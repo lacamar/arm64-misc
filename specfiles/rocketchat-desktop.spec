@@ -8,7 +8,7 @@ Summary: Desktop Client for Rocket.Chat
 
 License:  MIT
 URL:      https://github.com/RocketChat/Rocket.Chat.Electron
-Source0:  https://github.com/RocketChat/Rocket.Chat.Electron/archive/refs/tags//home/lm/.local/rpm/sources/rocketchat-desktop/Rocket.Chat.Electron-%{version}.tar.gz
+Source0:  https://github.com/RocketChat/Rocket.Chat.Electron/archive/refs/tags/%{version}.tar.gz
 Source1:  rocketchat-desktop-%{version}-yarn-cache.tar.xz
 Source2:  https://github.com/electron/electron/releases/download/v%{electron_version}/electron-v%{electron_version}-linux-arm64.zip
 
@@ -19,7 +19,6 @@ BuildRequires:  yarnpkg
 BuildRequires:  chromium
 BuildRequires:  vips-devel
 BuildRequires:  nodejs-devel
-
 Requires:       nodejs-electron >= %{electron_version}
 
 
