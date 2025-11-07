@@ -1,6 +1,6 @@
 %global bumpver 3
 
-%global commit a7e00f6ecfc51ff71f6adc1b598324df2c780b88
+%global commit a6c3024768fdad433e6823ce2b90f44a60989652
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       xray-16
@@ -10,7 +10,7 @@ Summary:    Open Source XRay engine for S.T.A.L.K.E.R.
 
 License:    MIT License
 URL:        https://github.com/OpenXRay/xray-16
-Source0:    https://github.com/OpenXRay/xray-16/archive/%{commit}/xray-16-%{commit}.tar.gz
+Source0:    https://github.com/OpenXRay/xray-16/archive/%{shortcommit}/xray-16-%{commit}.tar.gz
 
 %{lua:
 local externals = {
