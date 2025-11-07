@@ -1,6 +1,6 @@
-%global bumpver 2
+%global bumpver 3
 
-%global commit 9f0475db683956d7e14432aa36c608c21459cb7f
+%global commit a7e00f6ecfc51ff71f6adc1b598324df2c780b88
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       xray-16
