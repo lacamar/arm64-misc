@@ -39,7 +39,7 @@ export SHARP_SKIP_DOWNLOAD=1
 export npm_config_nodedir=/usr/
 export npm_config_build_from_source=true
 
-yarn install --immutable --immutable-cache
+YARN_ENABLE_INLINE_BUILDS=1 yarn install --immutable --immutable-cache --inline-builds
 yarn postinstall
 yarn build
 
