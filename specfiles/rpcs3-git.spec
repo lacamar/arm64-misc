@@ -1,7 +1,9 @@
+%global bumpver 0
+
 %global commit 50eb46d29428165ecfae5c64144fe44c5d49632e
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
-Name:       rpcs3
+Name:       rpcs3-git
 Version:    0.0.38%{?bumpver:^%{bumpver}.git.%{shortcommit}}
 Release:    %autorelease
 Summary:    PlayStation 3 emulator and debugger
@@ -15,20 +17,20 @@ local externals = {
  { name="7zip", ref="5e96a82", owner="ip7z", path="7zip/7zip", version="25.01",  license="GNU-LGPL" },
  { name="FAudio", ref="8de3616", owner="FNA-XNA", path="FAudio", version="25.11",  license="zlib" },
  { name="VulkanMemoryAllocator", ref="1d8f600", owner="GPUOpen-LibrariesAndSDKs", path="GPUOpen/VulkanMemoryAllocator", version="3.3.0",  license="MIT" },
- { name="openal-soft", ref="dc7d705", owner="kcat", path="OpenAL/openal-soft", version="1.24.3",  license="PFFFT" },
+ { name="openal-soft", ref="0e5e98e", owner="kcat", path="OpenAL/openal-soft", version="1.24.3",  license="PFFFT" },
  { name="soundtouch", ref="3982730", owner="RPCS3", path="SoundTouch/soundtouch/", version="2.4.0",  license="LGPLv2.1" },
  { name="asmjit", ref="416f735", owner="asmjit", path="asmjit/asmjit/", license="zlib" },
  { name="cubeb", ref="e495bee", owner="mozilla", path="cubeb/cubeb", license="ISC" },
- { name="curl", ref="11b9912", owner="curl", path="curl/curl", version="8.16.0",  license="MIT" },
+ { name="curl", ref="400fffa", owner="curl", path="curl/curl", version="8.17.0",  license="MIT" },
  { name="discord-rpc", ref="3dc2c32", owner="Vestrel", path="discord-rpc/discord-rpc", license="MIT" },
  { name="gamemode", ref="c54d6d4", owner="FeralInteractive", path="feralinteractive/feralinteractive", version="1.8.2", license="BSD-3-Clause" },
  { name="ffmpeg-core", ref="ec6367d", owner="RPCS3", path="ffmpeg", license="LGPLv2.1" },
  { name="flatbuffers", ref="595bf00", owner="google", path="flatbuffers", version="24.3.25",  license="Apache-v2" },
- { name="Fusion", ref="066d4a6", owner="xioTechnologies", path="fusion/fusion", version="1.2.8",  license="MIT" },
+ { name="Fusion", ref="759ac5d", owner="xioTechnologies", path="fusion/fusion", version="1.2.9",  license="MIT" },
  { name="glslang", ref="fc9889c", owner="KhronosGroup", path="glslang/glslang", version="15.3.0",  license="BSD-3-Clause" },
  { name="hidapi", ref="f424236", owner="RPCS3", path="hidapi/hidapi", version="0.15.0",  license="GPLv3, BSD" },
  { name="libpng", ref="2b97891", owner="pnggroup", path="libpng/libpng", version="1.6.50",  license="PNGRLLv2" },
- { name="SDL", ref="a96677b", owner="libsdl-org", path="libsdl-org/SDL", version="3.2.22",  license="zlib" },
+ { name="SDL", ref="badbf8d", owner="libsdl-org", path="libsdl-org/SDL", version="3.2.26",  license="zlib" },
  { name="libusb", ref="15a7ebb", owner="libusb", path="libusb/libusb", version="1.0.29",  license="LGPLv2.1" },
  { name="llvm-project", ref="cd70802", owner="llvm", path="llvm/llvm", version="19.1.7",  license="Apache-v2" },
  { name="miniupnp", ref="d66872e", owner="miniupnp", path="miniupnp/miniupnp", version="2.3.9",  license="BSD-3-Clause" },
@@ -113,7 +115,7 @@ BuildRequires:  doxygen
 PlayStation 3 emulator and debugger
 
 %prep
-%autosetup
+%autosetup -n rpcs3-%{commit}
 
 %{lua: print_setup_externals()}
 
@@ -192,6 +194,9 @@ DESTDIR=%{buildroot} ninja install
 
 
 %changelog
+* Wed Nov 12 2025 Lachlan Marie <lchlnm@pm.me> - git
+- Converted to build for git commits
+
 * Mon Aug 11 2025 Lachlan Marie <lchlnm@pm.me> - 0.0.38-1
 - Updated to 0.0.38, increased versions of several sources
 
