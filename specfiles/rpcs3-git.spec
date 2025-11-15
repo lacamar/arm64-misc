@@ -1,6 +1,6 @@
-%global bumpver 1
+%global bumpver 2
 
-%global commit e48ba283d82ec66072596b13f4d8522d0cf4961f
+%global commit fa06fed86f01c62c129aaaed78a8bf0a6ce0e7e7
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       rpcs3-git
@@ -110,6 +110,9 @@ BuildRequires:  qt6-qtsvg-devel
 BuildRequires:  llvm-devel
 BuildRequires:  SDL3-devel
 BuildRequires:  doxygen
+
+Conflicts:      rpcs3
+Provides:       rpcs3
 
 %description
 PlayStation 3 emulator and debugger
