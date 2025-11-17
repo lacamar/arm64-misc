@@ -1,6 +1,6 @@
-%global bumpver 5
+%global bumpver 6
 
-%global commit a93197cdcb33c65a559ddd36a58954dfafed8dd3
+%global commit 9b1d39c14e4cbfce4f364514e3c8c5cc351d2d92
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       rpcs3-git
