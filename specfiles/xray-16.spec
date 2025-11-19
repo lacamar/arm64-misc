@@ -1,6 +1,6 @@
 %global bumpver 7
 
-%global commit ccfb30e45ddd9945ee49ce3dd8c0dc3ecd3038d6
+%global commit ef8ab7d75aa5fc5a3ccf2cc1a8bb57327dc9780d
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       xray-16
@@ -18,7 +18,7 @@ local externals = {
   { name="GameSpy", ref="3e43480", owner="OpenXRay", path="GameSpy",  license="IGN" },
   { name="LuaJIT", ref="5a5cd82", owner="OpenXRay", path="LuaJIT", version="2.1",  license="MIT" },
   { name="gli", ref="779b99a", owner="g-truc", path="gli", version="0.8.2.0",  license="MIT" },
-  { name="imgui", ref="3109131", owner="ocornut", path="imgui", version="v.1.94.5",  license="MIT" },
+  { name="imgui", ref="4fa59df9fa20e4e2212070c5b1bc6cc52237093f", owner="ocornut", path="imgui", version="v.1.94.5",  license="MIT" },
   { name="luabind-deboostified", ref="8da131b", owner="OpenXRay", path="luabind", version="0.9",  license="MIT" },
   { name="sse2neon", ref="42eee28", owner="DLTcollab", path="sse2neon", version="1.8.0",  license="MIT" },
   { name="sse2rvv", ref="373f788", owner="pattonkan", path="sse2rvv", version="git",  license="MIT" },
