@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+copr-cli build wine-arm64ec $HOME/.local/rpm/rpms/fex-emu-wine-2*/fex-emu-wine-2*.src.rpm $HOME/.local/rpm/rpms/wine-1*/wine-*.src.rpm

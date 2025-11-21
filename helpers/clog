@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+
+# clog: capture commands (and/or interactive
+# shell) to a timestamped .txt file, copy its
+# URI to the clipboard.
+
+
+clog() {
+    local cache_dir snippet rcfile logfile
+    local first_cmd ret timestamp
+
+    cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/clog"
+    mkdir -p "$cache_dir"
+
+    timestamp="$(date +%Y.%m.%d_%H%M%S)"
+
+    code="0"
+    first_cmd="$*"
+    rcfile="$(mktemp)"
+    export -p | sed -n '/^declare \-x /p' > "$rcfile"
+    bash -i -c 'alias -p' | sed -n '/^alias /,$p' >> "$rcfile"
+    printf '\n# disable prompt hooks\n' >> "$rcfile"
+    printf 'unset PROMPT_COMMAND\n' >> "$rcfile"
+    printf 'PS1="clog> "\n\n' >> "$rcfile"
+    printf '# disable bracketed-paste\n' >> "$rcfile"
+    printf '\nshopt -s expand_aliases\n' >> "$rcfile"
+    printf 'bind '\''set enable-bracketed-paste off'\''\n' >> "$rcfile"
+
+    snippet="$(echo "$first_cmd" | sed 's/[^[:alnum:]-]/_/g' | cut -c1-30)"
+    logfile="$cache_dir/${timestamp}_${snippet}.txt"
+
+    if [ -t 0 ] && (( $# > 0 )); then
+        (
+            exec > >(tee -a "$logfile") 2>&1
+            echo "$first_cmd"
+            bash --noprofile --rcfile "$rcfile" -i -c "$first_cmd; exit"
+            code=$?
+            echo "⮕ clog: exit code $code" >> "$logfile"
+            exit $code
+        )
+        ret=$?
+        rm -f "$rcfile"
+
+    elif [ ! -t 0 ] && (( $# == 0 )); then
+        snippet="heredoc"
+        logfile="$cache_dir/${timestamp}_${snippet}.txt"
+        (
+            exec > >(tee -a "$logfile") 2>&1
+            echo "# here-doc"
+            echo "⮕ Reading commands from stdin (here-doc)"
+            bash --noprofile --rcfile "$rcfile" -i -s
+            code=$?
+            echo "⮕ clog: exit code $code" >> "$logfile"
+            exit $code
+        )
+        ret=$?
+        rm -f "$rcfile"
+
+    else
+        snippet="interactive"
+        logfile="$cache_dir/${timestamp}_${snippet}.txt"
+        (
+            exec > >(tee -a "$logfile") 2>&1
+            echo "# Interactive shell"
+            echo "⮕ Starting interactive session; type 'exit' to finish"
+            bash --noprofile --rcfile "$rcfile" -i
+            code=$?
+            echo "⮕ clog: exit code $code" >> "$logfile"
+            exit $code
+        )
+        ret=$?
+        rm -f "$rcfile"
+    fi
+
+    printf 'file://%s\n' "$logfile" | wl-copy --type text/uri-list
+
+    if command -v bat &>/dev/null; then
+        bat --paging=never --color=never --line-range :8 "$logfile"
+    else
+        head -n8 "$logfile"
+    fi
+
+    return $ret
+}
+
+clog "$@"

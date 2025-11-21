@@ -1,0 +1,686 @@
+#!/usr/bin/env bash
+# mx-rpm — Iterate RPM .spec files and build them with mock (enhanced)
+#
+# Features
+#   • Accept explicit spec *paths* (e.g. ./pkg/foo.spec), stems, or directories
+#   • Optional parallelism across packages (-P)
+#   • Fetch sources via spectool into per‑package source dirs
+#   • Build SRPM-only (-S) or binary packages (default) using mock
+#   • Pass-through --with/--without and --define to rpmbuild via mock
+#   • Skip packages that appear up-to-date (-u) based on mtime heuristics
+#   • Select Fedora release/arch/mock config at runtime or via flags
+#   • Extra repos via --addrepo (repeatable) or MX_RPM_ADDREPO env (space‑sep)
+#   • Optional git commit of changed spec on success (--git-commit/--git-msg)
+#   • Optional COPR upload of the built SRPM (--copr PROJECT [--copr-nowait])
+#   • Nice logging, failure trapping, and dry-run mode
+#
+# Requires: mock, rpm-build, spectool. For COPR: copr-cli configured.
+
+set -euo pipefail
+shopt -s nullglob
+
+# ---- Defaults (override via env) -------------------------------------------
+SPEC_DIR=${SPEC_DIR:-"$HOME/.local/rpm/specs"}
+SRC_ROOT=${SRC_ROOT:-"$HOME/.local/rpm/sources"}
+RESULT_ROOT=${RESULT_ROOT:-"$HOME/.local/rpm/rpms"}
+FEDORA_RELEASE=${FEDORA_RELEASE:-"$(rpm -E %fedora)"}
+BASEARCH=${BASEARCH:-"$(rpm -E %_arch)"}
+MOCK_CFG_EXPLICIT=0
+# If MOCK_CFG is provided via environment, treat it as explicit
+if [[ -n ${MOCK_CFG+x} ]]; then
+  MOCK_CFG_EXPLICIT=1
+fi
+MOCK_CFG=${MOCK_CFG:-"fedora-$FEDORA_RELEASE-$BASEARCH"}
+# Track whether LOG_ROOT was provided explicitly so we can recompute after args
+if [[ -z ${LOG_ROOT+x} ]]; then
+  LOG_ROOT="$RESULT_ROOT/.logs"
+  __LOG_ROOT_FROM_DEFAULT=1
+else
+  __LOG_ROOT_FROM_DEFAULT=0
+fi
+ADDREPO_ENV=${MX_RPM_ADDREPO:-""}   # space-separated list of URLs
+
+# ---- Globals ---------------------------------------------------------------
+SINGLE_SPEC=""
+DRYRUN=0
+LIST_ONLY=0
+SRPM_ONLY=0
+UPTODATE_SKIP=0
+PARALLEL=1
+GIT_COMMIT=1
+GIT_MSG=""
+COPR_PROJECT=""
+COPR_NOWAIT=1
+COPR_ASYNC=1
+MOCK_VERBOSE=0
+FORCE_TTY=0
+NO_LOG=1
+DISABLE_TTY=0
+MOCK_FOLLOW=0
+FOLLOW_ROOT=0
+QUIET=1
+SHOW_CMDS=0
+TAIL_PREFIX=1
+DEBUG_SH=0
+# systemd scope control (prefer killing by cgroup on Ctrl-C)
+USE_SYSTEMD_SCOPE=0
+# optionally run the build in a *system* scope (root) so we can kill nspawn reliably
+USE_SUDO_SCOPE=${MX_RPM_SUDO:-0}
+# arrays to collect passthroughs
+DEFINE_ARGS=()
+WITH_ARGS=()
+ADDREPO_ARGS=()
+
+# ---- Helpers ----------------------------------------
+msg() { printf "==> %s
+" "$*" 1>&2; }
+err() { printf "[1;31merror:[0m %s
+" "$*" >&2; }
+die() { err "$*"; exit 1; }
+
+# Track background build PIDs so we can kill them on Ctrl-C / TERM
+BUILD_PIDS=()
+BUILD_PGIDS=()
+BUILD_SIDS=()
+ABORTING=""
+add_build_sid(){ BUILD_SIDS+=("$1"); }
+add_build_pid(){ BUILD_PIDS+=("$1"); }
+add_build_pgid(){ BUILD_PGIDS+=("$1"); }
+# track transient systemd scope units for hard teardown
+BUILD_UNITS=()
+add_build_unit(){ BUILD_UNITS+=("$1"); }
+# Try to kill both recorded PIDs and their process groups, then any descendants
+cleanup_build_pids(){
+  # Kill whole sessions (most robust) if we recorded SIDs
+  for s in "${BUILD_SIDS[@]:-}"; do
+    kill -INT  -- -"$s" 2>/dev/null || true
+    pkill -INT  -s "$s" 2>/dev/null || true
+  done
+  sleep 0.2
+  for s in "${BUILD_SIDS[@]:-}"; do
+    kill -TERM -- -"$s" 2>/dev/null || true
+    pkill -TERM -s "$s" 2>/dev/null || true
+  done
+  sleep 0.5
+  for s in "${BUILD_SIDS[@]:-}"; do
+    kill -KILL -- -"$s" 2>/dev/null || true
+    pkill -KILL -s "$s" 2>/dev/null || true
+  done
+
+  # Kill any systemd scopes first (cgroup-wide)
+  if command -v systemctl >/dev/null 2>&1; then
+    for u in "${BUILD_UNITS[@]:-}"; do
+      if (( USE_SUDO_SCOPE )); then
+        sudo systemctl kill "$u" --signal=INT  2>/dev/null || true
+        sleep 0.2
+        sudo systemctl kill "$u" --signal=TERM 2>/dev/null || true
+        sleep 0.5
+        sudo systemctl kill "$u" --signal=KILL 2>/dev/null || true
+      else
+        systemctl --user kill "$u" --signal=INT  2>/dev/null || true
+        sleep 0.2
+        systemctl --user kill "$u" --signal=TERM 2>/dev/null || true
+        sleep 0.5
+        systemctl --user kill "$u" --signal=KILL 2>/dev/null || true
+      fi
+    done
+  fi
+  # Then kill by process group id (best for setsid())
+  for g in "${BUILD_PGIDS[@]:-}"; do
+    pkill -INT  -g "$g" 2>/dev/null || true
+    kill  -INT  -"$g" 2>/dev/null || true
+    sleep 0.2
+    pkill -TERM -g "$g" 2>/dev/null || true
+    kill  -TERM -"$g" 2>/dev/null || true
+    sleep 0.5
+    pkill -KILL -g "$g" 2>/dev/null || true
+    kill  -KILL -"$g" 2>/dev/null || true
+  done
+  # Finally hard-kill any tracked PIDs and descendants
+  for p in "${BUILD_PIDS[@]:-}"; do
+    kill -INT  "$p" 2>/dev/null || true
+    kill -TERM "$p" 2>/dev/null || true
+    if command -v pstree >/dev/null 2>&1; then
+      pstree -p "$p" 2>/dev/null | grep -Eo "\([0-9]+\)" | tr -d '()' | while read -r c; do kill -TERM "$c" 2>/dev/null || true; done
+      pstree -p "$p" 2>/dev/null | grep -Eo "\([0-9]+\)" | tr -d '()' | while read -r c; do kill -KILL "$c" 2>/dev/null || true; done
+    elif command -v pkill >/dev/null 2>&1; then
+      pkill -TERM -P "$p" 2>/dev/null || true
+      pkill -KILL -P "$p" 2>/dev/null || true
+    fi
+    kill -KILL "$p" 2>/dev/null || true
+  done
+}
+trap 'if [[ -z ${ABORTING:-} ]]; then ABORTING=1; err "aborted"; cleanup_build_pids; fi; exit 130' INT TERM
+
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [options] [spec-or-stem-or-dir ...]
+
+Options:
+  -d DIR, --specdir DIR      Spec directory for *stems* (default: $SPEC_DIR)
+  -s DIR, --sourceroot DIR   Sources root (default: $SRC_ROOT)
+  -r DIR, --resultroot DIR   Results root (default: $RESULT_ROOT)
+  -c CFG, --config CFG       mock config (default: $MOCK_CFG)
+  --release N                Fedora release override (sets mock cfg if not custom)
+  --arch A                   Base arch override (sets mock cfg if not custom)
+  -S, --srpm                 Build SRPM only
+  -u, --up-to-date           Skip if outputs newer than spec+sources
+  -P N, --parallel N         Build up to N packages concurrently (default 1)
+  -l, --list                 List discovered packages (stems) and exit
+  -n, --dry-run              Print actions without executing
+  --with NAME                Enable rpmbuild conditional (repeatable)
+  --without NAME             Disable rpmbuild conditional (repeatable)
+  --define K\=V              Add rpmbuild macro define (repeatable)
+  --addrepo URL              Extra repo for mock (repeatable or MX_RPM_ADDREPO)
+  --git-commit               On success, git add & commit the spec file
+  --git-msg MSG              Commit message (default autogenerated)
+  --copr PROJECT             If set, copr-cli build PROJECT with built SRPM
+  --copr-nowait              Pass --nowait to copr-cli build (default)
+  --mock-verbose             Add -v to mock for verbose output
+  --tty                      Allocate a pty for spectool/mock (via 'script')
+  --no-log                   Print command output directly (no tee to logs)
+  --no-tty                   Disable PTY even if stdout is a terminal
+  --no-follow-logs           Do not tail build/root logs from resultdir (default)
+  --follow-logs              Force tailing of build/root logs
+  --copr-wait                Wait for copr-cli to return and print output
+  --copr-async               Submit to COPR in background (default)
+  --sudo-scope               Run mock in a systemd scope via sudo (for better teardown)
+  --follow-root              Tail logs from the mock root (chroot) as well
+  --no-quiet                 Be noisy about progress
+  --show-cmds                Echo mock/spectool command lines before running
+  --single SPEC              Run only the given SPEC in this process and exit
+  -h, --help                 Show this help and exit
+
+Arguments:
+  spec-or-stem-or-dir ...  Paths to *.spec files, directories to scan (recursive),
+                           or bare stems (looked up in --specdir).
+EOF
+}
+
+# ---- Parse args ------------------------------------------------------------
+args=("$@")
+while [[ ${#args[@]} -gt 0 ]]; do
+  case "${args[0]}" in
+    -h|--help) usage; exit 0;;
+    -n|--dry-run) DRYRUN=1; args=("${args[@]:1}");;
+    -l|--list) LIST_ONLY=1; args=("${args[@]:1}");;
+    -S|--srpm) SRPM_ONLY=1; args=("${args[@]:1}");;
+    -u|--up-to-date) UPTODATE_SKIP=1; args=("${args[@]:1}");;
+    -P|--parallel) PARALLEL=${args[1]:-1}; args=("${args[@]:2}");;
+    -d|--specdir) SPEC_DIR=${args[1]:-}; args=("${args[@]:2}");;
+    -s|--sourceroot) SRC_ROOT=${args[1]:-}; args=("${args[@]:2}");;
+    -r|--resultroot) RESULT_ROOT=${args[1]:-}; args=("${args[@]:2}");;
+    -c|--config) MOCK_CFG=${args[1]:-}; MOCK_CFG_EXPLICIT=1; args=("${args[@]:2}");;
+    --release) FEDORA_RELEASE=${args[1]:-}; args=("${args[@]:2}");;
+    --arch) BASEARCH=${args[1]:-}; args=("${args[@]:2}");;
+    --with) WITH_ARGS+=("--with=${args[1]:-}"); args=("${args[@]:2}");;
+    --without) WITH_ARGS+=("--without=${args[1]:-}"); args=("${args[@]:2}");;
+    --define) DEFINE_ARGS+=("--define" "${args[1]:-}"); args=("${args[@]:2}");;
+    --addrepo) ADDREPO_ARGS+=("${args[1]:-}"); args=("${args[@]:2}");;
+    --git-commit) GIT_COMMIT=1; args=("${args[@]:1}");;
+    --git-msg) GIT_MSG=${args[1]:-}; args=("${args[@]:2}");;
+    --copr) COPR_PROJECT=${args[1]:-}; args=("${args[@]:2}");;
+    --copr-nowait) COPR_NOWAIT=1; args=("${args[@]:1}");;
+    --copr-wait) COPR_ASYNC=0; COPR_NOWAIT=0; args=("${args[@]:1}");;
+    --copr-async) COPR_ASYNC=1; args=("${args[@]:1}");;
+    --mock-verbose) MOCK_VERBOSE=1; args=("${args[@]:1}");;
+    --single) SINGLE_SPEC=${args[1]:-}; args=("${args[@]:2}");;
+    --debug) DEBUG_SH=1; args=("${args[@]:1}");;
+    --tty) FORCE_TTY=1; args=("${args[@]:1}");;
+    --no-log) NO_LOG=1; args=("${args[@]:1}");;
+    --no-tty) DISABLE_TTY=1; args=("${args[@]:1}");;
+    --no-follow-logs) MOCK_FOLLOW=0; args=("${args[@]:1}");;
+    --follow-logs) MOCK_FOLLOW=1; args=("${args[@]:1}");;
+    --sudo-scope) USE_SUDO_SCOPE=1; args=("${args[@]:1}");;
+    --follow-root) FOLLOW_ROOT=1; args=("${args[@]:1}");;
+    --no-quiet) QUIET=0; args=("${args[@]:1}");;
+    --show-cmds) SHOW_CMDS=1; args=("${args[@]:1}");;
+    --) args=("${args[@]:1}"); break;;
+    -*) die "unknown option: ${args[0]}";;
+    *) break;;
+  esac
+done
+
+# If release/arch changed but config not re-specified, compose it
+# Only auto-compose MOCK_CFG when it wasn't set explicitly via env or -c
+if (( ! MOCK_CFG_EXPLICIT )); then
+  MOCK_CFG="fedora-$FEDORA_RELEASE-$BASEARCH"
+fi
+
+# If LOG_ROOT came from the default, realign it to the (possibly changed) RESULT_ROOT
+if [[ ${__LOG_ROOT_FROM_DEFAULT:-0} -eq 1 ]]; then
+  LOG_ROOT="$RESULT_ROOT/.logs"
+fi
+
+# ---- Normalize inputs to absolute spec paths -------------------------------
+INPUTS=("${args[@]}")
+specs=()
+add_spec() { local f=$1; [[ -f $f ]] && specs+=("$(readlink -f "$f")"); }
+
+if [[ ${#INPUTS[@]} -gt 0 ]]; then
+  for _p in "${INPUTS[@]}"; do
+    # Normalize token: strip any stray quotes that survived shell parsing (e.g. '"hello.spec"')
+    p=${_p}
+    p=${p//\"/}
+    p=${p//\'/}
+    if [[ -f $p && $p == *.spec ]]; then
+      add_spec "$p"
+    elif [[ -d $p ]]; then
+      while IFS= read -r -d '' f; do add_spec "$f"; done < <(find "$p" -type f -name '*.spec' -print0)
+    else
+      if [[ $p == *.spec ]]; then
+        if [[ -f $p ]]; then
+          add_spec "$p"
+        else
+          # NEW: if a .spec was given but not found as a path, also look under --specdir
+          f="$SPEC_DIR/$p"
+          if [[ -f $f ]]; then
+            add_spec "$f"
+          else
+            if (( LIST_ONLY )); then err "spec not found: $(readlink -m "$p")"; continue; else die "spec not found: $(readlink -m "$p")"; fi
+          fi
+        fi
+      else
+        f="$SPEC_DIR/$p.spec"
+        if [[ -f $f ]]; then
+          add_spec "$f"
+        else
+          if (( LIST_ONLY )); then err "spec not found: $f"; continue; else die "spec not found: $f"; fi
+        fi
+      fi
+    fi
+  done
+else
+  while IFS= read -r -d '' f; do add_spec "$f"; done < <(find "$SPEC_DIR" -type f -name '*.spec' -print0)
+fi
+
+[[ ${#specs[@]} -gt 0 ]] || die "no specs found"
+# if running a single spec sequentially, drop noisy line prefixes
+if (( ${#specs[@]} == 1 )); then TAIL_PREFIX=0; fi
+
+# include ADDREPO from env
+if [[ -n $ADDREPO_ENV ]]; then
+  read -r -a env_repos <<<"$ADDREPO_ENV"
+  ADDREPO_ARGS+=("${env_repos[@]}")
+fi
+
+# default extra repos (example; comment/remove if unwanted)
+DEFAULT_REPOS=(
+  "https://download.copr.fedorainfracloud.org/results/lacamar/wine-arm64ec/fedora-$FEDORA_RELEASE-$BASEARCH/"
+  "https://download.opensuse.org/repositories/devel:/languages:/nodejs/Fedora_$FEDORA_RELEASE/"
+)
+# merge but avoid duplicates
+for r in "${DEFAULT_REPOS[@]}"; do
+  skip=0
+  for e in "${ADDREPO_ARGS[@]:-}"; do [[ "$e" == "$r" ]] && { skip=1; break; }; done
+  (( skip )) || ADDREPO_ARGS+=("$r")
+done
+
+# ---- Post-success actions --------------------------------------------------
+# Helper: detect if an identical NVR already exists in COPR for this project
+_copr_build_exists() {
+  # Check if this SRPM's exact N-V-R already exists in the COPR project.
+  # Usage: _copr_build_exists "<owner>/<project>" "<path/to/foo.src.rpm>"
+  local project="$1" srpm="$2"
+  local owner proj name ver rel rel_short url out
+
+  # Split owner/project (supports user/project or @group/project)
+  case "$project" in
+    */*) owner="${project%%/*}"; proj="${project#*/}" ;;
+    *) owner="$USER"; proj="$project" ;;
+  esac
+  # COPR expects owner without leading '@'
+  owner="${owner#@}"
+
+  # Extract N-V-R from SRPM
+  if ! read -r name ver rel < <(rpm -qp --qf '%{name} %{version} %{release}
+' "$srpm" 2>/dev/null); then
+    local base rest
+    base=$(basename "$srpm" .src.rpm)
+    name=${base%-*-*}
+    rest=${base#"$name-"}
+    ver=${rest%-*}
+    rel=${rest##*-}
+  fi
+  rel_short=${rel%%.*}
+
+  # Known-working HTML pipeline, adapted from manual test:
+  #   curl .../builds/ | grep -A 3 "$name" | grep -F "${ver}-${rel_short}"
+  url="https://copr.fedorainfracloud.org/coprs/${owner}/${proj}/builds/"
+  if command -v curl >/dev/null 2>&1; then
+    if out=$(curl -fsSL --retry 2 --max-time 10 "$url" 2>/dev/null); then
+      if printf '%s
+' "$out" | grep -A 3 "$name" 2>/dev/null | grep -Fq "${ver}-${rel_short}" 2>/dev/null; then
+        return 0
+      fi
+      # Fallback: some views include the full SRPM filename
+      local srpm_name="${name}-${ver}-${rel}.src.rpm"
+      if printf '%s
+' "$out" | grep -Fq "$srpm_name" 2>/dev/null; then
+        return 0
+      fi
+    fi
+  fi
+
+  return 1
+}
+
+
+_git_commit_spec() {
+  local spec="$1" name dir m
+  name=$(basename "$spec")
+  dir=$(dirname "$spec")
+
+  if ! git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    msg "git: not a repo, skipping commit for $name"
+    return 0
+  fi
+  if git -C "$dir" diff --quiet -- "$name" && git -C "$dir" diff --cached --quiet -- "$name"; then
+    msg "git: no changes in $name; nothing to commit"
+    return 0
+  fi
+
+  # Commit message logic: default unless overridden by --git-msg
+  if [[ -n $GIT_MSG ]]; then
+    m="$GIT_MSG"
+  else
+    m="Updated ${name%.spec} spec file"
+  fi
+
+  if (( DRYRUN )); then
+    printf 'DRYRUN: git -C %q add %q && git -C %q commit -m %q
+' "$dir" "$name" "$dir" "$m"
+    return 0
+  fi
+
+  git -C "$dir" add -- "$name"
+  if git -C "$dir" commit -m "$m"; then
+    msg "git: committed $name with message: '$m'"
+  else
+    err "git: commit failed for $name"
+    return 1
+  fi
+}
+
+_copr_upload_srpm() {
+  local result_dir="$1" name="$2"
+  local srpm
+  srpm=$(ls -t "$result_dir"/*.src.rpm 2>/dev/null | head -n1 || true)
+  if [[ -z ${srpm:-} ]]; then
+    err "copr: no SRPM found in $result_dir for $name"
+    return 1
+  fi
+
+  # Skip upload if an identical NVR already exists for this project
+  if _copr_build_exists "$COPR_PROJECT" "$srpm"; then
+    msg "copr: identical build already exists for $(basename "$srpm"); skipping upload"
+    return 0
+  fi
+
+  local cmd=(copr-cli build "$COPR_PROJECT" "$srpm")
+  (( COPR_NOWAIT )) && cmd+=(--nowait)
+  if (( DRYRUN )); then
+    printf 'DRYRUN: '; printf '%q ' "${cmd[@]}"; echo
+    return 0
+  fi
+  # ensure logs dir
+  local COPR_DIR="$LOG_ROOT/.copr"; mkdir -p "$COPR_DIR"
+  local SUBMIT_LOG="$COPR_DIR/${name}.$(date +%Y%m%d-%H%M%S).submit.log"
+  if (( COPR_ASYNC )); then
+    # Background submission: don't block the main loop
+    { printf '>> '; printf '%q ' "${cmd[@]}"; echo; } >>"$SUBMIT_LOG" 2>&1
+    if command -v setsid >/dev/null 2>&1; then
+      setsid bash -c "$(printf '%q ' "${cmd[@]}")" >>"$SUBMIT_LOG" 2>&1 &
+    else
+      nohup bash -c "$(printf '%q ' "${cmd[@]}")" >>"$SUBMIT_LOG" 2>&1 & disown
+    fi
+    msg "copr: submitted $srpm to $COPR_PROJECT (async); log: $SUBMIT_LOG"
+    return 0
+  else
+    if "${cmd[@]}"; then
+      msg "copr: submitted $srpm to $COPR_PROJECT"
+      return 0
+    else
+      err "copr: submission failed for $srpm"
+      return 1
+    fi
+  fi
+}
+
+# ---- Build one (function) --------------------------------------------------
+build_one() {
+  (( DEBUG_SH )) && set -x
+  local spec="$1"
+  local name
+  name=$(basename "$spec" .spec)
+  local src_dir="$SRC_ROOT/$name"
+  local result_dir="$RESULT_ROOT/$name"
+  local log_dir="$LOG_ROOT/$name"; mkdir -p "$log_dir"
+  mkdir -p "$src_dir" "$result_dir"
+
+  msg "Processing $name (mock: $MOCK_CFG)"
+
+  # 1. Retrieve sources
+  local spectool_cmd=(spectool --define "_sourcedir $src_dir" -g -C "$src_dir" "$spec")
+  (( MOCK_VERBOSE )) && spectool_cmd+=(--verbose)
+  # 2. Build (SRPM or binary)
+  local mock_cmd=(mock -r "$MOCK_CFG" --no-cleanup-after --resultdir "$result_dir")
+  (( MOCK_VERBOSE )) && mock_cmd+=(-v)
+  for r in "${ADDREPO_ARGS[@]}"; do mock_cmd+=(--addrepo="$r"); done
+  mock_cmd+=("${DEFINE_ARGS[@]}" "${WITH_ARGS[@]}")
+  if (( SRPM_ONLY )); then
+    mock_cmd+=(--buildsrpm --spec "$spec" --sources "$src_dir")
+  else
+    mock_cmd+=(--spec "$spec" --sources "$src_dir")
+  fi
+
+  # Up-to-date check (nullglob-safe, no compgen)
+  if (( UPTODATE_SKIP )); then
+    local newest_in spec_mtime out_mtime out_newer=0
+    spec_mtime=$(stat -c %Y "$spec"); newest_in=$spec_mtime
+    shopt -s nullglob
+    local src_files=("$src_dir"/*)
+    if ((${#src_files[@]})); then
+      local src_mtime; src_mtime=$(printf '%s
+' "${src_files[@]}" | xargs -r stat -c %Y | sort -n | tail -1)
+      (( src_mtime > newest_in )) && newest_in=$src_mtime
+    fi
+    local out_glob=()
+    if (( SRPM_ONLY )); then out_glob=("$result_dir"/*.src.rpm); else out_glob=("$result_dir"/*.rpm); fi
+    local outs=()
+    for f in "${out_glob[@]}"; do [[ $f == *.src.rpm && ! $SRPM_ONLY -eq 1 ]] && continue; outs+=("$f"); done
+    if ((${#outs[@]})); then
+      out_mtime=$(printf '%s
+' "${outs[@]}" | xargs -r stat -c %Y | sort -n | tail -1)
+      (( out_mtime >= newest_in )) && out_newer=1
+    fi
+    if (( out_newer )); then
+      msg "Skipping $name (up-to-date)"
+      return 0
+    fi
+  fi
+
+  if (( DRYRUN )); then
+    printf 'DRYRUN: '; printf '%q ' "${spectool_cmd[@]}"; echo
+    printf 'DRYRUN: '; printf '%q ' "${mock_cmd[@]}"; echo
+    return 0
+  fi
+
+  # Run with logging
+  local ts logf ok=1
+  ts=$(date +%Y%m%d-%H%M%S)
+  logf="$log_dir/$ts.$( ((SRPM_ONLY)) && echo srpm || echo build ).log"
+
+  # helpers for running commands with optional PTY and logging
+  run_cmd() {
+    local -a cmd=("$@")
+    local want_tty=0
+    if (( DISABLE_TTY == 0 )); then
+      if (( FORCE_TTY == 1 )) || [[ -t 1 ]]; then want_tty=1; fi
+    fi
+
+    if (( NO_LOG )); then
+      if (( want_tty )) && command -v script >/dev/null 2>&1; then
+        script -qefc "$(printf '%q ' "${cmd[@]}")" /dev/null
+      else
+        "${cmd[@]}"
+      fi
+    else
+      { printf '>> '; printf '%q ' "${cmd[@]}"; echo; } >>"$logf"
+      if (( SHOW_CMDS )); then { printf '>> '; printf '%q ' "${cmd[@]}"; echo; } 1>&2; fi
+      if (( want_tty )) && command -v script >/dev/null 2>&1; then
+        script -qefc "$(printf '%q ' "${cmd[@]}")" /dev/null 2>&1 | tee -a "$logf"
+      else
+        if command -v stdbuf >/dev/null 2>&1; then
+          stdbuf -oL -eL "${cmd[@]}" 2>&1 | tee -a "$logf"
+        else
+          "${cmd[@]}" 2>&1 | tee -a "$logf"
+        fi
+      fi
+    fi
+  }
+
+  # spectool (failure should NOT abort entire script)
+  if ! run_cmd "${spectool_cmd[@]}"; then
+    err "spectool failed for $name"
+    mkdir -p "$LOG_ROOT/.status/fail"; : >"$LOG_ROOT/.status/fail/$name" || true
+    return 1
+  fi
+
+# mock (failure should NOT abort entire script)
+# Run mock in the foreground so Ctrl-C works like plain mock; stream a single
+# copy of output to stdout and tee to $logf. Use PIPESTATUS to preserve rc.
+{
+  printf '>> ' >>"$logf"; printf '%q ' "${mock_cmd[@]}" >>"$logf"; echo >>"$logf"
+}
+mock_rc=0
+if (( NO_LOG )); then
+  "${mock_cmd[@]}" || mock_rc=$?
+else
+  if [[ ! -t 1 ]]; then
+    # Non‑TTY (e.g. clog): force a PTY so output behaves like an interactive mock run
+    if command -v script >/dev/null 2>&1; then
+      script -qfc "$(printf '%q ' "${mock_cmd[@]}")" /dev/null 2>&1 | tee -a "$logf"
+      mock_rc=${PIPESTATUS[0]}
+    else
+      if command -v stdbuf >/dev/null 2>&1; then
+        stdbuf -oL -eL "${mock_cmd[@]}" 2>&1 | tee -a "$logf"
+        mock_rc=${PIPESTATUS[0]}
+      else
+        "${mock_cmd[@]}" 2>&1 | tee -a "$logf"
+        mock_rc=${PIPESTATUS[0]}
+      fi
+    fi
+  else
+    if command -v stdbuf >/dev/null 2>&1; then
+      stdbuf -oL -eL "${mock_cmd[@]}" 2>&1 | tee -a "$logf"
+      mock_rc=${PIPESTATUS[0]}
+    else
+      "${mock_cmd[@]}" 2>&1 | tee -a "$logf"
+      mock_rc=${PIPESTATUS[0]}
+    fi
+  fi
+fi
+if (( mock_rc != 0 )); then
+  err "mock failed for $name"
+  mkdir -p "$LOG_ROOT/.status/fail"; : >"$LOG_ROOT/.status/fail/$name" || true
+  return 1
+fi
+
+msg "Done $name → $result_dir"
+
+  # Post-success hooks
+  mkdir -p "$LOG_ROOT/.status/ok"; : >"$LOG_ROOT/.status/ok/$name" || true
+  if (( GIT_COMMIT )); then
+    _git_commit_spec "$spec" || err "git commit hook failed for $name"
+  fi
+  if [[ -n $COPR_PROJECT ]]; then
+    _copr_upload_srpm "$result_dir" "$name" || err "copr upload failed for $name"
+  fi
+}
+
+# ---- Worker short-circuit --------------------------------------------------
+# If invoked as: mx-rpm2 --single /path/to/pkg.spec
+# run just one build in this process and exit
+if [[ -n $SINGLE_SPEC ]]; then
+  build_one "$SINGLE_SPEC"
+  exit $?
+fi
+
+# ---- List and/or build -----------------------------------------------------
+
+if (( LIST_ONLY )); then
+  for s in "${specs[@]}"; do basename "$s" .spec; done
+  exit 0
+fi
+
+mkdir -p "$LOG_ROOT" || true
+msg "Logs: $LOG_ROOT"
+mkdir -p "$LOG_ROOT/.status/ok" "$LOG_ROOT/.status/fail" || true
+# Clean previous status to avoid stale entries from other runs
+rm -f "$LOG_ROOT/.status/ok"/* "$LOG_ROOT/.status/fail"/* 2>/dev/null || true
+if (( FORCE_TTY )) && ! command -v script >/dev/null 2>&1; then
+  msg "--tty requested but 'script' not found; proceeding without PTY"
+fi
+
+if (( PARALLEL > 1 )); then
+  # Parallel fan-out using subshells; no xargs, no exported-function issues
+  pmax=$PARALLEL
+  running=0
+  msg "Parallel: building ${#specs[@]} specs with -P $PARALLEL"
+  for spec in "${specs[@]}"; do
+    # Re-invoke this script for isolation; pass through effective options
+    WORKER_OPTS=(
+      $([[ $SRPM_ONLY -eq 1 ]] && echo --srpm)
+      $([[ $UPTODATE_SKIP -eq 1 ]] && echo --up-to-date)
+      $([[ $DRYRUN -eq 1 ]] && echo --dry-run)
+      $([[ $MOCK_VERBOSE -eq 1 ]] && echo --mock-verbose)
+      $([[ $FORCE_TTY -eq 1 ]] && echo --tty)
+      $([[ $DISABLE_TTY -eq 1 ]] && echo --no-tty)
+      $([[ $NO_LOG -eq 1 ]] && echo --no-log)
+      $([[ $MOCK_FOLLOW -eq 1 ]] && echo --follow-logs)
+      -d "$SPEC_DIR" -s "$SRC_ROOT" -r "$RESULT_ROOT" -c "$MOCK_CFG"
+    )
+    # with/without conditionals (arrays are of form --with=NAME)
+    for w in "${WITH_ARGS[@]:-}"; do
+      case "$w" in
+        --with=*) WORKER_OPTS+=(--with "${w#--with=}");;
+        --without=*) WORKER_OPTS+=(--without "${w#--without=}");;
+      esac
+    done
+    # addrepo
+    for r in "${ADDREPO_ARGS[@]:-}"; do WORKER_OPTS+=(--addrepo "$r"); done
+    # defines (pairs: --define VALUE)
+    if ((${#DEFINE_ARGS[@]})); then
+      for ((i=0; i<${#DEFINE_ARGS[@]}; i+=2)); do
+        if [[ ${DEFINE_ARGS[i]} == --define ]]; then
+          WORKER_OPTS+=(--define "${DEFINE_ARGS[i+1]}")
+        fi
+      done
+    fi
+    bash "$0" "${WORKER_OPTS[@]}" --single "$spec" & pid=$!; add_build_pid "$pid"
+    (( running++ ))
+    if (( running >= pmax )); then
+      wait -n
+      (( running-- ))
+    fi
+  done
+  wait
+else
+  for spec in "${specs[@]}"; do
+    if ! build_one "$spec"; then
+      err "build failed: $(basename "$spec" .spec)"
+    fi
+  done
+fi
+
+# ---- Summary and exit code -------------------------------------------------
+ok_n=$(find "$LOG_ROOT/.status/ok" -type f 2>/dev/null | wc -l | tr -d ' ')
+fail_n=$(find "$LOG_ROOT/.status/fail" -type f 2>/dev/null | wc -l | tr -d ' ')
+msg "Summary: ${ok_n} succeeded, ${fail_n} failed"
+if (( fail_n > 0 )); then
+  echo -n "Failed: "; basename -a $(ls "$LOG_ROOT/.status/fail" 2>/dev/null || true) 2>/dev/null || true
+fi
+
+msg "All done."
+(( fail_n == 0 )) || exit 1
