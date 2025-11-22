@@ -1,2 +1,30 @@
 #!/usr/bin/env bash
-copr-cli build wine-arm64ec $HOME/.local/rpm/rpms/fex-emu-wine-2*/fex-emu-wine-2*.src.rpm $HOME/.local/rpm/rpms/wine-1*/wine-*.src.rpm
+copr-cli build wine-arm64ec \
+$HOME/.local/rpm/rpms/wine-10.5/wine-10.5-ec2.fc42.src.rpm \
+$HOME/.local/rpm/rpms/wine-10.6/wine-10.6-ec2.fc42.src.rpm \
+$HOME/.local/rpm/rpms/wine-10.7/wine-10.7-ec2.fc42.src.rpm \
+$HOME/.local/rpm/rpms/wine-10.8/wine-10.8-ec2.fc42.src.rpm \
+$HOME/.local/rpm/rpms/wine-10.9/wine-10.9-ec2.fc42.src.rpm \
+$HOME/.local/rpm/rpms/wine-10.10/wine-10.10-ec2.fc42.src.rpm \
+$HOME/.local/rpm/rpms/wine-10.11/wine-10.11-ec2.fc42.src.rpm \
+$HOME/.local/rpm/rpms/wine-10.12/wine-10.12-ec2.fc42.src.rpm \
+$HOME/.local/rpm/rpms/wine-10.13/wine-10.13-ec2.fc42.src.rpm \
+$HOME/.local/rpm/rpms/wine-10.14/wine-10.14-ec2.fc42.src.rpm \
+$HOME/.local/rpm/rpms/wine-10.15/wine-10.15-ec2.fc42.src.rpm \
+$HOME/.local/rpm/rpms/wine-10.16/wine-10.16-ec2.fc42.src.rpm \
+$HOME/.local/rpm/rpms/wine-10.17/wine-10.17-ec2.fc42.src.rpm \
+$HOME/.local/rpm/rpms/wine-10.18/wine-10.18-ec2.fc42.src.rpm \
+$HOME/.local/rpm/rpms/wine-10.19/wine-10.19-ec1.fc42.src.rpm \
+$HOME/.local/rpm/rpms/wine-10.20/wine-10.20-ec1.fc42.src.rpm \
+$HOME/.local/rpm/rpms/fex-emu-wine-2507/fex-emu-wine-2507-1.fc42.src.rpm \
+$HOME/.local/rpm/rpms/fex-emu-wine-2507.1/fex-emu-wine-2507.1-1.fc42.src.rpm \
+$HOME/.local/rpm/rpms/fex-emu-wine-2508/fex-emu-wine-2508-1.fc42.src.rpm \
+$HOME/.local/rpm/rpms/fex-emu-wine-2508.1/fex-emu-wine-2508.1-1.fc42.src.rpm \
+$HOME/.local/rpm/rpms/fex-emu-wine-2509/fex-emu-wine-2509-1.fc42.src.rpm \
+$HOME/.local/rpm/rpms/fex-emu-wine-2509.1/fex-emu-wine-2509.1-1.fc42.src.rpm \
+$HOME/.local/rpm/rpms/fex-emu-wine-2510/fex-emu-wine-2510-1.fc42.src.rpm \
+$HOME/.local/rpm/rpms/fex-emu-wine-2511/fex-emu-wine-2511-1.fc42.src.rpm \
+$HOME/.local/rpm/rpms/fex-emu-wine-2512/fex-emu-wine-2512-1.fc42.src.rpm \
+$HOME/.local/rpm/rpms/wine-dxvk-2.6.2/wine-dxvk-2.6.2-ec1.fc42.src.rpm \
+$HOME/.local/rpm/rpms/wine-dxvk-2.7/wine-dxvk-2.7-ec1.fc42.src.rpm \
+$HOME/.local/rpm/rpms/wine-dxvk-2.7.1/wine-dxvk-2.7.1-ec1.fc42.src.rpm \
