@@ -583,11 +583,13 @@ else
 fi
 if (( mock_rc != 0 )); then
   err "mock failed for $name"
+  notify-send "MX-RPM" "Build failed for $name"
   mkdir -p "$LOG_ROOT/.status/fail"; : >"$LOG_ROOT/.status/fail/$name" || true
   return 1
 fi
 
 msg "Done $name → $result_dir"
+notify-send "MX-RPM" "Build successful for $name"
 
   # Post-success hooks
   mkdir -p "$LOG_ROOT/.status/ok"; : >"$LOG_ROOT/.status/ok/$name" || true
