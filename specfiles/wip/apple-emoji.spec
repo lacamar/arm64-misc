@@ -1,33 +1,37 @@
-%global fontname apple-emoji
+%global fontname apple-emoji-linux
 %global fontconf 65-%{fontname}.conf
+%global fontdir %{_datadir}/fonts/%{fontname}
+%global fontconfig_avail %{_datadir}/fontconfig/conf.avail
+%global fontconfig_confdir %{_sysconfdir}/fonts/conf.d
 
 Name:           %{fontname}-fonts
 Version:        18.4
 Release:        1%{?dist}
-Summary:        Apple Color Emoji font
+Summary:        Apple Color Emoji font for Linux
 
-License:        LicenseRef-Apple-Emoji
-URL:            https://github.com/samuelngs/apple-emoji-linux
-Source0:        https://github.com/samuelngs/apple-emoji-linux/archive/refs/tags/v%{version}.tar.gz
+License:        OFL-1.1 AND Apache-2.0
+URL:            https://github.com/samuelngs/%{fontname}
+Source0:        https://github.com/samuelngs/%{fontname}/archive/refs/tags/v%{version}.tar.gz
 Source1:        %{name}-fontconfig.conf
 Source2:        %{fontname}.metainfo.xml
 
 BuildArch:      noarch
 
 BuildRequires:  make
-BuildRequires:  python3-pillow
-BuildRequires:  fontpackages-devel
+BuildRequires:  fonttools
+BuildRequires:  nototools
 BuildRequires:  optipng
 BuildRequires:  zopfli
 BuildRequires:  pngquant
 BuildRequires:  ImageMagick
-BuildRequires:  nototools
-BuildRequires:  fonttools
+BuildRequires:  libappstream-glib
 
 %description
-Apple-style color emoji font compiled from PNG assets using the
-apple-emoji-linux build system. This package ships only the resulting
-AppleColorEmoji.ttf, suitable for desktop use.
+Apple Color Emoji for Linux is a color emoji font that recreates Apple's
+emoji designs for use on Linux desktops and applications. It uses the CBDT/CBLC
+color font format and covers the same Unicode emoji repertoire as recent iOS
+releases. The upstream project builds the font from source emoji image assets
+and tooling derived from the Noto Emoji project.
 
 %prep
 %autosetup -n apple-emoji-linux-%{version}
@@ -36,37 +40,46 @@ AppleColorEmoji.ttf, suitable for desktop use.
 %make_build
 
 %install
-rm -rf %{buildroot}
-
-# Install the font
-install -m 0755 -d %{buildroot}%{_fontdir}/%{fontname}
+# Install built font
+install -m 0755 -d %{buildroot}%{fontdir}
 install -m 0644 -p AppleColorEmoji.ttf \
-    %{buildroot}%{_fontdir}/%{fontname}/AppleColorEmoji.ttf
+    %{buildroot}%{fontdir}/
 
-# fontconfig snippet (Source1)
-install -m 0755 -d %{buildroot}%{_datadir}/fontconfig/conf.avail
-install -m 0755 -d %{buildroot}%{_datadir}/fontconfig/conf.d
+# Install fontconfig configuration
+install -m 0755 -d %{buildroot}%{fontconfig_avail} \
+                   %{buildroot}%{fontconfig_confdir}
 install -m 0644 -p %{SOURCE1} \
-    %{buildroot}%{_datadir}/fontconfig/conf.avail/%{fontconf}
-ln -s ../conf.avail/%{fontconf} \
-    %{buildroot}%{_datadir}/fontconfig/conf.d/%{fontconf}
+    %{buildroot}%{fontconfig_avail}/%{fontconf}
+ln -s %{fontconfig_avail}/%{fontconf} \
+    %{buildroot}%{fontconfig_confdir}/%{fontconf}
 
-# AppStream metainfo (Source2)
+# Install AppStream metadata
 install -m 0755 -d %{buildroot}%{_metainfodir}
 install -m 0644 -p %{SOURCE2} \
     %{buildroot}%{_metainfodir}/%{fontname}.metainfo.xml
 
 %check
 appstream-util validate-relax --nonet \
-      %{buildroot}/%{_metainfodir}/%{fontname}.metainfo.xml
+    %{buildroot}/%{_metainfodir}/%{fontname}.metainfo.xml
+
+%post
+if [ -x /usr/bin/fc-cache ]; then
+    fc-cache -f %{_datadir}/fonts >/dev/null 2>&1 || :
+fi
+
+%postun
+if [ $1 -eq 0 ] && [ -x /usr/bin/fc-cache ]; then
+    fc-cache -f %{_datadir}/fonts >/dev/null 2>&1 || :
+fi
 
 %files
+%license LICENSE
 %doc README.md
+%{fontdir}/AppleColorEmoji.ttf
+%{fontconfig_avail}/%{fontconf}
+%{fontconfig_confdir}/%{fontconf}
 %{_metainfodir}/%{fontname}.metainfo.xml
-%{_datadir}/fontconfig/conf.avail/%{fontconf}
-%{_datadir}/fontconfig/conf.d/%{fontconf}
-%{_fontdir}/%{fontname}/AppleColorEmoji.ttf
 
 %changelog
 * Sat Nov 22 2025 Lachlan Marie <lchlnm@pm.me> - 18.4-1
-- Initial packaging for apple-emoji-fonts
+- Initial packaging for apple-emoji-linux-fonts
