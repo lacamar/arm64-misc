@@ -1,4 +1,4 @@
-%global bumpver 0
+%global bumpver 1
 
 %global commit 1156b3503a04780bbdcb6a781cce87281b8bf87d
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
@@ -48,6 +48,9 @@ Hot corners for Wayland. Create anchors in the corners of your monitors and exec
 %define debug_package %{nil}
 
 %changelog
+* Sat Nov 22 2025 Lachlan Marie <lchlnm@pm.me> - git^1.git.1156b35-3
+ - Update to commit 1156b3503a04780bbdcb6a781cce87281b8bf87d
+
 * Sun Jul 06 2025 Lachlan Marie <lchlnm@pm.me> - git^0.git.1156b35-3
 - Adjusted spec to build based on git commit.
 - Use short commit in source filenames
