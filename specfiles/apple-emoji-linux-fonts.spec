@@ -6,7 +6,7 @@
 
 Name:           %{fontname}-fonts
 Version:        18.4
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Apple Color Emoji font for Linux
 
 License:        OFL-1.1 AND Apache-2.0
@@ -77,5 +77,8 @@ fi
 %{_metainfodir}/%{fontname}.metainfo.xml
 
 %changelog
-* Sat Nov 23 2025 Lachlan Marie <lchlnm@pm.me> - 18.4-1
+* Sun Nov 23 2025 Lachlan Marie <lchlnm@pm.me> - 18.4-2
+- Fixed font config warning
+
+* Sun Nov 23 2025 Lachlan Marie <lchlnm@pm.me> - 18.4-1
 - Initial packaging for apple-emoji-linux-fonts
