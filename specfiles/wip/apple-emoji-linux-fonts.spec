@@ -30,8 +30,7 @@ BuildRequires:  libappstream-glib
 Apple Color Emoji for Linux is a color emoji font that recreates Apple's
 emoji designs for use on Linux desktops and applications. It uses the CBDT/CBLC
 color font format and covers the same Unicode emoji repertoire as recent iOS
-releases. The upstream project builds the font from source emoji image assets
-and tooling derived from the Noto Emoji project.
+releases.
 
 %prep
 %autosetup -n apple-emoji-linux-%{version}
@@ -40,12 +39,10 @@ and tooling derived from the Noto Emoji project.
 %make_build
 
 %install
-# Install built font
 install -m 0755 -d %{buildroot}%{fontdir}
 install -m 0644 -p AppleColorEmoji.ttf \
     %{buildroot}%{fontdir}/
 
-# Install fontconfig configuration
 install -m 0755 -d %{buildroot}%{fontconfig_avail} \
                    %{buildroot}%{fontconfig_confdir}
 install -m 0644 -p %{SOURCE1} \
@@ -53,7 +50,6 @@ install -m 0644 -p %{SOURCE1} \
 ln -s %{fontconfig_avail}/%{fontconf} \
     %{buildroot}%{fontconfig_confdir}/%{fontconf}
 
-# Install AppStream metadata
 install -m 0755 -d %{buildroot}%{_metainfodir}
 install -m 0644 -p %{SOURCE2} \
     %{buildroot}%{_metainfodir}/%{fontname}.metainfo.xml
@@ -81,5 +77,5 @@ fi
 %{_metainfodir}/%{fontname}.metainfo.xml
 
 %changelog
-* Sat Nov 22 2025 Lachlan Marie <lchlnm@pm.me> - 18.4-1
+* Sat Nov 23 2025 Lachlan Marie <lchlnm@pm.me> - 18.4-1
 - Initial packaging for apple-emoji-linux-fonts
