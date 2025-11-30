@@ -1,6 +1,6 @@
-%global bumpver 18
+%global bumpver 19
 
-%global commit e938b93f487532200d68d75d2bf15af6730e1a08
+%global commit c80aba2342a95a84d44cc5559276bf4609924c72
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       rpcs3-git
@@ -32,7 +32,7 @@ local externals = {
  { name="Fusion", ref="759ac5d", owner="xioTechnologies", path="fusion/fusion", version="1.2.9",  license="MIT" },
  { name="glslang", ref="fc9889c", owner="KhronosGroup", path="glslang/glslang", version="15.3.0",  license="BSD-3-Clause" },
  { name="hidapi", ref="f424236", owner="RPCS3", path="hidapi/hidapi", version="0.15.0",  license="GPLv3, BSD" },
- { name="libpng", ref="2b97891", owner="pnggroup", path="libpng/libpng", version="1.6.50",  license="PNGRLLv2" },
+ { name="libpng", ref="49363ad", owner="pnggroup", path="libpng/libpng", version="1.6.51",  license="PNGRLLv2" },
  { name="SDL", ref="badbf8d", owner="libsdl-org", path="libsdl-org/SDL", version="3.2.26",  license="zlib" },
  { name="libusb", ref="15a7ebb", owner="libusb", path="libusb/libusb", version="1.0.29",  license="LGPLv2.1" },
  { name="llvm-project", ref="cd70802", owner="llvm", path="llvm/llvm", version="19.1.7",  license="Apache-v2" },
@@ -197,6 +197,9 @@ DESTDIR=%{buildroot} ninja install
 
 
 %changelog
+* Sun Nov 30 2025 Lachlan Marie <lchlnm@pm.me> - 0.0.38^19.git.c80aba2-1
+ - Update to commit c80aba2342a95a84d44cc5559276bf4609924c72
+
 * Sun Nov 30 2025 Lachlan Marie <lchlnm@pm.me> - 0.0.38^18.git.e938b93-1
  - Update to commit e938b93f487532200d68d75d2bf15af6730e1a08
 
