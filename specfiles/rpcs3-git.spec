@@ -1,6 +1,6 @@
-%global bumpver 25
+%global bumpver 26
 
-%global commit 613d428ced78c345fd5c0077b0e72d484bce10d5
+%global commit b86b4d15c638644e3ef42ea6fe915733adb7a1bc
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       rpcs3-git
@@ -18,7 +18,7 @@ Source0:  https://github.com/RPCS3/rpcs3/archive/%{shortcommit}/rpcs3-%{shortcom
 %{lua:
 local externals = {
  { name="7zip", ref="5e96a82", owner="ip7z", path="7zip/7zip", version="25.01",  license="GNU-LGPL" },
- { name="FAudio", ref="8de3616", owner="FNA-XNA", path="FAudio", version="25.11",  license="zlib" },
+ { name="FAudio", ref="4ea8afe", owner="FNA-XNA", path="FAudio", version="25.12",  license="zlib" },
  { name="VulkanMemoryAllocator", ref="1d8f600", owner="GPUOpen-LibrariesAndSDKs", path="GPUOpen/VulkanMemoryAllocator", version="3.3.0",  license="MIT" },
  { name="openal-soft", ref="0e5e98e", owner="kcat", path="OpenAL/openal-soft", version="1.24.3",  license="PFFFT" },
  { name="soundtouch", ref="3982730", owner="RPCS3", path="SoundTouch/soundtouch/", version="2.4.0",  license="LGPLv2.1" },
@@ -33,7 +33,7 @@ local externals = {
  { name="glslang", ref="fc9889c", owner="KhronosGroup", path="glslang/glslang", version="15.3.0",  license="BSD-3-Clause" },
  { name="hidapi", ref="f424236", owner="RPCS3", path="hidapi/hidapi", version="0.15.0",  license="GPLv3, BSD" },
  { name="libpng", ref="49363ad", owner="pnggroup", path="libpng/libpng", version="1.6.51",  license="PNGRLLv2" },
- { name="SDL", ref="badbf8d", owner="libsdl-org", path="libsdl-org/SDL", version="3.2.26",  license="zlib" },
+ { name="SDL", ref="7f3ae3d", owner="libsdl-org", path="libsdl-org/SDL", version="3.2.28",  license="zlib" },
  { name="libusb", ref="15a7ebb", owner="libusb", path="libusb/libusb", version="1.0.29",  license="LGPLv2.1" },
  { name="llvm-project", ref="cd70802", owner="llvm", path="llvm/llvm", version="19.1.7",  license="Apache-v2" },
  { name="miniupnp", ref="d66872e", owner="miniupnp", path="miniupnp/miniupnp", version="2.3.9",  license="BSD-3-Clause" },
@@ -197,6 +197,9 @@ DESTDIR=%{buildroot} ninja install
 
 
 %changelog
+* Wed Dec 03 2025 Lachlan Marie <lchlnm@pm.me> - 0.0.38^26.git.b86b4d1-1
+ - Update to commit b86b4d15c638644e3ef42ea6fe915733adb7a1bc
+
 * Wed Dec 03 2025 Lachlan Marie <lchlnm@pm.me> - 0.0.38^25.git.613d428-1
  - Update to commit 613d428ced78c345fd5c0077b0e72d484bce10d5
 
