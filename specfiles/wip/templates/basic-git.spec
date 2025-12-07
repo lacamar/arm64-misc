@@ -1,18 +1,20 @@
 %global bumpver 0
+%global _name #NAME
+%global tag #TAG
 
 %global commit fcff16b6f711ae7263f883d8efc18a3a3d33e227
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
-Name:        #[NAME]-git
-Conflicts:   #[NAME]
-Provides:    #[NAME]
-Version:     #####%{?bumpver:^%{bumpver}.git.%{shortcommit}}
+Name:        #NAME-git
+Conflicts:   #NAME
+Provides:    #NAME
+Version:     #TAG%{?bumpver:^%{bumpver}.git.%{shortcommit}}
 Release:     1%{?dist}
-Summary:     ##########################################
+Summary:     #SUMMARY
 
-License:     #####
-URL:         https://github.com/##########/%{name}
-Source0:     https://github.com/#######/%{name}/archive/%{shortcommit}/%{name}-%{shortcommit}.tar.gz
+License:     #LICENSE
+URL:         https://github.com/#AUTHOR/%{_name}
+Source0:     https://github.com/#AUTHOR/%{_name}/archive/%{shortcommit}/%{_name}-%{shortcommit}.tar.gz
 
 BuildRequires:  #######
 BuildRequires:  #######
@@ -26,7 +28,7 @@ Requires:       #######
 ######################################################################
 
 %prep
-%autosetup -qn %{name}-%{version}
+%autosetup -qn %{_name}-%{commit}
 
 %build
 #####################
@@ -48,4 +50,4 @@ Requires:       #######
 
 %changelog
 * Sun Nov 23 2025 Lachlan Marie <lchlnm@pm.me> - #[VERSION]-1
-- Initial RPM packaging of #[NAME]-git
+- Initial RPM packaging of #NAME-git
