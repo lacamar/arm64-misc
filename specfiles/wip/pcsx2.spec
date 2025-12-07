@@ -62,6 +62,7 @@ BuildRequires: extra-cmake-modules
 BuildRequires: fontconfig-devel
 BuildRequires: gcc-c++
 BuildRequires: gtk3-devel
+BuildRequires: kddockwidgets-qt6-devel
 BuildRequires: libaio-devel
 BuildRequires: libcurl-devel
 BuildRequires: libdecor-devel
@@ -299,26 +300,32 @@ export CFLAGS="${CFLAGS} -fPIC"
 export CXXFLAGS="$CFLAGS"
 export LDFLAGS="-fuse-ld=lld"
 
-cmake -S %{_builddir}/pcsx2-%{version} \
-      -B %{_builddir}/pcsx2-%{version}/redhat-linux-build \
-      -DCMAKE_C_COMPILER=clang \
-      -DCMAKE_CXX_COMPILER=clang++ \
-      -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-      -DCMAKE_PREFIX_PATH=%{_builddir}/pcsx2-%{version}/deps \
-      -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=lld" \
-      -DCMAKE_MODULE_LINKER_FLAGS_INIT="-fuse-ld=lld" \
-      -DCMAKE_SHARED_LINKER_FLAGS_INIT="-fuse-ld=lld" \
-      -GNinja
+# cmake -S %{_builddir}/pcsx2-%{version} \
+#       -B %{_builddir}/pcsx2-%{version}/redhat-linux-build \
+#       -DCMAKE_C_COMPILER=clang \
+#       -DCMAKE_CXX_COMPILER=clang++ \
+#       -DCMAKE_BUILD_TYPE=Release \
+#       -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+#       -DCMAKE_PREFIX_PATH=%{_builddir}/pcsx2-%{version}/deps \
+#       -DCMAKE_INSTALL_PREFIX:PATH=%{_prefix} \
+#       -DCMAKE_INSTALL_LIBDIR:PATH=%{_libdir} \
+#       -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=lld" \
+#       -DCMAKE_MODULE_LINKER_FLAGS_INIT="-fuse-ld=lld" \
+#       -DCMAKE_SHARED_LINKER_FLAGS_INIT="-fuse-ld=lld" \
+#       -GNinja
 
-ninja -C %{_builddir}/pcsx2-%{version}/redhat-linux-build -v
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=lld" -DCMAKE_MODULE_LINKER_FLAGS_INIT="-fuse-ld" -DCMAKE_SHARED_LINKER_FLAGS_INIT="-fuse-ld=lld" -DCMAKE_PREFIX_PATH="$PWD/deps" -GNinja
+
+# ninja -C %{_builddir}/pcsx2-%{version}/redhat-linux-build -v
+ninja -C build
 
 
 
 %install
-ninja -C %{_builddir}/pcsx2-%{version}/redhat-linux-build install DESTDIR=%{buildroot}
+# DESTDIR=%{buildroot} ninja -C %{_builddir}/pcsx2-%{version}/redhat-linux-build install
+ninja -C build -v install
 
-find %{buildroot}%{_libdir} -name '*.a' -delete
+# find %{buildroot}%{_libdir} -name '*.a' -delete
 
 
 %files
