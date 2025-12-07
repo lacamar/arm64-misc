@@ -19,6 +19,8 @@ BuildRequires:  yarnpkg
 BuildRequires:  chromium
 BuildRequires:  vips-devel
 BuildRequires:  nodejs-devel
+BuildRequires:  python3-setuptools
+
 Requires:       nodejs-electron >= %{electron_version}
 
 
