@@ -19,7 +19,7 @@ License:        GPLv3
 URL:            https://github.com/Open-Wine-Components/%{_name}
 Source0:        %{url}/archive/%{shortcommit}/%{_name}-%{shortcommit}.tar.gz
 Source1:        https://github.com/urllib3/urllib3/releases/download/%{urllib3}/urllib3-%{urllib3}.tar.gz
-Source2:        umu-launcher-vendor-%{tag}.tar.gz
+Source2:        umu-launcher-vendor-4ed61d1.tar.zst
 
 BuildArch:      x86_64 aarch64
 BuildRequires:  meson >= 0.54.0
