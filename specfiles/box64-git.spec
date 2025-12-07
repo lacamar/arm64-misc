@@ -1,12 +1,12 @@
 %global bumpver 0
-%global _NAME box64
+%global _name box64
 
 %global commit 056999e8fd7ec7649762179f52e32819ef5e48e1
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
-Name:           %{_NAME}-git
-Conflicts:      %{_NAME}
-Provides:       %{_NAME}
+Name:           %{_name}-git
+Conflicts:      %{_name}
+Provides:       %{_name}
 Version:        0.3.8%{?bumpver:^%{bumpver}.git.%{shortcommit}}
 Release:        1%{?dist}
 Summary:        Linux userspace x86_64 emulator with a twist, targeted at ARM64
@@ -23,7 +23,7 @@ systems, like ARM (host system needs to be 64-bit little-endian).}
 
 License:        MIT
 URL:            https://box86.org
-Source:         %{forgeurl}/archive/%{shortcommit}/%{_NAME}-%{shortcommit}.tar.gz
+Source:         %{forgeurl}/archive/%{shortcommit}/%{_name}-%{shortcommit}.tar.gz
 
 BuildRequires:  cmake
 BuildRequires:  gcc
@@ -34,11 +34,11 @@ BuildRequires:  systemd-rpm-macros
 # box64 only supports these architectures
 ExclusiveArch:  aarch64 riscv64 ppc64le %{x86_64}
 
-Requires:       %{_NAME}-data = %{version}-%{release}
+Requires:       %{_name}-data = %{version}-%{release}
 # These should not be pulled in on x86_64 as they can cause a loop and prevent
 # any binary from successfully executing (#2344770)
 %ifnarch %{x86_64}
-Recommends:     %{_NAME}-binfmts = %{version}-%{release}
+Recommends:     %{_name}-binfmts = %{version}-%{release}
 %endif
 %ifarch aarch64
 Requires(post): %{_sbindir}/update-alternatives
@@ -48,7 +48,7 @@ Requires(postun): %{_sbindir}/update-alternatives
 %description    %{common_description}
 
 %package        data
-Summary:        Common files for %{_NAME}
+Summary:        Common files for %{_name}
 BuildArch:      noarch
 
 %description    data %{common_description}
@@ -69,7 +69,7 @@ execute x86_64 binaries.
 %package        asahi
 Summary:        Apple Silicon version of box64
 
-Requires:       %{_NAME}-data = %{version}-%{release}
+Requires:       %{_name}-data = %{version}-%{release}
 Requires(post): %{_sbindir}/update-alternatives
 Requires(postun): %{_sbindir}/update-alternatives
 
@@ -80,7 +80,7 @@ a 16k page size.
 %endif
 
 %prep
-%autosetup -p1 -n %{_NAME}-%{commit}
+%autosetup -p1 -n %{_name}-%{commit}
 
 # Remove prebuilt libraries
 rm -r x64lib
@@ -99,7 +99,7 @@ sed -i 's:/etc/binfmt.d:%{_binfmtdir}:g' CMakeLists.txt
 # Apple Silicon
 %cmake %{common_flags} -DM1=ON
 %cmake_build
-cp -p %{__cmake_builddir}/%{_NAME} %{_NAME}.asahi
+cp -p %{__cmake_builddir}/%{_name} %{_name}.asahi
 rm -r %{__cmake_builddir}
 
 %endif
@@ -121,16 +121,16 @@ rm -r %{__cmake_builddir}
 %cmake_build
 
 # Build manpage
-pod2man --stderr docs/%{_NAME}.pod > docs/%{_NAME}.1
+pod2man --stderr docs/%{_name}.pod > docs/%{_name}.1
 
 %install
 %ifarch %{x86_64}
 # Install manually as cmake_install doesn't seem to work on x86_64
-install -Dpm0755 -t %{buildroot}%{_bindir} %{__cmake_builddir}/%{_NAME}
+install -Dpm0755 -t %{buildroot}%{_bindir} %{__cmake_builddir}/%{_name}
 install -Ddpm0755 %{buildroot}%{_binfmtdir}
-sed 's:${CMAKE_INSTALL_PREFIX}/bin/${BOX64}:%{_bindir}/%{_NAME}:' \
+sed 's:${CMAKE_INSTALL_PREFIX}/bin/${BOX64}:%{_bindir}/%{_name}:' \
   < system/box32.conf.cmake > system/box32.conf
-sed 's:${CMAKE_INSTALL_PREFIX}/bin/${BOX64}:%{_bindir}/%{_NAME}:' \
+sed 's:${CMAKE_INSTALL_PREFIX}/bin/${BOX64}:%{_bindir}/%{_name}:' \
   < system/box64.conf.cmake > system/box64.conf
 install -Dpm0644 -t %{buildroot}%{_sysconfdir} system/box64.box64rc
 %else
@@ -138,31 +138,31 @@ install -Dpm0644 -t %{buildroot}%{_sysconfdir} system/box64.box64rc
 %endif
 
 # Install manpage
-install -Dpm0644 -t %{buildroot}%{_mandir}/man1 docs/%{_NAME}.1
+install -Dpm0644 -t %{buildroot}%{_mandir}/man1 docs/%{_name}.1
 
 %ifarch aarch64
-mv %{buildroot}%{_bindir}/%{_NAME} %{buildroot}%{_bindir}/%{_NAME}.aarch64
-touch %{buildroot}%{_bindir}/%{_NAME}
-chmod +x %{buildroot}%{_bindir}/%{_NAME}
+mv %{buildroot}%{_bindir}/%{_name} %{buildroot}%{_bindir}/%{_name}.aarch64
+touch %{buildroot}%{_bindir}/%{_name}
+chmod +x %{buildroot}%{_bindir}/%{_name}
 install -Dpm0755 -t %{buildroot}%{_bindir} \
-  %{_NAME}.asahi
+  %{_name}.asahi
 
 %post
-%{_sbindir}/update-alternatives --install %{_bindir}/%{_NAME} \
-  %{_NAME} %{_bindir}/%{_NAME}.aarch64 20
+%{_sbindir}/update-alternatives --install %{_bindir}/%{_name} \
+  %{_name} %{_bindir}/%{_name}.aarch64 20
 
 %postun
 if [ $1 -eq 0 ] ; then
-  %{_sbindir}/update-alternatives --remove %{_NAME} %{_bindir}/%{_NAME}.aarch64
+  %{_sbindir}/update-alternatives --remove %{_name} %{_bindir}/%{_name}.aarch64
 fi
 
 %post asahi
-%{_sbindir}/update-alternatives --install %{_bindir}/%{_NAME} \
-  %{_NAME} %{_bindir}/%{_NAME}.asahi 10
+%{_sbindir}/update-alternatives --install %{_bindir}/%{_name} \
+  %{_name} %{_bindir}/%{_name}.asahi 10
 
 %postun asahi
 if [ $1 -eq 0 ] ; then
-  %{_sbindir}/update-alternatives --remove %{_NAME} %{_bindir}/%{_NAME}.asahi
+  %{_sbindir}/update-alternatives --remove %{_name} %{_bindir}/%{_name}.asahi
 fi
 
 %endif
@@ -174,16 +174,16 @@ fi
 
 %files
 %ifarch aarch64
-%ghost %{_bindir}/%{_NAME}
-%{_bindir}/%{_NAME}.aarch64
+%ghost %{_bindir}/%{_name}
+%{_bindir}/%{_name}.aarch64
 %else
-%{_bindir}/%{_NAME}
+%{_bindir}/%{_name}
 %endif
 
 %ifarch aarch64
 %files asahi
-%ghost %{_bindir}/%{_NAME}
-%{_bindir}/%{_NAME}.asahi
+%ghost %{_bindir}/%{_name}
+%{_bindir}/%{_name}.asahi
 %endif
 
 %files data
