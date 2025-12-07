@@ -45,18 +45,14 @@ BuildRequires:  python3-pyzstd
 BuildRequires:  python3-vdf
 BuildRequires:  python3-hatch-vcs
 BuildRequires:  cargo
-
-# Can't use these yet, F41 doesn't ship urllib3 >= 2.0 needed
-#BuildRequires:  python3-urllib3
+BuildRequires:  python3-urllib3
 
 Requires:	python
 Requires:	python3
 Requires:	python3-xlib
 Requires:	python3-filelock
 Requires:	python3-pyzstd
-
-# Can't use these yet, F41 doesn't ship urllib3 >= 2.0 needed
-#Requires:  python3-urllib3
+Requires:       python3-urllib3
 
 Recommends:	python3-cbor2
 Recommends:	python3-xxhash
@@ -93,8 +89,6 @@ EOF
 
 
 %build
-# Update this when fedora ships urllib3 >= 2.0
-#./configure.sh --prefix=/usr --use-system-pyzstd --use-system-urllib
 ./configure.sh --prefix=/usr --use-system-pyzstd --use-system-vdf --use-system-urllib
 make
 
