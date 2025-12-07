@@ -15,7 +15,6 @@ $HOME/.local/rpm/rpms/wine-10.16/wine-10.16-ec2.fc42.src.rpm \
 $HOME/.local/rpm/rpms/wine-10.17/wine-10.17-ec2.fc42.src.rpm \
 $HOME/.local/rpm/rpms/wine-10.18/wine-10.18-ec2.fc42.src.rpm \
 $HOME/.local/rpm/rpms/wine-10.19/wine-10.19-ec1.fc42.src.rpm \
-$HOME/.local/rpm/rpms/wine-10.20/wine-10.20-ec1.fc42.src.rpm \
 $HOME/.local/rpm/rpms/fex-emu-wine-2507/fex-emu-wine-2507-1.fc42.src.rpm \
 $HOME/.local/rpm/rpms/fex-emu-wine-2507.1/fex-emu-wine-2507.1-1.fc42.src.rpm \
 $HOME/.local/rpm/rpms/fex-emu-wine-2508/fex-emu-wine-2508-1.fc42.src.rpm \
