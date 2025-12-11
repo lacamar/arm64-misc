@@ -1,6 +1,6 @@
-%global bumpver 31
+%global bumpver 32
 
-%global commit 3f6529fecbacdf90aa556ae0fd39b478ae28c27f
+%global commit 0f1eadcab038fa6f2d20cb639fe16d72b97f9b4a
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       rpcs3-git
@@ -28,10 +28,10 @@ local externals = {
  { name="discord-rpc", ref="3dc2c32", owner="Vestrel", path="discord-rpc/discord-rpc", license="MIT" },
  { name="gamemode", ref="c54d6d4", owner="FeralInteractive", path="feralinteractive/feralinteractive", version="1.8.2", license="BSD-3-Clause" },
  { name="ffmpeg-core", ref="ec6367d", owner="RPCS3", path="ffmpeg", license="LGPLv2.1" },
- { name="flatbuffers", ref="595bf00", owner="google", path="flatbuffers", version="24.3.25",  license="Apache-v2" },
+ { name="flatbuffers", ref="1872409", owner="google", path="flatbuffers", version="25.9.23",  license="Apache-v2" },
  { name="Fusion", ref="759ac5d", owner="xioTechnologies", path="fusion/fusion", version="1.2.9",  license="MIT" },
  { name="glslang", ref="fc9889c", owner="KhronosGroup", path="glslang/glslang", version="15.3.0",  license="BSD-3-Clause" },
- { name="hidapi", ref="f424236", owner="RPCS3", path="hidapi/hidapi", version="0.15.0",  license="GPLv3, BSD" },
+ { name="hidapi", ref="d6b2a97", owner="RPCS3", path="hidapi/hidapi", version="0.15.0",  license="GPLv3, BSD" },
  { name="libpng", ref="49363ad", owner="pnggroup", path="libpng/libpng", version="1.6.51",  license="PNGRLLv2" },
  { name="SDL", ref="7f3ae3d", owner="libsdl-org", path="libsdl-org/SDL", version="3.2.28",  license="zlib" },
  { name="libusb", ref="15a7ebb", owner="libusb", path="libusb/libusb", version="1.0.29",  license="LGPLv2.1" },
@@ -197,6 +197,18 @@ DESTDIR=%{buildroot} ninja install
 
 
 %changelog
+* Thu Dec 11 2025 Lachlan Marie <lchlnm@pm.me> - 0.0.38^32.git.0f1eadc-1
+ - Update to commit 0f1eadcab038fa6f2d20cb639fe16d72b97f9b4a
+
+* Wed Dec 10 2025 Lachlan Marie <lchlnm@pm.me> - 0.0.38^34.git.aff6452-1
+ - Update to commit aff645272fb51440276b07fac8d8c219eaee1772
+
+* Tue Dec 09 2025 Lachlan Marie <lchlnm@pm.me> - 0.0.38^33.git.27f39d2-1
+ - Update to commit 27f39d2ac08e40fc705135cba6898bc3166e0e71
+
+* Mon Dec 08 2025 Lachlan Marie <lchlnm@pm.me> - 0.0.38^32.git.0f1d516-1
+ - Update to commit 0f1d516d9ae6a1725e4db5553c99463b1aa6d821
+
 * Sun Dec 07 2025 Lachlan Marie <lchlnm@pm.me> - 0.0.38^31.git.3f6529f-1
  - Update to commit 3f6529fecbacdf90aa556ae0fd39b478ae28c27f
 
