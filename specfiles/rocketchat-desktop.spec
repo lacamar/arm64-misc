@@ -1,5 +1,5 @@
 Name: rocketchat-desktop
-Version: 4.10.0
+Version: 4.10.1
 Release: %autorelease
 Summary: Desktop Client for Rocket.Chat
 
@@ -19,7 +19,8 @@ BuildRequires:  yarnpkg
 BuildRequires:  chromium
 BuildRequires:  vips-devel
 BuildRequires:  nodejs-devel
-BuildRequires:  python3-setuptools
+BuildRequires:  python3-devel
+BuildRequires:  python3dist(setuptools)
 
 Requires:       nodejs-electron >= %{electron_version}
 
@@ -30,10 +31,12 @@ Desktop client for Rocket.Chat.
 %prep
 %autosetup -n Rocket.Chat.Electron-%{version} -N -a 1
 sed -i '/downloadSupportedVersions()/d' rollup.config.mjs
+rm -rf node_modules/electron
 mkdir -p node_modules/electron
 unzip -q %{SOURCE2} -d node_modules/electron/
 
 %build
+export NODE_ENV=production
 export ELECTRON_OVERRIDE_DIST_PATH=%{_bindir}/electron
 export ELECTRON_SKIP_BINARY_DOWNLOAD=1
 export PUPPETEER_SKIP_DOWNLOAD=1
