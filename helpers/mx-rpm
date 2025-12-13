@@ -306,6 +306,7 @@ fi
 
 # default extra repos (example; comment/remove if unwanted)
 DEFAULT_REPOS=(
+  "https://download.copr.fedorainfracloud.org/results/lacamar/arm64-misc/fedora-$FEDORA_RELEASE-$BASEARCH/"
   "https://download.copr.fedorainfracloud.org/results/lacamar/wine-arm64ec/fedora-$FEDORA_RELEASE-$BASEARCH/"
   "https://download.opensuse.org/repositories/devel:/languages:/nodejs/Fedora_$FEDORA_RELEASE/"
 )
