@@ -3,8 +3,9 @@ set -euo pipefail
 echo "==> Start AutoBuild ----------------------------------------------------------------
 "
 
+export OS_VER=fedora-43-aarch64
 export SPECFILE="$(realpath "$1")"
-export BUILD_CMD="mx-rpm --copr $COPR"
+export BUILD_CMD="mx-rpm -c $OS_VER --copr $COPR"
 export BRANCH="HEAD"
 
 export NAME=$(rpmspec -P "$SPECFILE" | awk '/^Name:/ {print $2; exit}')
