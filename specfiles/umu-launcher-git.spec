@@ -1,8 +1,8 @@
-%global bumpver 0
+%global bumpver 1
 %global tag 1.3.0
 %global _name umu-launcher
 
-%global commit 4ed61d1031ea43d55100ae2ffa3057280ed2540c
+%global commit bb5c870fe076e21fe60cb652b57365022fbfd77a
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:        umu-launcher-git
@@ -101,6 +101,9 @@ make DESTDIR=%{buildroot} PYTHONDIR=%{python3_sitelib} install
 %{python3_sitelib}/umu*
 
 %changelog
+* Tue Dec 16 2025 Lachlan Marie <lchlnm@pm.me> - 1.3.0^1.git.bb5c870-1
+ - Update to commit bb5c870fe076e21fe60cb652b57365022fbfd77a
+
 * Sun Dec 07 2025 Lachlan Marie <lchlnm@pm.me> - 1.3.0^0.git.4ed61d1-1
  - Adapted specfile from gmanka copr
  - Changed build from project git commits
