@@ -1,6 +1,6 @@
-%global bumpver 11
+%global bumpver 12
 
-%global commit debb0911206e4090ee984528bdf4e1baef7fcf99
+%global commit db06c3ba7d19d9cb9379a10141a8d2e0fdfd4770
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       xray-16
@@ -18,9 +18,9 @@ local externals = {
   { name="GameSpy", ref="3e43480", owner="OpenXRay", path="GameSpy",  license="IGN" },
   { name="LuaJIT", ref="5a5cd82", owner="OpenXRay", path="LuaJIT", version="2.1",  license="MIT" },
   { name="gli", ref="779b99a", owner="g-truc", path="gli", version="0.8.2.0",  license="MIT" },
-  { name="imgui", ref="4fa59df", owner="ocornut", path="imgui", version="v.1.94.5",  license="MIT" },
+  { name="imgui", ref="6327b63", owner="ocornut", path="imgui", version="v.1.92.5",  license="MIT" },
   { name="luabind-deboostified", ref="8da131b", owner="OpenXRay", path="luabind", version="0.9",  license="MIT" },
-  { name="sse2neon", ref="42eee28", owner="DLTcollab", path="sse2neon", version="1.8.0",  license="MIT" },
+  { name="sse2neon", ref="68ec5cb", owner="DLTcollab", path="sse2neon", version="1.8.0",  license="MIT" },
   { name="sse2rvv", ref="373f788", owner="pattonkan", path="sse2rvv", version="git",  license="MIT" },
   { name="xrLuaFix", ref="0e89050", owner="OpenXRay", path="xrLuaFix", version="git",  license="BSD-3" },
   { name="jenkins-ctest-plugin", ref="63a4a82", owner="rpavlik", path="luabind/test/jenkins-ctest-plugin", version="git",  license="MIT" },
@@ -102,6 +102,9 @@ Improved version of the X-Ray Engine, the game engine used in the world-famous S
 %{_datadir}/openxray/*
 
 %changelog
+* Tue Dec 16 2025 Lachlan Marie <lchlnm@pm.me> - git^12.git.db06c3b-3
+ - Update to commit db06c3ba7d19d9cb9379a10141a8d2e0fdfd4770
+
 * Sun Dec 14 2025 Lachlan Marie <lchlnm@pm.me> - git^11.git.debb091-3
  - Update to commit debb0911206e4090ee984528bdf4e1baef7fcf99
 
