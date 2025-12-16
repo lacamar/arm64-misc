@@ -1,6 +1,6 @@
-%global bumpver 12
+%global bumpver 13
 
-%global commit db06c3ba7d19d9cb9379a10141a8d2e0fdfd4770
+%global commit bf1c14f0fe1670766008e57b0db188e78541f052
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       xray-16
@@ -102,6 +102,9 @@ Improved version of the X-Ray Engine, the game engine used in the world-famous S
 %{_datadir}/openxray/*
 
 %changelog
+* Tue Dec 16 2025 Lachlan Marie <lchlnm@pm.me> - git^13.git.bf1c14f-3
+ - Update to commit bf1c14f0fe1670766008e57b0db188e78541f052
+
 * Tue Dec 16 2025 Lachlan Marie <lchlnm@pm.me> - git^12.git.db06c3b-3
  - Update to commit db06c3ba7d19d9cb9379a10141a8d2e0fdfd4770
 
