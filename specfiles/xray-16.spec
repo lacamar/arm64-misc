@@ -1,6 +1,6 @@
-%global bumpver 13
+%global bumpver 21
 
-%global commit bf1c14f0fe1670766008e57b0db188e78541f052
+%global commit 1881ea90030f797f715f20698e95090fc914d2db
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       xray-16
@@ -18,9 +18,9 @@ local externals = {
   { name="GameSpy", ref="3e43480", owner="OpenXRay", path="GameSpy",  license="IGN" },
   { name="LuaJIT", ref="5a5cd82", owner="OpenXRay", path="LuaJIT", version="2.1",  license="MIT" },
   { name="gli", ref="779b99a", owner="g-truc", path="gli", version="0.8.2.0",  license="MIT" },
-  { name="imgui", ref="6327b63", owner="ocornut", path="imgui", version="v.1.92.5",  license="MIT" },
+  { name="imgui", ref="9ca7ea0", owner="ocornut", path="imgui", version="v.1.92.5",  license="MIT" },
   { name="luabind-deboostified", ref="8da131b", owner="OpenXRay", path="luabind", version="0.9",  license="MIT" },
-  { name="sse2neon", ref="68ec5cb", owner="DLTcollab", path="sse2neon", version="1.8.0",  license="MIT" },
+  { name="sse2neon", ref="d352d24", owner="DLTcollab", path="sse2neon", version="1.8.0",  license="MIT" },
   { name="sse2rvv", ref="373f788", owner="pattonkan", path="sse2rvv", version="git",  license="MIT" },
   { name="xrLuaFix", ref="0e89050", owner="OpenXRay", path="xrLuaFix", version="git",  license="BSD-3" },
   { name="jenkins-ctest-plugin", ref="63a4a82", owner="rpavlik", path="luabind/test/jenkins-ctest-plugin", version="git",  license="MIT" },
@@ -75,9 +75,10 @@ Improved version of the X-Ray Engine, the game engine used in the world-famous S
 
 
 %build
+%set_build_flags
+export CXXFLAGS="%{build_cxxflags} -Wno-error=overloaded-virtual"
 %cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo
 %cmake_build
-
 
 %install
 %cmake_install
@@ -102,6 +103,30 @@ Improved version of the X-Ray Engine, the game engine used in the world-famous S
 %{_datadir}/openxray/*
 
 %changelog
+* Sun Dec 28 2025 Lachlan Marie <lchlnm@pm.me> - git^21.git.1881ea9-3
+ - Update to commit 1881ea90030f797f715f20698e95090fc914d2db
+
+* Sat Dec 27 2025 Lachlan Marie <lchlnm@pm.me> - git^20.git.bf27fba-3
+ - Update to commit bf27fba43d15ee5df042c6a2c1d7d375de197a08
+
+* Thu Dec 25 2025 Lachlan Marie <lchlnm@pm.me> - git^19.git.dc3c07a-3
+ - Update to commit dc3c07ac29550e5c3c64c09975131f7e153d32a2
+
+* Thu Dec 25 2025 Lachlan Marie <lchlnm@pm.me> - git^18.git.8907fb9-3
+ - Update to commit 8907fb958b038f45f1eac719455c77ea2ef6d368
+
+* Wed Dec 24 2025 Lachlan Marie <lchlnm@pm.me> - git^17.git.57a8246-3
+ - Update to commit 57a82460278a4f42b4a64273b87abe174ac17731
+
+* Mon Dec 22 2025 Lachlan Marie <lchlnm@pm.me> - git^16.git.5c4a40f-3
+ - Update to commit 5c4a40fd9fce9e6c3469506442fefe2bb37e707d
+
+* Sun Dec 21 2025 Lachlan Marie <lchlnm@pm.me> - git^15.git.75f99a7-3
+ - Update to commit 75f99a7db0d1eb17ad53c83263cedb71b8ec278f
+
+* Sat Dec 20 2025 Lachlan Marie <lchlnm@pm.me> - git^14.git.5fa524d-3
+ - Update to commit 5fa524ddc1dafbbdca8a4774a8af2562121e4423
+
 * Tue Dec 16 2025 Lachlan Marie <lchlnm@pm.me> - git^13.git.bf1c14f-3
  - Update to commit bf1c14f0fe1670766008e57b0db188e78541f052
 
