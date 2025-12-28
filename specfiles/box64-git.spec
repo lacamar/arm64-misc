@@ -1,7 +1,7 @@
-%global bumpver 24
+%global bumpver 25
 %global _name box64
 
-%global commit 9a5a8fedc5cbb9d8e503264038b9e520706bdfbe
+%global commit 050e0f9f43dcec2d9b2365056e248ca7b6ff0e03
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           %{_name}-git
@@ -208,6 +208,9 @@ fi
 %endif
 
 %changelog
+* Sun Dec 28 2025 Lachlan Marie <lchlnm@pm.me> - 0.3.8^25.git.050e0f9-1
+ - Update to commit 050e0f9f43dcec2d9b2365056e248ca7b6ff0e03
+
 * Sun Dec 28 2025 Lachlan Marie <lchlnm@pm.me> - 0.3.8^24.git.9a5a8fe-1
  - Update to commit 9a5a8fedc5cbb9d8e503264038b9e520706bdfbe
 
