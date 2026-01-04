@@ -1,13 +1,13 @@
-%global bumpver 31
+%global bumpver 32
 %global _name box64
 
-%global commit baa962f5869d6209648d29d17e658c0271f53fef
+%global commit dae0917c47b4edd8956f314210417a20fd225c4b
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           %{_name}-git
 Conflicts:      %{_name}
 Provides:       %{_name} = %{version}-%{release}
-Version:        0.3.8%{?bumpver:^%{bumpver}.git.%{shortcommit}}
+Version:        0.4.0%{?bumpver:^%{bumpver}.git.%{shortcommit}}
 Release:        1%{?dist}
 Summary:        Linux userspace x86_64 emulator with a twist, targeted at ARM64
 
@@ -208,6 +208,9 @@ fi
 %endif
 
 %changelog
+* Sun Jan 04 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0^32.git.dae0917-1
+ - Update to commit dae0917c47b4edd8956f314210417a20fd225c4b
+
 * Sat Jan 03 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.8^31.git.baa962f-1
  - Update to commit baa962f5869d6209648d29d17e658c0271f53fef
 
