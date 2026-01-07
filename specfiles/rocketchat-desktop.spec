@@ -1,6 +1,6 @@
 Name:       rocketchat-desktop
 Version:    4.11.0
-Release:    2%{?dist}
+Release:    1%{?dist}
 Summary:    Desktop Client for Rocket.Chat
 
 %global electron_version 39.2.5
