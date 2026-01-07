@@ -1,5 +1,5 @@
 Name:       rocketchat-desktop
-Version:    4.10.0
+Version:    4.11.0
 Release:    2%{?dist}
 Summary:    Desktop Client for Rocket.Chat
 
@@ -11,6 +11,7 @@ URL:      https://github.com/RocketChat/Rocket.Chat.Electron
 Source0:  https://github.com/RocketChat/Rocket.Chat.Electron/archive/refs/tags/%{version}.tar.gz
 Source1:  Rocket.Chat.Electron-%{version}-yarn-cache.tar.xz
 Source2:  https://github.com/electron/electron/releases/download/v%{electron_version}/electron-v%{electron_version}-linux-arm64.zip
+Source3:  rocketchat-tarballer.sh
 
 ExclusiveArch:  aarch64
 
