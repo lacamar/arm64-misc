@@ -1,13 +1,13 @@
-%global bumpver 13
+%global bumpver 20
 %global _name faugus-launcher
 
-%global commit 6f8fc60cdc729dcf0e522ff4f1616b9b100a3e96
+%global commit 22244d49023e86876462ff221e54de528225fd75
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           faugus-launcher-git
 Conflicts:      faugus-launcher
 Provides:       faugus-launcher
-Version:        1.11.8%{?bumpver:^%{bumpver}.git.%{shortcommit}}
+Version:        1.13.4%{?bumpver:^%{bumpver}.git.%{shortcommit}}
 Release:        1%{?dist}
 Summary:        A simple and lightweight app for running Windows games using UMU-Launcher
 
@@ -16,7 +16,12 @@ URL:            https://github.com/Faugus/%{_name}
 Source0:        https://github.com/Faugus/%{_name}/archive/%{shortcommit}/%{_name}-%{shortcommit}.tar.gz
 
 BuildArch:      noarch
-BuildRequires:  meson gtk-update-icon-cache
+
+BuildRequires:  meson
+BuildRequires:  gtk-update-icon-cache
+BuildRequires:  python3-devel
+BuildRequires:  python3-rpm-macros
+
 Requires:       python3
 Requires:       python3-gobject
 Requires:       python3-requests
@@ -49,8 +54,8 @@ A simple and lightweight app for running Windows games using UMU-Launcher/UMU-Pr
 %{_bindir}/faugus-launcher
 %{_bindir}/faugus-run
 %{_bindir}/faugus-proton-manager
-%{_bindir}/faugus-components
-%{_bindir}/faugus-proton-downloader
+%{python3_sitelib}/faugus
+%{python3_sitelib}/faugus/*.py
 %{_datadir}/applications/*.desktop
 %{_datadir}/icons/hicolor/256x256/apps/*.png
 %{_datadir}/icons/hicolor/256x256/apps/faugus-mono.svg
@@ -61,6 +66,27 @@ A simple and lightweight app for running Windows games using UMU-Launcher/UMU-Pr
 %{_datadir}/licenses/faugus-launcher/LICENSE
 
 %changelog
+* Tue Jan 13 2026 Lachlan Marie <lchlnm@pm.me> - 1.13.4^20.git.22244d4-1
+ - Update to commit 22244d49023e86876462ff221e54de528225fd75
+
+* Fri Jan 09 2026 Lachlan Marie <lchlnm@pm.me> - 1.13.3^19.git.3b6ff51-1
+ - Update to commit 3b6ff512b25d5a114a7f8bf867bff46c2827caa1
+
+* Fri Jan 09 2026 Lachlan Marie <lchlnm@pm.me> - 1.13.1^18.git.256f943-1
+ - Update to commit 256f943b36cdb976aed9b07497fa0b1c88967171
+
+* Wed Jan 07 2026 Lachlan Marie <lchlnm@pm.me> - 1.12.1^17.git.1079be0-1
+ - Update to commit 1079be0a41ce817b54ce667af4b3ab62b287d5ba
+
+* Tue Jan 06 2026 Lachlan Marie <lchlnm@pm.me> - 1.12.1^16.git.8430d70-1
+ - Update to commit 8430d707205aa8a9b473d13f8b988ea98d17f363
+
+* Tue Jan 06 2026 Lachlan Marie <lchlnm@pm.me> - 1.12.1^15.git.dccd451-1
+ - Update to commit dccd4519dccfa6a0667cecc4eea47ff606e9112b
+
+* Sun Jan 04 2026 Lachlan Marie <lchlnm@pm.me> - 1.11.8^14.git.6f613dd-1
+ - Update to commit 6f613dde03943183a066d385eddb677dffe6d4d5
+
 * Sat Jan 03 2026 Lachlan Marie <lchlnm@pm.me> - 1.11.8^13.git.6f8fc60-1
  - Update to commit 6f8fc60cdc729dcf0e522ff4f1616b9b100a3e96
 
