@@ -1,7 +1,7 @@
-%global bumpver 44
+%global bumpver 45
 %global _name box64
 
-%global commit 0414fadaf0ee810ed448f25d9ab48098c6ab0923
+%global commit df223496b263e0ea44cd521740d618730c771df2
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           %{_name}-git
@@ -208,6 +208,9 @@ fi
 %endif
 
 %changelog
+* Sun Jan 18 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0^45.git.df22349-1
+ - Update to commit df223496b263e0ea44cd521740d618730c771df2
+
 * Sat Jan 17 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0^44.git.0414fad-1
  - Update to commit 0414fadaf0ee810ed448f25d9ab48098c6ab0923
 
