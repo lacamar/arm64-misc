@@ -1,6 +1,6 @@
-%global bumpver 69
+%global bumpver 73
 
-%global commit 3e49c32c9c59b2bdf6bb29ec7d1e44074ffad4e5
+%global commit fbd5bbcfa32a83aea9823dae1a34e637f6e56d5e
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       rpcs3-git
@@ -28,7 +28,6 @@ local externals = {
  { name="discord-rpc", ref="3dc2c32", owner="Vestrel", path="discord-rpc/discord-rpc", license="MIT" },
  { name="gamemode", ref="c54d6d4", owner="FeralInteractive", path="feralinteractive/feralinteractive", version="1.8.2", license="BSD-3-Clause" },
  { name="ffmpeg-core", ref="ce81114", owner="RPCS3", path="ffmpeg", version="7.1.2", license="LGPLv2.1" },
- { name="flatbuffers", ref="1872409", owner="google", path="flatbuffers", version="25.9.23",  license="Apache-v2" },
  { name="Fusion", ref="759ac5d", owner="xioTechnologies", path="fusion/fusion", version="1.2.9",  license="MIT" },
  { name="glslang", ref="fc9889c", owner="KhronosGroup", path="glslang/glslang", version="15.3.0",  license="BSD-3-Clause" },
  { name="hidapi", ref="d6b2a97", owner="RPCS3", path="hidapi/hidapi", version="0.15.0",  license="GPLv3, BSD" },
@@ -38,6 +37,7 @@ local externals = {
  { name="llvm-project", ref="cd70802", owner="llvm", path="llvm/llvm", version="19.1.7",  license="Apache-v2" },
  { name="miniupnp", ref="d66872e", owner="miniupnp", path="miniupnp/miniupnp", version="2.3.9",  license="BSD-3-Clause" },
  { name="opencv_minimal", ref="67f53c2", owner="Megamouse", path="opencv/opencv", version="4.12.0" },
+ { name="protobuf", ref="edaa823", owner="protocolbuffers", path="protobuf/protobuf", version="33.4",  license="BSD-3-Clause" },
  { name="pugixml", ref="ee86beb", owner="zeux", path="pugixml", version="1.15",  license="MIT" },
  { name="rtmidi", ref="1e5b499", owner="thestk", path="rtmidi", version="6.0.0",  license="MIT" },
  { name="stb", ref="013ac3b", owner="nothings", path="stblib/stb", license="MIT" },
@@ -113,6 +113,8 @@ BuildRequires:  qt6-qtsvg-devel
 BuildRequires:  llvm-devel
 BuildRequires:  SDL3-devel
 BuildRequires:  doxygen
+BuildRequires:  gtest-devel
+BuildRequires:  abseil-cpp-devel
 
 %description
 PlayStation 3 emulator and debugger
@@ -197,6 +199,12 @@ DESTDIR=%{buildroot} ninja install
 
 
 %changelog
+* Sun Jan 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.38^73.git.fbd5bbc-1
+ - Update to commit fbd5bbcfa32a83aea9823dae1a34e637f6e56d5e
+
+* Sun Jan 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.38^70.git.b41c275-1
+ - Update to commit b41c2754ce0d49d92dfb7843180abb8682b4a599
+
 * Wed Jan 21 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.38^69.git.3e49c32-1
  - Update to commit 3e49c32c9c59b2bdf6bb29ec7d1e44074ffad4e5
 
