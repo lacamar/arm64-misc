@@ -154,6 +154,8 @@ install -Dpm0755 -t %{buildroot}%{_bindir} \
   %{_name}.asahi
 
 %post
+echo "%{_sbindir}/update-alternatives --install %{_bindir}/%{_name} \
+  %{_name} %{_bindir}/%{_name}.aarch64 10 --auto"
 %{_sbindir}/update-alternatives --install %{_bindir}/%{_name} \
   %{_name} %{_bindir}/%{_name}.aarch64 10 --auto
 
@@ -163,6 +165,8 @@ if [ $1 -eq 0 ] ; then
 fi
 
 %post asahi
+echo "%{_sbindir}/update-alternatives --install %{_bindir}/%{_name} \
+  %{_name} %{_bindir}/%{_name}.asahi 200 --auto"
 %{_sbindir}/update-alternatives --install %{_bindir}/%{_name} \
   %{_name} %{_bindir}/%{_name}.asahi 200 --auto
 
