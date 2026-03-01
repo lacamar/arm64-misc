@@ -1,6 +1,6 @@
-%global bumpver 74
+%global bumpver 75
 
-%global commit d854ff03febb59d7f37b98ae05d0ffb50d2dca93
+%global commit 198c2e9eb835dbe95c674ad8c98138fb080f1ff4
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       rpcs3-git
@@ -17,13 +17,13 @@ Source0:  https://github.com/RPCS3/rpcs3/archive/%{shortcommit}/rpcs3-%{shortcom
 
 %{lua:
 local externals = {
- { name="7zip", ref="5e96a82", owner="ip7z", path="7zip/7zip", version="25.01",  license="GNU-LGPL" },
- { name="FAudio", ref="633bdb7", owner="FNA-XNA", path="FAudio", version="26.01",  license="zlib" },
+ { name="7zip", ref="839151e", owner="ip7z", path="7zip/7zip", version="26.00",  license="GNU-LGPL" },
+ { name="FAudio", ref="e67d761", owner="FNA-XNA", path="FAudio", version="26.02",  license="zlib" },
  { name="VulkanMemoryAllocator", ref="1d8f600", owner="GPUOpen-LibrariesAndSDKs", path="GPUOpen/VulkanMemoryAllocator", version="3.3.0",  license="MIT" },
- { name="openal-soft", ref="75c0059", owner="kcat", path="OpenAL/openal-soft", version="1.25.0",  license="PFFFT" },
+ { name="openal-soft", ref="c41d64c", owner="kcat", path="OpenAL/openal-soft", version="1.25.1",  license="PFFFT" },
  { name="soundtouch", ref="3982730", owner="RPCS3", path="SoundTouch/soundtouch/", version="2.4.0",  license="LGPLv2.1" },
  { name="asmjit", ref="416f735", owner="asmjit", path="asmjit/asmjit/", license="zlib" },
- { name="cubeb", ref="e495bee", owner="mozilla", path="cubeb/cubeb", license="ISC" },
+ { name="cubeb", ref="4848575", owner="mozilla", path="cubeb/cubeb", license="ISC" },
  { name="curl", ref="400fffa", owner="curl", path="curl/curl", version="8.17.0",  license="MIT" },
  { name="discord-rpc", ref="3dc2c32", owner="Vestrel", path="discord-rpc/discord-rpc", license="MIT" },
  { name="gamemode", ref="c54d6d4", owner="FeralInteractive", path="feralinteractive/feralinteractive", version="1.8.2", license="BSD-3-Clause" },
@@ -31,8 +31,8 @@ local externals = {
  { name="Fusion", ref="759ac5d", owner="xioTechnologies", path="fusion/fusion", version="1.2.9",  license="MIT" },
  { name="glslang", ref="fc9889c", owner="KhronosGroup", path="glslang/glslang", version="15.3.0",  license="BSD-3-Clause" },
  { name="hidapi", ref="d6b2a97", owner="RPCS3", path="hidapi/hidapi", version="0.15.0",  license="GPLv3, BSD" },
- { name="libpng", ref="4e3f57d", owner="pnggroup", path="libpng/libpng", version="1.6.53",  license="PNGRLLv2" },
- { name="SDL", ref="a962f40", owner="libsdl-org", path="libsdl-org/SDL", version="3.4.0",  license="zlib" },
+ { name="libpng", ref="c3e3049", owner="pnggroup", path="libpng/libpng", version="1.6.55",  license="PNGRLLv2" },
+ { name="SDL", ref="683181b", owner="libsdl-org", path="libsdl-org/SDL", version="3.4.2",  license="zlib" },
  { name="libusb", ref="15a7ebb", owner="libusb", path="libusb/libusb", version="1.0.29",  license="LGPLv2.1" },
  { name="llvm-project", ref="cd70802", owner="llvm", path="llvm/llvm", version="19.1.7",  license="Apache-v2" },
  { name="miniupnp", ref="d66872e", owner="miniupnp", path="miniupnp/miniupnp", version="2.3.9",  license="BSD-3-Clause" },
@@ -42,8 +42,8 @@ local externals = {
  { name="rtmidi", ref="1e5b499", owner="thestk", path="rtmidi", version="6.0.0",  license="MIT" },
  { name="stb", ref="013ac3b", owner="nothings", path="stblib/stb", license="MIT" },
  { name="wolfssl", ref="b077c81", owner="wolfSSL", path="wolfssl/wolfssl", version="5.8.2",  license="GPLv3" },
- { name="yaml-cpp", ref="456c68f", owner="RPCS3", path="yaml-cpp/yaml-cpp", version="0.5.3",  license="MIT" },
- { name="zlib", ref="51b7f2a", owner="madler", path="zlib/zlib", version="1.3.1",  license="zlib" },
+ { name="yaml-cpp", ref="05c44fc", owner="RPCS3", path="yaml-cpp/yaml-cpp", version="0.9.0",  license="MIT" },
+ { name="zlib", ref="da607da", owner="madler", path="zlib/zlib", version="1.3.2",  license="zlib" },
  { name="zstd", ref="f8745da", owner="facebook", path="zstd/zstd", version="1.5.7",  license="GPLv2" },
 }
 
@@ -167,15 +167,68 @@ cmake -B build \
       -DUSE_SYSTEM_RTMIDI=ON \
       -DUSE_DISCORD_RPC=ON \
       -DUSE_SYSTEM_OPENCV=ON \
-      -DCURL_USE_SYSTEM=ON \
       -DDISABLE_LTO=TRUE \
-      -DUSE_SYSTEM_OPENCV=ON \
       -DOpenGL_GL_PREFERENCE=LEGACY \
       -DCMAKE_INSTALL_PREFIX=%{_prefix} \
       -DCMAKE_INSTALL_LIBDIR=%{_lib} \
       -DCMAKE_EXE_LINKER_FLAGS="-L/usr/lib64/pipewire-0.3/jack" \
       -DSTATIC_LINK_LLVM=ON \
       -G Ninja
+
+      # -B build \
+      # -Wno-dev \
+      # -DCMAKE_BUILD_TYPE=Release \
+      # -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+      # -DLLVM_TARGETS_TO_BUILD=AArch64 \
+      # -DCMAKE_EXE_LINKER_FLAGS="${LINKER_FLAG}" \
+      # -DCMAKE_MODULE_LINKER_FLAGS="${LINKER_FLAG}" \
+      # -DCMAKE_SHARED_LINKER_FLAGS="${LINKER_FLAG}" \
+      # -DDISABLE_LTO=TRUE \
+      # -DOpenGL_GL_PREFERENCE=LEGACY \
+      # -DCMAKE_INSTALL_PREFIX=%{_prefix} \
+      # -DCMAKE_INSTALL_LIBDIR=%{_lib} \
+      # -DCMAKE_EXE_LINKER_FLAGS="-L/usr/lib64/pipewire-0.3/jack" \
+      # -G Ninja
+      #
+      # -DUSE_NATIVE_INSTRUCTIONS=OFF "USE_NATIVE_INSTRUCTIONS makes rpcs3 compile with -march=native, which is useful for local builds, but not good for packages." ON)
+      # -DWITH_LLVM=ON "Enable usage of LLVM library" ON)
+      # -DBUILD_LLVM=ON "Build LLVM from git submodule" OFF)
+      # -DSTATIC_LINK_LLVM=ON "Link against LLVM statically. This will get set to ON if you build LLVM from the submodule." OFF)
+      # -DUSE_FAUDIO=ON "FAudio audio backend" ON)
+      # -DUSE_LIBEVDEV "libevdev-based joystick support" ON)
+      # -DUSE_DISCORD_RPC=ON "Discord rich presence integration" OFF)
+      # -DUSE_VULKAN=ON "Vulkan render backend" ON)
+      # -DUSE_PRECOMPILED_HEADERS=OFF "Use precompiled headers" OFF)
+      # -DUSE_SDL=ON "Enables SDL input handler" OFF)
+      # -DUSE_SYSTEM_CUBEB "Prefer system cubeb instead of the builtin one" OFF)
+      # -DUSE_SYSTEM_CURL=ON "Prefer system Curl instead of the prebuild one" ON)
+      # -DUSE_SYSTEM_FAUDIO "Prefer system FAudio instead of the builtin one" OFF)
+      # -DUSE_SYSTEM_FFMPEG=ON "Prefer system ffmpeg instead of the prebuild one" OFF)
+      # -DUSE_SYSTEM_PROTOBUF "Prefer system protobuf instead of the builtin one" OFF)
+      # -DUSE_SYSTEM_GLSLANG "Prefer system glslang instead of the builtin one" OFF)
+      # -DUSE_SYSTEM_HIDAPI "Prefer system hidapi instead of the builtin one" OFF)
+      # -DUSE_SYSTEM_LIBPNG "Prefer system libpng instead of the builtin one" OFF)
+      # -DUSE_SYSTEM_LIBUSB "Prefer system libusb instead of the builtin one" OFF)
+      # -DUSE_SYSTEM_MINIUPNPC "Prefer system MiniUPnPc instead of the builtin one" OFF)
+      # -DUSE_SYSTEM_MVK "Prefer system MoltenVK instead of the builtin one" OFF)
+      # -DUSE_SYSTEM_OPENAL "Prefer system OpenAL instead of the prebuild one" ${USE_SYSTEM_OPENAL_DEFAULT})
+      # -DUSE_SYSTEM_OPENCV=ON "Prefer system OpenCV instead of the builtin one" ON)
+      # -DUSE_SYSTEM_PUGIXML "Prefer system pugixml instead of the builtin one" OFF)
+      # -DUSE_SYSTEM_RTMIDI=ON "Prefer system RtMidi instead of the builtin one" OFF)
+      # -DUSE_SYSTEM_SDL=ON "Prefer system SDL instead of the builtin one" ON)
+      # -DUSE_SYSTEM_VULKAN_MEMORY_ALLOCATOR "Prefer system Vulkan Memory Allocator instead of the builtin one" OFF)
+      # -DUSE_SYSTEM_WOLFSSL "Prefer system wolfSSL instead of the builtin one" OFF)
+      # -DUSE_SYSTEM_ZLIB "Prefer system ZLIB instead of the builtin one" ON)
+      # -DUSE_SYSTEM_ZSTD=ON "Prefer system zstd instead of the builtin one" OFF)
+      # -DHAS_MEMORY_BREAKPOINTS "Add support for memory breakpoints to the interpreter" OFF)
+      # -DUSE_LTO "Use LTO for building" ON)
+      # -DBUILD_RPCS3_TESTS=OFF "Build RPCS3 unit tests." OFF)
+      # -DRUN_RPCS3_TESTS=OFF "Run RPCS3 unit tests. Requires BUILD_RPCS3_TESTS" OFF)
+      # -DUSE_GAMEMODE=ON "Choose whether to enable GameMode features or not." ON)
+
+
+
+
 cd build
 ninja
 
@@ -199,6 +252,9 @@ DESTDIR=%{buildroot} ninja install
 
 
 %changelog
+* Sun Mar 01 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.38^75.git.198c2e9-1
+ - Update to commit 198c2e9eb835dbe95c674ad8c98138fb080f1ff4
+
 * Mon Jan 26 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.38^74.git.d854ff0-1
  - Update to commit d854ff03febb59d7f37b98ae05d0ffb50d2dca93
 
