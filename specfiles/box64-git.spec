@@ -1,7 +1,7 @@
-%global bumpver 52
+%global bumpver 53
 %global _name box64
 
-%global commit 2ef63f29f118813ed650b0266c7138af02438c33
+%global commit 388d9c88a4740fad14cfbb3c063ef6678b66a684
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           %{_name}-git
@@ -154,8 +154,8 @@ install -Dpm0755 -t %{buildroot}%{_bindir} \
   %{_name}.asahi
 
 %post
-%{_sbindir}/update-alternatives --auto --install %{_bindir}/%{_name} \
-  %{_name} %{_bindir}/%{_name}.aarch64 10
+%{_sbindir}/update-alternatives --install %{_bindir}/%{_name} \
+  %{_name} %{_bindir}/%{_name}.aarch64 10 --auto
 
 %postun
 if [ $1 -eq 0 ] ; then
@@ -163,8 +163,8 @@ if [ $1 -eq 0 ] ; then
 fi
 
 %post asahi
-%{_sbindir}/update-alternatives --auto --install %{_bindir}/%{_name} \
-  %{_name} %{_bindir}/%{_name}.asahi 200
+%{_sbindir}/update-alternatives --install %{_bindir}/%{_name} \
+  %{_name} %{_bindir}/%{_name}.asahi 200 --auto
 
 %postun asahi
 if [ $1 -eq 0 ] ; then
@@ -208,6 +208,9 @@ fi
 %endif
 
 %changelog
+* Sun Mar 01 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0^53.git.388d9c8-1
+ - Update to commit 388d9c88a4740fad14cfbb3c063ef6678b66a684
+
 * Sat Feb 28 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0^52.git.2ef63f2-1
  - Update to commit 2ef63f29f118813ed650b0266c7138af02438c33
 
