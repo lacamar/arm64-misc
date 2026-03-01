@@ -49,11 +49,13 @@ Requires(postun): %{_sbindir}/update-alternatives
 
 %description    %{common_description}
 
-%package        -n box64-data
+# %package        -n box64-data
+%package        data
 Provides:       box64-data = %{version}-%{release}
 Summary:        Common files for %{_name}
 BuildArch:      noarch
-%description    -n box64-data %{common_description}
+# 0%%%description    -n box64-data {common_description}
+%description    data %{common_description}
 
 This package provides common data files for box64.
 
@@ -157,7 +159,7 @@ install -Dpm0755 -t %{buildroot}%{_bindir} \
 echo "%{_sbindir}/update-alternatives --install %{_bindir}/%{_name} \
   %{_name} %{_bindir}/%{_name}.aarch64 10 --auto"
 %{_sbindir}/update-alternatives --install %{_bindir}/%{_name} \
-  %{_name} %{_bindir}/%{_name}.aarch64 10 --auto
+  %{_name} %{_bindir}/%{_name}.aarch64 10
 
 %postun
 if [ $1 -eq 0 ] ; then
@@ -168,7 +170,7 @@ fi
 echo "%{_sbindir}/update-alternatives --install %{_bindir}/%{_name} \
   %{_name} %{_bindir}/%{_name}.asahi 200 --auto"
 %{_sbindir}/update-alternatives --install %{_bindir}/%{_name} \
-  %{_name} %{_bindir}/%{_name}.asahi 200 --auto
+  %{_name} %{_bindir}/%{_name}.asahi 200
 
 %postun asahi
 if [ $1 -eq 0 ] ; then
@@ -196,7 +198,8 @@ fi
 %{_bindir}/%{_name}.asahi
 %endif
 
-%files -n box64-data
+# %files -n box64-data
+%files data
 %license LICENSE
 %doc README.md
 %doc %lang(cn) README_CN.md
