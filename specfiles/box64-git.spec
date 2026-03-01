@@ -1,14 +1,14 @@
-%global bumpver 53
+%global bumpver 54
 %global _name box64
 
-%global commit 388d9c88a4740fad14cfbb3c063ef6678b66a684
+%global commit aab7817df8a3b8410556289b9db423319464d693
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           %{_name}-git
 Conflicts:      %{_name}
 Provides:       %{_name} = %{version}-%{release}
 Version:        0.4.0%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Linux userspace x86_64 emulator with a twist, targeted at ARM64
 
 # Tests are disabled as they require x86_64 libraries to run
@@ -49,12 +49,10 @@ Requires(postun): %{_sbindir}/update-alternatives
 
 %description    %{common_description}
 
-# %package        -n box64-data
 %package        data
 Provides:       box64-data = %{version}-%{release}
 Summary:        Common files for %{_name}
 BuildArch:      noarch
-# 0%%%description    -n box64-data {common_description}
 %description    data %{common_description}
 
 This package provides common data files for box64.
@@ -198,7 +196,6 @@ fi
 %{_bindir}/%{_name}.asahi
 %endif
 
-# %files -n box64-data
 %files data
 %license LICENSE
 %doc README.md
@@ -215,6 +212,9 @@ fi
 %endif
 
 %changelog
+* Sun Mar 01 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0^54.git.aab7817-2
+ - Update to commit aab7817df8a3b8410556289b9db423319464d693
+
 * Sun Mar 01 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0^53.git.388d9c8-1
  - Update to commit 388d9c88a4740fad14cfbb3c063ef6678b66a684
 
