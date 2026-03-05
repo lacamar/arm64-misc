@@ -1,7 +1,7 @@
 %define aname meteo_qt
 
 Name:           meteo-qt
-Version:        4.2
+Version:        4.3
 Release:        %autorelease
 Group:          Graphical desktop/Other
 Summary:        Weather status system tray application
