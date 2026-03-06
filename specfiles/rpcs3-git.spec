@@ -1,10 +1,11 @@
-%global bumpver 80
+%global bumpver 81
 
-%global commit d46ddcee5d8db68d7f856c5e7015bffc651b419f
+%global tag 0.0.40
+%global commit c57d6110c4c503e8145c9d18e38042d275cd6995
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       rpcs3-git
-Version:    0.0.38%{?bumpver:^%{bumpver}.git.%{shortcommit}}
+Version:    %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
 Release:    1%{dist}
 Summary:    PlayStation 3 emulator and debugger
 
@@ -252,6 +253,9 @@ DESTDIR=%{buildroot} ninja install
 
 
 %changelog
+* Fri Mar 06 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.40^81.git.c57d611-1
+ - Update to commit c57d6110c4c503e8145c9d18e38042d275cd6995
+
 * Thu Mar 05 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.38^80.git.d46ddce-1
  - Update to commit d46ddcee5d8db68d7f856c5e7015bffc651b419f
 
