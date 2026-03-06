@@ -1,7 +1,7 @@
-%global bumpver 61
+%global bumpver 62
 %global _name box64
 
-%global commit 3435090558e36ee75fd00f9cf33ff951473600bf
+%global commit cbf21d696f03bdf3c44626ac47794417d852094c
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           %{_name}-git
@@ -212,6 +212,9 @@ fi
 %endif
 
 %changelog
+* Fri Mar 06 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0^62.git.cbf21d6-2
+ - Update to commit cbf21d696f03bdf3c44626ac47794417d852094c
+
 * Thu Mar 05 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0^61.git.3435090-2
  - Update to commit 3435090558e36ee75fd00f9cf33ff951473600bf
 
