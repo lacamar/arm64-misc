@@ -1,7 +1,7 @@
-%global bumpver 81
+%global bumpver 85
 
 %global tag 0.0.40
-%global commit c57d6110c4c503e8145c9d18e38042d275cd6995
+%global commit e6cf05cfb73e156818685495814b0b7b8edaa97b
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       rpcs3-git
@@ -19,7 +19,7 @@ Source0:  https://github.com/RPCS3/rpcs3/archive/%{shortcommit}/rpcs3-%{shortcom
 %{lua:
 local externals = {
  { name="7zip", ref="839151e", owner="ip7z", path="7zip/7zip", version="26.00",  license="GNU-LGPL" },
- { name="FAudio", ref="e67d761", owner="FNA-XNA", path="FAudio", version="26.02",  license="zlib" },
+ { name="FAudio", ref="dc034fc", owner="FNA-XNA", path="FAudio", version="26.03",  license="zlib" },
  { name="VulkanMemoryAllocator", ref="1d8f600", owner="GPUOpen-LibrariesAndSDKs", path="GPUOpen/VulkanMemoryAllocator", version="3.3.0",  license="MIT" },
  { name="openal-soft", ref="c41d64c", owner="kcat", path="OpenAL/openal-soft", version="1.25.1",  license="PFFFT" },
  { name="soundtouch", ref="3982730", owner="RPCS3", path="SoundTouch/soundtouch/", version="2.4.0",  license="LGPLv2.1" },
@@ -43,7 +43,7 @@ local externals = {
  { name="rtmidi", ref="1e5b499", owner="thestk", path="rtmidi", version="6.0.0",  license="MIT" },
  { name="stb", ref="013ac3b", owner="nothings", path="stblib/stb", license="MIT" },
  { name="wolfssl", ref="b077c81", owner="wolfSSL", path="wolfssl/wolfssl", version="5.8.2",  license="GPLv3" },
- { name="yaml-cpp", ref="05c44fc", owner="RPCS3", path="yaml-cpp/yaml-cpp", version="0.9.0",  license="MIT" },
+ { name="yaml-cpp", ref="51a5d62", owner="RPCS3", path="yaml-cpp/yaml-cpp", version="0.9.0",  license="MIT" },
  { name="zlib", ref="da607da", owner="madler", path="zlib/zlib", version="1.3.2",  license="zlib" },
  { name="zstd", ref="f8745da", owner="facebook", path="zstd/zstd", version="1.5.7",  license="GPLv2" },
 }
@@ -253,6 +253,18 @@ DESTDIR=%{buildroot} ninja install
 
 
 %changelog
+* Thu Mar 12 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.40^85.git.e6cf05c-1
+ - Update to commit e6cf05cfb73e156818685495814b0b7b8edaa97b
+
+* Wed Mar 11 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.40^84.git.ee01d11-1
+ - Update to commit ee01d1186ffe80042a5f61830a6407ac739d07df
+
+* Sun Mar 08 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.40^83.git.41db06b-1
+ - Update to commit 41db06b53f906fbe2941552008ea8b468fa38482
+
+* Sat Mar 07 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.40^82.git.ac30fee-1
+ - Update to commit ac30feeddb4d53f08397897574649228b8c187d1
+
 * Fri Mar 06 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.40^81.git.c57d611-1
  - Update to commit c57d6110c4c503e8145c9d18e38042d275cd6995
 
