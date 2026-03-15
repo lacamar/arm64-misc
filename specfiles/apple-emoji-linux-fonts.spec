@@ -5,8 +5,8 @@
 %global fontconfig_confdir %{_sysconfdir}/fonts/conf.d
 
 Name:           %{fontname}-fonts
-Version:        18.4
-Release:        3%{?dist}
+Version:        26.2.1
+Release:        1%{?dist}
 Summary:        Apple Color Emoji font for Linux
 
 License:        OFL-1.1 AND Apache-2.0
@@ -33,7 +33,7 @@ color font format and covers the same Unicode emoji repertoire as recent iOS
 releases.
 
 %prep
-%autosetup -n apple-emoji-linux-%{version}
+%autosetup -n apple-emoji-ttf-%{version}
 
 %build
 %make_build
