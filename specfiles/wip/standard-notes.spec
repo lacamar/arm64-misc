@@ -241,6 +241,16 @@ rm -rf %{buildroot}%{_libexecdir}/%{name}/app/images/tray/{darwin,win32} \
 find %{buildroot}%{_libexecdir}/%{name} -type d \( -name build -o -name build-tmp-\* -o -name node_gyp_bins \) -prune -exec rm -rf {} +
 find %{buildroot}%{_libexecdir}/%{name} -type f \( -name '*.o' -o -name '*.a' -o -name '*.mk' -o -name Makefile \) -delete
 
+find %{buildroot}%{_libexecdir}/standard-notes -type d \
+  \( -name build -o -name node_gyp_bins -o -name .bin \) \
+  -prune -exec rm -rf {} +
+
+find %{buildroot}%{_libexecdir}/standard-notes -type f \
+  \( -name '*.a' -o -name '*.o' -o -name '*.mk' -o -name Makefile \) \
+  -delete
+
+find %{buildroot}%{_libexecdir}/standard-notes -type f \
+  \( -name '*.musl.node' -o -path '*/@cbor-extract/*/*.musl.node' \) -delete
 
 %files
 %define debug_package %{nil}
