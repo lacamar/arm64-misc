@@ -238,6 +238,9 @@ rm -rf %{buildroot}%{_libexecdir}/%{name}/node_modules/**/node_gyp_bins 2>/dev/n
 rm -rf %{buildroot}%{_libexecdir}/%{name}/app/images/tray/{darwin,win32} \
        %{buildroot}%{_libexecdir}/%{name}/app/images/icon.ico
 
+find %{buildroot}%{_libexecdir}/%{name} -type d \( -name build -o -name build-tmp-\* -o -name node_gyp_bins \) -prune -exec rm -rf {} +
+find %{buildroot}%{_libexecdir}/%{name} -type f \( -name '*.o' -o -name '*.a' -o -name '*.mk' -o -name Makefile \) -delete
+
 
 %files
 %define debug_package %{nil}
