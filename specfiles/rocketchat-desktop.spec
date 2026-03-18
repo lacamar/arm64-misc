@@ -23,7 +23,7 @@ BuildRequires:  nodejs-devel
 BuildRequires:  python3-devel
 BuildRequires:  python3dist(setuptools)
 
-Requires:       nodejs-electron
+Requires:       electron
 
 
 %description
