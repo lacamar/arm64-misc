@@ -4,7 +4,7 @@
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           wldash
-Version:        git%{?bumpver:^%{bumpver}.git.%{shortcommit}}
+Version:        0.3.0
 Release:        3%{?dist}
 Summary:        Hot corners for Wayland. Create anchors in the corners of your monitors and execute a command of your choice.
 
@@ -48,6 +48,9 @@ Hot corners for Wayland. Create anchors in the corners of your monitors and exec
 %define debug_package %{nil}
 
 %changelog
+* Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.0-3
+ - Update to 0.3.0
+
 * Sat Nov 22 2025 Lachlan Marie <lchlnm@pm.me> - git^1.git.1156b35-3
  - Update to commit 1156b3503a04780bbdcb6a781cce87281b8bf87d
 
