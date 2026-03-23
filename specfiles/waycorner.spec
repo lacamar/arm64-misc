@@ -40,6 +40,9 @@ Hot corners for Wayland. Create anchors in the corners of your monitors and exec
 %define debug_package %{nil}
 
 %changelog
+* Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 0.2.3-2
+ - Update to 0.2.3
+
 * Sun Jul 06 2025 Lachlan Marie <lchlnm@pm.me> - 0.2.3-2
 - Vendored rust cargo to allow offline building.
 
