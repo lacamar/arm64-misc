@@ -1,5 +1,7 @@
+%global tag 1.3
+
 Name:     avizo
-Version:  1.3
+Version:  %{tag}
 Release:  1%{?dist}
 Summary:  A neat notification daemon
 
@@ -51,5 +53,8 @@ DESTDIR=%{buildroot} ninja -C build install
 
 
 %changelog
+* Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.3-1
+ - Update to 1.3
+
 * Thu May 29 2025 Lachlan Marie <lchlnm@pm.me> - 1.3-1
 - Initial RPM packaging of avizo
