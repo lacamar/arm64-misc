@@ -1,5 +1,7 @@
+%global tag 1.5.0
+
 Name: dual-function-keys
-Version:        1.5.0
+Version:        %{tag}
 Release:        1%{?dist}
 Summary:        Interception - dual function keys
 
@@ -43,5 +45,8 @@ make install DESTDIR=%{buildroot} PREFIX=%{_prefix}
 %{_mandir}/man1/dual-function-keys.1.gz
 
 %changelog
+* Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.5.0-1
+ - Update to 1.5.0
+
 * Thu May 29 2025 Lachlan Marie <lchlnm@pm.me> - 1.5.0-1
 - Initial RPM packaging of dual-function-keys
