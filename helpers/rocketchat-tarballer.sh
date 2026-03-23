@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-version=4.10.1
+version=4.11.1
 
 tar -xzf $version.tar.gz
 cd Rocket.Chat.Electron-$version/
