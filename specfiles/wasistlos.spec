@@ -1,5 +1,6 @@
+%global tag 1.7.0
 Name: wasistlos
-Version: 1.7.0
+Version: %{tag}
 Release: 1%{?dist}
 Summary: An unofficial WhatsApp desktop application for Linux.
 
@@ -66,5 +67,8 @@ An unofficial WhatsApp desktop application for Linux.
 
 
 %changelog
+* Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-1
+ - Update to 1.7.0
+
 * Wed Jul 23 2025 Lachlan Marie <lchlnm@pm.me> - 1.7.0-1
 - Initial RPM packaging of wasistlos
