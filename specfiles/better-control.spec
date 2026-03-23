@@ -1,5 +1,6 @@
-Name: better-control
-Version:        6.12.1
+%global tag 6.12.1
+Name:           better-control
+Version:        %{tag}
 Release:        1%{?dist}
 Summary:        A simple control panel for linux based on the GTK framework
 
@@ -48,5 +49,8 @@ make install DESTDIR=%{buildroot}
 
 
 %changelog
+* Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 6.12.1-1
+ - Update to 6.12.1
+
 * Fri Jun 06 2025 Lachlan Marie <lchlnm@pm.me> - 6.12.1-1
 - Initial RPM packaging of better-control
