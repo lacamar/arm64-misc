@@ -3,7 +3,7 @@ Version:    4.13.0
 Release:    1%{?dist}
 Summary:    Desktop Client for Rocket.Chat
 
-%global electron_version 39.2.5
+%global electron_version 40.0.0
 
 
 License:  MIT
@@ -22,6 +22,10 @@ BuildRequires:  vips-devel
 BuildRequires:  nodejs-devel
 BuildRequires:  python3-devel
 BuildRequires:  python3dist(setuptools)
+BuildRequires:  rubygems
+BuildRequires:  rubygem-json
+BuildRequires:  atool
+BuildRequires:  electron
 
 Requires:       electron
 
@@ -35,12 +39,14 @@ sed -i '/downloadSupportedVersions()/d' rollup.config.mjs
 rm -rf node_modules/electron
 mkdir -p node_modules/electron
 unzip -q %{SOURCE2} -d node_modules/electron/
+# gem install fpm
 
 %build
 export NODE_ENV=production
 export ELECTRON_OVERRIDE_DIST_PATH=%{_bindir}/electron
 export ELECTRON_SKIP_BINARY_DOWNLOAD=1
 export PUPPETEER_SKIP_DOWNLOAD=1
+export USE_SYSTEM_FPM=true
 export SHARP_SKIP_DOWNLOAD=1
 export npm_config_nodedir=/usr/
 export npm_config_build_from_source=true
@@ -48,6 +54,7 @@ export npm_config_build_from_source=true
 YARN_ENABLE_INLINE_BUILDS=1 yarn install --immutable --immutable-cache --inline-builds
 yarn postinstall
 yarn build
+yarn electron-builder --linux rpm
 
 %install
 install -d -m 0755 %{buildroot}%{_bindir}
