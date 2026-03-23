@@ -308,7 +308,6 @@ fi
 DEFAULT_REPOS=(
   "https://download.copr.fedorainfracloud.org/results/lacamar/arm64-misc/fedora-$FEDORA_RELEASE-$BASEARCH/"
   "https://download.copr.fedorainfracloud.org/results/lacamar/wine-arm64ec/fedora-$FEDORA_RELEASE-$BASEARCH/"
-  "https://download.opensuse.org/repositories/devel:/languages:/nodejs/Fedora_$FEDORA_RELEASE/"
 )
 # merge but avoid duplicates
 for r in "${DEFAULT_REPOS[@]}"; do
@@ -465,7 +464,7 @@ build_one() {
   local spectool_cmd=(spectool --define "_sourcedir $src_dir" -g -C "$src_dir" "$spec")
   (( MOCK_VERBOSE )) && spectool_cmd+=(--verbose)
   # 2. Build (SRPM or binary)
-  local mock_cmd=(mock -r "$MOCK_CFG" --no-cleanup-after --resultdir "$result_dir")
+  local mock_cmd=(mock -r "$MOCK_CFG" --no-clean --no-cleanup-after --resultdir "$result_dir")
   (( MOCK_VERBOSE )) && mock_cmd+=(-v)
   for r in "${ADDREPO_ARGS[@]}"; do mock_cmd+=(--addrepo="$r"); done
   mock_cmd+=("${DEFINE_ARGS[@]}" "${WITH_ARGS[@]}")
