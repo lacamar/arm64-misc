@@ -1,5 +1,6 @@
+%global tag 0.12.7
 Name:           mangowc
-Version:        0.10.10
+Version:        %{tag}
 Release:        1%?dist
 Summary:        Lightweight Wayland compositor without compromises
 License:        GPL-3.0
@@ -24,7 +25,7 @@ BuildRequires:  pkgconfig(scenefx-0.4)
 MangoWC is a lightweight, high-performance Wayland compositor built on dwl, designed for speed, flexibility, and a modern, customizable desktop experience.
 
 %prep
-%autosetup
+%autosetup -n mango-%{tag}
 
 %build
 %meson
@@ -45,8 +46,12 @@ MangoWC is a lightweight, high-performance Wayland compositor built on dwl, desi
 %{_bindir}/mmsg
 %{_sysconfdir}/mango/config.conf
 %{_datadir}/wayland-sessions/mango.desktop
+%{_datadir}/xdg-desktop-portal/mango-portals.conf
 
 %changelog
+* Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 0.12.7-1
+ - Update to 0.12.7
+
 * Thu Jan 08 2026 Lachlan Marie <lchlnm@pm.me>
 - Added to arm64-misc COPR
 
