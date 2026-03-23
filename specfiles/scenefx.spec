@@ -18,9 +18,10 @@
 
 %define sover   4
 %define libname libscenefx%{sover}
+%global tag 0.4.1
 
 Name:           scenefx
-Version:        0.4.1
+Version:        %{tag}
 Release:        0
 Summary:        A drop-in wlroots replacement that allows eye-candy effects
 License:        MIT
@@ -88,6 +89,9 @@ echo %{optflags}
 %{_libdir}/libscenefx-0.4.so
 
 %changelog
+* Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 0.4
+ - Update to 0.4.1
+
 * Thu Jan 08 2026 Lachlan Marie <lchlnm@pm.me>
 - Added to arm64-misc COPR
 - Bumped version to 0.4.1
