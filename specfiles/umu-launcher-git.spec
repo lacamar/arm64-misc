@@ -1,4 +1,4 @@
-%global bumpver 1
+%global bumpver 0
 %global tag 1.4.0.3
 %global _name umu-launcher
 
@@ -20,6 +20,7 @@ URL:            https://github.com/Open-Wine-Components/%{_name}
 Source0:        %{url}/archive/%{shortcommit}/%{_name}-%{shortcommit}.tar.gz
 Source1:        https://github.com/urllib3/urllib3/releases/download/%{urllib3}/urllib3-%{urllib3}.tar.gz
 Source2:        umu-launcher-%{commit}-vendor.tar.zst
+Source3:        umu-launcher-git-tarballer
 
 BuildArch:      x86_64 aarch64
 BuildRequires:  meson >= 0.54.0
@@ -58,10 +59,6 @@ Recommends:	python3-cbor2
 Recommends:	python3-xxhash
 Recommends:	libzstd
 
-# We need this for now to allow umu's builtin urllib3 version to be used.
-# Can be removed when python3-urllib3 version is bumped >= 2.0
-AutoReqProv: no
-
 
 %description
 %{name} A tool for launching non-steam games with proton
@@ -69,24 +66,6 @@ AutoReqProv: no
 %prep
 %autosetup -n %{_name}-%{commit} -p 1 -a 2
 %cargo_prep -v %{_name}-%{commit}-vendor/vendor
-# if ! find subprojects/urllib3/ -mindepth 1 -maxdepth 1 | read; then
-#     # Directory is empty, perform action
-#     mv %{SOURCE1} .
-#     tar -xf urllib3-%{urllib3}.tar.gz
-#     rm *.tar.gz
-#     mv urllib3-%{urllib3}/* subprojects/urllib3/
-# fi
-# sed -i 's/cargo build -r --target-dir/cargo build --offline -r --target-dir/g' Makefile.in
-# mkdir -p .cargo
-# cat >> .cargo/config.toml << 'EOF'
-#
-# [source.crates-io]
-# replace-with = "vendored-sources"
-#
-# [source.vendored-sources]
-# directory = "vendor"
-# EOF
-
 
 
 %build
@@ -102,17 +81,8 @@ make DESTDIR=%{buildroot} PYTHONDIR=%{python3_sitelib} install
 %{python3_sitelib}/umu*
 
 %changelog
-* Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.4.0.3^1.git.ff468bc-1
- - Update to commit ff468bc6f95cd5f9f94e3e3c7d9dd177eeb433c9
-
 * Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.4.0.3^0.git.ff468bc-1
  - Update to 1.4.0.3
-
-* Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.4.0.rc3^0.git.ff468bc-1
- - Update to commit ff468bc6f95cd5f9f94e3e3c7d9dd177eeb433c9
-
-* Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.0^5.git.ff468bc-1
- - Update to commit ff468bc6f95cd5f9f94e3e3c7d9dd177eeb433c9
 
 * Thu Mar 12 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.0^4.git.cfa9df7-1
  - Update to commit cfa9df7a069b792cb06c5fe5e13a7e6020570010
