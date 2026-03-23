@@ -1,5 +1,7 @@
+%global tag 0.18.4.7
+
 Name: monero-gui
-Version: 0.18.4.7
+Version: 0.18.4.6
 Release: 1%{?dist}
 Summary: Monero: the secure, private, untraceable cryptocurrency
 
@@ -128,6 +130,9 @@ install -Dm0644 share/org.getmonero.Monero.desktop \
 
 
 %changelog
+* Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.4.6-1
+ - Update to 0.18.4.7
+
 * Wed Nov 19 2025 Lachlan Marie <lchlnm@pm.me> - 0.18.4.4-1
 - Increased version to 0.18.4.4.
 
