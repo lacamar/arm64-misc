@@ -1,5 +1,7 @@
+%global tag 0.0.40
+
 Name:           rpcs3
-Version:        0.0.40
+Version:        %{tag}
 Release:        1%{?dist}
 Summary:        PlayStation 3 emulator and debugger
 
@@ -189,6 +191,9 @@ DESTDIR=%{buildroot} ninja install
 
 
 %changelog
+* Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.40-1
+ - Update to 0.0.40
+
 * Thu Mar 05 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.40-1
 - Updated how sources are organised and extracted.
 
