@@ -1,7 +1,8 @@
+%global tag 4.3
 %define aname meteo_qt
 
 Name:           meteo-qt
-Version:        4.3
+Version:        %{tag}
 Release:        %autorelease
 Group:          Graphical desktop/Other
 Summary:        Weather status system tray application
@@ -67,5 +68,8 @@ rm -rf %{buildroot}%{python3_sitelib}/usr
 
 
 %changelog
+* Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 4.3-1
+ - Update to 4.3
+
 * Thu Jul 31 2025 Lachlan Marie <lchlnm@pm.me> - 4.2-1
 - Initial packaging of meteo-qt.
