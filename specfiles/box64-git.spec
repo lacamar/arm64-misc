@@ -1,15 +1,15 @@
-%global bumpver 2
+%global bumpver 3
 %global _name box64
 %global tag 0.4.12
 
-%global commit 00e4f02a2ae92d0de8548aa72db35e85fd7a0f1f
+%global commit 518f065591510da254e25cb75e0d0d132c52207b
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           %{_name}-git
-Conflicts:      %{_name}
-Provides:       %{_name} = %{version}-%{release}
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
 Release:        2%{?dist}
+Conflicts:      %{_name}
+Provides:       %{_name} = %{version}-%{release}
 Summary:        Linux userspace x86_64 emulator with a twist, targeted at ARM64
 
 # Tests are disabled as they require x86_64 libraries to run
@@ -213,6 +213,9 @@ fi
 %endif
 
 %changelog
+* Wed Mar 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.12^3.git.518f065-2
+ - Update to commit 518f065591510da254e25cb75e0d0d132c52207b
+
 * Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.12^2.git.00e4f02-2
  - Update to commit 00e4f02a2ae92d0de8548aa72db35e85fd7a0f1f
 
