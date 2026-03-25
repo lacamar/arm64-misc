@@ -1,8 +1,8 @@
 %global bumpver 0
-%global tag 1.4.0.3
+%global tag 1.4.0
 %global _name umu-launcher
 
-%global commit ff468bc6f95cd5f9f94e3e3c7d9dd177eeb433c9
+%global commit e17b257d4e6c06295e2ff607a6e9865d2033db43
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:        umu-launcher-git
@@ -81,6 +81,9 @@ make DESTDIR=%{buildroot} PYTHONDIR=%{python3_sitelib} install
 %{python3_sitelib}/umu*
 
 %changelog
+* Wed Mar 25 2026 Lachlan Marie <lchlnm@pm.me> - 1.4.0^0.git.e17b257-1
+ - Update to 1.4.0
+
 * Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.4.0.3^0.git.ff468bc-1
  - Update to 1.4.0.3
 
