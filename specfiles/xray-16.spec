@@ -1,6 +1,6 @@
-%global bumpver 30
+%global bumpver 31
 
-%global commit c2b9a28649120fd527a6863800f1b9f7560b58cf
+%global commit 7368d4b0ec7dabad6f7108655d66cfbe34d5364c
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       xray-16
@@ -103,6 +103,9 @@ export CXXFLAGS="%{build_cxxflags} -Wno-error=overloaded-virtual"
 %{_datadir}/openxray/*
 
 %changelog
+* Wed Apr 01 2026 Lachlan Marie <lchlnm@pm.me> - git^31.git.7368d4b-3
+ - Update to commit 7368d4b0ec7dabad6f7108655d66cfbe34d5364c
+
 * Tue Mar 31 2026 Lachlan Marie <lchlnm@pm.me> - git^30.git.c2b9a28-3
  - Update to commit c2b9a28649120fd527a6863800f1b9f7560b58cf
 
