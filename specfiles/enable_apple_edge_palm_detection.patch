@@ -1,0 +1,38 @@
+--- src/evdev-mt-touchpad.c	2025-08-28 17:03:37.000000000 +0800
++++ src/evdev-mt-touchpad.c	2026-03-06 01:32:36.810049809 +0800
+@@ -3256,10 +3256,10 @@
+ 	    !tp_is_tpkb_combo_below(device))
+ 		return;
+
+-	/* Edge palm detection hurts more than it helps on Apple touchpads. */
+-	if (evdev_device_has_model_quirk(device, QUIRK_MODEL_APPLE_TOUCHPAD))
+-		return;
+-
++	// /* Edge palm detection hurts more than it helps on Apple touchpads. */
++	// if (evdev_device_has_model_quirk(device, QUIRK_MODEL_APPLE_TOUCHPAD))
++	// 	return;
++	//
+ 	evdev_device_get_size(device, &width, &height);
+
+ 	/* Enable edge palm detection on touchpads >= 70 mm. Anything
+@@ -3850,3 +3850,4 @@
+
+ 	return &tp->base;
+ }
++
+--- test/litest.h	2025-08-28 17:03:37.000000000 +0800
++++ test/litest.h	2026-03-06 01:33:44.649686876 +0800
+@@ -1785,7 +1785,7 @@
+ 	if (bustype == BUS_BLUETOOTH)
+ 		return 0;
+ 	if (vendor == VENDOR_ID_APPLE)
+-		return 0;
++		return 1;
+
+ 	rc = libinput_device_get_size(dev->libinput_device, &width, &height);
+
+@@ -1793,3 +1793,4 @@
+ }
+
+ #endif /* LITEST_H */
++
