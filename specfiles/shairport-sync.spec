@@ -62,6 +62,8 @@ EOF
 %build
 autoreconf -i -f
 %configure --sysconfdir=/etc \
+--with-systemd-startup \
+--without-create-user-group \
 --with-os=linux \
 --with-dummy \
 --with-stdout \
@@ -78,9 +80,9 @@ autoreconf -i -f
 --with-ffmpeg \
 --with-mpris-interface \
 --with-airplay-2
-# --with-systemd-startup \
-# --with-create-user-group=no \
 # --with-dbus-interface
+sed -i '/getent group shairport-sync/ d' Makefile
+sed -i '/getent passwd shairport-sync/ d' Makefile
 
 %make_build
 
@@ -109,7 +111,7 @@ install -m0644 -D shairport-sync.sysusers.conf %{buildroot}%{_sysusersdir}/shair
 
 /usr/bin/shairport-sync
 /usr/share/man/man1/shairport-sync.1.gz
-#{_unitdir}/#{name}.service
+%{_unitdir}/%{name}.service
 %doc README.md RELEASENOTES.md TROUBLESHOOTING.md
 %license LICENSES
 %attr(-, %{name}, %{name}) %{_sharedstatedir}/%{name}
