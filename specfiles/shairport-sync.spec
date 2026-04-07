@@ -26,6 +26,7 @@ BuildRequires:  autoconf
 BuildRequires:  automake
 BuildRequires:	gcc
 BuildRequires:	gcc-c++
+BuildRequires:	ffmpeg-free
 BuildRequires:	pkgconfig(libpulse)
 BuildRequires:	pkgconfig(libpipewire-0.3)
 BuildRequires:  libsndfile-devel
