@@ -1,10 +1,10 @@
 %global bumpver 1
-
+%global tag 0.3.0
 %global commit 1156b3503a04780bbdcb6a781cce87281b8bf87d
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           wldash
-Version:        0.3.0
+Version:        %{tag}
 Release:        3%{?dist}
 Summary:        Hot corners for Wayland. Create anchors in the corners of your monitors and execute a command of your choice.
 
