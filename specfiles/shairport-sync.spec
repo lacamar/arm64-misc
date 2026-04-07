@@ -78,8 +78,8 @@ autoreconf -i -f
 --with-pipewire \
 --with-convolution \
 --with-ffmpeg \
---with-mpris-interface \
---with-airplay-2
+--with-mpris-interface
+# --with-airplay-2
 # --with-dbus-interface
 sed -i '/getent group shairport-sync/ d' Makefile
 sed -i '/getent passwd shairport-sync/ d' Makefile
