@@ -123,15 +123,10 @@ install -m0644 -D shairport-sync.sysusers.conf %{buildroot}%{_sysusersdir}/shair
 %{_sysconfdir}/dbus-1/system.d/shairport-sync-dbus.conf
 
 %changelog
-* Tue Apr 07 2026 Lachlan Marie <lchlnm@pm.me> - 5.0.2-6
- - Re-enabled systemd service creation
- - Fixed erroneous group creation in build
-
 * Tue Apr 07 2026 Lachlan Marie <lchlnm@pm.me> - 5.0.2-5
  - Update to 5.0.2
-
-* Mon Apr 06 2026 Lachlan Marie <lchlnm@pm.me> - 5.0.2-4
- - Enabled Airplay 2
+ - Fixed erroneous group creation in build
+ - Set default backend to pipewire
 
 * Mon Apr 06 2026 Lachlan Marie <lchlnm@pm.me> - 4.3.7-4
 - Modified build flags
