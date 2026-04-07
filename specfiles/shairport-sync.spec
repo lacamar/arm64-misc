@@ -1,7 +1,7 @@
 %global tag 5.0.2
 Name:           shairport-sync
 Version:        %{tag}
-Release:        5%{?dist}
+Release:        6%{?dist}
 Summary:        AirTunes emulator. Multi-Room with Audio Synchronisation
 # MIT licensed except for tinysvcmdns under BSD,
 # FFTConvolver/ under GPLv3+ and audio_sndio.c
@@ -83,6 +83,7 @@ autoreconf -i -f
 # --with-dbus-interface
 sed -i '/getent group shairport-sync/ d' Makefile
 sed -i '/getent passwd shairport-sync/ d' Makefile
+sed -i 's|ExecStart=@prefix@/bin/shairport-sync --log-to-syslog|ExecStart=@prefix@/bin/shairport-sync -vv -o pipewire --log-to-syslog|' scripts/shairport-sync.service.in
 
 %make_build
 
@@ -120,6 +121,10 @@ install -m0644 -D shairport-sync.sysusers.conf %{buildroot}%{_sysusersdir}/shair
 #{_sysconfdir}/dbus-1/system.d/shairport-sync-dbus.conf
 
 %changelog
+* Tue Apr 07 2026 Lachlan Marie <lchlnm@pm.me> - 5.0.2-6
+ - Re-enabled systemd service creation
+ - Fixed erroneous group creation in build
+
 * Tue Apr 07 2026 Lachlan Marie <lchlnm@pm.me> - 5.0.2-5
  - Update to 5.0.2
 
