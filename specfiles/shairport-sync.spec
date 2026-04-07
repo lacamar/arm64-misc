@@ -62,26 +62,32 @@ EOF
 
 %build
 autoreconf -i -f
-%configure --sysconfdir=/etc \
---with-systemd-startup \
---without-create-user-group \
---with-os=linux \
---with-dummy \
---with-stdout \
---with-pipe \
---with-configfiles \
---with-ssl=openssl \
---with-soxr \
---with-metadata \
---with-avahi \
---with-alsa \
---with-pulseaudio \
---with-pipewire \
---with-convolution \
---with-ffmpeg \
---with-mpris-interface
-# --with-airplay-2
-# --with-dbus-interface
+#configure --sysconfdir=/etc \
+# --with-systemd-startup \
+# --without-create-user-group \
+# --with-os=linux \
+# --with-dummy \
+# --with-stdout \
+# --with-pipe \
+# --with-configfiles \
+# --with-ssl=openssl \
+# --with-soxr \
+# --with-metadata \
+# --with-avahi \
+# --with-alsa \
+# --with-pulseaudio \
+# --with-pipewire \
+# --with-convolution \
+# --with-ffmpeg \
+# --with-mpris-interface
+# # --with-airplay-2
+# # --with-dbus-interface
+%configure --sysconfdir=/etc --with-alsa --with-pipe --with-dummy \
+           --with-stdout --with-pulseaudio --with-metadata --with-pipewire \
+           --with-soxr --with-avahi --with-systemd-startup --with-ssl=openssl \
+           --with-create-user-group=false --with-mpris-interface # --with-airplay-2
+
+
 sed -i '/getent group shairport-sync/ d' Makefile
 sed -i '/getent passwd shairport-sync/ d' Makefile
 sed -i 's|ExecStart=@prefix@/bin/shairport-sync --log-to-syslog|ExecStart=@prefix@/bin/shairport-sync -vv -o pipewire --log-to-syslog|' scripts/shairport-sync.service.in
