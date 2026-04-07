@@ -1,16 +1,13 @@
+%global tag 1.2.6
+
 Name:           nqptp
-Version:        1.2.4
+Version:        %{tag}
 Release:        1%{?dist}
 Summary:        Not Quite PTP
 License:        GPL-2.0-only
 URL:            https://github.com/mikebrady/nqptp
 Source0:        https://github.com/mikebrady/%{name}/archive/%{version}/%{name}-%{version}.tar.gz
 Source1:        nqptp-user.conf
-# Backported from 1.2.5-dev:
-Patch0:         backport-050a8c2de9f3e1f4859abf9b36d2f18afd4c34d7.patch
-# Backported from 1.2.5-dev:
-Patch1:         backport-b5321a88d21b854aaa461dc0f6c226d650309b91.patch
-Patch2:         disable-user-group-generation.patch
 
 BuildRequires:  autoconf
 BuildRequires:  automake
@@ -61,5 +58,8 @@ install -D -m 0644 %{SOURCE1} %{buildroot}%{_sysusersdir}/nqptp.conf
 %{_sysusersdir}/nqptp.conf
 
 %changelog
+* Tue Apr 07 2026 Lachlan Marie <lchlnm@pm.me> - 1.2.6-1
+ - Update to 1.2.6
+
 * Tue Apr 07 2026 ChatGPT <noreply@example.com> - 1.2.4-1
 - Convert openSUSE systemd/sysusers macros to Fedora macros
