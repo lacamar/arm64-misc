@@ -85,7 +85,7 @@ autoreconf -i -f
 %configure --sysconfdir=/etc --with-alsa --with-pipe --with-dummy \
            --with-stdout --with-pulseaudio --with-metadata --with-pipewire \
            --with-soxr --with-avahi --with-systemd-startup --with-ssl=openssl \
-           --with-create-user-group=false --with-mpris-interface # --with-airplay-2
+           --with-create-user-group=false --with-mpris-interface --with-dbus-interface # --with-airplay-2
 
 
 sed -i '/getent group shairport-sync/ d' Makefile
@@ -114,7 +114,7 @@ install -m0644 -D shairport-sync.sysusers.conf %{buildroot}%{_sysusersdir}/shair
 %files
 %config(noreplace) /etc/shairport-sync.conf
 %config(noreplace) /etc/dbus-1/system.d/shairport-sync-mpris.conf
-#config(noreplace) /etc/dbus-1/system.d/shairport-sync-dbus.conf
+%config(noreplace) /etc/dbus-1/system.d/shairport-sync-dbus.conf
 
 
 /usr/bin/shairport-sync
@@ -125,7 +125,7 @@ install -m0644 -D shairport-sync.sysusers.conf %{buildroot}%{_sysusersdir}/shair
 %attr(-, %{name}, %{name}) %{_sharedstatedir}/%{name}
 %{_sysusersdir}/shairport-sync.conf
 %{_sysconfdir}/dbus-1/system.d/shairport-sync-mpris.conf
-#{_sysconfdir}/dbus-1/system.d/shairport-sync-dbus.conf
+%{_sysconfdir}/dbus-1/system.d/shairport-sync-dbus.conf
 
 %changelog
 * Tue Apr 07 2026 Lachlan Marie <lchlnm@pm.me> - 5.0.2-6
