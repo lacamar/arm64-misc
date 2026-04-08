@@ -53,7 +53,7 @@ DESTDIR=%{buildroot} ninja -C build install
 
 
 %changelog
-* Wed Apr 08 2026 Lachlan Marie <lchlnm@pm.me> - 1.3-1
+* Thu Apr 09 2026 Lachlan Marie <lchlnm@pm.me> - 1.3-1
  - Update to 1.3
 
 * Thu May 29 2025 Lachlan Marie <lchlnm@pm.me> - 1.3-1
