@@ -1,4 +1,4 @@
-%global tag 5.0.2
+%global tag 5.0.3
 Name:           shairport-sync
 Version:        %{tag}
 Release:        6%{?dist}
@@ -123,6 +123,9 @@ install -m0644 -D shairport-sync.sysusers.conf %{buildroot}%{_sysusersdir}/shair
 %{_sysconfdir}/dbus-1/system.d/shairport-sync-dbus.conf
 
 %changelog
+* Sun Apr 12 2026 Lachlan Marie <lchlnm@pm.me> - 5.0.3-6
+ - Update to 5.0.3
+
 * Tue Apr 07 2026 Lachlan Marie <lchlnm@pm.me> - 5.0.2-5
  - Update to 5.0.2
  - Fixed erroneous group creation in build
