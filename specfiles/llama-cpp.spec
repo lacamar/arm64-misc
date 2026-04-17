@@ -1,7 +1,7 @@
 # For the extra python package gguf that comes with llama-cpp
 %global pypi_name gguf
 %global pypi_version 0.10.0
-%global tag b8785
+%global tag b8816
 
 # Some optional subpackages
 %bcond_with examples
@@ -78,6 +78,7 @@ BuildRequires:  glslc
 
 BuildRequires: vulkan-headers
 BuildRequires: vulkan-loader-devel
+BuildRequires: spirv-headers-devel
 
 %if %{with examples}
 BuildRequires:  python3-devel
@@ -317,6 +318,9 @@ export LD_LIBRARY_PATH=$PWD/%{_vpath_builddir}/bin
 %endif
 
 %changelog
+* Fri Apr 17 2026 Lachlan Marie <lchlnm@pm.me> - b8816-1
+ - Update to b8816
+
 * Tue Apr 14 2026 Lachlan Marie <lchlnm@pm.me> - b8785-1
  - Update to b8785
 
