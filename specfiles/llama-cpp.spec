@@ -1,7 +1,7 @@
 # For the extra python package gguf that comes with llama-cpp
 %global pypi_name gguf
 %global pypi_version 0.10.0
-%global tag b8816
+%global tag b8851
 
 # Some optional subpackages
 %bcond_with examples
@@ -224,6 +224,7 @@ rm -f %{buildroot}/usr/lib/debug/usr/bin/llama-debug-template-parser-*
 rm -f %{buildroot}/usr/lib/debug/usr/bin/llama-results-*
 rm -f %{buildroot}/usr/lib/debug/usr/bin/llama-template-analysis-*
 rm -f %{buildroot}/usr/lib/debug/usr/lib64/libggml-vulkan.so*
+rm -f %{buildroot}/usr/lib/debug/usr/lib64/libllama-common.so*
 
 
 %if %{with examples}
@@ -252,6 +253,8 @@ export LD_LIBRARY_PATH=$PWD/%{_vpath_builddir}/bin
 %files
 %license LICENSE
 %{_libdir}/libllama.so.*
+%{_libdir}/libllama-common.so
+%{_libdir}/libllama-common.so.*
 %{_libdir}/libmtmd.so.*
 %{_libdir}/libggml.so.*
 %{_libdir}/libggml-base.so.*
@@ -318,6 +321,9 @@ export LD_LIBRARY_PATH=$PWD/%{_vpath_builddir}/bin
 %endif
 
 %changelog
+* Mon Apr 20 2026 Lachlan Marie <lchlnm@pm.me> - b8851-1
+ - Update to b8851
+
 * Fri Apr 17 2026 Lachlan Marie <lchlnm@pm.me> - b8816-1
  - Update to b8816
 
