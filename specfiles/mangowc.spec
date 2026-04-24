@@ -1,4 +1,4 @@
-%global tag 0.12.8
+%global tag 0.12.9
 Name:           mangowc
 Version:        %{tag}
 Release:        1%?dist
@@ -49,6 +49,9 @@ MangoWC is a lightweight, high-performance Wayland compositor built on dwl, desi
 %{_datadir}/xdg-desktop-portal/mango-portals.conf
 
 %changelog
+* Sat Apr 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.12.9-1
+ - Update to 0.12.9
+
 * Sun Mar 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.12.8-1
  - Update to 0.12.8
 
