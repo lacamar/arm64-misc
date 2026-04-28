@@ -93,7 +93,11 @@ BuildRequires:  libcurl-devel
 BuildRequires:  opencv-devel
 BuildRequires:  libzstd-devel
 BuildRequires:  git-all
+
+%if 0%{?fedora} <= 44
 BuildRequires:  rtmidi-devel
+%endif
+
 BuildRequires:  alsa-lib-devel
 BuildRequires:  cmake
 BuildRequires:  ninja-build
