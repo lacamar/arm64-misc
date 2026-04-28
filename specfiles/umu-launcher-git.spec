@@ -1,8 +1,8 @@
-%global bumpver 0
+%global bumpver 1
 %global tag 1.4.0
 %global _name umu-launcher
 
-%global commit e17b257d4e6c06295e2ff607a6e9865d2033db43
+%global commit 7f360de5e7f8d92944dd5ccd75ed6b923644afee
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:        umu-launcher-git
@@ -47,6 +47,7 @@ BuildRequires:  python3-vdf
 BuildRequires:  python3-hatch-vcs
 BuildRequires:  cargo
 BuildRequires:  python3-urllib3
+BuildRequires:  rust2rpm
 
 Requires:	python
 Requires:	python3
@@ -81,6 +82,9 @@ make DESTDIR=%{buildroot} PYTHONDIR=%{python3_sitelib} install
 %{python3_sitelib}/umu*
 
 %changelog
+* Tue Apr 28 2026 Lachlan Marie <lchlnm@pm.me> - 1.4.0^1.git.7f360de-1
+ - Update to commit 7f360de5e7f8d92944dd5ccd75ed6b923644afee
+
 * Wed Mar 25 2026 Lachlan Marie <lchlnm@pm.me> - 1.4.0^0.git.e17b257-1
  - Update to 1.4.0
 
