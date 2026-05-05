@@ -1,4 +1,4 @@
-%global tag 0.18.4.7
+%global tag 0.18.5.0
 
 Name: monero-gui
 Version: 0.18.4.6
@@ -130,6 +130,9 @@ install -Dm0644 share/org.getmonero.Monero.desktop \
 
 
 %changelog
+* Wed May 06 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.4.6-1
+ - Update to 0.18.5.0
+
 * Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.4.6-1
  - Update to 0.18.4.7
 
