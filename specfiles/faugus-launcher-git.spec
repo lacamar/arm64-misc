@@ -1,9 +1,9 @@
-%global bumpver 2
+%global bumpver 1
 %global _name faugus-launcher
 
-%global tag 1.18.12
+%global tag 1.19.3
 
-%global commit 0458c0605ddc5a56200e4a011d4d8c47c1e14616
+%global commit dcc89e91114188381125cac39358e4d193de7217
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           faugus-launcher-git
@@ -71,6 +71,27 @@ A simple and lightweight app for running Windows games using UMU-Launcher/UMU-Pr
 %{_datadir}/licenses/faugus-launcher/LICENSE
 
 %changelog
+* Mon May 11 2026 Lachlan Marie <lchlnm@pm.me> - 1.19.3^1.git.dcc89e9-1
+ - Update to commit dcc89e91114188381125cac39358e4d193de7217
+
+* Mon May 11 2026 Lachlan Marie <lchlnm@pm.me> - 1.19.3^0.git.dcc89e9-1
+ - Update to 1.19.3
+
+* Sun May 10 2026 Lachlan Marie <lchlnm@pm.me> - 1.19.2^2.git.d114dac-1
+ - Update to commit d114dac47231302f4dbc089d2b868b732adee28a
+
+* Sun May 10 2026 Lachlan Marie <lchlnm@pm.me> - 1.19.2^1.git.827afad-1
+ - Update to commit 827afad73f603e84876f4c64cefd4b026ae4b973
+
+* Sat May 09 2026 Lachlan Marie <lchlnm@pm.me> - 1.19.2^0.git.b5534ef-1
+ - Update to 1.19.2
+
+* Thu May 07 2026 Lachlan Marie <lchlnm@pm.me> - 1.18.12^4.git.434de34-1
+ - Update to commit 434de34e573a277dd85fddf4118340cbb4dc3acd
+
+* Thu May 07 2026 Lachlan Marie <lchlnm@pm.me> - 1.18.12^3.git.3d09310-1
+ - Update to commit 3d09310c401952d87adbf146db17427684435a68
+
 * Wed May 06 2026 Lachlan Marie <lchlnm@pm.me> - 1.18.12^2.git.0458c06-1
  - Update to commit 0458c0605ddc5a56200e4a011d4d8c47c1e14616
 
