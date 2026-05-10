@@ -1,7 +1,7 @@
-%global bumpver 51
+%global bumpver 59
 
 %global tag 0.0.40
-%global commit 4f47fee36039f38449830eccf10e72282d680f1a
+%global commit 6b5a2f781aae6f87007b4cf7a12375b84882d0ea
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       rpcs3-git
@@ -257,6 +257,30 @@ DESTDIR=%{buildroot} ninja install
 
 
 %changelog
+* Mon May 11 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.40^59.git.6b5a2f7-1
+ - Update to commit 6b5a2f781aae6f87007b4cf7a12375b84882d0ea
+
+* Mon May 11 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.40^58.git.6b5a2f7-1
+ - Update to commit 6b5a2f781aae6f87007b4cf7a12375b84882d0ea
+
+* Sun May 10 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.40^57.git.29b4577-1
+ - Update to commit 29b4577fdb1e9d168097ad6149c2e1772f936cdc
+
+* Sun May 10 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.40^56.git.b34eba2-1
+ - Update to commit b34eba2fb3ca6878a62ac7cbe67aaefd6cadbe0c
+
+* Sat May 09 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.40^55.git.6850e2e-1
+ - Update to commit 6850e2e5a8524180fb7cb014ff3703ed2bb7b689
+
+* Sat May 09 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.40^54.git.4312221-1
+ - Update to commit 431222149882e63a30fdfa7fcc6b25db4e1dfc43
+
+* Fri May 08 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.40^53.git.e2e1cf0-1
+ - Update to commit e2e1cf02f4329c78b885c359777bf4de46139da6
+
+* Thu May 07 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.40^52.git.0262973-1
+ - Update to commit 026297334f28500c8cbf6a5f48f395196700d6d7
+
 * Wed May 06 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.40^51.git.4f47fee-1
  - Update to commit 4f47fee36039f38449830eccf10e72282d680f1a
 
