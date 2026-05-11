@@ -1,8 +1,8 @@
-%global bumpver 4
+%global bumpver 13
 %global _name box64
 %global tag 0.4.31
 
-%global commit dfaabd0187c3c75f7427ea6e3d9eda018eecd3a5
+%global commit cf040876beda6fbcaaa423f6b3a271df91d240c3
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           %{_name}-git
@@ -213,6 +213,33 @@ fi
 %endif
 
 %changelog
+* Tue May 12 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.31^13.git.cf04087-2
+ - Update to commit cf040876beda6fbcaaa423f6b3a271df91d240c3
+
+* Sun May 10 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.31^12.git.740d39c-2
+ - Update to commit 740d39c6d1ef6244c717441e6cf20fd0ed0a2d65
+
+* Sun May 10 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.31^11.git.027c7e9-2
+ - Update to commit 027c7e9c05951f1a6188a2452e756403ed12eacf
+
+* Sat May 09 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.31^10.git.56cdd9f-2
+ - Update to commit 56cdd9f7325d78b6caf37a44fdd0bde6a93f2cce
+
+* Sat May 09 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.31^9.git.70b6068-2
+ - Update to commit 70b6068ecba07f9fd0bc20fcba5edb072c0cf9c1
+
+* Fri May 08 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.31^8.git.84a6eba-2
+ - Update to commit 84a6eba99f2407032e82b08a7bef732138e245b7
+
+* Thu May 07 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.31^7.git.469c420-2
+ - Update to commit 469c42062674aac8631003160cd6b0d37ba58671
+
+* Thu May 07 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.31^6.git.19c9af4-2
+ - Update to commit 19c9af4dd093e2e8cd2728370ca60531c6e879cb
+
+* Wed May 06 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.31^5.git.05b8d97-2
+ - Update to commit 05b8d9782397132fa92da162e03aff7fe030aecf
+
 * Mon May 04 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.31^4.git.dfaabd0-2
  - Update to commit dfaabd0187c3c75f7427ea6e3d9eda018eecd3a5
 
