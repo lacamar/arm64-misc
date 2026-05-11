@@ -1,7 +1,7 @@
 # For the extra python package gguf that comes with llama-cpp
 %global pypi_name gguf
 %global pypi_version 0.10.0
-%global tag b9037
+%global tag b9102
 
 # Some optional subpackages
 %bcond_with examples
@@ -321,6 +321,39 @@ export LD_LIBRARY_PATH=$PWD/%{_vpath_builddir}/bin
 %endif
 
 %changelog
+* Mon May 11 2026 Lachlan Marie <lchlnm@pm.me> - b9102-1
+ - Update to b9102
+
+* Mon May 11 2026 Lachlan Marie <lchlnm@pm.me> - b9097-1
+ - Update to b9097
+
+* Sun May 10 2026 Lachlan Marie <lchlnm@pm.me> - b9095-1
+ - Update to b9095
+
+* Sun May 10 2026 Lachlan Marie <lchlnm@pm.me> - b9093-1
+ - Update to b9093
+
+* Sat May 09 2026 Lachlan Marie <lchlnm@pm.me> - b9089-1
+ - Update to b9089
+
+* Sat May 09 2026 Lachlan Marie <lchlnm@pm.me> - b9082-1
+ - Update to b9082
+
+* Fri May 08 2026 Lachlan Marie <lchlnm@pm.me> - b9071-1
+ - Update to b9071
+
+* Fri May 08 2026 Lachlan Marie <lchlnm@pm.me> - b9066-1
+ - Update to b9066
+
+* Thu May 07 2026 Lachlan Marie <lchlnm@pm.me> - b9050-1
+ - Update to b9050
+
+* Thu May 07 2026 Lachlan Marie <lchlnm@pm.me> - b9049-1
+ - Update to b9049
+
+* Wed May 06 2026 Lachlan Marie <lchlnm@pm.me> - b9041-1
+ - Update to b9041
+
 * Wed May 06 2026 Lachlan Marie <lchlnm@pm.me> - b9037-1
  - Update to b9037
 
