@@ -1,7 +1,7 @@
 # For the extra python package gguf that comes with llama-cpp
 %global pypi_name gguf
 %global pypi_version 0.10.0
-%global tag b9151
+%global tag b9481
 
 # Some optional subpackages
 %bcond_with examples
@@ -225,6 +225,15 @@ rm -f %{buildroot}/usr/lib/debug/usr/bin/llama-results-*
 rm -f %{buildroot}/usr/lib/debug/usr/bin/llama-template-analysis-*
 rm -f %{buildroot}/usr/lib/debug/usr/lib64/libggml-vulkan.so*
 rm -f %{buildroot}/usr/lib/debug/usr/lib64/libllama-common.so*
+rm -f %{buildroot}/usr/lib/debug/usr/bin/llama-*
+rm -f %{buildroot}/usr/lib64/libllama-batched-bench-impl.so-*.debug
+rm -f %{buildroot}/usr/lib64/libllama-bench-impl.so-*.debug
+rm -f %{buildroot}/usr/lib64/libllama-cli-impl.so-*.debug
+rm -f %{buildroot}/usr/lib64/libllama-completion-impl.so-*.debug
+rm -f %{buildroot}/usr/lib64/libllama-fit-params-impl.so-*.debug
+rm -f %{buildroot}/usr/lib64/libllama-perplexity-impl.so-*.debug
+rm -f %{buildroot}/usr/lib64/libllama-quantize-impl.so-*.debug
+rm -f %{buildroot}/usr/lib64/libllama-server-impl.so-*.debug
 
 
 %if %{with examples}
@@ -234,7 +243,7 @@ cp -r %{_vpath_srcdir}/models %{buildroot}%{_datarootdir}/%{name}/
 cp -r %{_vpath_srcdir}/README.md %{buildroot}%{_datarootdir}/%{name}/
 rm -rf %{buildroot}%{_datarootdir}/%{name}/examples/llama.android
 %else
-rm %{buildroot}%{_bindir}/convert*.py
+#rm %{buildroot}%{_bindir}/convert*.py
 %endif
 
 %if %{with test}
@@ -260,9 +269,18 @@ export LD_LIBRARY_PATH=$PWD/%{_vpath_builddir}/bin
 %{_libdir}/libggml-base.so.*
 %{_libdir}/libggml-cpu.so.*
 %{_libdir}/libggml-vulkan.so.*
+%{_libdir}/libllama-batched-bench-impl.so
+%{_libdir}/libllama-bench-impl.so
+%{_libdir}/libllama-cli-impl.so
+%{_libdir}/libllama-completion-impl.so
+%{_libdir}/libllama-fit-params-impl.so
+%{_libdir}/libllama-perplexity-impl.so
+%{_libdir}/libllama-quantize-impl.so
+%{_libdir}/libllama-server-impl.so
 %if %{with rocm}
 %{_libdir}/libggml-hip.so.*
 %endif
+%{_bindir}/llama
 %{_bindir}/llama-batched-bench
 %{_bindir}/llama-bench
 %{_bindir}/llama-cli
@@ -321,6 +339,9 @@ export LD_LIBRARY_PATH=$PWD/%{_vpath_builddir}/bin
 %endif
 
 %changelog
+* Wed Jun 03 2026 Lachlan Marie <lchlnm@pm.me> - b9481-1
+ - Update to b9481
+
 * Fri May 15 2026 Lachlan Marie <lchlnm@pm.me> - b9151-1
  - Update to b9151
 
