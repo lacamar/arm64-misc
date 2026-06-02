@@ -1,4 +1,4 @@
-%global tag 1.2.6
+%global tag 1.2.8
 
 Name:           nqptp
 Version:        %{tag}
@@ -34,8 +34,8 @@ autoreconf -i -f
 %install
 %make_install
 mkdir -p %{buildroot}%{_unitdir}
-mv %{buildroot}%{_libdir}/systemd/system/%{name}.service \
-   %{buildroot}%{_unitdir}/%{name}.service
+# mv %{buildroot}%{_libdir}/systemd/system/%{name}.service \
+#    %{buildroot}%{_unitdir}/%{name}.service
 install -D -m 0644 %{SOURCE1} %{buildroot}%{_sysusersdir}/nqptp.conf
 
 %pre
@@ -56,8 +56,15 @@ install -D -m 0644 %{SOURCE1} %{buildroot}%{_sysusersdir}/nqptp.conf
 %{_bindir}/%{name}
 %{_unitdir}/%{name}.service
 %{_sysusersdir}/nqptp.conf
+%{_mandir}/man8/nqptp.8.gz
 
 %changelog
+* Wed Jun 03 2026 Lachlan Marie <lchlnm@pm.me> - 1.2.8-1
+ - Update to 1.2.8
+
+* Wed May 06 2026 Lachlan Marie <lchlnm@pm.me> - 1.2.7-1
+ - Update to 1.2.7
+
 * Tue Apr 07 2026 Lachlan Marie <lchlnm@pm.me> - 1.2.6-1
  - Update to 1.2.6
 
