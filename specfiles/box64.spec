@@ -7,7 +7,7 @@
 Box64 lets you run x86_64 Linux programs (such as games) on non-x86_64 Linux
 systems, like ARM (host system needs to be 64-bit little-endian).}
 
-%global tag 0.4.31
+%global tag 0.4.32
 
 Name:           box64
 Version:        %{tag}
@@ -195,6 +195,9 @@ fi
 %endif
 
 %changelog
+* Wed Jun 03 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.32-1
+ - Update to 0.4.32
+
 * Mon Apr 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.31-1
  - Update to 0.4.31
 
