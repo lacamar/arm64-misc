@@ -1,4 +1,4 @@
-%global tag 0.13.1
+%global tag 0.14.0
 Name:           mangowc
 Version:        %{tag}
 Release:        1%?dist
@@ -20,6 +20,7 @@ BuildRequires:  pkgconfig(libinput)
 BuildRequires:  pkgconfig(wayland-client)
 BuildRequires:  pkgconfig(libpcre2-8)
 BuildRequires:  pkgconfig(scenefx-0.4)
+BuildRequires:  pkgconfig(libcjson)
 
 %description
 MangoWC is a lightweight, high-performance Wayland compositor built on dwl, designed for speed, flexibility, and a modern, customizable desktop experience.
@@ -49,6 +50,9 @@ MangoWC is a lightweight, high-performance Wayland compositor built on dwl, desi
 %{_datadir}/xdg-desktop-portal/mango-portals.conf
 
 %changelog
+* Wed Jun 03 2026 Lachlan Marie <lchlnm@pm.me> - 0.14.0-1
+ - Update to 0.14.0
+
 * Mon May 18 2026 Lachlan Marie <lchlnm@pm.me> - 0.13.1-1
  - Update to 0.13.1
 
