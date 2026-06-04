@@ -1,5 +1,5 @@
 %global udevdir %(pkg-config --variable=udevdir udev)
-%global tag 1.31.3
+%global tag 1.30.4
 #global gitdate 20141211
 %global gitversion 58abea394
 
@@ -163,6 +163,9 @@ intended to be run by users.
 
 
 %changelog
+* Fri Jun 05 2026 Lachlan Marie <lchlnm@pm.me> - 1.30.4-3
+ - Update to 1.30.4
+
 * Thu Jun 04 2026 Lachlan Marie <lchlnm@pm.me> - 1.31.3-3
  - Update to 1.31.3
 
