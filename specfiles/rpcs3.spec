@@ -86,7 +86,11 @@ BuildRequires:  libcurl-devel
 BuildRequires:  opencv-devel
 BuildRequires:  libzstd-devel
 BuildRequires:  git-all
+
+%if 0%{?fedora} <= 44
 BuildRequires:  rtmidi-devel
+%endif
+
 BuildRequires:  alsa-lib-devel
 BuildRequires:  cmake
 BuildRequires:  ninja-build
@@ -107,6 +111,8 @@ BuildRequires:  qt6-qtsvg-devel
 BuildRequires:  llvm-devel
 BuildRequires:  SDL3-devel
 BuildRequires:  doxygen
+BuildRequires:  gtest-devel
+BuildRequires:  abseil-cpp-devel
 
 %description
 PlayStation 3 emulator and debugger
@@ -159,9 +165,7 @@ cmake -B build \
       -DUSE_SYSTEM_RTMIDI=ON \
       -DUSE_DISCORD_RPC=ON \
       -DUSE_SYSTEM_OPENCV=ON \
-      -DCURL_USE_SYSTEM=ON \
       -DDISABLE_LTO=TRUE \
-      -DUSE_SYSTEM_OPENCV=ON \
       -DOpenGL_GL_PREFERENCE=LEGACY \
       -DCMAKE_INSTALL_PREFIX=%{_prefix} \
       -DCMAKE_INSTALL_LIBDIR=%{_lib} \
