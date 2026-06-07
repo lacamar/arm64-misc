@@ -1,7 +1,7 @@
-%global bumpver 5
+%global bumpver 6
 
 %global tag 0.0.41
-%global commit e7165cbe99afb232c2e80d773bc6fed5d3da879a
+%global commit 57b4687ac2a27250a75d9feeefa4906830782321
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       rpcs3-git
@@ -257,6 +257,9 @@ DESTDIR=%{buildroot} ninja install
 
 
 %changelog
+* Mon Jun 08 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.41^6.git.57b4687-1
+ - Update to commit 57b4687ac2a27250a75d9feeefa4906830782321
+
 * Sun Jun 07 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.41^5.git.e7165cb-1
  - Update to commit e7165cbe99afb232c2e80d773bc6fed5d3da879a
 
