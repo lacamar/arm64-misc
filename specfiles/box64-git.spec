@@ -1,13 +1,13 @@
-%global bumpver 4
+%global bumpver 5
 %global _name box64
 %global tag 0.4.33
 
-%global commit 8d7f6a54d78ab7c551367c0b43553c8b30dc6a39
+%global commit 8f445d9a0c52767274567f1a9bd76ef28e531ec7
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           %{_name}-git
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        2%{?dist}
+Release:        3%{?dist}
 Conflicts:      %{_name}
 Provides:       %{_name} = %{version}-%{release}
 Summary:        Linux userspace x86_64 emulator with a twist, targeted at ARM64
@@ -187,6 +187,7 @@ fi
 %ifarch aarch64
 %ghost %{_bindir}/%{_name}
 %{_bindir}/%{_name}.aarch64
+%{_bindir}/box64-configurator
 %else
 %{_bindir}/%{_name}
 %endif
@@ -213,6 +214,11 @@ fi
 %endif
 
 %changelog
+* Sat Jun 13 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.33^5.git.8f445d9-3
+ - Update to commit 8f445d9a0c52767274567f1a9bd76ef28e531ec7
+
+ - Added box64-configurator to files section
+
 * Fri Jun 12 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.33^4.git.8d7f6a5-2
  - Update to commit 8d7f6a54d78ab7c551367c0b43553c8b30dc6a39
 
