@@ -1,6 +1,6 @@
 Name:           waycorner
 Version:        0.2.3
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Hot corners for Wayland. Create anchors in the corners of your monitors and execute a command of your choice.
 
 License:        MIT
