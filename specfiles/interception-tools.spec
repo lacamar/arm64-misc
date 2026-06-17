@@ -1,7 +1,7 @@
 %global tag 0.6.8
 Name: interception-tools
 Version:        %{tag}
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Interception Tools - A minimal composable infrastructure on top of libudev and libevdev.
 
 License: GNU GPL v3
@@ -31,7 +31,8 @@ The Interception Tools is a small set of utilities for operating on input events
 %build
 cmake -B build \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=%{_prefix}
+    -DCMAKE_INSTALL_PREFIX=%{_prefix} \
+    -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 cmake --build build -j%{?_smp_build_nproc}
 
 %install
