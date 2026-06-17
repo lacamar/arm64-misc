@@ -1,6 +1,6 @@
-%global bumpver 31
+%global bumpver 32
 
-%global commit 7368d4b0ec7dabad6f7108655d66cfbe34d5364c
+%global commit 11b8c4ecac4f249cf8b856389bd722cb421df787
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       xray-16
@@ -18,10 +18,10 @@ local externals = {
   { name="GameSpy", ref="3e43480", owner="OpenXRay", path="GameSpy",  license="IGN" },
   { name="LuaJIT", ref="5a5cd82", owner="OpenXRay", path="LuaJIT", version="2.1",  license="MIT" },
   { name="gli", ref="779b99a", owner="g-truc", path="gli", version="0.8.2.0",  license="MIT" },
-  { name="imgui", ref="9ca7ea0", owner="ocornut", path="imgui", version="v.1.92.5",  license="MIT" },
+  { name="imgui", ref="3fb22b8", owner="ocornut", path="imgui", version="v.1.92.5",  license="MIT" },
   { name="luabind-deboostified", ref="8da131b", owner="OpenXRay", path="luabind", version="0.9",  license="MIT" },
-  { name="sse2neon", ref="d352d24", owner="DLTcollab", path="sse2neon", version="1.8.0",  license="MIT" },
-  { name="sse2rvv", ref="373f788", owner="pattonkan", path="sse2rvv", version="git",  license="MIT" },
+  { name="sse2neon", ref="3b70b37", owner="DLTcollab", path="sse2neon", version="1.8.0",  license="MIT" },
+  { name="sse2rvv", ref="f1ab916", owner="pattonkan", path="sse2rvv", version="git",  license="MIT" },
   { name="xrLuaFix", ref="0e89050", owner="OpenXRay", path="xrLuaFix", version="git",  license="BSD-3" },
   { name="jenkins-ctest-plugin", ref="63a4a82", owner="rpavlik", path="luabind/test/jenkins-ctest-plugin", version="git",  license="MIT" },
   { name="luafilesystem", ref="314c0d0", owner="OpenXRay", path="xrLuaFix/lfs", version="git",  license="MIT" },
@@ -103,6 +103,9 @@ export CXXFLAGS="%{build_cxxflags} -Wno-error=overloaded-virtual"
 %{_datadir}/openxray/*
 
 %changelog
+* Fri May 08 2026 Lachlan Marie <lchlnm@pm.me> - git^32.git.11b8c4e-3
+ - Update to commit 11b8c4ecac4f249cf8b856389bd722cb421df787
+
 * Wed Apr 01 2026 Lachlan Marie <lchlnm@pm.me> - git^31.git.7368d4b-3
  - Update to commit 7368d4b0ec7dabad6f7108655d66cfbe34d5364c
 
