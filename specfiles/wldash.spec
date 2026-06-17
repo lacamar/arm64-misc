@@ -11,7 +11,7 @@ Summary:        Hot corners for Wayland. Create anchors in the corners of your m
 License:        GNU GPL v3
 URL:            https://git.sr.ht/~kennylevinsen/%{name}
 Source0:        https://git.sr.ht/~kennylevinsen/%{name}/archive/%{shortcommit}.tar.gz
-Source1:        %{name}-vendor-%{shortcommit}.tar.gz
+Source1:        %{name}-%{shortcommit}-vendor.tar.zst
 
 BuildArch:      %{_target_cpu}
 BuildRequires:  rust
@@ -30,6 +30,9 @@ Hot corners for Wayland. Create anchors in the corners of your monitors and exec
 
 %prep
 %autosetup -n %{name}-%{shortcommit} -p1 -a1
+mv wldash-1156b35-vendor/vendor vendor
+mv wldash-1156b35-vendor/vendor-config.toml vendor-config.toml
+rm -rf wldash-1156b35-vendor
 %cargo_prep -v vendor
 
 %generate_buildrequires
