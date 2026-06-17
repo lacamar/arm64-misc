@@ -5,7 +5,7 @@
 
 Name:           wldash
 Version:        %{tag}
-Release:        3%{?dist}
+Release:        4%{?dist}
 Summary:        Hot corners for Wayland. Create anchors in the corners of your monitors and execute a command of your choice.
 
 License:        GNU GPL v3
@@ -30,8 +30,8 @@ Hot corners for Wayland. Create anchors in the corners of your monitors and exec
 
 %prep
 %autosetup -n %{name}-%{shortcommit} -p1 -a1
-mv wldash-1156b35-vendor/vendor vendor
-mv wldash-1156b35-vendor/vendor-config.toml vendor-config.toml
+mv %{name}-%{shortcommit}-vendor/vendor vendor
+mv %{name}-%{shortcommit}-vendor/vendor-config.toml vendor-config.toml
 rm -rf wldash-1156b35-vendor
 %cargo_prep -v vendor
 
