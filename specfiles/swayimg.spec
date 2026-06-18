@@ -1,5 +1,5 @@
 %bcond  tests   1
-%global tag 5.2
+%global tag 5.3
 
 Name:           swayimg
 Version:        %{tag}
@@ -108,6 +108,9 @@ export LANG=en_US.UTF-8 # ImageListTest.SortAlphaUnicode fails with LANG=C
 
 
 %changelog
+* Fri Jun 19 2026 Lachlan Marie <lchlnm@pm.me> - 5.3-1
+ - Update to 5.3
+
 * Thu Apr 09 2026 Lachlan Marie <lchlnm@pm.me> - 5.2-1
  - Update to 5.2
 
