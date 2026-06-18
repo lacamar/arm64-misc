@@ -1,6 +1,6 @@
 %global _name swayimg
-%global tag 5.2
-%global bumpver 30
+%global tag 5.3
+%global bumpver 0
 
 %global commit f1aa0005cf90ac40b4d89d4ee189dadfb631a048
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
@@ -114,6 +114,9 @@ export LANG=en_US.UTF-8 # ImageListTest.SortAlphaUnicode fails with LANG=C
 
 
 %changelog
+* Fri Jun 19 2026 Lachlan Marie <lchlnm@pm.me> - 5.3^0.git.f1aa000-1
+ - Update to 5.3
+
 * Wed Jun 17 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^30.git.f1aa000-1
  - Update to commit f1aa0005cf90ac40b4d89d4ee189dadfb631a048
 
