@@ -1,9 +1,9 @@
 %undefine __brp_mangle_shebangs
 
-%global bumpver 15
+%global bumpver 16
 %global _name yazi
 %global tag 26.1.22
-%global commit 84a5be0b6a05464b2601f6194c74c0ea8160e6a9
+%global commit ef5db6e257134963a52ca2e43a5b3ada4caaf7fe
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name: %{_name}-git
@@ -68,6 +68,9 @@ install -Dm644 assets/yazi.desktop \
 
 
 %changelog
+* Sat Jun 20 2026 Lachlan Marie <lchlnm@pm.me> - 26.1.22^16.git.ef5db6e-2
+ - Update to commit ef5db6e257134963a52ca2e43a5b3ada4caaf7fe
+
 * Sat Jun 20 2026 Lachlan Marie <lchlnm@pm.me> - 26.1.22^15.git.84a5be0-2
  - Update to commit 84a5be0b6a05464b2601f6194c74c0ea8160e6a9
 
