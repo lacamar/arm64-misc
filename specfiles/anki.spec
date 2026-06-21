@@ -1,6 +1,6 @@
 %global __requires_exclude_from ^%{_datadir}/anki/.*$
 %global __provides_exclude_from ^%{_datadir}/anki/.*$
-%global tag 26.05
+%global tag 25.09.4
 
 Name:           anki
 Version:        %{tag}
