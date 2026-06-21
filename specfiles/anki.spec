@@ -1,6 +1,6 @@
 %global __requires_exclude_from ^%{_datadir}/anki/.*$
 %global __provides_exclude_from ^%{_datadir}/anki/.*$
-%global tag 25.09.4
+%global tag 26.05
 
 Name:           anki
 Version:        %{tag}
@@ -111,6 +111,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/anki.desktop
 %{_datadir}/pixmaps/anki.png
 
 %changelog
+* Mon Jun 22 2026 Lachlan Marie <lchlnm@pm.me> - 26.05-2
+ - Update to 26.05
+
 * Mon Jun 22 2026 Lachlan Marie <lchlnm@pm.me> - 26.05-2
 - Pin pip install to the spec version so the RPM matches its declared contents
 - Fix taskbar icon by correcting StartupWMClass to the window app_id
