@@ -1,7 +1,7 @@
-%global bumpver 33
+%global bumpver 34
 
 %global tag 0.0.41
-%global commit f5e8a2bfa987f4cb7a2a8a58c2abc0ee788aed82
+%global commit cae36151ff24808c6e8bf91b1a35274e7f20b09b
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       rpcs3-git
@@ -18,8 +18,8 @@ Source0:  https://github.com/RPCS3/rpcs3/archive/%{shortcommit}/rpcs3-%{shortcom
 
 %{lua:
 local externals = {
- { name="7zip", ref="8c63d71", owner="ip7z", path="7zip/7zip", version="26.00",  license="GNU-LGPL" },
- { name="FAudio", ref="14f2875", owner="FNA-XNA", path="FAudio", version="26.03",  license="zlib" },
+ { name="7zip", ref="f9d78af", owner="ip7z", path="7zip/7zip", version="26.00",  license="GNU-LGPL" },
+ { name="FAudio", ref="75c79d4", owner="FNA-XNA", path="FAudio", version="26.03",  license="zlib" },
  { name="VulkanMemoryAllocator", ref="1d8f600", owner="GPUOpen-LibrariesAndSDKs", path="GPUOpen/VulkanMemoryAllocator", version="3.3.0",  license="MIT" },
  { name="openal-soft", ref="b2c48f7", owner="kcat", path="OpenAL/openal-soft", version="1.25.1",  license="PFFFT" },
  { name="soundtouch", ref="a0fba77", owner="RPCS3", path="SoundTouch/soundtouch/", version="2.4.0",  license="LGPLv2.1" },
@@ -28,21 +28,21 @@ local externals = {
  { name="curl", ref="a05f349", owner="curl", path="curl/curl", version="8.17.0",  license="MIT" },
  { name="discord-rpc", ref="3dc2c32", owner="Vestrel", path="discord-rpc/discord-rpc", license="MIT" },
  { name="gamemode", ref="c54d6d4", owner="FeralInteractive", path="feralinteractive/feralinteractive", version="1.8.2", license="BSD-3-Clause" },
- { name="ffmpeg-core", ref="4230054", owner="RPCS3", path="ffmpeg", version="7.1.2", license="LGPLv2.1" },
+ { name="ffmpeg-core", ref="649d9d9", owner="RPCS3", path="ffmpeg", version="7.1.2", license="LGPLv2.1" },
  { name="Fusion", ref="759ac5d", owner="xioTechnologies", path="fusion/fusion", version="1.2.9",  license="MIT" },
  { name="glslang", ref="f0bd025", owner="KhronosGroup", path="glslang/glslang", version="15.3.0",  license="BSD-3-Clause" },
  { name="hidapi", ref="d6b2a97", owner="RPCS3", path="hidapi/hidapi", version="0.15.0",  license="GPLv3, BSD" },
  { name="libpng", ref="3061454", owner="pnggroup", path="libpng/libpng", version="1.6.55",  license="PNGRLLv2" },
- { name="SDL", ref="d9d5536", owner="libsdl-org", path="libsdl-org/SDL", version="3.4.2",  license="zlib" },
+ { name="SDL", ref="8e37db5", owner="libsdl-org", path="libsdl-org/SDL", version="3.4.2",  license="zlib" },
  { name="libusb", ref="87a5563", owner="libusb", path="libusb/libusb", version="1.0.29",  license="LGPLv2.1" },
  { name="llvm-project", ref="cd70802", owner="llvm", path="llvm/llvm", version="19.1.7",  license="Apache-v2" },
  { name="miniupnp", ref="d66872e", owner="miniupnp", path="miniupnp/miniupnp", version="2.3.9",  license="BSD-3-Clause" },
  { name="opencv_minimal", ref="6900a12", owner="Megamouse", path="opencv/opencv", version="4.12.0" },
  { name="protobuf", ref="edaa823", owner="protocolbuffers", path="protobuf/protobuf", version="33.4",  license="BSD-3-Clause" },
- { name="pugixml", ref="ee86beb", owner="zeux", path="pugixml", version="1.15",  license="MIT" },
+ { name="pugixml", ref="c8033ce", owner="zeux", path="pugixml", version="1.15",  license="MIT" },
  { name="rtmidi", ref="1e5b499", owner="thestk", path="rtmidi", version="6.0.0",  license="MIT" },
  { name="stb", ref="013ac3b", owner="nothings", path="stblib/stb", license="MIT" },
- { name="wolfssl", ref="1d363f3", owner="wolfSSL", path="wolfssl/wolfssl", version="5.8.2",  license="GPLv3" },
+ { name="wolfssl", ref="ac01707", owner="wolfSSL", path="wolfssl/wolfssl", version="5.8.2",  license="GPLv3" },
  { name="yaml-cpp", ref="51a5d62", owner="RPCS3", path="yaml-cpp/yaml-cpp", version="0.9.0",  license="MIT" },
  { name="zlib", ref="da607da", owner="madler", path="zlib/zlib", version="1.3.2",  license="zlib" },
  { name="zstd", ref="f8745da", owner="facebook", path="zstd/zstd", version="1.5.7",  license="GPLv2" },
@@ -93,6 +93,7 @@ BuildRequires:  libcurl-devel
 BuildRequires:  opencv-devel
 BuildRequires:  libzstd-devel
 BuildRequires:  git-all
+BuildRequires:  libxkbcommon-x11-devel
 
 %if 0%{?fedora} <= 44
 BuildRequires:  rtmidi-devel
@@ -257,6 +258,9 @@ DESTDIR=%{buildroot} ninja install
 
 
 %changelog
+* Thu Jul 02 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.41^34.git.cae3615-1
+ - Update to commit cae36151ff24808c6e8bf91b1a35274e7f20b09b
+
 * Tue Jun 30 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.41^33.git.f5e8a2b-1
  - Update to commit f5e8a2bfa987f4cb7a2a8a58c2abc0ee788aed82
 
