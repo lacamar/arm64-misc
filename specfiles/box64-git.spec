@@ -1,8 +1,8 @@
-%global bumpver 17
+%global bumpver 18
 %global _name box64
 %global tag 0.4.33
 
-%global commit 95b02080ecae26392ffd621ed0c405e5d5e11170
+%global commit 90dffce78a8297b31dab47e1be3a3cfc0fc103b5
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           %{_name}-git
@@ -32,6 +32,7 @@ BuildRequires:  make
 BuildRequires:  perl-podlators
 BuildRequires:  systemd-rpm-macros
 BuildRequires:  alternatives
+BuildRequires:  desktop-file-utils
 
 # box64 only supports these architectures
 ExclusiveArch:  aarch64 riscv64 ppc64le %{x86_64}
@@ -147,6 +148,11 @@ install -Dpm0644 -t %{buildroot}%{_sysconfdir} system/box64.box64rc
 # Install manpage
 install -Dpm0644 -t %{buildroot}%{_mandir}/man1 docs/%{_name}.1
 
+# Validate desktop file (only installed by cmake_install, i.e. not on x86_64)
+%ifnarch %{x86_64}
+desktop-file-validate %{buildroot}%{_datadir}/applications/box64-configurator.desktop
+%endif
+
 %ifarch aarch64
 mv %{buildroot}%{_bindir}/%{_name} %{buildroot}%{_bindir}/%{_name}.aarch64
 touch %{buildroot}%{_bindir}/%{_name}
@@ -188,6 +194,7 @@ fi
 %ghost %{_bindir}/%{_name}
 %{_bindir}/%{_name}.aarch64
 %{_bindir}/box64-configurator
+
 %else
 %{_bindir}/%{_name}
 %endif
@@ -206,6 +213,7 @@ fi
 %doc docs/*.md docs/img
 %{_mandir}/man1/box64.1*
 %config(noreplace) %{_sysconfdir}/box64.box64rc
+%{_datadir}/applications/box64-configurator.desktop
 
 %ifnarch %{x86_64}
 %files binfmts
@@ -214,6 +222,9 @@ fi
 %endif
 
 %changelog
+* Thu Jul 02 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.33^18.git.90dffce-3
+ - Update to commit 90dffce78a8297b31dab47e1be3a3cfc0fc103b5
+
 * Wed Jun 24 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.33^17.git.95b0208-3
  - Update to commit 95b02080ecae26392ffd621ed0c405e5d5e11170
 
