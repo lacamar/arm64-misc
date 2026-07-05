@@ -1,7 +1,7 @@
-%global tag 0.18.5.0
+%global tag 0.18.5.1
 
 Name: monero-gui
-Version: 0.18.4.6
+Version: %{tag}
 Release: 1%{?dist}
 Summary: Monero: the secure, private, untraceable cryptocurrency
 
@@ -11,7 +11,7 @@ Source0: https://github.com/monero-project/monero-gui/archive/refs/tags/v%{versi
 
 %{lua:
 local externals = {
-  { name="monero",        ref="dbcc7d2", owner="monero-project", path="", version="0.18.4.6", license="BSD-3-Clause" },
+  { name="monero",        ref="3ca4c30", owner="monero-project", path="", version="0.18.5.0", license="BSD-3-Clause" },
   { name="quirc",         ref="7e7ab59", owner="dlbeer", path="../external/quirc", license="ISC License" },
   { name="miniupnp",      ref="544e6fc", owner="miniupnp", path="external/miniupnp", version="2.2.1", license="BSD-3-Clause" },
   { name="RandomX",       ref="102f8ac", owner="tevador", path="external/randomx", version="1.2.1", license="BSD-3-Clause" },
@@ -130,7 +130,10 @@ install -Dm0644 share/org.getmonero.Monero.desktop \
 
 
 %changelog
-* Wed May 06 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.4.6-1
+* Sun Jul 05 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.5.1-1
+ - Update to 0.18.5.1
+
+* Mon Jun 22 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.5.0-1
  - Update to 0.18.5.0
 
 * Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.4.6-1
