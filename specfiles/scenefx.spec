@@ -22,7 +22,7 @@
 
 Name:           scenefx
 Version:        %{tag}
-Release:        0
+Release:        1
 Summary:        A drop-in wlroots replacement that allows eye-candy effects
 License:        MIT
 Group:          System/GUI/Other
@@ -89,7 +89,7 @@ echo %{optflags}
 %{_libdir}/libscenefx-%{apiver}.so
 
 %changelog
-* Thu Jul 09 2026 Lachlan Marie <lchlnm@pm.me> - 0.5.0-0
+* Thu Jul 09 2026 Lachlan Marie <lchlnm@pm.me> - 0.5.0-1
  - Update to 0.5.0 (requires wlroots 0.20)
  - Switch wlroots BuildRequires to pkgconfig(wlroots-0.20)
  - Bump versioned paths from 0.4 to 0.5, dedupe unversioned .so
