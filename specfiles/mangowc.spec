@@ -1,4 +1,4 @@
-%global tag 0.14.4
+%global tag 0.15.0
 Name:           mangowc
 Version:        %{tag}
 Release:        1%?dist
@@ -13,14 +13,17 @@ BuildRequires:  gcc-c++
 BuildRequires:  pkgconfig(xcb)
 BuildRequires:  pkgconfig(xcb-icccm)
 BuildRequires:  pkgconfig(wayland-protocols)
-BuildRequires:  pkgconfig(wayland-server)
-BuildRequires:  pkgconfig(wlroots-0.19)
+BuildRequires:  pkgconfig(wayland-server) >= 1.23.1
+BuildRequires:  pkgconfig(wlroots-0.20) >= 0.20.0
+BuildRequires:  pkgconfig(scenefx-0.5) >= 0.5.0
 BuildRequires:  pkgconfig(xkbcommon)
-BuildRequires:  pkgconfig(libinput)
+BuildRequires:  pkgconfig(libinput) >= 1.27.1
 BuildRequires:  pkgconfig(wayland-client)
 BuildRequires:  pkgconfig(libpcre2-8)
-BuildRequires:  pkgconfig(scenefx-0.4)
 BuildRequires:  pkgconfig(libcjson)
+BuildRequires:  pkgconfig(pangocairo)
+BuildRequires:  pkgconfig(libdrm)
+BuildRequires:  pkgconfig(pixman-1)
 
 %description
 MangoWC is a lightweight, high-performance Wayland compositor built on dwl, designed for speed, flexibility, and a modern, customizable desktop experience.
@@ -38,11 +41,6 @@ MangoWC is a lightweight, high-performance Wayland compositor built on dwl, desi
 %files
 %doc README.md
 %license LICENSE
-%license LICENSE.wlroots
-%license LICENSE.tinywl
-%license LICENSE.sway
-%license LICENSE.dwm
-%license LICENSE.dwl
 %{_bindir}/mango
 %{_bindir}/mmsg
 %{_sysconfdir}/mango/config.conf
@@ -51,6 +49,11 @@ MangoWC is a lightweight, high-performance Wayland compositor built on dwl, desi
 %{_mandir}/man1/mmsg.1.gz
 
 %changelog
+* Thu Jul 09 2026 Lachlan Marie <lchlnm@pm.me> - 0.15.0-1
+ - Update to 0.15.0
+ - Move to wlroots-0.20 and scenefx-0.5 (drops Fedora 43, which caps at wlroots 0.19)
+ - Add missing pangocairo, libdrm, pixman-1 BuildRequires
+
 * Wed Jun 17 2026 Lachlan Marie <lchlnm@pm.me> - 0.14.4-1
  - Update to 0.14.4
 
