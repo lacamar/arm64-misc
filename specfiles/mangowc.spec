@@ -51,7 +51,7 @@ MangoWC is a lightweight, high-performance Wayland compositor built on dwl, desi
 %changelog
 * Thu Jul 09 2026 Lachlan Marie <lchlnm@pm.me> - 0.15.0-1
  - Update to 0.15.0
- - Move to wlroots-0.20 and scenefx-0.5 (drops Fedora 43, which caps at wlroots 0.19)
+ - Move to wlroots-0.20 and scenefx-0.5
  - Add missing pangocairo, libdrm, pixman-1 BuildRequires
 
 * Wed Jun 17 2026 Lachlan Marie <lchlnm@pm.me> - 0.14.4-1
