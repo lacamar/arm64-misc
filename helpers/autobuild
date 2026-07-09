@@ -80,18 +80,31 @@ if [[ -d "$TARGET_PATH" ]]; then
     exit "$overall_status"
 fi
 
-echo "==> Start AutoBuild ----------------------------------------------------------------
-"
+echo "
+==> Start AutoBuild ----------------------------------------------------------------"
 
 export OS_VER=fedora-43-aarch64
 export SPECFILE="$TARGET_PATH"
 export BUILD_CMD="mx-rpm -c $OS_VER --copr $COPR"
 export BRANCH="HEAD"
 
-export NAME=$(rpmspec -P "$SPECFILE" | awk '/^Name:/ {print $2; exit}')
-export VERSION=$(rpmspec -P "$SPECFILE" | awk '/^Version:/ {print $2; exit}')
-export URL=$(rpmspec -P "$SPECFILE" | awk '/^URL:/ {print $2; exit}')
-export SRC0=$(rpmspec -P "$SPECFILE" | awk '/^Source0:/ { sub(/^Source0:[ \t]*/, "", $0); print; exit }')
+# Erstatt -dev med _dev i spec-filen slik at rpmspec -P ikke feiler (RPM tillater ikke - i Version)
+SPECFILE_WORK=$(mktemp)
+sed 's/-dev$/_dev/' "$SPECFILE" > "$SPECFILE_WORK"
+
+export NAME=$(rpmspec -P "$SPECFILE_WORK" | awk '/^Name:/ {print $2; exit}')
+export VERSION=$(rpmspec -P "$SPECFILE_WORK" | awk '/^Version:/ {print $2; exit}')
+export URL=$(rpmspec -P "$SPECFILE_WORK" | awk '/^URL:/ {print $2; exit}')
+export SRC0=$(rpmspec -P "$SPECFILE_WORK" | awk '/^Source0:/ { sub(/^Source0:[ \t]*/, "", $0); print; exit }')
+
+rm -f -- "$SPECFILE_WORK"
+# Les tag-verdi fra originalen for makro-utvidelse (hvis Version inneholder %{tag})
+TAG_VAL=""
+if [[ "$VERSION" == *"%{tag}"* ]]; then
+    TAG_VAL=$(awk '/^%global[[:space:]]+tag[[:space:]]+/ {print $3; exit}' "$SPECFILE" | sed 's/-dev$/_dev/')
+fi
+# Utvid RPM-makroer i SRC0 ved hjelp av perl (f.eks. %{name}, %{version}, %{tag})
+SRC0=$(echo "$SRC0" | perl -pe "s/\\%\\{name\\}/$NAME/g; s/\\%\\{version\\}/$VERSION/g; s/\\%\\{tag\\}/${TAG_VAL:-$VERSION}/g")
 
 derive_repo_url() {
     local src0="$1"
@@ -107,10 +120,8 @@ derive_repo_url_from_goipath() {
     local goipath="$1"
     [[ -n "$goipath" ]] || return 1
     case "$goipath" in
-        http://*|https://*) printf '%s
-' "$goipath" ;;
-        *) printf 'https://%s
-' "$goipath" ;;
+        http://*|https://*) printf '%s\n' "$goipath" ;;
+        *) printf 'https://%s\n' "$goipath" ;;
     esac
 }
 
@@ -134,7 +145,7 @@ get_latest_tag_chrono() {
 
     git -C "$tmpdir" init -q
     git -C "$tmpdir" remote add origin "$repo_url"
-    git -C "$tmpdir" -c protocol.version=2 fetch -q --depth=1 --filter=blob:none origin \
+    git -C "$tmpdir" -c protocol.version=2 fetch -q --depth=1 origin \
         '+refs/tags/*:refs/tags/*' || return 1
 
     latest_tag="$(
@@ -177,10 +188,11 @@ get_latest_commit() {
     git ls-remote "$repo_url" "$branch" 2>/dev/null | awk 'NR==1 { print $1; exit }'
 }
 
-echo "==> SPECFILE:     $SPECFILE"
-echo "==> NVR:          $NAME-$VERSION"
-echo "==> BASE URL:     $REPO_URL"
-echo "==> COPR REPO:    $COPR"
+echo "    SPECFILE:     $SPECFILE"
+echo "    NVR:          $NAME-$VERSION"
+echo "    BASE URL:     $REPO_URL"
+echo "    COPR REPO:    $COPR"
+echo ""
 
 current_commit="$(awk '/^%global[[:space:]]+commit[[:space:]]+/ {print $3; exit}' "$SPECFILE" || true)"
 has_commit=0
@@ -306,7 +318,7 @@ ENTRY="$entry" perl -0pi -e '
 ' "$SPECFILE"
 
 echo "==> Running AutoBuild: ${BUILD_CMD} $SPECFILE"
-
+# qs -c noctalia-shell ipc call toast send "{\"title\":\"AutoBuild\",\"body\":\"Starting build for $NAME-$latest_tag$latest_commit\",\"icon\":\"package-export\"}"
 if ! $BUILD_CMD $SPECFILE; then
     echo "==> Build failed. Restoring original specfile."
     restore_original_specfile
