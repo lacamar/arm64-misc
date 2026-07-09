@@ -16,18 +16,18 @@
 #
 
 
-%define sover   4
-%define libname libscenefx%{sover}
-%global tag 0.4.1
+%define apiver  0.5
+%define libname libscenefx5
+%global tag 0.5
 
 Name:           scenefx
-Version:        %{tag}
+Version:        0.5.0
 Release:        0
 Summary:        A drop-in wlroots replacement that allows eye-candy effects
 License:        MIT
 Group:          System/GUI/Other
 URL:            https://github.com/wlrfx/scenefx
-Source0:        %{url}/archive/refs/tags/%{version}.tar.gz#/%{name}-%{version}.tar.gz
+Source0:        %{url}/archive/refs/tags/%{tag}.tar.gz#/%{name}-%{tag}.tar.gz
 BuildRequires:  gcc-c++
 BuildRequires:  libevdev-devel
 BuildRequires:  pixman-devel
@@ -37,9 +37,10 @@ BuildRequires:  python3-i3ipc
 BuildRequires:  scdoc >= 1.9.2
 BuildRequires:  pkgconfig(wayland-protocols) >= 1.27
 BuildRequires:  pkgconfig(wayland-server) >= 1.22.0
-BuildRequires:  wlroots-devel >= 0.19.0
+BuildRequires:  pkgconfig(wlroots-0.20) >= 0.20.0
 BuildRequires:  pkgconfig(libdrm) >= 2.4.114
 BuildRequires:  pkgconfig(pixman-1) >= 0.42.0
+BuildRequires:  cmake
 
 %description
 SceneFX is a project that takes the scene api and replaces the wlr
@@ -64,7 +65,7 @@ Group:          System/Libraries
 This package provides the %{name} shared library.
 
 %prep
-%autosetup -p1
+%autosetup -p1 -n %{name}-%{tag}
 
 %build
 echo $CFLAGS
@@ -81,14 +82,18 @@ echo %{optflags}
 %files devel
 %license LICENSE
 %doc README.md
-%{_includedir}/scenefx-0.4/
-%{_libdir}/libscenefx-0.4.so
-%{_libdir}/pkgconfig/scenefx-0.4.pc
+%{_includedir}/scenefx-%{apiver}/
+%{_libdir}/pkgconfig/scenefx-%{apiver}.pc
 
 %files -n %{libname}
-%{_libdir}/libscenefx-0.4.so
+%{_libdir}/libscenefx-%{apiver}.so
 
 %changelog
+* Thu Jul 09 2026 Lachlan Marie <lchlnm@pm.me> - 0.5.0-0
+ - Update to 0.5.0 (requires wlroots 0.20)
+ - Switch wlroots BuildRequires to pkgconfig(wlroots-0.20)
+ - Bump versioned paths from 0.4 to 0.5, dedupe unversioned .so
+
 * Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 0.4
  - Update to 0.4.1
 
