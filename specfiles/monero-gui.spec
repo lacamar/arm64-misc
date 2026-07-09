@@ -9,12 +9,14 @@ License: Monero Project
 URL: https://github.com/monero-project/monero-gui
 Source0: https://github.com/monero-project/monero-gui/archive/refs/tags/v%{version}.tar.gz
 
+Patch0: net_ssl-openssl-const.patch
+
 %{lua:
 local externals = {
-  { name="monero",        ref="3ca4c30", owner="monero-project", path="", version="0.18.5.0", license="BSD-3-Clause" },
-  { name="quirc",         ref="7e7ab59", owner="dlbeer", path="../external/quirc", license="ISC License" },
+  { name="monero",        ref="4f92268", owner="monero-project", path="", version="0.18.5.1", license="BSD-3-Clause" },
+  { name="quirc",         ref="927d680", owner="dlbeer", path="../external/quirc", license="ISC License" },
   { name="miniupnp",      ref="544e6fc", owner="miniupnp", path="external/miniupnp", version="2.2.1", license="BSD-3-Clause" },
-  { name="RandomX",       ref="102f8ac", owner="tevador", path="external/randomx", version="1.2.1", license="BSD-3-Clause" },
+  { name="RandomX",       ref="6c4340b", owner="tevador", path="external/randomx", version="1.2.2", license="BSD-3-Clause" },
   { name="rapidjson",     ref="129d19b", owner="Tencent", path="external/rapidjson", version="1.1.0", license="MIT" },
   { name="supercop",      ref="633500a", owner="monero-project", path="external/supercop" },
   { name="trezor-common", ref="bff7fdf", owner="trezor", path="external/trezor-common", license="LGPLv3" },
@@ -82,9 +84,11 @@ Requires:   qt5-qtxmlpatterns
 Monero is a private, secure, untraceable, decentralised digital currency. You are your bank, you control your funds, and nobody can trace your transfers unless you allow them to do so.
 
 %prep
-%autosetup
+%autosetup -N
 
 %{lua: print_setup_externals()}
+
+%patch -P0 -p1
 
 
 %build
@@ -130,8 +134,9 @@ install -Dm0644 share/org.getmonero.Monero.desktop \
 
 
 %changelog
-* Sun Jul 05 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.5.1-1
+* Thu Jul 09 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.5.1-1
  - Update to 0.18.5.1
+ - Added a patch to fix a build error related to OpenSSL
 
 * Mon Jun 22 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.5.0-1
  - Update to 0.18.5.0
