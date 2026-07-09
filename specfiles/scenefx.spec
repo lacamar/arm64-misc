@@ -21,7 +21,7 @@
 %global tag 0.5
 
 Name:           scenefx
-Version:        0.5.0
+Version:        %{tag}
 Release:        0
 Summary:        A drop-in wlroots replacement that allows eye-candy effects
 License:        MIT
