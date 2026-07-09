@@ -136,6 +136,7 @@ install -Dm0644 share/org.getmonero.Monero.desktop \
 %changelog
 * Thu Jul 09 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.5.1-1
  - Update to 0.18.5.1
+
  - Added a patch to fix a build error related to OpenSSL
 
 * Mon Jun 22 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.5.0-1
