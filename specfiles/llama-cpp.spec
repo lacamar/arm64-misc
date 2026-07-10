@@ -1,7 +1,7 @@
 # For the extra python package gguf that comes with llama-cpp
 %global pypi_name gguf
 %global pypi_version 0.10.0
-%global tag b9951
+%global tag b9956
 
 # Some optional subpackages
 %bcond_with examples
@@ -339,6 +339,9 @@ export LD_LIBRARY_PATH=$PWD/%{_vpath_builddir}/bin
 %endif
 
 %changelog
+* Fri Jul 10 2026 Lachlan Marie <lchlnm@pm.me> - b9956-1
+ - Update to b9956
+
 * Fri Jul 10 2026 Lachlan Marie <lchlnm@pm.me> - b9951-1
  - Update to b9951
 
