@@ -1,5 +1,5 @@
 Name:           urserver
-Version:        3.13.0.2510
+Version:        3.14.0.2574
 Release:        1%{?dist}
 Summary:        Server for universal remote control
 
