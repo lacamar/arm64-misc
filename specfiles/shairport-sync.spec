@@ -1,4 +1,4 @@
-%global tag 5.2
+%global tag 5.2.1
 Name:           shairport-sync
 Version:        %{tag}
 Release:        6%{?dist}
@@ -123,6 +123,9 @@ install -m0644 -D shairport-sync.sysusers.conf %{buildroot}%{_sysusersdir}/shair
 %{_sysconfdir}/dbus-1/system.d/shairport-sync-dbus.conf
 
 %changelog
+* Thu Jul 30 2026 Lachlan Marie <lchlnm@pm.me> - 5.2.1-6
+ - Update to 5.2.1
+
 * Thu Jul 09 2026 Lachlan Marie <lchlnm@pm.me> - 5.2-6
  - Update to 5.2
 
