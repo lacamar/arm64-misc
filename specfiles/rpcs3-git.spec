@@ -1,7 +1,7 @@
-%global bumpver 54
+%global bumpver 0
 
-%global tag 0.0.41
-%global commit 7a3deb649f9a0ea8a619f2f810da739b8d626689
+%global tag 0.0.42
+%global commit 3d587726a23f514be0e7c3ac43e2db0cf2fe931a
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       rpcs3-git
@@ -19,7 +19,7 @@ Source0:  https://github.com/RPCS3/rpcs3/archive/%{shortcommit}/rpcs3-%{shortcom
 %{lua:
 local externals = {
  { name="7zip", ref="f9d78af", owner="ip7z", path="7zip/7zip", version="26.02",  license="GNU-LGPL" },
- { name="FAudio", ref="4a56564", owner="FNA-XNA", path="FAudio", version="26.07",  license="zlib" },
+ { name="FAudio", ref="c54eb8f", owner="FNA-XNA", path="FAudio", version="26.08",  license="zlib" },
  { name="VulkanMemoryAllocator", ref="1d8f600", owner="GPUOpen-LibrariesAndSDKs", path="GPUOpen/VulkanMemoryAllocator", version="3.3.0",  license="MIT" },
  { name="openal-soft", ref="b2c48f7", owner="kcat", path="OpenAL/openal-soft", version="1.25.2",  license="PFFFT" },
  { name="soundtouch", ref="a0fba77", owner="RPCS3", path="SoundTouch/soundtouch/", version="2.4.1",  license="LGPLv2.1" },
@@ -29,13 +29,13 @@ local externals = {
  { name="discord-rpc", ref="3dc2c32", owner="Vestrel", path="discord-rpc/discord-rpc", license="MIT" },
  { name="gamemode", ref="c54d6d4", owner="FeralInteractive", path="feralinteractive/feralinteractive", version="1.8.2", license="BSD-3-Clause" },
  { name="ffmpeg-core", ref="649d9d9", owner="RPCS3", path="ffmpeg", version="8.1.1", license="LGPLv2.1" },
- { name="Fusion", ref="a853d08", owner="xioTechnologies", path="fusion/fusion", version="1.3.0",  license="MIT" },
+ { name="Fusion", ref="015d684", owner="xioTechnologies", path="fusion/fusion", version="1.3.2",  license="MIT" },
  { name="glslang", ref="f0bd025", owner="KhronosGroup", path="glslang/glslang", version="16.2.0",  license="BSD-3-Clause" },
  { name="hidapi", ref="d6b2a97", owner="RPCS3", path="hidapi/hidapi", version="0.15.0",  license="GPLv3, BSD" },
  { name="libpng", ref="3061454", owner="pnggroup", path="libpng/libpng", version="1.6.58",  license="PNGRLLv2" },
- { name="SDL", ref="f87239e", owner="libsdl-org", path="libsdl-org/SDL", version="3.4.12",  license="zlib" },
+ { name="SDL", ref="147a8ee", owner="libsdl-org", path="libsdl-org/SDL", version="3.4.14",  license="zlib" },
  { name="libusb", ref="87a5563", owner="libusb", path="libusb/libusb", version="1.0.30",  license="LGPLv2.1" },
- { name="llvm-project", ref="cd70802", owner="llvm", path="llvm/llvm", version="19.1.7",  license="Apache-v2" },
+ { name="llvm-project", ref="ca7933e", owner="llvm", path="llvm/llvm", version="22.1.8",  license="Apache-v2" },
  { name="miniupnp", ref="d66872e", owner="miniupnp", path="miniupnp/miniupnp", version="2.3.9",  license="BSD-3-Clause" },
  { name="opencv_minimal", ref="6900a12", owner="Megamouse", path="opencv/opencv", version="4.13.0" },
  { name="protobuf", ref="edaa823", owner="protocolbuffers", path="protobuf/protobuf", version="33.4",  license="BSD-3-Clause" },
@@ -258,6 +258,9 @@ DESTDIR=%{buildroot} ninja install
 
 
 %changelog
+* Thu Aug 06 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.42^0.git.3d58772-1
+ - Update to 0.0.42
+
 * Mon Jul 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.41^54.git.7a3deb6-1
  - Update to commit 7a3deb649f9a0ea8a619f2f810da739b8d626689
 
