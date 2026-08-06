@@ -1,6 +1,6 @@
 %global __requires_exclude_from ^%{_datadir}/anki/.*$
 %global __provides_exclude_from ^%{_datadir}/anki/.*$
-%global tag 26.08
+%global tag 26.08.1
 
 Name:           anki
 Version:        %{tag}
@@ -111,6 +111,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/anki.desktop
 %{_datadir}/pixmaps/anki.png
 
 %changelog
+* Thu Aug 06 2026 Lachlan Marie <lchlnm@pm.me> - 26.08.1-2
+ - Update to 26.08.1
+
 * Sat Aug 01 2026 Lachlan Marie <lchlnm@pm.me> - 26.08-2
  - Update to 26.08
 
