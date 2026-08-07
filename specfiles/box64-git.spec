@@ -1,13 +1,13 @@
-%global bumpver 4
+%global bumpver 0
 %global _name box64
-%global tag 0.4.4
+%global tag 0.4.51
 
-%global commit ba373ab4b3ae2ecbc9aeeece309817cad47ba421
+%global commit e99ca51299ec897e6a96da6d00983d90406a836f
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           %{_name}-git
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        3%{?dist}
+Release:        4%{?dist}
 Conflicts:      %{_name}
 Provides:       %{_name} = %{version}-%{release}
 Summary:        Linux userspace x86_64 emulator with a twist, targeted at ARM64
@@ -105,7 +105,7 @@ sed -i 's:/etc/binfmt.d:%{_binfmtdir}:g' CMakeLists.txt
 %global common_flags -DARM_DYNAREC=ON %{common_flags}
 
 # Apple Silicon
-%cmake %{common_flags} -DM1=ON
+%cmake %{common_flags} -DM1=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBOX32=ON -DBOX32_BINFMT=ON
 %cmake_build
 cp -p %{__cmake_builddir}/%{_name} %{_name}.asahi
 rm -r %{__cmake_builddir}
@@ -222,6 +222,9 @@ fi
 %endif
 
 %changelog
+* Fri Aug 07 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.51^0.git.e99ca51-4
+ - Update to 0.4.51
+
 * Fri Aug 07 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.4^4.git.ba373ab-3
  - Update to commit ba373ab4b3ae2ecbc9aeeece309817cad47ba421
 
