@@ -1,8 +1,8 @@
-%global bumpver 3
+%global bumpver 4
 %global _name box64
 %global tag 0.4.5.1
 
-%global commit b5108ce4681b5cfdcb9a5c2ee363bd08e348d285
+%global commit 8ed77f3d9344c621217f5fe3c74e1f21bd9de0fb
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           %{_name}-git
@@ -222,6 +222,9 @@ fi
 %endif
 
 %changelog
+* Thu Aug 13 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.5.1^4.git.8ed77f3-4
+ - Update to commit 8ed77f3d9344c621217f5fe3c74e1f21bd9de0fb
+
 * Wed Aug 12 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.5.1^3.git.b5108ce-4
  - Update to commit b5108ce4681b5cfdcb9a5c2ee363bd08e348d285
 
