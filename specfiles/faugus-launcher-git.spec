@@ -1,9 +1,9 @@
-%global bumpver 2
+%global bumpver 0
 %global _name faugus-launcher
 
-%global tag 1.22.8
+%global tag 2.1.0
 
-%global commit 28dd9532a4e7f8ddf59413faff7012d86df90201
+%global commit 5b2316c3a977359092392635b608ab497fd01cfd
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           faugus-launcher-git
@@ -23,6 +23,7 @@ BuildRequires:  meson
 BuildRequires:  gtk-update-icon-cache
 BuildRequires:  python3-devel
 BuildRequires:  python3-rpm-macros
+BuildRequires:  gettext
 
 Requires:       python3
 Requires:       python3-gobject
@@ -54,7 +55,6 @@ A simple and lightweight app for running Windows games using UMU-Launcher/UMU-Pr
 %files
 %license LICENSE
 %{_bindir}/faugus-launcher
-%{_bindir}/faugus-run
 #{_bindir}/faugus-proton-manager
 #{_bindir}/faugus-shortcut
 %{python3_sitelib}/faugus
@@ -67,10 +67,13 @@ A simple and lightweight app for running Windows games using UMU-Launcher/UMU-Pr
 %{_datadir}/icons/hicolor/scalable/actions/*.svg
 %{_datadir}/faugus-launcher/*
 %{_datadir}/locale/*/LC_MESSAGES/*.mo
-%{_datadir}/metainfo/faugus-launcher.metainfo.xml
+%{_datadir}/metainfo/io.github.Faugus.faugus-launcher.metainfo.xml
 %{_datadir}/licenses/faugus-launcher/LICENSE
 
 %changelog
+* Fri Aug 21 2026 Lachlan Marie <lchlnm@pm.me> - 2.1.0^0.git.5b2316c-1
+ - Update to 2.1.0
+
 * Sat Jul 11 2026 Lachlan Marie <lchlnm@pm.me> - 1.22.8^2.git.28dd953-1
  - Update to commit 28dd9532a4e7f8ddf59413faff7012d86df90201
 
