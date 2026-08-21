@@ -1,4 +1,4 @@
-%global tag 0.0.41
+%global tag 0.0.42
 
 Name:           rpcs3
 Version:        %{tag}
@@ -22,7 +22,7 @@ local externals = {
  { name="discord-rpc", ref="3dc2c32", owner="Vestrel", path="discord-rpc/discord-rpc", license="MIT" },
  { name="gamemode", ref="c54d6d4", owner="FeralInteractive", path="feralinteractive/feralinteractive", version="1.8.2", license="BSD-3-Clause" },
  { name="ffmpeg-core", ref="4230054", owner="RPCS3", path="ffmpeg", version="7.1.2", license="LGPLv2.1" },
- { name="Fusion", ref="759ac5d", owner="xioTechnologies", path="fusion/fusion", version="1.2.9",  license="MIT" },
+ { name="Fusion", ref="015d684", owner="xioTechnologies", path="fusion/fusion", version="1.3.2",  license="MIT" },
  { name="glslang", ref="f0bd025", owner="KhronosGroup", path="glslang/glslang", version="15.3.0",  license="BSD-3-Clause" },
  { name="hidapi", ref="d6b2a97", owner="RPCS3", path="hidapi/hidapi", version="0.15.0",  license="GPLv3, BSD" },
  { name="libpng", ref="3061454", owner="pnggroup", path="libpng/libpng", version="1.6.55",  license="PNGRLLv2" },
@@ -72,6 +72,7 @@ BuildRequires:  qt6-qtbase-devel
 BuildRequires:  qt6-qttools-devel
 BuildRequires:  libX11-devel
 BuildRequires:  libXrandr-devel
+BuildRequires:  libxkbcommon-x11-devel
 BuildRequires:  glew-devel
 BuildRequires:  vulkan-devel
 BuildRequires:  libudev-devel
@@ -195,6 +196,9 @@ DESTDIR=%{buildroot} ninja install
 
 
 %changelog
+* Fri Aug 21 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.42-1
+ - Update to 0.0.42
+
 * Fri Jun 05 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.41-1
  - Update to 0.0.41
 
