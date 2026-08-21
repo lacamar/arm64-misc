@@ -7,16 +7,33 @@
 Box64 lets you run x86_64 Linux programs (such as games) on non-x86_64 Linux
 systems, like ARM (host system needs to be 64-bit little-endian).}
 
-%global tag 0.4.33
+%global tag 0.4.5.1
+# Raw upstream git tag, exactly as it appears in box64's repo (e.g.
+# "v0.4.5-1") - box64 sometimes suffixes a hotfix number with a literal
+# "-N", which rpm's Version field can't contain, so the tag global above is
+# always the hyphen-free, rpm-legal normalized form. Source0 below must
+# fetch the real ref, so it uses tag_ref (kept exact) rather than
+# reconstructing "v" + version, which silently 404s whenever a tag doesn't
+# fit the plain "vMAJOR.MINOR.PATCH" shape.
+# NOTE: rpm expands macros even inside comments (a bare %%autosetup or
+# %%{tag} reference here would itself be expanded and misparsed as a real
+# directive) - keep every macro-looking token in this comment block
+# %%-escaped.
+%global tag_ref v0.4.5-1
+# GitHub's archive generator strips a leading "v" from the tag (but keeps
+# everything else literal, hyphens included) when naming the extracted
+# top-level directory - e.g. tag "v0.4.5-1" unpacks as "box64-0.4.5-1", not
+# "box64-" + version (0.4.5.1). %%autosetup below needs this exact name.
+%global tag_ref_nov %(echo %{tag_ref} | sed 's/^v//')
 
 Name:           box64
 Version:        %{tag}
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Linux userspace x86_64 emulator with a twist, targeted at ARM64
 
 License:        MIT
 URL:            https://box86.org
-Source0:         %{forgeurl}/archive/v%{version}/%{name}-%{version}.tar.gz
+Source0:         %{forgeurl}/archive/%{tag_ref}/%{name}-%{version}.tar.gz
 
 BuildRequires:  cmake
 BuildRequires:  gcc
@@ -73,7 +90,7 @@ a 16k page size.
 %endif
 
 %prep
-%autosetup -p1
+%autosetup -n %{name}-%{tag_ref_nov} -p1
 
 # Remove prebuilt libraries
 rm -r x64lib
@@ -90,7 +107,7 @@ sed -i 's:/etc/binfmt.d:%{_binfmtdir}:g' CMakeLists.txt
 %global common_flags -DARM_DYNAREC=ON %{common_flags}
 
 # Apple Silicon
-%cmake %{common_flags} -DM1=ON
+%cmake %{common_flags} -DM1=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBOX32=ON -DBOX32_BINFMT=ON
 %cmake_build
 cp -p %{__cmake_builddir}/%{name} %{name}.asahi
 rm -r %{__cmake_builddir}
@@ -172,6 +189,7 @@ fi
 %else
 %{_bindir}/%{name}
 %endif
+%{_bindir}/box64-configurator
 
 %ifarch aarch64
 %files asahi
@@ -187,6 +205,7 @@ fi
 %doc docs/*.md docs/img
 %{_mandir}/man1/box64.1*
 %config(noreplace) %{_sysconfdir}/box64.box64rc
+%{_datadir}/applications/box64-configurator.desktop
 
 %ifnarch %{x86_64}
 %files binfmts
@@ -195,6 +214,9 @@ fi
 %endif
 
 %changelog
+* Fri Aug 21 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.5.1-2
+ - Update to 0.4.5.1
+
 * Tue Jun 09 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.33-1
  - Update to 0.4.33
 
