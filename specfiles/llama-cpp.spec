@@ -1,7 +1,7 @@
 # For the extra python package gguf that comes with llama-cpp
 %global pypi_name gguf
 %global pypi_version 0.10.0
-%global tag b10590
+%global tag b10666
 
 # Some optional subpackages
 %bcond_with examples
@@ -220,9 +220,7 @@ cd -
 %cmake_install
 
 rm -rf %{buildroot}%{_libdir}/libggml_shared.*
-rm -f %{buildroot}/usr/lib/debug/usr/bin/llama-debug-template-parser-*
 rm -f %{buildroot}/usr/lib/debug/usr/bin/llama-results-*
-rm -f %{buildroot}/usr/lib/debug/usr/bin/llama-template-analysis-*
 rm -f %{buildroot}/usr/lib/debug/usr/lib64/libggml-vulkan.so*
 rm -f %{buildroot}/usr/lib/debug/usr/lib64/libllama-common.so*
 rm -f %{buildroot}/usr/lib/debug/usr/bin/llama-*
@@ -286,7 +284,6 @@ export LD_LIBRARY_PATH=$PWD/%{_vpath_builddir}/bin
 %{_bindir}/llama-cli
 %{_bindir}/llama-completion
 %{_bindir}/llama-cvector-generator
-%{_bindir}/llama-debug-template-parser
 %{_bindir}/llama-export-lora
 %{_bindir}/llama-fit-params
 %{_bindir}/llama-gguf-split
@@ -296,7 +293,6 @@ export LD_LIBRARY_PATH=$PWD/%{_vpath_builddir}/bin
 %{_bindir}/llama-quantize
 %{_bindir}/llama-results
 %{_bindir}/llama-server
-%{_bindir}/llama-template-analysis
 %{_bindir}/llama-tokenize
 %{_bindir}/llama-tts
 
@@ -339,6 +335,12 @@ export LD_LIBRARY_PATH=$PWD/%{_vpath_builddir}/bin
 %endif
 
 %changelog
+* Fri Aug 28 2026 Lachlan Marie <lchlnm@pm.me> - b10666-1
+ - Update to b10666
+ - Drop llama-debug-template-parser/llama-template-analysis: upstream removed
+   tools/parser (add_subdirectory(parser) dropped from tools/CMakeLists.txt
+   after b10590), so these binaries are no longer built
+
 * Sun Aug 23 2026 Lachlan Marie <lchlnm@pm.me> - b10590-1
  - Update to b10590
 
