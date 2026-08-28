@@ -62,6 +62,21 @@ ExclusiveArch:  x86_64 aarch64
 %global toolchain gcc
 %endif
 
+# On aarch64 this is built and run on the same box (Apple Silicon under
+# Asahi), so -march=native (GGML_NATIVE) is safe and picks up dotprod/i8mm/
+# bf16 automatically instead of the generic armv8-a baseline. KleidiAI adds
+# Arm's own hand-tuned int4/int8 GEMM/GEMV kernels on top of that (fetched
+# via CMake FetchContent, network is already enabled for this mock build).
+# Neither applies to the x86_64/rocm variant, which stays on its existing
+# explicit AVX* toggles for redistributability.
+%ifarch aarch64
+%global build_native ON
+%global build_kleidiai ON
+%else
+%global build_native OFF
+%global build_kleidiai OFF
+%endif
+
 BuildRequires:  cmake
 BuildRequires:  curl
 BuildRequires:  git
@@ -75,6 +90,7 @@ BuildRequires:  openmpi
 BuildRequires:  pthreadpool-devel
 BuildRequires:  vulkan-tools
 BuildRequires:  glslc
+BuildRequires:  openblas-devel
 
 BuildRequires: vulkan-headers
 BuildRequires: vulkan-loader-devel
@@ -203,6 +219,11 @@ export HIPCC_COMPILE_FLAGS_APPEND="--offload-compress"
     -DCMAKE_BUILD_TYPE=Release \
     -DGGML_VULKAN=ON \
     -DGGML_LTO=ON \
+    -DGGML_NATIVE=%{build_native} \
+    -DGGML_CPU_KLEIDIAI=%{build_kleidiai} \
+    -DGGML_RPC=ON \
+    -DGGML_BLAS=ON \
+    -DGGML_BLAS_VENDOR=OpenBLAS \
     -DLLAMA_BUILD_COMMON=ON \
     -DLLAMA_BUILD_TOOLS=ON \
     -DLLAMA_BUILD_SERVER=ON \
@@ -267,6 +288,8 @@ export LD_LIBRARY_PATH=$PWD/%{_vpath_builddir}/bin
 %{_libdir}/libggml-base.so.*
 %{_libdir}/libggml-cpu.so.*
 %{_libdir}/libggml-vulkan.so.*
+%{_libdir}/libggml-blas.so.*
+%{_libdir}/libggml-rpc.so.*
 %{_libdir}/libllama-batched-bench-impl.so
 %{_libdir}/libllama-bench-impl.so
 %{_libdir}/libllama-cli-impl.so
@@ -295,6 +318,7 @@ export LD_LIBRARY_PATH=$PWD/%{_vpath_builddir}/bin
 %{_bindir}/llama-server
 %{_bindir}/llama-tokenize
 %{_bindir}/llama-tts
+%{_bindir}/ggml-rpc-server
 
 %files devel
 %dir %{_libdir}/cmake/llama
@@ -310,6 +334,8 @@ export LD_LIBRARY_PATH=$PWD/%{_vpath_builddir}/bin
 %{_libdir}/libggml-base.so
 %{_libdir}/libggml-cpu.so
 %{_libdir}/libggml-vulkan.so
+%{_libdir}/libggml-blas.so
+%{_libdir}/libggml-rpc.so
 %if %{with rocm}
 %{_libdir}/libggml-hip.so
 %endif
@@ -335,6 +361,16 @@ export LD_LIBRARY_PATH=$PWD/%{_vpath_builddir}/bin
 %endif
 
 %changelog
+* Fri Aug 28 2026 Lachlan Marie <lchlnm@pm.me> - b10666-2
+ - On aarch64, build with -DGGML_NATIVE=ON and -DGGML_CPU_KLEIDIAI=ON: the
+   package is built and run on the same Apple Silicon/Asahi box, so this
+   picks up dotprod/i8mm/bf16 and Arm's own KleidiAI GEMM/GEMV kernels
+   instead of the generic armv8-a baseline. Not enabled for the x86_64/rocm
+   variant, which keeps its existing explicit AVX* toggles.
+ - Enable the BLAS (OpenBLAS) and RPC ggml backends unconditionally; package
+   the new libggml-blas.so*, libggml-rpc.so* and ggml-rpc-server
+ - Add BuildRequires: openblas-devel
+
 * Fri Aug 28 2026 Lachlan Marie <lchlnm@pm.me> - b10666-1
  - Update to b10666
  - Drop llama-debug-template-parser/llama-template-analysis: upstream removed
