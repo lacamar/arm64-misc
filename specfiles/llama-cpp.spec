@@ -1,7 +1,7 @@
 # For the extra python package gguf that comes with llama-cpp
 %global pypi_name gguf
 %global pypi_version 0.10.0
-%global tag b10666
+%global tag b10675
 
 # Some optional subpackages
 %bcond_with examples
@@ -361,6 +361,9 @@ export LD_LIBRARY_PATH=$PWD/%{_vpath_builddir}/bin
 %endif
 
 %changelog
+* Fri Aug 28 2026 Lachlan Marie <lchlnm@pm.me> - b10675-1
+ - Update to b10675
+
 * Fri Aug 28 2026 Lachlan Marie <lchlnm@pm.me> - b10666-2
  - On aarch64, build with -DGGML_NATIVE=ON and -DGGML_CPU_KLEIDIAI=ON: the
    package is built and run on the same Apple Silicon/Asahi box, so this
