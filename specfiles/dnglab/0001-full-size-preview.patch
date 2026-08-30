@@ -1,0 +1,292 @@
+diff --git a/bin/dnglab/completions/_dnglab b/bin/dnglab/completions/_dnglab
+index 001bbb8..8b3568f 100644
+--- a/bin/dnglab/completions/_dnglab
++++ b/bin/dnglab/completions/_dnglab
+@@ -82,6 +82,7 @@ _arguments "${_arguments_options[@]}" : \
+ '--dng-preview=[DNG include preview image]:preview:(true false)' \
+ '--dng-thumbnail=[DNG include thumbnail image]:thumbnail:(true false)' \
+ '--embed-raw=[Embed the raw file into DNG]:embedded:(true false)' \
++'--full-size-preview=[Always render the DNG preview/thumbnail from the full raw data instead of using the camera'\''s own embedded preview]:full_size_preview:(true false)' \
+ '--artist=[Set the artist tag]:artist:_default' \
+ '--keep-mtime=[Keep mtime, read from EXIF with fallback to original file mtime]:keepmtime:(true false)' \
+ '--image-index=[Select a specific image index (or '\''all'\'') if file is a image container]:index:_default' \
+@@ -109,6 +110,7 @@ _arguments "${_arguments_options[@]}" : \
+ '--dng-preview=[DNG include preview image]:preview:(true false)' \
+ '--dng-thumbnail=[DNG include thumbnail image]:thumbnail:(true false)' \
+ '--embed-raw=[Embed the raw file into DNG]:embedded:(true false)' \
++'--full-size-preview=[Always render the DNG preview/thumbnail from the full raw data instead of using the camera'\''s own embedded preview]:full_size_preview:(true false)' \
+ '--artist=[Set the artist tag]:artist:_default' \
+ '--keep-mtime=[Keep mtime, read from EXIF with fallback to original file mtime]:keepmtime:(true false)' \
+ '--image-index=[Select a specific image index (or '\''all'\'') if file is a image container]:index:_default' \
+diff --git a/bin/dnglab/completions/_dnglab.ps1 b/bin/dnglab/completions/_dnglab.ps1
+index e12683d..5efd246 100644
+--- a/bin/dnglab/completions/_dnglab.ps1
++++ b/bin/dnglab/completions/_dnglab.ps1
+@@ -85,6 +85,7 @@ Register-ArgumentCompleter -Native -CommandName 'dnglab' -ScriptBlock {
+             [CompletionResult]::new('--dng-preview', '--dng-preview', [CompletionResultType]::ParameterName, 'DNG include preview image')
+             [CompletionResult]::new('--dng-thumbnail', '--dng-thumbnail', [CompletionResultType]::ParameterName, 'DNG include thumbnail image')
+             [CompletionResult]::new('--embed-raw', '--embed-raw', [CompletionResultType]::ParameterName, 'Embed the raw file into DNG')
++            [CompletionResult]::new('--full-size-preview', '--full-size-preview', [CompletionResultType]::ParameterName, 'Always render the DNG preview/thumbnail from the full raw data instead of using the camera''s own embedded preview')
+             [CompletionResult]::new('--artist', '--artist', [CompletionResultType]::ParameterName, 'Set the artist tag')
+             [CompletionResult]::new('--keep-mtime', '--keep-mtime', [CompletionResultType]::ParameterName, 'Keep mtime, read from EXIF with fallback to original file mtime')
+             [CompletionResult]::new('--image-index', '--image-index', [CompletionResultType]::ParameterName, 'Select a specific image index (or ''all'') if file is a image container')
+@@ -109,6 +110,7 @@ Register-ArgumentCompleter -Native -CommandName 'dnglab' -ScriptBlock {
+             [CompletionResult]::new('--dng-preview', '--dng-preview', [CompletionResultType]::ParameterName, 'DNG include preview image')
+             [CompletionResult]::new('--dng-thumbnail', '--dng-thumbnail', [CompletionResultType]::ParameterName, 'DNG include thumbnail image')
+             [CompletionResult]::new('--embed-raw', '--embed-raw', [CompletionResultType]::ParameterName, 'Embed the raw file into DNG')
++            [CompletionResult]::new('--full-size-preview', '--full-size-preview', [CompletionResultType]::ParameterName, 'Always render the DNG preview/thumbnail from the full raw data instead of using the camera''s own embedded preview')
+             [CompletionResult]::new('--artist', '--artist', [CompletionResultType]::ParameterName, 'Set the artist tag')
+             [CompletionResult]::new('--keep-mtime', '--keep-mtime', [CompletionResultType]::ParameterName, 'Keep mtime, read from EXIF with fallback to original file mtime')
+             [CompletionResult]::new('--image-index', '--image-index', [CompletionResultType]::ParameterName, 'Select a specific image index (or ''all'') if file is a image container')
+diff --git a/bin/dnglab/completions/dnglab.bash b/bin/dnglab/completions/dnglab.bash
+index 6111ad9..b8ac24b 100644
+--- a/bin/dnglab/completions/dnglab.bash
++++ b/bin/dnglab/completions/dnglab.bash
+@@ -149,7 +149,7 @@ _dnglab() {
+             return 0
+             ;;
+         dnglab__subcmd__convert)
+-            opts="-c -f -r -j -d -v -h --compression --ljpeg92-predictor --dng-preview --dng-thumbnail --embed-raw --artist --keep-mtime --image-index --crop --override --recursive --jobs --loglevel --help"
++            opts="-c -f -r -j -d -v -h --compression --ljpeg92-predictor --dng-preview --dng-thumbnail --embed-raw --full-size-preview --artist --keep-mtime --image-index --crop --override --recursive --jobs --loglevel --help"
+             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                 return 0
+@@ -179,6 +179,10 @@ _dnglab() {
+                     COMPREPLY=($(compgen -W "true false" -- "${cur}"))
+                     return 0
+                     ;;
++                --full-size-preview)
++                    COMPREPLY=($(compgen -W "true false" -- "${cur}"))
++                    return 0
++                    ;;
+                 --artist)
+                     COMPREPLY=($(compgen -f "${cur}"))
+                     return 0
+@@ -241,7 +245,7 @@ _dnglab() {
+             return 0
+             ;;
+         dnglab__subcmd__ftpserver)
+-            opts="-c -f -d -v -h --compression --ljpeg92-predictor --dng-preview --dng-thumbnail --embed-raw --artist --keep-mtime --image-index --crop --override --port --listen --keep-original --loglevel --help"
++            opts="-c -f -d -v -h --compression --ljpeg92-predictor --dng-preview --dng-thumbnail --embed-raw --full-size-preview --artist --keep-mtime --image-index --crop --override --port --listen --keep-original --loglevel --help"
+             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                 return 0
+@@ -271,6 +275,10 @@ _dnglab() {
+                     COMPREPLY=($(compgen -W "true false" -- "${cur}"))
+                     return 0
+                     ;;
++                --full-size-preview)
++                    COMPREPLY=($(compgen -W "true false" -- "${cur}"))
++                    return 0
++                    ;;
+                 --artist)
+                     COMPREPLY=($(compgen -f "${cur}"))
+                     return 0
+diff --git a/bin/dnglab/completions/dnglab.elv b/bin/dnglab/completions/dnglab.elv
+index 1b267c6..0d2c575 100644
+--- a/bin/dnglab/completions/dnglab.elv
++++ b/bin/dnglab/completions/dnglab.elv
+@@ -79,6 +79,7 @@ set edit:completion:arg-completer[dnglab] = {|@words|
+             cand --dng-preview 'DNG include preview image'
+             cand --dng-thumbnail 'DNG include thumbnail image'
+             cand --embed-raw 'Embed the raw file into DNG'
++            cand --full-size-preview 'Always render the DNG preview/thumbnail from the full raw data instead of using the camera''s own embedded preview'
+             cand --artist 'Set the artist tag'
+             cand --keep-mtime 'Keep mtime, read from EXIF with fallback to original file mtime'
+             cand --image-index 'Select a specific image index (or ''all'') if file is a image container'
+@@ -102,6 +103,7 @@ set edit:completion:arg-completer[dnglab] = {|@words|
+             cand --dng-preview 'DNG include preview image'
+             cand --dng-thumbnail 'DNG include thumbnail image'
+             cand --embed-raw 'Embed the raw file into DNG'
++            cand --full-size-preview 'Always render the DNG preview/thumbnail from the full raw data instead of using the camera''s own embedded preview'
+             cand --artist 'Set the artist tag'
+             cand --keep-mtime 'Keep mtime, read from EXIF with fallback to original file mtime'
+             cand --image-index 'Select a specific image index (or ''all'') if file is a image container'
+diff --git a/bin/dnglab/completions/dnglab.fish b/bin/dnglab/completions/dnglab.fish
+index 0c1d79b..58d279d 100644
+--- a/bin/dnglab/completions/dnglab.fish
++++ b/bin/dnglab/completions/dnglab.fish
+@@ -88,6 +88,8 @@ complete -c dnglab -n "__fish_dnglab_using_subcommand convert" -l dng-thumbnail
+ false\t''"
+ complete -c dnglab -n "__fish_dnglab_using_subcommand convert" -l embed-raw -d 'Embed the raw file into DNG' -r -f -a "true\t''
+ false\t''"
++complete -c dnglab -n "__fish_dnglab_using_subcommand convert" -l full-size-preview -d 'Always render the DNG preview/thumbnail from the full raw data instead of using the camera\'s own embedded preview' -r -f -a "true\t''
++false\t''"
+ complete -c dnglab -n "__fish_dnglab_using_subcommand convert" -l artist -d 'Set the artist tag' -r
+ complete -c dnglab -n "__fish_dnglab_using_subcommand convert" -l keep-mtime -d 'Keep mtime, read from EXIF with fallback to original file mtime' -r -f -a "true\t''
+ false\t''"
+@@ -114,6 +116,8 @@ complete -c dnglab -n "__fish_dnglab_using_subcommand ftpserver" -l dng-thumbnai
+ false\t''"
+ complete -c dnglab -n "__fish_dnglab_using_subcommand ftpserver" -l embed-raw -d 'Embed the raw file into DNG' -r -f -a "true\t''
+ false\t''"
++complete -c dnglab -n "__fish_dnglab_using_subcommand ftpserver" -l full-size-preview -d 'Always render the DNG preview/thumbnail from the full raw data instead of using the camera\'s own embedded preview' -r -f -a "true\t''
++false\t''"
+ complete -c dnglab -n "__fish_dnglab_using_subcommand ftpserver" -l artist -d 'Set the artist tag' -r
+ complete -c dnglab -n "__fish_dnglab_using_subcommand ftpserver" -l keep-mtime -d 'Keep mtime, read from EXIF with fallback to original file mtime' -r -f -a "true\t''
+ false\t''"
+diff --git a/bin/dnglab/dnglab-lib/src/app.rs b/bin/dnglab/dnglab-lib/src/app.rs
+index b0c4138..aa337c7 100644
+--- a/bin/dnglab/dnglab-lib/src/app.rs
++++ b/bin/dnglab/dnglab-lib/src/app.rs
+@@ -79,6 +79,13 @@ pub fn create_app() -> Command {
+         .default_value("true")
+         .default_missing_value("true"),
+     )
++    .arg(
++      arg!(full_size_preview: --"full-size-preview" <full_size_preview> "Always render the DNG preview/thumbnail from the full raw data instead of using the camera's own embedded preview")
++        .value_parser(ValueParser::bool())
++        .required(false)
++        .default_value("false")
++        .default_missing_value("true"),
++    )
+     .arg(
+       arg!(--"artist" <artist> "Set the artist tag")
+         .required(false)
+diff --git a/bin/dnglab/dnglab-lib/src/convert.rs b/bin/dnglab/dnglab-lib/src/convert.rs
+index 6ba0e22..c94c86f 100644
+--- a/bin/dnglab/dnglab-lib/src/convert.rs
++++ b/bin/dnglab/dnglab-lib/src/convert.rs
+@@ -212,6 +212,7 @@ fn generate_job(entry: &FileMap, options: &ArgMatches, claimed: &mut HashSet<Pat
+         .ok_or_else(|| AppError::InvalidCmdSwitch("crop has no default".into()))?,
+       preview: options.get_flag("preview"),
+       thumbnail: options.get_flag("thumbnail"),
++      full_size_preview: options.get_flag("full_size_preview"),
+       compression: *options
+         .get_one("compression")
+         .ok_or_else(|| AppError::InvalidCmdSwitch("compression has no default".into()))?,
+diff --git a/bin/dnglab/dnglab-lib/src/ftpconv.rs b/bin/dnglab/dnglab-lib/src/ftpconv.rs
+index 57e8864..19e72a7 100644
+--- a/bin/dnglab/dnglab-lib/src/ftpconv.rs
++++ b/bin/dnglab/dnglab-lib/src/ftpconv.rs
+@@ -75,6 +75,7 @@ pub async fn ftpserver(options: &ArgMatches) -> crate::Result<()> {
+       .ok_or_else(|| crate::AppError::InvalidCmdSwitch("crop has no default".into()))?,
+     preview: options.get_flag("preview"),
+     thumbnail: options.get_flag("thumbnail"),
++    full_size_preview: options.get_flag("full_size_preview"),
+     compression: *options
+       .get_one("compression")
+       .ok_or_else(|| crate::AppError::InvalidCmdSwitch("compression has no default".into()))?,
+diff --git a/bin/dnglab/manpages/dnglab-convert.1 b/bin/dnglab/manpages/dnglab-convert.1
+index 3b1c7f7..34a179a 100644
+--- a/bin/dnglab/manpages/dnglab-convert.1
++++ b/bin/dnglab/manpages/dnglab-convert.1
+@@ -4,7 +4,7 @@
+ .SH NAME
+ dnglab\-convert \- Convert raw image(s) into dng format
+ .SH SYNOPSIS
+-\fBdnglab\-convert\fR [\fB\-c\fR|\fB\-\-compression\fR] [\fB\-\-ljpeg92\-predictor\fR] [\fB\-\-dng\-preview\fR] [\fB\-\-dng\-thumbnail\fR] [\fB\-\-embed\-raw\fR] [\fB\-\-artist\fR] [\fB\-\-keep\-mtime\fR] [\fB\-\-image\-index\fR] [\fB\-\-crop\fR] [\fB\-f\fR|\fB\-\-override\fR] [\fB\-r\fR|\fB\-\-recursive\fR] [\fB\-j\fR|\fB\-\-jobs\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIINPUT\fR> <\fIOUTPUT\fR> 
++\fBdnglab\-convert\fR [\fB\-c\fR|\fB\-\-compression\fR] [\fB\-\-ljpeg92\-predictor\fR] [\fB\-\-dng\-preview\fR] [\fB\-\-dng\-thumbnail\fR] [\fB\-\-embed\-raw\fR] [\fB\-\-full\-size\-preview\fR] [\fB\-\-artist\fR] [\fB\-\-keep\-mtime\fR] [\fB\-\-image\-index\fR] [\fB\-\-crop\fR] [\fB\-f\fR|\fB\-\-override\fR] [\fB\-r\fR|\fB\-\-recursive\fR] [\fB\-j\fR|\fB\-\-jobs\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIINPUT\fR> <\fIOUTPUT\fR> 
+ .SH DESCRIPTION
+ Convert raw image(s) into dng format
+ .SH OPTIONS
+@@ -55,6 +55,19 @@ false
+ Embed the raw file into DNG
+ .br
+ 
++.br
++\fIPossible values:\fR
++.RS 14
++.IP \(bu 2
++true
++.IP \(bu 2
++false
++.RE
++.TP
++\fB\-\-full\-size\-preview\fR \fI<full_size_preview>\fR [default: false]
++Always render the DNG preview/thumbnail from the full raw data instead of using the camera\*(Aqs own embedded preview
++.br
++
+ .br
+ \fIPossible values:\fR
+ .RS 14
+diff --git a/bin/dnglab/manpages/dnglab-ftpserver.1 b/bin/dnglab/manpages/dnglab-ftpserver.1
+index 22cc2ad..65f5b60 100644
+--- a/bin/dnglab/manpages/dnglab-ftpserver.1
++++ b/bin/dnglab/manpages/dnglab-ftpserver.1
+@@ -4,7 +4,7 @@
+ .SH NAME
+ dnglab\-ftpserver \- Convert raw image(s) into dng format
+ .SH SYNOPSIS
+-\fBdnglab\-ftpserver\fR [\fB\-c\fR|\fB\-\-compression\fR] [\fB\-\-ljpeg92\-predictor\fR] [\fB\-\-dng\-preview\fR] [\fB\-\-dng\-thumbnail\fR] [\fB\-\-embed\-raw\fR] [\fB\-\-artist\fR] [\fB\-\-keep\-mtime\fR] [\fB\-\-image\-index\fR] [\fB\-\-crop\fR] [\fB\-f\fR|\fB\-\-override\fR] [\fB\-\-port\fR] [\fB\-\-listen\fR] [\fB\-\-keep\-original\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIOUTPUT\fR> 
++\fBdnglab\-ftpserver\fR [\fB\-c\fR|\fB\-\-compression\fR] [\fB\-\-ljpeg92\-predictor\fR] [\fB\-\-dng\-preview\fR] [\fB\-\-dng\-thumbnail\fR] [\fB\-\-embed\-raw\fR] [\fB\-\-full\-size\-preview\fR] [\fB\-\-artist\fR] [\fB\-\-keep\-mtime\fR] [\fB\-\-image\-index\fR] [\fB\-\-crop\fR] [\fB\-f\fR|\fB\-\-override\fR] [\fB\-\-port\fR] [\fB\-\-listen\fR] [\fB\-\-keep\-original\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIOUTPUT\fR> 
+ .SH DESCRIPTION
+ Convert raw image(s) into dng format
+ .SH OPTIONS
+@@ -55,6 +55,19 @@ false
+ Embed the raw file into DNG
+ .br
+ 
++.br
++\fIPossible values:\fR
++.RS 14
++.IP \(bu 2
++true
++.IP \(bu 2
++false
++.RE
++.TP
++\fB\-\-full\-size\-preview\fR \fI<full_size_preview>\fR [default: false]
++Always render the DNG preview/thumbnail from the full raw data instead of using the camera\*(Aqs own embedded preview
++.br
++
+ .br
+ \fIPossible values:\fR
+ .RS 14
+diff --git a/rawler/src/dng/convert.rs b/rawler/src/dng/convert.rs
+index b2acbfb..f547800 100644
+--- a/rawler/src/dng/convert.rs
++++ b/rawler/src/dng/convert.rs
+@@ -37,6 +37,10 @@ pub struct ConvertParams {
+   pub predictor: u8,
+   pub preview: bool,
+   pub thumbnail: bool,
++  /// Skip the (possibly small) preview JPEG embedded by the camera and
++  /// always render the preview/thumbnail from the full raw sensor data
++  /// instead, matching Adobe DNG Converter's "Full Size JPEG Preview".
++  pub full_size_preview: bool,
+   pub artist: Option<String>,
+   pub software: String,
+   pub index: usize,
+@@ -65,6 +69,7 @@ impl Default for ConvertParams {
+       predictor: 1,
+       preview: true,
+       thumbnail: true,
++      full_size_preview: false,
+       artist: None,
+       software: "DNGLab".into(),
+       index: 0,
+@@ -247,7 +252,7 @@ where
+ 
+   // Write preview and thumbnail if requested
+   if params.preview || params.thumbnail {
+-    match generate_preview(rawfile, decoder.as_ref(), &rawimage, &raw_params) {
++    match generate_preview(rawfile, decoder.as_ref(), &rawimage, &raw_params, params.full_size_preview) {
+       Ok(image) => {
+         if params.preview {
+           let mut preview = dng.subframe(1);
+@@ -332,11 +337,22 @@ where
+   Ok(ConvertInfo { last_modified })
+ }
+ 
+-fn generate_preview(rawfile: &RawSource, decoder: &dyn Decoder, rawimage: &RawImage, params: &RawDecodeParams) -> crate::Result<DynamicImage> {
+-  match decoder.preview_image(rawfile, params)? {
++fn generate_preview(
++  rawfile: &RawSource,
++  decoder: &dyn Decoder,
++  rawimage: &RawImage,
++  params: &RawDecodeParams,
++  full_size: bool,
++) -> crate::Result<DynamicImage> {
++  let embedded = if full_size { None } else { decoder.preview_image(rawfile, params)? };
++  match embedded {
+     Some(image) => Ok(image),
+     None => {
+-      log::warn!("Preview image not found, try to generate sRGB from RAW");
++      if full_size {
++        log::debug!("Full-size preview requested, generating sRGB from RAW instead of the embedded preview");
++      } else {
++        log::warn!("Preview image not found, try to generate sRGB from RAW");
++      }
+       let dev = RawDevelop::default();
+       let image = dev.develop_intermediate(rawimage)?;
+       /*
