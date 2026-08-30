@@ -17,6 +17,10 @@ URL:            https://github.com/artemsen/%{_name}
 Source:         %{url}/archive/%{shortcommit}/%{_name}-%{shortcommit}.tar.gz
 
 # Patch0:          #{url}/commit/5c2d958.patch#/swayimg-5.0-missing-includes.patch
+# Adds an "exif" imagelist.order sort mode using the EXIF capture time
+# (DateTimeOriginal/DateTimeDigitized/DateTime, via exiv2), falling back to
+# path order when unavailable. Not upstream.
+Patch1:          0001-imagelist-add-exif-capture-time-sort-order.patch
 
 # Exclude x86 and all the platforms where luajit is not available
 ExcludeArch:    %{ix86} riscv64 ppc64 ppc64le
@@ -67,8 +71,9 @@ Swayimg is a lightweight image viewer for Wayland display servers.
 
 
 %prep
-%autosetup -n %{_name}-%{commit}
+%autosetup -N -n %{_name}-%{commit}
 #patch -P 0 -p1 -F3
+%patch -P 1 -p1 -F3
 
 
 %build
