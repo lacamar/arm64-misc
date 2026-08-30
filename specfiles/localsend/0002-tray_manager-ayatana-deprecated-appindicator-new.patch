@@ -1,0 +1,14 @@
+--- a/linux/tray_manager_plugin.cc
++++ b/linux/tray_manager_plugin.cc
+@@ -115,8 +115,11 @@
+     menu = gtk_menu_new();
+ 
+   if (!indicator) {
++#pragma GCC diagnostic push
++#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+     indicator = app_indicator_new(id, icon_path,
+                                   APP_INDICATOR_CATEGORY_APPLICATION_STATUS);
++#pragma GCC diagnostic pop
+ 
+     app_indicator_set_menu(indicator, GTK_MENU(menu));
+     gtk_widget_show_all(menu);

@@ -1,0 +1,22 @@
+[Unit]
+Description=Proton Mail Bridge
+Documentation=https://proton.me/mail/bridge
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+# Goes through the launcher (not bridge-gui directly) so auto-update/session
+# wiring behaves the same way as a normal desktop autostart of Bridge.
+# --no-window: start minimized to the tray, matching Bridge's own
+# login-autostart invocation, just as a login systemd --user unit instead of
+# a desktop-file autostart entry.
+ExecStart=/usr/bin/proton-bridge --no-window
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+Slice=app.slice
+
+[Install]
+WantedBy=graphical-session.target

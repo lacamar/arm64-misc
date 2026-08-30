@@ -36,6 +36,9 @@ $HOME/.local/rpm/rpms/wine-11.9/wine-11.9-ec1.fc45.src.rpm \
 $HOME/.local/rpm/rpms/wine-11.10/wine-11.10-ec1.fc45.src.rpm \
 $HOME/.local/rpm/rpms/wine-11.11/wine-11.11-ec1.fc45.src.rpm \
 $HOME/.local/rpm/rpms/wine-11.12/wine-11.12-ec1.fc45.src.rpm \
+$HOME/.local/rpm/rpms/wine-11.13/wine-11.13-ec1.fc45.src.rpm \
+$HOME/.local/rpm/rpms/wine-11.14/wine-11.14-ec1.fc45.src.rpm \
+$HOME/.local/rpm/rpms/wine-11.15/wine-11.15-ec1.fc44.src.rpm \
 $HOME/.local/rpm/rpms/fex-emu-wine-2507/fex-emu-wine-2507-2.fc45.src.rpm \
 $HOME/.local/rpm/rpms/fex-emu-wine-2507.1/fex-emu-wine-2507.1-2.fc45.src.rpm \
 $HOME/.local/rpm/rpms/fex-emu-wine-2508/fex-emu-wine-2508-2.fc45.src.rpm \
@@ -50,6 +53,7 @@ $HOME/.local/rpm/rpms/fex-emu-wine-2603/fex-emu-wine-2603-2.fc45.src.rpm \
 $HOME/.local/rpm/rpms/fex-emu-wine-2604/fex-emu-wine-2604-2.fc45.src.rpm \
 $HOME/.local/rpm/rpms/fex-emu-wine-2605/fex-emu-wine-2605-2.fc45.src.rpm \
 $HOME/.local/rpm/rpms/fex-emu-wine-2607/fex-emu-wine-2607-3.fc45.src.rpm \
+$HOME/.local/rpm/rpms/fex-emu-wine-2608/fex-emu-wine-2608-3.fc45.src.rpm \
 $HOME/.local/rpm/rpms/wine-dxvk-2.6.2/wine-dxvk-2.6.2-ec1.fc45.src.rpm \
 $HOME/.local/rpm/rpms/wine-dxvk-2.7/wine-dxvk-2.7-ec1.fc45.src.rpm \
 $HOME/.local/rpm/rpms/wine-dxvk-2.7.1/wine-dxvk-2.7.1-ec1.fc45.src.rpm \

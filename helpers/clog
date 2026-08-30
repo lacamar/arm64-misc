@@ -73,6 +73,7 @@ clog() {
     fi
 
     printf 'file://%s\n' "$logfile" | wl-copy --type text/uri-list
+    notify-send -e -u low -a Clog "Copied log" "Log file $logfile copied to clipboard"
 
     if command -v bat &>/dev/null; then
         bat --paging=never --color=never --line-range :8 "$logfile"

@@ -1,0 +1,193 @@
+--- a/internal/frontend/bridge-gui/BridgeSetup.cmake
++++ b/internal/frontend/bridge-gui/BridgeSetup.cmake
+@@ -48,48 +48,63 @@
+ #****************************************************************************************************************************************************
+ # vcpkg, toolchain, and architecture
+ #****************************************************************************************************************************************************
+-# We rely on vcpkg for to get gRPC / Protobuf
+-# run build.sh / build.ps1 to get gRPC / Protobuf and dependencies installed.
+-
+-if(WIN32)
+-    set(VCPKG_ROOT "${BRIDGE_REPO_ROOT}/extern/vcpkg-windows")
+-else()
+-    set(VCPKG_ROOT "${BRIDGE_REPO_ROOT}/extern/vcpkg")
+-endif()
+-message(STATUS "VCPKG_ROOT is ${VCPKG_ROOT}")
+-
+-if (WIN32)
+-    find_program(VCPKG_EXE "${VCPKG_ROOT}/vcpkg.exe")
+-else()
+-    find_program(VCPKG_EXE "${VCPKG_ROOT}/vcpkg")
+-endif()
+-if (NOT VCPKG_EXE)
+-    message(FATAL_ERROR "vcpkg is not installed. Run build.sh (macOS/Linux) or build.ps1 (Windows) first.")
+-endif()
++# On macOS and Windows we rely on vcpkg to get gRPC / Protobuf / sentry-native
++# (run build.sh / build.ps1 to get them installed).
++#
++# On Linux we deliberately skip vcpkg altogether: Fedora ships gRPC/Protobuf
++# system packages with working CMake integration (gRPCConfig.cmake internally
++# resolves Protobuf via `find_package(Protobuf MODULE)`, which Fedora's
++# protobuf-devel supports even though it ships no protobuf-config.cmake of
++# its own). sentry-native isn't packaged, so it's built separately and its
++# install prefix is passed in via CMAKE_PREFIX_PATH instead. This also sidesteps
++# a real arm64 bug in build.sh, which unconditionally runs
++# `vcpkg install sentry-native:x64-linux grpc:x64-linux` on every Linux host
++# regardless of arch -- on aarch64 that populates vcpkg's x64-linux triplet
++# while CMake's vcpkg toolchain auto-detects arm64-linux, so the packages can
++# never be found there anyway.
++if (APPLE OR WIN32)
++    if(WIN32)
++        set(VCPKG_ROOT "${BRIDGE_REPO_ROOT}/extern/vcpkg-windows")
++    else()
++        set(VCPKG_ROOT "${BRIDGE_REPO_ROOT}/extern/vcpkg")
++    endif()
++    message(STATUS "VCPKG_ROOT is ${VCPKG_ROOT}")
+ 
+-# For now we support only a single architecture for macOS (ARM64 or x86_64). We need to investigate how to build universal binaries with vcpkg.
+-if (APPLE)
+-    if (NOT DEFINED CMAKE_OSX_ARCHITECTURES)
+-        execute_process(COMMAND "uname" "-m" OUTPUT_VARIABLE UNAME_RESULT OUTPUT_STRIP_TRAILING_WHITESPACE)
+-        set(CMAKE_OSX_ARCHITECTURES ${UNAME_RESULT} CACHE STRING "osx_architectures")
++    if (WIN32)
++        find_program(VCPKG_EXE "${VCPKG_ROOT}/vcpkg.exe")
++    else()
++        find_program(VCPKG_EXE "${VCPKG_ROOT}/vcpkg")
++    endif()
++    if (NOT VCPKG_EXE)
++        message(FATAL_ERROR "vcpkg is not installed. Run build.sh (macOS/Linux) or build.ps1 (Windows) first.")
+     endif()
+ 
+-    if (CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
+-        set(CMAKE_OSX_DEPLOYMENT_TARGET 11.0)
+-        message(STATUS "Building for Apple Silicon Mac computers")
+-        set(VCPKG_TARGET_TRIPLET arm64-osx-min-11-0)
+-    elseif (CMAKE_OSX_ARCHITECTURES STREQUAL "x86_64")
+-        set(CMAKE_OSX_DEPLOYMENT_TARGET 10.15)
+-        message(STATUS "Building for Intel based Mac computers")
+-        set(VCPKG_TARGET_TRIPLET x64-osx-min-10-15)
+-    else ()
+-        message(FATAL_ERROR "Unknown value for CMAKE_OSX_ARCHITECTURE. Please use one of \"arm64\" and \"x86_64\". Multiple architectures are not supported.")
+-    endif ()
+-endif()
++    # For now we support only a single architecture for macOS (ARM64 or x86_64). We need to investigate how to build universal binaries with vcpkg.
++    if (APPLE)
++        if (NOT DEFINED CMAKE_OSX_ARCHITECTURES)
++            execute_process(COMMAND "uname" "-m" OUTPUT_VARIABLE UNAME_RESULT OUTPUT_STRIP_TRAILING_WHITESPACE)
++            set(CMAKE_OSX_ARCHITECTURES ${UNAME_RESULT} CACHE STRING "osx_architectures")
++        endif()
++
++        if (CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
++            set(CMAKE_OSX_DEPLOYMENT_TARGET 11.0)
++            message(STATUS "Building for Apple Silicon Mac computers")
++            set(VCPKG_TARGET_TRIPLET arm64-osx-min-11-0)
++        elseif (CMAKE_OSX_ARCHITECTURES STREQUAL "x86_64")
++            set(CMAKE_OSX_DEPLOYMENT_TARGET 10.15)
++            message(STATUS "Building for Intel based Mac computers")
++            set(VCPKG_TARGET_TRIPLET x64-osx-min-10-15)
++        else ()
++            message(FATAL_ERROR "Unknown value for CMAKE_OSX_ARCHITECTURE. Please use one of \"arm64\" and \"x86_64\". Multiple architectures are not supported.")
++        endif ()
++    endif()
+ 
+-if  (WIN32)
+-    message(STATUS "Building for Intel x64 Windows computers")
+-    set(VCPKG_TARGET_TRIPLET x64-windows)
+-endif()
++    if  (WIN32)
++        message(STATUS "Building for Intel x64 Windows computers")
++        set(VCPKG_TARGET_TRIPLET x64-windows)
++    endif()
+ 
+-set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "toolchain")
+\ No newline at end of file
++    set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "toolchain")
++else()
++    message(STATUS "Linux build: using system gRPC/Protobuf/Qt6 and a separately-built sentry-native, no vcpkg")
++endif()
+\ No newline at end of file
+--- a/internal/frontend/bridge-gui/bridgepp/CMakeLists.txt
++++ b/internal/frontend/bridge-gui/bridgepp/CMakeLists.txt
+@@ -48,7 +48,14 @@
+ #****************************************************************************************************************************************************
+ # gRPC / Protobuf
+ #****************************************************************************************************************************************************
+-find_package(Protobuf CONFIG REQUIRED)
++if (LINUX OR (UNIX AND NOT APPLE))
++    # Fedora's protobuf-devel ships no protobuf-config.cmake, only headers/.so
++    # + a pkg-config file, so this must fall back to CMake's bundled
++    # FindProtobuf.cmake module instead of being locked to CONFIG mode.
++    find_package(Protobuf REQUIRED)
++else()
++    find_package(Protobuf CONFIG REQUIRED)
++endif()
+ message(STATUS "Using protobuf ${Protobuf_VERSION}")
+ 
+ find_package(gRPC CONFIG REQUIRED)
+@@ -168,6 +175,15 @@
+ # GoogleTest
+ #*****************************************************************************************************************************************************
+ 
++# Fetched unconditionally upstream, which means `cmake` needs network access
++# to github.com just to *configure* bridgepp, even for consumers who only
++# want the bridgepp library and never build bridgepp-test (which is already
++# EXCLUDE_FROM_ALL). Gated behind BUILD_TESTING (default ON, matching CMake's
++# usual convention) so an offline/package build can pass -DBUILD_TESTING=OFF
++# and skip the fetch entirely.
++option(BUILD_TESTING "Build bridgepp-test (fetches GoogleTest from network)" ON)
++if (BUILD_TESTING)
++
+ if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
+     cmake_policy(SET CMP0135 NEW) # avoid warning DOWNLOAD_EXTRACT_TIMESTAMP
+ endif ()
+@@ -205,3 +221,5 @@
+ 
+ include(GoogleTest)
+ gtest_discover_tests(bridgepp-test)
++
++endif (BUILD_TESTING)
+--- a/internal/frontend/bridge-gui/bridge-gui/CMakeLists.txt
++++ b/internal/frontend/bridge-gui/bridge-gui/CMakeLists.txt
+@@ -178,17 +178,30 @@
+         LIBRARY DESTINATION "${CMAKE_INSTALL_PREFIX}"
+         )
+ 
+-qt_generate_deploy_app_script(
+-        TARGET bridge-gui
+-        FILENAME_VARIABLE deploy_script
+-        NO_UNSUPPORTED_PLATFORM_ERROR)
++# Bundling Qt/ICU/Wayland .so files and the whole qml/plugins tree next to the
++# binary (DeployLinux.cmake, and Qt's own qt_generate_deploy_app_script/
++# qt6_deploy_runtime_dependencies) is for portable, unpackaged distribution.
++# It also hardcodes Debian/Ubuntu-style paths and exact upstream Qt Online
++# Installer library filenames (e.g. libicui18n.so.73), which don't match a
++# distro's own Qt6 packages (Fedora keeps 64-bit libs in /usr/lib64, not
++# /usr/lib, and ships whatever ICU version it currently has, not .73). A
++# proper distro package should link against the system Qt6 instead and let
++# the package manager's automatic library dependencies (Requires:) handle
++# runtime linkage, so this is skippable entirely there.
++option(BRIDGE_GUI_BUNDLE_QT "Bundle Qt/ICU/QML runtime files next to the binary instead of relying on a system Qt install" ON)
++if (BRIDGE_GUI_BUNDLE_QT)
++    qt_generate_deploy_app_script(
++            TARGET bridge-gui
++            OUTPUT_SCRIPT deploy_script
++            NO_UNSUPPORTED_PLATFORM_ERROR)
+ 
+-if(UNIX AND NOT APPLE)
+-    set(DEPLOY_OS Linux)
+-elseif(APPLE)
+-    set(DEPLOY_OS Darwin)
+-else()
+-    set(DEPLOY_OS Windows)
+-endif()
++    if(UNIX AND NOT APPLE)
++        set(DEPLOY_OS Linux)
++    elseif(APPLE)
++        set(DEPLOY_OS Darwin)
++    else()
++        set(DEPLOY_OS Windows)
++    endif()
+ 
+-include(Deploy${DEPLOY_OS}.cmake)
++    include(Deploy${DEPLOY_OS}.cmake)
++endif()

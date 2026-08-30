@@ -1,0 +1,22 @@
+[Unit]
+Description=LocalSend
+Documentation=https://localsend.org
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+# --hidden: start minimized to the tray. This is LocalSend's own
+# self-managed autostart flag (see app/lib/util/native/autostart_helper.dart),
+# normally written into a ~/.config/autostart/*.desktop entry when the user
+# toggles "Launch at startup" in-app; this unit provides the same effect
+# via systemd --user instead.
+ExecStart=/usr/bin/localsend --hidden
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+Slice=app.slice
+
+[Install]
+WantedBy=graphical-session.target

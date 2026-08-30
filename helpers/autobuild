@@ -161,7 +161,15 @@ get_latest_tag_chrono() {
 
 normalize_tag_to_numeric() {
     local tag="$1"
-    printf '%s\n' "$tag" | tr -cd '0-9.\n'
+    # Collapse each run of non-digit characters (v, +, -, letters, ...) into
+    # a single '.' separator instead of deleting it outright. A plain
+    # tr -cd '0-9.\n' would turn "v2.1.0+90" into "2.1.090" -- silently
+    # merging the build-metadata digits into the patch version -- which can
+    # never compare equal to a cleanly-stored "2.1.0.90", so any package
+    # tagged with a separator between numeric groups (e.g. semver build
+    # metadata) would look "changed" on every single run.
+    printf '%s\n' "$tag" \
+        | sed -E 's/[^0-9]+/./g; s/^\.+//; s/\.+$//; s/\.{2,}/./g'
 }
 
 apply_numeric_template() {
