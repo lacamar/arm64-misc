@@ -4,7 +4,7 @@
 
 Name:           dnglab
 Version:        0.8.0
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Camera RAW to DNG file format converter
 
 License:        LGPL-2.1-only
@@ -57,6 +57,15 @@ install -Dm644 bin/%{name}/completions/_%{name} %{buildroot}%{_datadir}/zsh/site
 %{_datadir}/zsh/site-functions/_%{name}
 
 %changelog
+* Tue Sep 01 2026 Lachlan Marie <lchlnm@pm.me> - 0.8.0-3
+- Fix --full-size-preview to actually produce a full-size preview:
+  DngWriter::preview() (rawler/src/dng/writer.rs) was unconditionally
+  resizing the preview subframe to fit 1024x768 regardless of source, so
+  the 0.8.0-2 patch only changed where the pre-resize image came from
+  (embedded JPEG vs. full raw develop) without changing the output size.
+  Thread full_size_preview through to preview() and skip the resize cap
+  when it's set.
+
 * Sun Aug 30 2026 Lachlan Marie <lchlnm@pm.me> - 0.8.0-2
 - Add patch for a --full-size-preview convert/ftpserver flag (renders the DNG
   preview/thumbnail from the full raw data instead of the camera's own,
