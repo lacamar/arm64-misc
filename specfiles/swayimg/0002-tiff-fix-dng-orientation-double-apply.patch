@@ -1,0 +1,45 @@
+diff --git a/src/formats/tiff.cpp b/src/formats/tiff.cpp
+index 6d8bc52..17ea257 100644
+--- a/src/formats/tiff.cpp
++++ b/src/formats/tiff.cpp
+@@ -48,6 +48,17 @@ public:
+             return nullptr;
+         }
+ 
++        // TIFFRGBAImage(3tiff) NOTES: its readers can only mirror an image
++        // across an axis, never rotate it, so orientations 5-8 (which need
++        // an actual 90-degree turn) come back wrong no matter what target
++        // orientation is requested. Request the file's own stored
++        // orientation instead (a no-op transform for libtiff) and leave the
++        // real correction to the generic EXIF-driven fix_orientation() this
++        // format doesn't override -- it covers all 8 cases correctly via
++        // Pixmap::rotate()/flip(), which libtiff's mirror-only reader can't.
++        uint32_t orientation = ORIENTATION_TOPLEFT;
++        TIFFGetField(tiff.get(), TIFFTAG_ORIENTATION, &orientation);
++
+         // allocate image and frame
+         ImagePtr image = std::make_shared<Image>();
+         image->frames.resize(1);
+@@ -57,21 +68,13 @@ public:
+         // decode image
+         const int rc = TIFFReadRGBAImageOriented(
+             tiff.get(), width, height,
+-            reinterpret_cast<uint32_t*>(pm.ptr(0, 0)), ORIENTATION_TOPLEFT, 1);
++            reinterpret_cast<uint32_t*>(pm.ptr(0, 0)), orientation, 1);
+         if (rc == 0) {
+             return nullptr;
+         }
+ 
+         pm.abgr_to_argb();
+ 
+-        // something strange, but i don't know how to deal with it
+-        uint32_t orientation;
+-        if (TIFFGetField(tiff.get(), TIFFTAG_ORIENTATION, &orientation)) {
+-            if (orientation == ORIENTATION_RIGHTTOP) {
+-                image->flip_horizontal();
+-            }
+-        }
+-
+         image->format = "TIFF";
+ 
+         return image;

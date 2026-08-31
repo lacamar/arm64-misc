@@ -7,7 +7,7 @@
 
 Name:           %{_name}-git
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        3%{?dist}
+Release:        4%{?dist}
 Conflicts:      %{_name}
 Provides:       %{_name} = %{version}-%{release}
 Summary:        Lightweight image viewer for Wayland display servers
@@ -21,6 +21,19 @@ Source:         %{url}/archive/%{shortcommit}/%{_name}-%{shortcommit}.tar.gz
 # (DateTimeOriginal/DateTimeDigitized/DateTime, via exiv2), falling back to
 # path order when unavailable. Not upstream.
 Patch1:          0001-imagelist-add-exif-capture-time-sort-order.patch
+# Fixes upside-down/sideways display of portrait DNGs (confirmed live with
+# an iPhone 17 Pro Max ProRAW DNG) whose raw SubIFD uses a codec libraw
+# can't decode (JPEG XL), so format detection falls back to the "tiff"
+# handler. That handler asked libtiff's TIFFReadRGBAImageOriented() to
+# normalize to ORIENTATION_TOPLEFT itself, but TIFFRGBAImage(3tiff) can only
+# mirror an image, never rotate it -- orientations 5-8 come back wrong
+# regardless of what's requested -- and its partial correction then got
+# double-applied on top of the generic EXIF-driven fix_orientation() every
+# other format relies on for this, which the tiff handler didn't opt out of
+# the way raw.cpp does. Now requests the file's own stored orientation (a
+# no-op for libtiff) and leaves 100% of the correction to that generic pass.
+# Not upstream.
+Patch2:          0002-tiff-fix-dng-orientation-double-apply.patch
 
 # Exclude x86 and all the platforms where luajit is not available
 ExcludeArch:    %{ix86} riscv64 ppc64 ppc64le
@@ -75,6 +88,7 @@ Swayimg is a lightweight image viewer for Wayland display servers.
 %autosetup -N -n %{_name}-%{commit}
 #patch -P 0 -p1 -F3
 %patch -P 1 -p1 -F3
+%patch -P 2 -p1 -F3
 
 
 %build
@@ -120,6 +134,12 @@ export LANG=en_US.UTF-8 # ImageListTest.SortAlphaUnicode fails with LANG=C
 
 
 %changelog
+* Mon Aug 31 2026 Lachlan Marie <lchlnm@pm.me> - 5.5^9.git.aafed37-4
+ - Add a patch fixing upside-down/sideways display of portrait DNGs whose
+   raw layer libraw can't decode (confirmed live: an iPhone 17 Pro Max
+   ProRAW DNG using JPEG XL, falling back to the tiff format handler). See
+   0002-tiff-fix-dng-orientation-double-apply.patch for the root cause.
+
 * Mon Aug 31 2026 Lachlan Marie <lchlnm@pm.me> - 5.5^9.git.aafed37-3
  - Add missing pkgconfig(libopenjp2) BuildRequires (fixes fc45/rawhide builds)
 
