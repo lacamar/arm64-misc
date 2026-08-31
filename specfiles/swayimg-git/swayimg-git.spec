@@ -7,7 +7,7 @@
 
 Name:           %{_name}-git
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        1%{?dist}
+Release:        2%{?dist}
 Conflicts:      %{_name}
 Provides:       %{_name} = %{version}-%{release}
 Summary:        Lightweight image viewer for Wayland display servers
@@ -119,6 +119,9 @@ export LANG=en_US.UTF-8 # ImageListTest.SortAlphaUnicode fails with LANG=C
 
 
 %changelog
+* Mon Aug 31 2026 Lachlan Marie <lchlnm@pm.me> - 5.5^9.git.aafed37-2
+ - Add exif imagelist.order sort mode (EXIF capture time)
+
 * Sun Aug 23 2026 Lachlan Marie <lchlnm@pm.me> - 5.5^9.git.aafed37-1
  - Update to commit aafed37a14c13dba61f5d4e88068dab457e8e0b4
 
