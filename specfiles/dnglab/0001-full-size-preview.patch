@@ -236,13 +236,10 @@ diff --git a/rawler/src/dng/convert.rs b/rawler/src/dng/convert.rs
 index b2acbfb..f547800 100644
 --- a/rawler/src/dng/convert.rs
 +++ b/rawler/src/dng/convert.rs
-@@ -37,6 +37,10 @@ pub struct ConvertParams {
+@@ -37,6 +37,7 @@ pub struct ConvertParams {
    pub predictor: u8,
    pub preview: bool,
    pub thumbnail: bool,
-+  /// Skip the (possibly small) preview JPEG embedded by the camera and
-+  /// always render the preview/thumbnail from the full raw sensor data
-+  /// instead, matching Adobe DNG Converter's "Full Size JPEG Preview".
 +  pub full_size_preview: bool,
    pub artist: Option<String>,
    pub software: String,
