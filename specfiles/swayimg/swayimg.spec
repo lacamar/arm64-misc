@@ -3,7 +3,7 @@
 
 Name:           swayimg
 Version:        %{tag}
-Release:        %autorelease
+Release:        2%{?dist}
 Summary:        Lightweight image viewer for Wayland display servers
 
 License:        MIT
