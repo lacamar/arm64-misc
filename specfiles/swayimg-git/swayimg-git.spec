@@ -7,7 +7,7 @@
 
 Name:           %{_name}-git
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        2%{?dist}
+Release:        3%{?dist}
 Conflicts:      %{_name}
 Provides:       %{_name} = %{version}-%{release}
 Summary:        Lightweight image viewer for Wayland display servers
@@ -46,6 +46,7 @@ BuildRequires:  pkgconfig(libdrm)
 BuildRequires:  pkgconfig(libheif)
 BuildRequires:  pkgconfig(libjpeg)
 BuildRequires:  pkgconfig(libjxl)
+BuildRequires:  pkgconfig(libopenjp2)
 BuildRequires:  pkgconfig(libpng)
 BuildRequires:  pkgconfig(libraw)
 BuildRequires:  pkgconfig(librsvg-2.0) >= 2.46
@@ -119,6 +120,9 @@ export LANG=en_US.UTF-8 # ImageListTest.SortAlphaUnicode fails with LANG=C
 
 
 %changelog
+* Mon Aug 31 2026 Lachlan Marie <lchlnm@pm.me> - 5.5^9.git.aafed37-3
+ - Add missing pkgconfig(libopenjp2) BuildRequires (fixes fc45/rawhide builds)
+
 * Mon Aug 31 2026 Lachlan Marie <lchlnm@pm.me> - 5.5^9.git.aafed37-2
  - Add exif imagelist.order sort mode (EXIF capture time)
 
