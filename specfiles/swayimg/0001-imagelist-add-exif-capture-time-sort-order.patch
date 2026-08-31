@@ -1,0 +1,198 @@
+diff --git a/CONFIG.md b/CONFIG.md
+index d74f2f0..8420185 100644
+--- a/CONFIG.md
++++ b/CONFIG.md
+@@ -453,6 +453,7 @@ Since 5.5.
+ * `"alpha"`: Lexicographic sort: 1,10,2,20,a,b,c
+ * `"numeric"`: Numeric sort: 1,2,3,10,100,a,b,c
+ * `"mtime"`: Modification time sort
++* `"exif"`: EXIF capture time sort (`DateTimeOriginal`/`DateTimeDigitized`/`DateTime`), falls back to path order if unavailable
+ * `"size"`: Size sort
+ * `"random"`: Random order
+ 
+diff --git a/extra/swayimg.lua b/extra/swayimg.lua
+index 0d98f74..80ba68c 100644
+--- a/extra/swayimg.lua
++++ b/extra/swayimg.lua
+@@ -15,6 +15,7 @@
+ ---| "alpha"   # Lexicographic sort: 1,10,2,20,a,b,c
+ ---| "numeric" # Numeric sort: 1,2,3,10,100,a,b,c
+ ---| "mtime"   # Modification time sort
++---| "exif"    # EXIF capture time sort
+ ---| "size"    # Size sort
+ ---| "random"  # Random order
+ 
+diff --git a/src/image.hpp b/src/image.hpp
+index 976c8a8..0c41df0 100644
+--- a/src/image.hpp
++++ b/src/image.hpp
+@@ -18,6 +18,7 @@ struct ImageEntry {
+     size_t index = std::numeric_limits<size_t>::max(); ///< Index in image list
+     std::filesystem::path path; ///< Path to the image file
+     std::time_t mtime = 0;      ///< File modification time
++    std::time_t exif_time = 0;  ///< EXIF capture time (0 if unavailable)
+     size_t size = 0;            ///< Size of the image file
+     bool mark = false;          ///< Marked image flag
+     bool removed = false;       ///< State, true if removed from image list
+diff --git a/src/imagelist.cpp b/src/imagelist.cpp
+index 7259412..bc6444d 100644
+--- a/src/imagelist.cpp
++++ b/src/imagelist.cpp
+@@ -4,16 +4,23 @@
+ 
+ #include "imagelist.hpp"
+ 
++#include "buildconf.hpp"
+ #include "defaults.hpp"
+ #include "fsmonitor.hpp"
+ #include "log.hpp"
+ 
+ #include <algorithm>
++#include <array>
+ #include <cassert>
++#include <cstdio>
+ #include <mutex>
+ #include <random>
+ #include <string>
+ 
++#ifdef HAVE_LIBEXIV2
++#include <exiv2/exiv2.hpp>
++#endif // HAVE_LIBEXIV2
++
+ namespace {
+ 
+ /**
+@@ -78,6 +85,56 @@ int compare_strings(const std::string& l, const std::string& r,
+     return cmp;
+ }
+ 
++#ifdef HAVE_LIBEXIV2
++/**
++ * Read EXIF capture time of an image file.
++ * @param path path to the image file
++ * @return capture time, or 0 if not available
++ */
++std::time_t read_exif_time(const std::filesystem::path& path)
++{
++    // preference order: original capture, digitized, last modified
++    static constexpr std::array tags = {
++        "Exif.Photo.DateTimeOriginal",
++        "Exif.Photo.DateTimeDigitized",
++        "Exif.Image.DateTime",
++    };
++
++    try {
++        Exiv2::Image::UniquePtr image =
++            Exiv2::ImageFactory::open(path.string());
++        if (!image) {
++            return 0;
++        }
++        image->readMetadata();
++        const Exiv2::ExifData& exif = image->exifData();
++
++        for (const char* tag : tags) {
++            const auto it = exif.findKey(Exiv2::ExifKey(tag));
++            if (it == exif.end()) {
++                continue;
++            }
++            std::tm tm{};
++            // EXIF date/time format: "YYYY:MM:DD HH:MM:SS"
++            if (std::sscanf(it->toString().c_str(), "%d:%d:%d %d:%d:%d",
++                            &tm.tm_year, &tm.tm_mon, &tm.tm_mday, &tm.tm_hour,
++                            &tm.tm_min, &tm.tm_sec) == 6) {
++                tm.tm_year -= 1900;
++                tm.tm_mon -= 1;
++                tm.tm_isdst = -1;
++                const std::time_t t = std::mktime(&tm);
++                if (t != static_cast<std::time_t>(-1)) {
++                    return t;
++                }
++            }
++        }
++    } catch (const Exiv2::Error&) {
++    }
++
++    return 0;
++}
++#endif // HAVE_LIBEXIV2
++
+ /**
+  * Comparison of two paths.
+  * @param l,r paths to compare
+@@ -128,6 +185,10 @@ bool compare_entries(const ImageEntry& l, const ImageEntry& r,
+         case ImageList::Order::Mtime:
+             return l.mtime == r.mtime ? compare_paths(l.path, r.path, false) < 0
+                                       : l.mtime < r.mtime;
++        case ImageList::Order::Exif:
++            return l.exif_time == r.exif_time
++                ? compare_paths(l.path, r.path, false) < 0
++                : l.exif_time < r.exif_time;
+         case ImageList::Order::Size:
+             return l.size == r.size ? compare_paths(l.path, r.path, false) < 0
+                                     : l.size < r.size;
+@@ -539,11 +600,17 @@ ImageEntryPtr ImageList::add_file(const std::filesystem::path& path)
+ 
+     const size_t size = std::filesystem::file_size(path);
+ 
+-    return add_entry(path, mtime, size);
++    std::time_t exif_time = 0;
++#ifdef HAVE_LIBEXIV2
++    exif_time = read_exif_time(path);
++#endif // HAVE_LIBEXIV2
++
++    return add_entry(path, mtime, size, exif_time);
+ }
+ 
+ ImageEntryPtr ImageList::add_entry(const std::filesystem::path& path,
+-                                   const std::time_t mtime, const size_t size)
++                                   const std::time_t mtime, const size_t size,
++                                   const std::time_t exif_time)
+ {
+     ImageEntryPtr entry = nullptr;
+ 
+@@ -552,6 +619,7 @@ ImageEntryPtr ImageList::add_entry(const std::filesystem::path& path,
+         entry->path = path;
+         entry->mtime = mtime;
+         entry->size = size;
++        entry->exif_time = exif_time;
+         entries_map.insert({ entry->path, entry });
+         entries_arr.push_back(entry);
+     }
+diff --git a/src/imagelist.hpp b/src/imagelist.hpp
+index a4f2b5e..8731b11 100644
+--- a/src/imagelist.hpp
++++ b/src/imagelist.hpp
+@@ -20,6 +20,7 @@ public:
+         Alpha,   ///< Lexicographic sort
+         Numeric, ///< Numeric sort
+         Mtime,   ///< Modification time sort
++        Exif,    ///< EXIF capture time sort
+         Size,    ///< Size sort
+         Random   ///< Random order
+     };
+@@ -181,10 +182,12 @@ private:
+      * @param path path to the image file
+      * @param mtime file modification time
+      * @param size size of the file
++     * @param exif_time EXIF capture time
+      * @return added entry (nullptr if already exists)
+      */
+     ImageEntryPtr add_entry(const std::filesystem::path& path,
+-                            const std::time_t mtime = 0, const size_t size = 0);
++                            const std::time_t mtime = 0, const size_t size = 0,
++                            const std::time_t exif_time = 0);
+ 
+     /**
+      * Sort and reindex image list.
+diff --git a/src/luaengine.cpp b/src/luaengine.cpp
+index d3bd50e..4d43410 100644
+--- a/src/luaengine.cpp
++++ b/src/luaengine.cpp
+@@ -51,6 +51,7 @@ static constexpr std::array ilorders =
+         { ImageList::Order::Alpha,   "alpha"   },
+         { ImageList::Order::Numeric, "numeric" },
+         { ImageList::Order::Mtime,   "mtime"   },
++        { ImageList::Order::Exif,    "exif"    },
+         { ImageList::Order::Size,    "size"    },
+         { ImageList::Order::Random,  "random"  },
+ });

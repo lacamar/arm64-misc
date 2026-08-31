@@ -113,6 +113,9 @@ export LANG=en_US.UTF-8 # ImageListTest.SortAlphaUnicode fails with LANG=C
 
 
 %changelog
+* Mon Aug 31 2026 Lachlan Marie <lchlnm@pm.me> - 5.5-2
+ - Add exif imagelist.order sort mode (EXIF capture time)
+
 * Mon Jul 27 2026 Lachlan Marie <lchlnm@pm.me> - 5.5-1
  - Update to 5.5
 
