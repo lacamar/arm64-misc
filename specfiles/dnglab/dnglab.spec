@@ -4,7 +4,7 @@
 
 Name:           dnglab
 Version:        0.8.0
-Release:        3%{?dist}
+Release:        4%{?dist}
 Summary:        Camera RAW to DNG file format converter
 
 License:        LGPL-2.1-only
@@ -57,6 +57,12 @@ install -Dm644 bin/%{name}/completions/_%{name} %{buildroot}%{_datadir}/zsh/site
 %{_datadir}/zsh/site-functions/_%{name}
 
 %changelog
+* Tue Sep 01 2026 Lachlan Marie <lchlnm@pm.me> - 0.8.0-4
+- 0.8.0-3 built with a stale cached copy of 0001-full-size-preview.patch from
+  ~/.local/rpm/sources/dnglab/ (mx-rpm doesn't re-sync a local Patch0 already
+  present there), so it shipped without the writer.rs fix below despite the
+  changelog claiming it. Re-synced the source-dir patch copy and rebuilt.
+
 * Tue Sep 01 2026 Lachlan Marie <lchlnm@pm.me> - 0.8.0-3
 - Fix --full-size-preview to actually produce a full-size preview:
   DngWriter::preview() (rawler/src/dng/writer.rs) was unconditionally
