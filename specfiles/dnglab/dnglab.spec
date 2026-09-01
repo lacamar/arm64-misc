@@ -4,7 +4,7 @@
 
 Name:           dnglab
 Version:        0.8.0
-Release:        4%{?dist}
+Release:        5%{?dist}
 Summary:        Camera RAW to DNG file format converter
 
 License:        LGPL-2.1-only
@@ -17,6 +17,16 @@ Source0:        %{forgeurl}/archive/refs/tags/v%{version}/%{name}-%{version}.tar
 # rawler/src/dng/convert.rs's generate_preview(), which otherwise always
 # prefers the camera's own embedded preview when one exists. Not upstream.
 Patch0:         0001-full-size-preview.patch
+# Adds a LibRaw-style "auto bright" exposure-normalization step to
+# RawDevelop's default pipeline (rawler/src/imgop/develop.rs), used both by
+# the --full-size-preview fallback render and by `dnglab convert`'s
+# standalone raw-to-image mode. Without it, that render is plain WB + camera
+# color matrix + sRGB gamma with no exposure adjustment, which looks
+# noticeably darker/flatter for any properly-exposed (headroom-preserving)
+# shot than what other raw viewers show -- e.g. swayimg's raw.cpp, which
+# decodes via LibRaw's dcraw_process() with auto-bright on by default. Not
+# upstream.
+Patch1:         0002-auto-bright-preview.patch
 
 BuildRequires:  cargo
 BuildRequires:  anda-srpm-macros
@@ -57,6 +67,13 @@ install -Dm644 bin/%{name}/completions/_%{name} %{buildroot}%{_datadir}/zsh/site
 %{_datadir}/zsh/site-functions/_%{name}
 
 %changelog
+* Tue Sep 01 2026 Lachlan Marie <lchlnm@pm.me> - 0.8.0-5
+- Add an auto-bright exposure-normalization step to RawDevelop's default
+  pipeline, closing the gap between the --full-size-preview render and a
+  properly-exposed shot as rendered by other raw viewers (e.g. swayimg,
+  via LibRaw's dcraw_process() with its default auto-bright). See
+  0002-auto-bright-preview.patch.
+
 * Tue Sep 01 2026 Lachlan Marie <lchlnm@pm.me> - 0.8.0-4
 - 0.8.0-3 built with a stale cached copy of 0001-full-size-preview.patch from
   ~/.local/rpm/sources/dnglab/ (mx-rpm doesn't re-sync a local Patch0 already
