@@ -1,0 +1,563 @@
+diff --git a/resource/ui/MainWindow.ui b/resource/ui/MainWindow.ui
+index c9d364c..153e648 100644
+--- a/resource/ui/MainWindow.ui
++++ b/resource/ui/MainWindow.ui
+@@ -123,6 +123,19 @@
+             <property name="position">3</property>
+           </packing>
+         </child>
++        <child>
++          <object class="GtkModelButton" id="button_continuous_export">
++            <property name="visible">True</property>
++            <property name="can-focus">True</property>
++            <property name="receives-default">True</property>
++            <property name="text" translatable="yes">Continuous Chat Export…</property>
++          </object>
++          <packing>
++            <property name="expand">False</property>
++            <property name="fill">True</property>
++            <property name="position">4</property>
++          </packing>
++        </child>
+         <child>
+           <object class="GtkSeparator" id="separator_2">
+             <property name="visible">True</property>
+@@ -131,7 +144,7 @@
+           <packing>
+             <property name="expand">False</property>
+             <property name="fill">True</property>
+-            <property name="position">4</property>
++            <property name="position">5</property>
+           </packing>
+         </child>
+         <child>
+@@ -144,7 +157,7 @@
+           <packing>
+             <property name="expand">False</property>
+             <property name="fill">True</property>
+-            <property name="position">5</property>
++            <property name="position">6</property>
+           </packing>
+         </child>
+         <child>
+@@ -157,7 +170,7 @@
+           <packing>
+             <property name="expand">False</property>
+             <property name="fill">True</property>
+-            <property name="position">6</property>
++            <property name="position">7</property>
+           </packing>
+         </child>
+         <child>
+@@ -170,7 +183,7 @@
+           <packing>
+             <property name="expand">False</property>
+             <property name="fill">True</property>
+-            <property name="position">7</property>
++            <property name="position">8</property>
+           </packing>
+         </child>
+         <child>
+@@ -183,7 +196,7 @@
+           <packing>
+             <property name="expand">False</property>
+             <property name="fill">True</property>
+-            <property name="position">8</property>
++            <property name="position">9</property>
+           </packing>
+         </child>
+       </object>
+diff --git a/src/ui/MainWindow.cpp b/src/ui/MainWindow.cpp
+index 6d113bb..c732a38 100644
+--- a/src/ui/MainWindow.cpp
++++ b/src/ui/MainWindow.cpp
+@@ -65,6 +65,10 @@ namespace wil::ui
+         refBuilder->get_widget("button_export_chat", buttonExportChat);
+         buttonExportChat->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onExportChat));
+ 
++        Gtk::ModelButton* buttonContinuousExport = nullptr;
++        refBuilder->get_widget("button_continuous_export", buttonContinuousExport);
++        buttonContinuousExport->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onConfigureContinuousExport));
++
+         Gtk::ModelButton* buttonPreferences = nullptr;
+         refBuilder->get_widget("button_preferences", buttonPreferences);
+         buttonPreferences->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onOpenPreferences));
+@@ -278,6 +282,11 @@ namespace wil::ui
+         m_webView.exportChatTranscript();
+     }
+ 
++    void MainWindow::onConfigureContinuousExport()
++    {
++        m_webView.configureContinuousExport();
++    }
++
+     void MainWindow::onNotificationChanged(bool show)
+     {
+         if (!is_visible())
+diff --git a/src/ui/MainWindow.hpp b/src/ui/MainWindow.hpp
+index 73244c2..2b333c7 100644
+--- a/src/ui/MainWindow.hpp
++++ b/src/ui/MainWindow.hpp
+@@ -34,6 +34,7 @@ namespace wil::ui
+             void onOpenPhoneNumber();
+             void onPhoneNumberDialogResponse(int responseId);
+             void onExportChat();
++            void onConfigureContinuousExport();
+             void onNotificationChanged(bool show);
+             void onShow();
+             void onQuit();
+diff --git a/src/ui/WebView.cpp b/src/ui/WebView.cpp
+index b2c423b..8a4a389 100644
+--- a/src/ui/WebView.cpp
++++ b/src/ui/WebView.cpp
+@@ -5,10 +5,12 @@
+ #include <streambuf>
+ #include <optional>
+ #include <locale>
++#include <cctype>
+ #include <jsc/jsc.h>
+ #include <glibmm/i18n.h>
+ #include <glibmm/main.h>
+ #include <glibmm/miscutils.h>
++#include <glibmm/ustring.h>
+ #include <gtkmm/messagedialog.h>
+ #include <gtkmm/filechooserdialog.h>
+ #include "../util/Settings.hpp"
+@@ -50,6 +52,89 @@ namespace wil::ui
+             })();
+         )JS";
+ 
++        constexpr auto const CONTINUOUS_EXPORT_GROUP = "chat-export";
++
++        // Same title lookup as EXPORT_CHAT_SCRIPT, used on its own to figure out which
++        // chat the continuous-export menu action should be configuring.
++        constexpr auto const CURRENT_CHAT_TITLE_SCRIPT = R"JS(
++            (function() {
++                var titleEl = document.querySelector('#main header [data-testid="conversation-info-header-chat-title"]')
++                    || document.querySelector('#main header span[dir="auto"]');
++                return titleEl ? titleEl.innerText.trim() : '';
++            })();
++        )JS";
++
++        // Installed once per page load and left running for the lifetime of the
++        // WhatsApp Web session. WhatsApp Web swaps out #main's contents wholesale on
++        // every chat switch, so there is no single stable node to observe instead of
++        // document.body. Debounced on every mutation, it re-scrapes whichever chat is
++        // currently open (same data-pre-plain-text technique as EXPORT_CHAT_SCRIPT) and
++        // posts the title plus a markdown-formatted transcript back to native code,
++        // which only writes to disk if that chat has a continuous-export destination
++        // configured -- see WebView::configureContinuousExport().
++        constexpr auto const CONTINUOUS_EXPORT_INIT_SCRIPT = R"JS(
++            (function() {
++                if (window.__wilContinuousExportInstalled) { return; }
++                window.__wilContinuousExportInstalled = true;
++
++                function currentTitle() {
++                    var titleEl = document.querySelector('#main header [data-testid="conversation-info-header-chat-title"]')
++                        || document.querySelector('#main header span[dir="auto"]');
++                    return titleEl ? titleEl.innerText.trim() : '';
++                }
++
++                function toMarkdown(title, entries) {
++                    var out = '# ' + title + '\n\n';
++                    entries.forEach(function(entry) {
++                        out += '**' + entry.sender + '** _' + entry.time + '_\n\n';
++                        entry.text.split('\n').forEach(function(line) {
++                            out += '> ' + line + '\n';
++                        });
++                        out += '\n';
++                    });
++                    return out;
++                }
++
++                function scrapeAndNotify() {
++                    var title = currentTitle();
++                    if (!title) { return; }
++
++                    var entries = [];
++                    document.querySelectorAll('#main div.copyable-text[data-pre-plain-text]').forEach(function(node) {
++                        var meta     = (node.getAttribute('data-pre-plain-text') || '').trim();
++                        var match    = meta.match(/^\[(.*?)\]\s*(.*?):\s*$/);
++                        var textNode = node.querySelector('span.selectable-text') || node;
++                        var text     = (textNode.innerText || '').trim();
++
++                        if (!match && !text) { return; }
++
++                        entries.push({
++                            time:   match ? match[1] : '',
++                            sender: match ? match[2] : '',
++                            text:   text
++                        });
++                    });
++
++                    if (entries.length === 0) { return; }
++
++                    try {
++                        window.webkit.messageHandlers.wilContinuousExport.postMessage(title + '' + toMarkdown(title, entries));
++                    } catch (e) { /* handler not registered yet */ }
++                }
++
++                window.__wilForceContinuousExportScrape = scrapeAndNotify;
++
++                var debounceTimer = null;
++                var observer = new MutationObserver(function() {
++                    if (debounceTimer) { clearTimeout(debounceTimer); }
++                    debounceTimer = setTimeout(scrapeAndNotify, 600);
++                });
++                observer.observe(document.body, {childList: true, subtree: true});
++
++                scrapeAndNotify();
++            })();
++        )JS";
++
+         std::string sanitizeFilename(std::string name)
+         {
+             for (auto& character : name)
+@@ -64,6 +149,22 @@ namespace wil::ui
+             return name.empty() ? "whatsapp-chat" : name;
+         }
+ 
++        // GKeyFile keys are less forgiving than filenames, so continuous-export
++        // settings are looked up by a stricter sanitization of the chat title than
++        // sanitizeFilename() -- this is purely a lookup key, never shown to the user.
++        std::string sanitizeSettingsKey(std::string name)
++        {
++            for (auto& character : name)
++            {
++                if (!std::isalnum(static_cast<unsigned char>(character)) && character != '.' && character != '-' && character != '_')
++                {
++                    character = '_';
++                }
++            }
++
++            return name.empty() ? "whatsapp-chat" : name;
++        }
++
+         void saveChatTranscript(std::string const& suggestedTitle, std::string const& transcript)
+         {
+             auto dialog = Gtk::FileChooserDialog{_("Export Chat Transcript"), Gtk::FILE_CHOOSER_ACTION_SAVE};
+@@ -118,6 +219,133 @@ namespace wil::ui
+             saveChatTranscript(title, transcript);
+         }
+ 
++        void triggerImmediateContinuousExportScrape(WebKitWebView* view)
++        {
++            webkit_web_view_evaluate_javascript(view, "if (window.__wilForceContinuousExportScrape) { window.__wilForceContinuousExportScrape(); }",
++                -1, nullptr, nullptr, nullptr, nullptr, nullptr);
++        }
++
++        // Returns true if a destination was set (i.e. the user didn't cancel).
++        bool promptForContinuousExportPath(std::string const& chatTitle)
++        {
++            auto dialog = Gtk::FileChooserDialog{_("Continuous Chat Export Location"), Gtk::FILE_CHOOSER_ACTION_SAVE};
++            dialog.add_button(_("Cancel"), Gtk::RESPONSE_CANCEL);
++            dialog.add_button(_("Save"), Gtk::RESPONSE_OK);
++            dialog.set_current_name(sanitizeFilename(chatTitle) + ".md");
++
++            if (dialog.run() != Gtk::RESPONSE_OK)
++            {
++                return false;
++            }
++
++            util::Settings::getInstance().setValue<Glib::ustring>(
++                CONTINUOUS_EXPORT_GROUP, sanitizeSettingsKey(chatTitle), dialog.get_filename());
++            return true;
++        }
++
++        void continuousExportConfigureFinished(GObject* sourceObject, GAsyncResult* result, gpointer)
++        {
++            GError* error      = nullptr;
++            auto* const value  = webkit_web_view_evaluate_javascript_finish(WEBKIT_WEB_VIEW(sourceObject), result, &error);
++
++            if (!value)
++            {
++                std::cerr << "WebView: Failed to read current chat title: " << (error ? error->message : "unknown error") << std::endl;
++                if (error)
++                {
++                    g_error_free(error);
++                }
++                return;
++            }
++
++            auto* const resultString = jsc_value_to_string(value);
++            auto const  title        = std::string{resultString ? resultString : ""};
++            g_free(resultString);
++            g_object_unref(value);
++
++            if (title.empty())
++            {
++                auto dialog = Gtk::MessageDialog{_("No Chat Open"), false, Gtk::MESSAGE_INFO, Gtk::BUTTONS_OK};
++                dialog.set_secondary_text(_("Open a chat before configuring continuous export."));
++                dialog.run();
++                return;
++            }
++
++            auto* const view = WEBKIT_WEB_VIEW(sourceObject);
++            auto const  key  = sanitizeSettingsKey(title);
++
++            if (util::Settings::getInstance().hasKey(CONTINUOUS_EXPORT_GROUP, key))
++            {
++                auto const currentPath = util::Settings::getInstance().getValue<Glib::ustring>(CONTINUOUS_EXPORT_GROUP, key, Glib::ustring{});
++
++                auto dialog = Gtk::MessageDialog{_("Continuous Export Enabled"), false, Gtk::MESSAGE_QUESTION, Gtk::BUTTONS_NONE};
++                dialog.set_secondary_text(Glib::ustring::compose(_("“%1” is currently exporting to:\n%2"), title, currentPath));
++                dialog.add_button(_("Stop Exporting"), Gtk::RESPONSE_REJECT);
++                dialog.add_button(_("Change Location"), Gtk::RESPONSE_APPLY);
++                dialog.add_button(_("Cancel"), Gtk::RESPONSE_CANCEL);
++
++                switch (dialog.run())
++                {
++                    case Gtk::RESPONSE_REJECT:
++                        util::Settings::getInstance().removeValue(CONTINUOUS_EXPORT_GROUP, key);
++                        break;
++
++                    case Gtk::RESPONSE_APPLY:
++                        if (promptForContinuousExportPath(title))
++                        {
++                            triggerImmediateContinuousExportScrape(view);
++                        }
++                        break;
++
++                    default:
++                        break;
++                }
++            }
++            else
++            {
++                auto dialog = Gtk::MessageDialog{_("Enable Continuous Export?"), false, Gtk::MESSAGE_QUESTION, Gtk::BUTTONS_YES_NO};
++                dialog.set_secondary_text(
++                    Glib::ustring::compose(_("Continuously export “%1” to a markdown file, updated as new messages arrive?"), title));
++
++                if ((dialog.run() == Gtk::RESPONSE_YES) && promptForContinuousExportPath(title))
++                {
++                    triggerImmediateContinuousExportScrape(view);
++                }
++            }
++        }
++
++        void continuousExportMessageReceived(WebKitUserContentManager*, WebKitJavascriptResult* jsResult, gpointer)
++        {
++            auto* const value         = webkit_javascript_result_get_js_value(jsResult);
++            auto* const resultString  = jsc_value_to_string(value);
++            auto const  raw           = std::string{resultString ? resultString : ""};
++            g_free(resultString);
++
++            auto const delimiterPos = raw.find('\x01');
++            if (delimiterPos == std::string::npos)
++            {
++                return;
++            }
++
++            auto const title    = raw.substr(0, delimiterPos);
++            auto const markdown = raw.substr(delimiterPos + 1);
++            auto const key      = sanitizeSettingsKey(title);
++
++            if (!util::Settings::getInstance().hasKey(CONTINUOUS_EXPORT_GROUP, key))
++            {
++                return;
++            }
++
++            auto const path = util::Settings::getInstance().getValue<Glib::ustring>(CONTINUOUS_EXPORT_GROUP, key, Glib::ustring{});
++            if (path.empty())
++            {
++                return;
++            }
++
++            auto outFile = std::ofstream{path.raw()};
++            outFile << markdown;
++        }
++
+         std::optional<std::string> getSystemLanguage()
+         {
+             try
+@@ -319,6 +547,8 @@ namespace wil::ui
+             applyCustomCss(cssFilePath);
+         }
+ 
++        setupContinuousExport();
++
+         webkit_web_view_load_uri(*this, WHATSAPP_WEB_URI);
+     }
+ 
+@@ -386,6 +616,12 @@ namespace wil::ui
+             *this, EXPORT_CHAT_SCRIPT, -1, nullptr, nullptr, nullptr, exportChatTranscriptFinished, nullptr);
+     }
+ 
++    void WebView::configureContinuousExport()
++    {
++        webkit_web_view_evaluate_javascript(
++            *this, CURRENT_CHAT_TITLE_SCRIPT, -1, nullptr, nullptr, nullptr, continuousExportConfigureFinished, nullptr);
++    }
++
+     void WebView::zoomIn()
+     {
+         if (auto zoomLevel = webkit_web_view_get_zoom_level(*this); zoomLevel < 2.0)
+@@ -487,4 +723,20 @@ namespace wil::ui
+         auto* manager = webkit_web_view_get_user_content_manager(*this);
+         webkit_user_content_manager_add_style_sheet(manager, styleSheet);
+     }
++
++    void WebView::setupContinuousExport()
++    {
++        auto* const manager = webkit_web_view_get_user_content_manager(*this);
++
++        // Connect before registering, per WebKitUserContentManager's own recommendation,
++        // to avoid a race between the handler name becoming active and this signal
++        // connection existing.
++        g_signal_connect(manager, "script-message-received::wilContinuousExport", G_CALLBACK(continuousExportMessageReceived), nullptr);
++        webkit_user_content_manager_register_script_message_handler(manager, "wilContinuousExport");
++
++        auto* const script = webkit_user_script_new(
++            CONTINUOUS_EXPORT_INIT_SCRIPT, WEBKIT_USER_CONTENT_INJECT_TOP_FRAME, WEBKIT_USER_SCRIPT_INJECT_AT_DOCUMENT_END, nullptr, nullptr);
++        webkit_user_content_manager_add_script(manager, script);
++        webkit_user_script_unref(script);
++    }
+ }
+diff --git a/src/ui/WebView.hpp b/src/ui/WebView.hpp
+index d969c6a..d3155ca 100644
+--- a/src/ui/WebView.hpp
++++ b/src/ui/WebView.hpp
+@@ -25,6 +25,7 @@ namespace wil::ui
+             void            sendRequest(std::string url);
+             void            openPhoneNumber(std::string const& phoneNumber);
+             void            exportChatTranscript();
++            void            configureContinuousExport();
+             void            zoomIn();
+             void            zoomOut();
+             void            resetZoom();
+@@ -40,6 +41,7 @@ namespace wil::ui
+             void onLoadStatusChanged(WebKitLoadEvent loadEvent);
+             bool onTimeout();
+             void applyCustomCss(const std::string& cssFilePath);
++            void setupContinuousExport();
+ 
+             friend void detail::loadChanged(WebKitWebView*, WebKitLoadEvent, gpointer);
+ 
+diff --git a/src/util/SettingMap.hpp b/src/util/SettingMap.hpp
+index 5160aa4..a59b892 100644
+--- a/src/util/SettingMap.hpp
++++ b/src/util/SettingMap.hpp
+@@ -14,6 +14,8 @@ namespace wil::util
+         public:
+             bool loadFromFile(std::string const& fileName);
+             bool saveToFile(std::string const& fileName);
++            bool hasKey(Glib::ustring const& group, Glib::ustring const& key) const noexcept;
++            void removeValue(Glib::ustring const& group, Glib::ustring const& key);
+ 
+             template<typename ValueType>
+             void setValue(Glib::ustring const& group, Glib::ustring const& key, ValueType value);
+@@ -56,6 +58,30 @@ namespace wil::util
+         }
+     }
+ 
++    inline bool SettingMap::hasKey(Glib::ustring const& group, Glib::ustring const& key) const noexcept
++    {
++        try
++        {
++            return m_map.has_key(group, key);
++        }
++        catch (Glib::KeyFileError const& error)
++        {
++            return false;
++        }
++    }
++
++    inline void SettingMap::removeValue(Glib::ustring const& group, Glib::ustring const& key)
++    {
++        try
++        {
++            m_map.remove_key(group, key);
++        }
++        catch (Glib::KeyFileError const& error)
++        {
++            std::cerr << "SettingMap: Failed to remove key: " << error.what().c_str() << std::endl;
++        }
++    }
++
+     template<typename ValueType>
+     inline void SettingMap::setValue(Glib::ustring const& group, Glib::ustring const& key, ValueType value)
+     {
+diff --git a/src/util/Settings.cpp b/src/util/Settings.cpp
+index 9ae9cb0..e904c58 100644
+--- a/src/util/Settings.cpp
++++ b/src/util/Settings.cpp
+@@ -45,6 +45,17 @@ namespace wil::util
+         m_settingMap.saveToFile(m_configFilePath);
+     }
+ 
++    bool Settings::hasKey(Glib::ustring const& group, Glib::ustring const& key) noexcept
++    {
++        return m_settingMap.hasKey(group, key);
++    }
++
++    void Settings::removeValue(Glib::ustring const& group, Glib::ustring const& key)
++    {
++        m_settingMap.removeValue(group, key);
++        m_settingMap.saveToFile(m_configFilePath);
++    }
++
+     void Settings::setAutostart(bool autostart)
+     {
+         if (auto autostartDir = Gio::File::create_for_path(m_configDir + "/autostart"); !autostartDir->query_exists())
+diff --git a/src/util/Settings.hpp b/src/util/Settings.hpp
+index 894d518..bf234b0 100644
+--- a/src/util/Settings.hpp
++++ b/src/util/Settings.hpp
+@@ -20,6 +20,9 @@ namespace wil::util
+             template<typename ValueType>
+             ValueType getValue(Glib::ustring const& group, Glib::ustring const& key, ValueType defaultValue = {});
+ 
++            bool hasKey(Glib::ustring const& group, Glib::ustring const& key) noexcept;
++            void removeValue(Glib::ustring const& group, Glib::ustring const& key);
++
+         private:
+             Settings();
+             ~Settings();
+@@ -43,28 +46,35 @@ namespace wil::util
+     template<typename ValueType>
+     inline void Settings::setValue(Glib::ustring const& group, Glib::ustring const& key, ValueType value)
+     {
+-        if ((group == "general") && (key == "autostart") && std::is_same_v<ValueType, bool>)
+-        {
+-            setAutostart(value);
+-        }
+-        else
++        // Must be "if constexpr": for ValueType's like Glib::ustring, which don't
++        // convert to/from bool, the discarded branch would otherwise still need to
++        // compile.
++        if constexpr (std::is_same_v<ValueType, bool>)
+         {
+-            m_settingMap.setValue(group, key, value);
++            if ((group == "general") && (key == "autostart"))
++            {
++                setAutostart(value);
++                m_settingMap.saveToFile(m_configFilePath);
++                return;
++            }
+         }
+ 
++        m_settingMap.setValue(group, key, value);
+         m_settingMap.saveToFile(m_configFilePath);
+     }
+ 
+     template<typename ValueType>
+     inline ValueType Settings::getValue(Glib::ustring const& group, Glib::ustring const& key, ValueType defaultValue)
+     {
+-        if ((group == "general") && (key == "autostart") && std::is_same_v<ValueType, bool>)
++        // See setValue() for why this needs "if constexpr" rather than a runtime check.
++        if constexpr (std::is_same_v<ValueType, bool>)
+         {
+-            return getAutostart();
+-        }
+-        else
+-        {
+-            return m_settingMap.getValue(group, key, defaultValue);
++            if ((group == "general") && (key == "autostart"))
++            {
++                return getAutostart();
++            }
+         }
++
++        return m_settingMap.getValue(group, key, defaultValue);
+     }
+ }
