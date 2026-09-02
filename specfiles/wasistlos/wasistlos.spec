@@ -1,12 +1,13 @@
 %global tag 1.7.0
 Name: wasistlos
 Version: %{tag}
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: An unofficial WhatsApp desktop application for Linux.
 
 License: GNU GPL v3
 URL:     https://github.com/xeco23/WasIstLos
 Source0: %{url}/archive/v%{version}/wasistlos-%{version}.tar.gz
+Patch0:  0001-export-chat-transcript.patch
 
 BuildRequires: cmake
 BuildRequires: pkgconfig
@@ -24,7 +25,7 @@ An unofficial WhatsApp desktop application for Linux.
 
 
 %prep
-%autosetup -n WasIstLos-1.7.0
+%autosetup -n WasIstLos-1.7.0 -p1
 
 
 %build
@@ -67,6 +68,9 @@ An unofficial WhatsApp desktop application for Linux.
 
 
 %changelog
+* Wed Sep 02 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-2
+ - Add patch to export the full chat transcript (sender, timestamp, text, in order) to a text file
+
 * Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-1
  - Update to 1.7.0
 

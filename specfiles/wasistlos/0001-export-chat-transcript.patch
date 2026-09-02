@@ -1,0 +1,251 @@
+diff --git a/resource/ui/MainWindow.ui b/resource/ui/MainWindow.ui
+index 75aae40..c9d364c 100644
+--- a/resource/ui/MainWindow.ui
++++ b/resource/ui/MainWindow.ui
+@@ -110,6 +110,30 @@
+             <property name="position">2</property>
+           </packing>
+         </child>
++        <child>
++          <object class="GtkModelButton" id="button_export_chat">
++            <property name="visible">True</property>
++            <property name="can-focus">True</property>
++            <property name="receives-default">True</property>
++            <property name="text" translatable="yes">Export Chat Transcript</property>
++          </object>
++          <packing>
++            <property name="expand">False</property>
++            <property name="fill">True</property>
++            <property name="position">3</property>
++          </packing>
++        </child>
++        <child>
++          <object class="GtkSeparator" id="separator_2">
++            <property name="visible">True</property>
++            <property name="can-focus">False</property>
++          </object>
++          <packing>
++            <property name="expand">False</property>
++            <property name="fill">True</property>
++            <property name="position">4</property>
++          </packing>
++        </child>
+         <child>
+           <object class="GtkModelButton" id="button_preferences">
+             <property name="visible">True</property>
+@@ -120,7 +144,7 @@
+           <packing>
+             <property name="expand">False</property>
+             <property name="fill">True</property>
+-            <property name="position">3</property>
++            <property name="position">5</property>
+           </packing>
+         </child>
+         <child>
+@@ -133,7 +157,7 @@
+           <packing>
+             <property name="expand">False</property>
+             <property name="fill">True</property>
+-            <property name="position">4</property>
++            <property name="position">6</property>
+           </packing>
+         </child>
+         <child>
+@@ -146,7 +170,7 @@
+           <packing>
+             <property name="expand">False</property>
+             <property name="fill">True</property>
+-            <property name="position">5</property>
++            <property name="position">7</property>
+           </packing>
+         </child>
+         <child>
+@@ -159,7 +183,7 @@
+           <packing>
+             <property name="expand">False</property>
+             <property name="fill">True</property>
+-            <property name="position">6</property>
++            <property name="position">8</property>
+           </packing>
+         </child>
+       </object>
+diff --git a/src/ui/MainWindow.cpp b/src/ui/MainWindow.cpp
+index 661baee..6d113bb 100644
+--- a/src/ui/MainWindow.cpp
++++ b/src/ui/MainWindow.cpp
+@@ -61,6 +61,10 @@ namespace wil::ui
+         refBuilder->get_widget("button_zoom_out", buttonZoomOut);
+         buttonZoomOut->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onZoomOut));
+ 
++        Gtk::ModelButton* buttonExportChat = nullptr;
++        refBuilder->get_widget("button_export_chat", buttonExportChat);
++        buttonExportChat->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onExportChat));
++
+         Gtk::ModelButton* buttonPreferences = nullptr;
+         refBuilder->get_widget("button_preferences", buttonPreferences);
+         buttonPreferences->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onOpenPreferences));
+@@ -269,6 +273,11 @@ namespace wil::ui
+         }
+     }
+ 
++    void MainWindow::onExportChat()
++    {
++        m_webView.exportChatTranscript();
++    }
++
+     void MainWindow::onNotificationChanged(bool show)
+     {
+         if (!is_visible())
+diff --git a/src/ui/MainWindow.hpp b/src/ui/MainWindow.hpp
+index 01f51f3..73244c2 100644
+--- a/src/ui/MainWindow.hpp
++++ b/src/ui/MainWindow.hpp
+@@ -33,6 +33,7 @@ namespace wil::ui
+             void onOpenPreferences();
+             void onOpenPhoneNumber();
+             void onPhoneNumberDialogResponse(int responseId);
++            void onExportChat();
+             void onNotificationChanged(bool show);
+             void onShow();
+             void onQuit();
+diff --git a/src/ui/WebView.cpp b/src/ui/WebView.cpp
+index 49f59d7..b2c423b 100644
+--- a/src/ui/WebView.cpp
++++ b/src/ui/WebView.cpp
+@@ -5,6 +5,7 @@
+ #include <streambuf>
+ #include <optional>
+ #include <locale>
++#include <jsc/jsc.h>
+ #include <glibmm/i18n.h>
+ #include <glibmm/main.h>
+ #include <glibmm/miscutils.h>
+@@ -20,6 +21,103 @@ namespace wil::ui
+         constexpr auto const WHATSAPP_WEB_URI = "https://web.whatsapp.com";
+         constexpr auto const USER_AGENT       = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+ 
++        // WhatsApp Web stamps every message bubble's copyable-text node with a
++        // data-pre-plain-text attribute of the form "[time, date] Sender: " -- the
++        // same metadata it uses for its own copy-to-clipboard feature -- so reading
++        // it back out gives a stable source for sender/timestamp without depending
++        // on WhatsApp's obfuscated CSS class names. Messages are collected in DOM
++        // order, which is chronological order (oldest first). A single 0x01 byte,
++        // which cannot appear in innerText, separates the chat title from the body.
++        constexpr auto const EXPORT_CHAT_SCRIPT = R"JS(
++            (function() {
++                var titleEl = document.querySelector('#main header [data-testid="conversation-info-header-chat-title"]')
++                    || document.querySelector('#main header span[dir="auto"]');
++                var title = titleEl ? titleEl.innerText.trim() : '';
++
++                var lines = [];
++                document.querySelectorAll('#main div.copyable-text[data-pre-plain-text]').forEach(function(node) {
++                    var meta     = (node.getAttribute('data-pre-plain-text') || '').trim();
++                    var textNode = node.querySelector('span.selectable-text') || node;
++                    var text     = (textNode.innerText || '').trim();
++
++                    if (meta || text)
++                    {
++                        lines.push((meta + ' ' + text).trim());
++                    }
++                });
++
++                return title + '' + lines.join('\n');
++            })();
++        )JS";
++
++        std::string sanitizeFilename(std::string name)
++        {
++            for (auto& character : name)
++            {
++                if (character == '/' || character == '\\' || character == ':' || character == '*' || character == '?' || character == '"'
++                    || character == '<' || character == '>' || character == '|')
++                {
++                    character = '_';
++                }
++            }
++
++            return name.empty() ? "whatsapp-chat" : name;
++        }
++
++        void saveChatTranscript(std::string const& suggestedTitle, std::string const& transcript)
++        {
++            auto dialog = Gtk::FileChooserDialog{_("Export Chat Transcript"), Gtk::FILE_CHOOSER_ACTION_SAVE};
++            dialog.add_button(_("Cancel"), Gtk::RESPONSE_CANCEL);
++            dialog.add_button(_("Save"), Gtk::RESPONSE_OK);
++            dialog.set_do_overwrite_confirmation(true);
++            dialog.set_current_name(sanitizeFilename(suggestedTitle) + ".txt");
++
++            if (dialog.run() == Gtk::RESPONSE_OK)
++            {
++                auto outFile = std::ofstream{dialog.get_filename()};
++                outFile << transcript << std::endl;
++            }
++        }
++
++        void exportChatTranscriptFinished(GObject* sourceObject, GAsyncResult* result, gpointer)
++        {
++            GError* error   = nullptr;
++            auto* const value = webkit_web_view_evaluate_javascript_finish(WEBKIT_WEB_VIEW(sourceObject), result, &error);
++
++            if (!value)
++            {
++                std::cerr << "WebView: Failed to export chat transcript: " << (error ? error->message : "unknown error") << std::endl;
++                if (error)
++                {
++                    g_error_free(error);
++                }
++
++                auto dialog = Gtk::MessageDialog{_("Export Failed"), false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK};
++                dialog.set_secondary_text(_("Failed to read the chat transcript."));
++                dialog.run();
++                return;
++            }
++
++            auto* const resultString = jsc_value_to_string(value);
++            auto const  raw          = std::string{resultString ? resultString : ""};
++            g_free(resultString);
++            g_object_unref(value);
++
++            auto const delimiterPos = raw.find('\x01');
++            auto const title        = (delimiterPos == std::string::npos) ? std::string{} : raw.substr(0, delimiterPos);
++            auto const transcript   = (delimiterPos == std::string::npos) ? raw : raw.substr(delimiterPos + 1);
++
++            if (transcript.empty())
++            {
++                auto dialog = Gtk::MessageDialog{_("Nothing to Export"), false, Gtk::MESSAGE_INFO, Gtk::BUTTONS_OK};
++                dialog.set_secondary_text(_("Open a chat with at least one message before exporting."));
++                dialog.run();
++                return;
++            }
++
++            saveChatTranscript(title, transcript);
++        }
++
+         std::optional<std::string> getSystemLanguage()
+         {
+             try
+@@ -282,6 +380,12 @@ namespace wil::ui
+         sendRequest("whatsapp://send?phone=" + phoneNumber);
+     }
+ 
++    void WebView::exportChatTranscript()
++    {
++        webkit_web_view_evaluate_javascript(
++            *this, EXPORT_CHAT_SCRIPT, -1, nullptr, nullptr, nullptr, exportChatTranscriptFinished, nullptr);
++    }
++
+     void WebView::zoomIn()
+     {
+         if (auto zoomLevel = webkit_web_view_get_zoom_level(*this); zoomLevel < 2.0)
+diff --git a/src/ui/WebView.hpp b/src/ui/WebView.hpp
+index faef7fd..d969c6a 100644
+--- a/src/ui/WebView.hpp
++++ b/src/ui/WebView.hpp
+@@ -24,6 +24,7 @@ namespace wil::ui
+             void            setHwAccelPolicy(WebKitHardwareAccelerationPolicy policy);
+             void            sendRequest(std::string url);
+             void            openPhoneNumber(std::string const& phoneNumber);
++            void            exportChatTranscript();
+             void            zoomIn();
+             void            zoomOut();
+             void            resetZoom();
