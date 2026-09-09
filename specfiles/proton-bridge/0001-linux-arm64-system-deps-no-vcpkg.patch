@@ -154,7 +154,7 @@
  
 -qt_generate_deploy_app_script(
 -        TARGET bridge-gui
--        FILENAME_VARIABLE deploy_script
+-        OUTPUT_SCRIPT deploy_script
 -        NO_UNSUPPORTED_PLATFORM_ERROR)
 +# Bundling Qt/ICU/Wayland .so files and the whole qml/plugins tree next to the
 +# binary (DeployLinux.cmake, and Qt's own qt_generate_deploy_app_script/
