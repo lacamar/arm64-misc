@@ -1,7 +1,7 @@
 %global debug_package %{nil}
 
 Name:           proton-bridge
-Version:        3.25.0
+Version:        3.27.0
 Release:        1%{?dist}
 Summary:        IMAP/SMTP bridge for Proton Mail, with GUI
 
@@ -139,6 +139,9 @@ sed -i \
 %{_datadir}/applications/proton-bridge.desktop
 
 %changelog
+* Wed Sep 09 2026 Lachlan Marie <lchlnm@pm.me> - 3.27.0-1
+- Update to 3.27.0.
+
 * Fri Aug 14 2026 Lachlan Marie <lchlnm@pm.me> - 3.25.0-1
 - GUI (bridge-gui) build for Fedora 44 aarch64, with a systemd --user
   service that autostarts it minimized to the tray, plus BuildRequires
