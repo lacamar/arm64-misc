@@ -1,7 +1,7 @@
 %global tag 1.7.0
 Name: wasistlos
 Version: %{tag}
-Release: 3%{?dist}
+Release: 4%{?dist}
 Summary: An unofficial WhatsApp desktop application for Linux.
 
 License: GNU GPL v3
@@ -69,6 +69,9 @@ An unofficial WhatsApp desktop application for Linux.
 
 
 %changelog
+* Sat Sep 12 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-4
+ - Fix continuous chat export silently going stale for any chat that isn't the one currently on screen: resync the visible chat immediately on chat switch instead of waiting on the debounce, and force a resync when the app window regains focus
+
 * Wed Sep 02 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-3
  - Add patch to continuously export a chat to a self-updating markdown file as new messages arrive, with a per-chat destination configurable from the menu
 
