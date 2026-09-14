@@ -74,7 +74,7 @@ index 6d113bb..a8e48b9 100644
 @@ -65,6 +65,10 @@ namespace wil::ui
          refBuilder->get_widget("button_export_chat", buttonExportChat);
          buttonExportChat->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onExportChat));
-
+ 
 +        Gtk::ModelButton* buttonContinuousExport = nullptr;
 +        refBuilder->get_widget("button_continuous_export", buttonContinuousExport);
 +        buttonContinuousExport->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onConfigureContinuousExport));
@@ -85,7 +85,7 @@ index 6d113bb..a8e48b9 100644
 @@ -209,6 +213,17 @@ namespace wil::ui
          return Gtk::ApplicationWindow::on_window_state_event(windowStateEvent);
      }
-
+ 
 +    bool MainWindow::on_focus_in_event(GdkEventFocus* focusEvent)
 +    {
 +        // A chat's continuous-export file only updates while that chat is on screen (see
@@ -103,7 +103,7 @@ index 6d113bb..a8e48b9 100644
 @@ -278,6 +293,11 @@ namespace wil::ui
          m_webView.exportChatTranscript();
      }
-
+ 
 +    void MainWindow::onConfigureContinuousExport()
 +    {
 +        m_webView.configureContinuousExport();
@@ -121,7 +121,7 @@ index 73244c2..f9210d9 100644
              bool on_window_state_event(GdkEventWindowState* windowStateEvent) override;
              bool on_delete_event(GdkEventAny*) override;
 +            bool on_focus_in_event(GdkEventFocus* focusEvent) override;
-
+ 
          private:
              void onRefresh();
 @@ -34,6 +35,7 @@ namespace wil::ui
@@ -133,14 +133,17 @@ index 73244c2..f9210d9 100644
              void onShow();
              void onQuit();
 diff --git a/src/ui/WebView.cpp b/src/ui/WebView.cpp
-index b2c423b..a835257 100644
+index b2c423b..26a6a10 100644
 --- a/src/ui/WebView.cpp
 +++ b/src/ui/WebView.cpp
-@@ -5,10 +5,12 @@
+@@ -5,10 +5,15 @@
  #include <streambuf>
  #include <optional>
  #include <locale>
 +#include <cctype>
++#include <sstream>
++#include <vector>
++#include <algorithm>
  #include <jsc/jsc.h>
  #include <glibmm/i18n.h>
  #include <glibmm/main.h>
@@ -149,10 +152,10 @@ index b2c423b..a835257 100644
  #include <gtkmm/messagedialog.h>
  #include <gtkmm/filechooserdialog.h>
  #include "../util/Settings.hpp"
-@@ -50,6 +52,105 @@ namespace wil::ui
+@@ -50,6 +55,103 @@ namespace wil::ui
              })();
          )JS";
-
+ 
 +        constexpr auto const CONTINUOUS_EXPORT_GROUP = "chat-export";
 +
 +        // Same title lookup as EXPORT_CHAT_SCRIPT, used on its own to figure out which
@@ -169,10 +172,16 @@ index b2c423b..a835257 100644
 +        // WhatsApp Web session. WhatsApp Web swaps out #main's contents wholesale on
 +        // every chat switch, so there is no single stable node to observe instead of
 +        // document.body. Debounced on every mutation, it re-scrapes whichever chat is
-+        // currently open (same data-pre-plain-text technique as EXPORT_CHAT_SCRIPT) and
-+        // posts the title plus a markdown-formatted transcript back to native code,
-+        // which only writes to disk if that chat has a continuous-export destination
-+        // configured -- see WebView::configureContinuousExport().
++        // currently open (same data-pre-plain-text technique as EXPORT_CHAT_SCRIPT).
++        //
++        // WhatsApp Web virtualizes the message list -- only messages near the current
++        // scroll position are ever in the DOM, so a scrape only ever sees a partial
++        // window of the chat, never the full history. Rather than try to reconstruct
++        // the full history in JS (which would need to survive page reloads to be any
++        // use), each scrape just posts whatever window it currently sees as a list of
++        // records; native code merges that window into the existing export file --
++        // see continuousExportMessageReceived() in this file. Each record is
++        // "time\x02sender\x02text\x03"; \x02/\x03 cannot appear in innerText.
 +        constexpr auto const CONTINUOUS_EXPORT_INIT_SCRIPT = R"JS(
 +            (function() {
 +                if (window.__wilContinuousExportInstalled) { return; }
@@ -182,18 +191,6 @@ index b2c423b..a835257 100644
 +                    var titleEl = document.querySelector('#main header [data-testid="conversation-info-header-chat-title"]')
 +                        || document.querySelector('#main header span[dir="auto"]');
 +                    return titleEl ? titleEl.innerText.trim() : '';
-+                }
-+
-+                function toMarkdown(title, entries) {
-+                    var out = '# ' + title + '\n\n';
-+                    entries.forEach(function(entry) {
-+                        out += '**' + entry.sender + '** _' + entry.time + '_\n\n';
-+                        entry.text.split('\n').forEach(function(line) {
-+                            out += '> ' + line + '\n';
-+                        });
-+                        out += '\n';
-+                    });
-+                    return out;
 +                }
 +
 +                function scrapeAndNotify() {
@@ -218,8 +215,12 @@ index b2c423b..a835257 100644
 +
 +                    if (entries.length === 0) { return; }
 +
++                    var records = entries.map(function(entry) {
++                        return entry.time + '\x02' + entry.sender + '\x02' + entry.text + '\x03';
++                    }).join('');
++
 +                    try {
-+                        window.webkit.messageHandlers.wilContinuousExport.postMessage(title + '\x01' + toMarkdown(title, entries));
++                        window.webkit.messageHandlers.wilContinuousExport.postMessage(title + '\x01' + records);
 +                    } catch (e) { /* handler not registered yet */ }
 +                }
 +
@@ -255,10 +256,10 @@ index b2c423b..a835257 100644
          std::string sanitizeFilename(std::string name)
          {
              for (auto& character : name)
-@@ -64,6 +165,22 @@ namespace wil::ui
+@@ -64,6 +166,22 @@ namespace wil::ui
              return name.empty() ? "whatsapp-chat" : name;
          }
-
+ 
 +        // GKeyFile keys are less forgiving than filenames, so continuous-export
 +        // settings are looked up by a stricter sanitization of the chat title than
 +        // sanitizeFilename() -- this is purely a lookup key, never shown to the user.
@@ -278,10 +279,10 @@ index b2c423b..a835257 100644
          void saveChatTranscript(std::string const& suggestedTitle, std::string const& transcript)
          {
              auto dialog = Gtk::FileChooserDialog{_("Export Chat Transcript"), Gtk::FILE_CHOOSER_ACTION_SAVE};
-@@ -118,6 +235,133 @@ namespace wil::ui
+@@ -118,6 +236,362 @@ namespace wil::ui
              saveChatTranscript(title, transcript);
          }
-
+ 
 +        void triggerImmediateContinuousExportScrape(WebKitWebView* view)
 +        {
 +            webkit_web_view_evaluate_javascript(view, "if (window.__wilForceContinuousExportScrape) { window.__wilForceContinuousExportScrape(); }",
@@ -377,6 +378,220 @@ index b2c423b..a835257 100644
 +            }
 +        }
 +
++        struct ChatEntry
++        {
++            std::string time;
++            std::string sender;
++            std::string text;
++
++            bool operator==(ChatEntry const& other) const
++            {
++                return (time == other.time) && (sender == other.sender) && (text == other.text);
++            }
++        };
++
++        // Parses the "time\x02sender\x02text\x03" records posted by
++        // CONTINUOUS_EXPORT_INIT_SCRIPT for whichever window of the chat is currently
++        // rendered -- see that script's comment for why this is only ever a window,
++        // never the full history.
++        std::vector<ChatEntry> parseIncomingRecords(std::string const& records)
++        {
++            std::vector<ChatEntry> entries;
++            std::size_t pos = 0;
++
++            while (pos < records.size())
++            {
++                auto const recordEnd = records.find('\x03', pos);
++                if (recordEnd == std::string::npos)
++                {
++                    break;
++                }
++
++                auto const record = records.substr(pos, recordEnd - pos);
++                auto const sep1   = record.find('\x02');
++                auto const sep2   = (sep1 == std::string::npos) ? std::string::npos : record.find('\x02', sep1 + 1);
++
++                if ((sep1 != std::string::npos) && (sep2 != std::string::npos))
++                {
++                    entries.push_back(ChatEntry{record.substr(0, sep1), record.substr(sep1 + 1, sep2 - sep1 - 1), record.substr(sep2 + 1)});
++                }
++
++                pos = recordEnd + 1;
++            }
++
++            return entries;
++        }
++
++        std::string renderChatMarkdown(std::string const& title, std::vector<ChatEntry> const& entries)
++        {
++            std::string out = "# " + title + "\n\n";
++
++            for (auto const& entry : entries)
++            {
++                out += "**" + entry.sender + "** _" + entry.time + "_\n\n";
++
++                std::size_t lineStart = 0;
++                while (true)
++                {
++                    auto const lineEnd = entry.text.find('\n', lineStart);
++                    auto const line    = (lineEnd == std::string::npos) ? entry.text.substr(lineStart) : entry.text.substr(lineStart, lineEnd - lineStart);
++                    out += "> " + line + "\n";
++
++                    if (lineEnd == std::string::npos)
++                    {
++                        break;
++                    }
++                    lineStart = lineEnd + 1;
++                }
++
++                out += "\n";
++            }
++
++            return out;
++        }
++
++        // Reverses renderChatMarkdown(), so a previously-written export file can be
++        // read back and merged with a freshly-scraped window -- see mergeEntries().
++        // A header line is "**sender** _time_"; every following "> "-prefixed line
++        // until the next header (or end of file) is that entry's text, rejoined with
++        // "\n". This only needs to round-trip what renderChatMarkdown() itself
++        // produces, not arbitrary markdown.
++        std::vector<ChatEntry> parseExistingMarkdown(std::string const& markdown)
++        {
++            std::vector<ChatEntry> entries;
++            std::istringstream     stream{markdown};
++            std::string            line;
++            bool                   inEntry = false;
++            std::string            currentSender;
++            std::string            currentTime;
++            std::vector<std::string> currentLines;
++
++            auto flush = [&]()
++            {
++                if (!inEntry)
++                {
++                    return;
++                }
++
++                std::string text;
++                for (std::size_t i = 0; i < currentLines.size(); ++i)
++                {
++                    if (i)
++                    {
++                        text += "\n";
++                    }
++                    text += currentLines[i];
++                }
++
++                entries.push_back(ChatEntry{currentTime, currentSender, text});
++                inEntry = false;
++                currentLines.clear();
++            };
++
++            while (std::getline(stream, line))
++            {
++                if ((line.rfind("**", 0) == 0) && !line.empty() && (line.back() == '_'))
++                {
++                    if (auto const sepPos = line.find("** _", 2); sepPos != std::string::npos)
++                    {
++                        flush();
++                        inEntry       = true;
++                        currentSender = line.substr(2, sepPos - 2);
++                        currentTime   = line.substr(sepPos + 4, line.size() - (sepPos + 4) - 1);
++                        continue;
++                    }
++                }
++
++                if (inEntry && (line.rfind("> ", 0) == 0))
++                {
++                    currentLines.push_back(line.substr(2));
++                }
++                else if (inEntry && (line == ">"))
++                {
++                    currentLines.push_back("");
++                }
++            }
++            flush();
++
++            return entries;
++        }
++
++        // Splices a chronological window of newly-scraped entries into the existing,
++        // already-chronological accumulated list. Entries the window shares with
++        // `existing` act as anchors: any brand-new entries immediately before/after an
++        // anchor in the window are inserted immediately before/after that anchor's
++        // position in `existing`. In normal use (gradual scrolling, or new messages
++        // arriving at the bottom) consecutive scrapes overlap, so an anchor is nearly
++        // always found; a window that shares no entries at all with `existing` (e.g.
++        // jumping to a search result) falls back to appending at the end -- imperfect
++        // ordering in that rare case, but no message is ever dropped.
++        std::vector<ChatEntry> mergeEntries(std::vector<ChatEntry> existing, std::vector<ChatEntry> const& window)
++        {
++            if (existing.empty())
++            {
++                return window;
++            }
++
++            auto findPos = [&existing](ChatEntry const& needle) -> std::optional<std::size_t>
++            {
++                for (std::size_t i = 0; i < existing.size(); ++i)
++                {
++                    if (existing[i] == needle)
++                    {
++                        return i;
++                    }
++                }
++                return std::nullopt;
++            };
++
++            struct Insertion
++            {
++                std::size_t             at;
++                std::vector<ChatEntry>  items;
++            };
++
++            std::vector<Insertion>     insertions;
++            std::vector<ChatEntry>     pending;
++            std::optional<std::size_t> afterPos;
++
++            auto flushPending = [&]()
++            {
++                if (pending.empty())
++                {
++                    return;
++                }
++                insertions.push_back(Insertion{afterPos.has_value() ? (*afterPos + 1) : 0, pending});
++                pending.clear();
++            };
++
++            for (auto const& item : window)
++            {
++                if (auto const pos = findPos(item))
++                {
++                    flushPending();
++                    afterPos = pos;
++                }
++                else
++                {
++                    pending.push_back(item);
++                }
++            }
++
++            if (!pending.empty())
++            {
++                insertions.push_back(Insertion{afterPos.has_value() ? (*afterPos + 1) : existing.size(), pending});
++            }
++
++            std::sort(insertions.begin(), insertions.end(), [](Insertion const& a, Insertion const& b) { return a.at > b.at; });
++
++            for (auto const& insertion : insertions)
++            {
++                existing.insert(existing.begin() + static_cast<std::ptrdiff_t>(insertion.at), insertion.items.begin(), insertion.items.end());
++            }
++
++            return existing;
++        }
++
 +        void continuousExportMessageReceived(WebKitUserContentManager*, WebKitJavascriptResult* jsResult, gpointer)
 +        {
 +            auto* const value         = webkit_javascript_result_get_js_value(jsResult);
@@ -390,9 +605,9 @@ index b2c423b..a835257 100644
 +                return;
 +            }
 +
-+            auto const title    = raw.substr(0, delimiterPos);
-+            auto const markdown = raw.substr(delimiterPos + 1);
-+            auto const key      = sanitizeSettingsKey(title);
++            auto const title   = raw.substr(0, delimiterPos);
++            auto const records = raw.substr(delimiterPos + 1);
++            auto const key     = sanitizeSettingsKey(title);
 +
 +            if (!util::Settings::getInstance().hasKey(CONTINUOUS_EXPORT_GROUP, key))
 +            {
@@ -405,26 +620,41 @@ index b2c423b..a835257 100644
 +                return;
 +            }
 +
++            auto const windowEntries = parseIncomingRecords(records);
++            if (windowEntries.empty())
++            {
++                return;
++            }
++
++            auto existingEntries = std::vector<ChatEntry>{};
++            if (auto inFile = std::ifstream{path.raw()}; inFile)
++            {
++                auto const existingMarkdown = std::string{std::istreambuf_iterator<char>(inFile), std::istreambuf_iterator<char>()};
++                existingEntries              = parseExistingMarkdown(existingMarkdown);
++            }
++
++            auto const mergedEntries = mergeEntries(std::move(existingEntries), windowEntries);
++
 +            auto outFile = std::ofstream{path.raw()};
-+            outFile << markdown;
++            outFile << renderChatMarkdown(title, mergedEntries);
 +        }
 +
          std::optional<std::string> getSystemLanguage()
          {
              try
-@@ -319,6 +563,8 @@ namespace wil::ui
+@@ -319,6 +793,8 @@ namespace wil::ui
              applyCustomCss(cssFilePath);
          }
-
+ 
 +        setupContinuousExport();
 +
          webkit_web_view_load_uri(*this, WHATSAPP_WEB_URI);
      }
-
-@@ -386,6 +632,19 @@ namespace wil::ui
+ 
+@@ -386,6 +862,19 @@ namespace wil::ui
              *this, EXPORT_CHAT_SCRIPT, -1, nullptr, nullptr, nullptr, exportChatTranscriptFinished, nullptr);
      }
-
+ 
 +    void WebView::configureContinuousExport()
 +    {
 +        webkit_web_view_evaluate_javascript(
@@ -441,7 +671,7 @@ index b2c423b..a835257 100644
      void WebView::zoomIn()
      {
          if (auto zoomLevel = webkit_web_view_get_zoom_level(*this); zoomLevel < 2.0)
-@@ -487,4 +746,20 @@ namespace wil::ui
+@@ -487,4 +976,20 @@ namespace wil::ui
          auto* manager = webkit_web_view_get_user_content_manager(*this);
          webkit_user_content_manager_add_style_sheet(manager, styleSheet);
      }
@@ -480,9 +710,9 @@ index d969c6a..2c0ba81 100644
              bool onTimeout();
              void applyCustomCss(const std::string& cssFilePath);
 +            void setupContinuousExport();
-
+ 
              friend void detail::loadChanged(WebKitWebView*, WebKitLoadEvent, gpointer);
-
+ 
 diff --git a/src/util/SettingMap.hpp b/src/util/SettingMap.hpp
 index 5160aa4..a59b892 100644
 --- a/src/util/SettingMap.hpp
@@ -493,13 +723,13 @@ index 5160aa4..a59b892 100644
              bool saveToFile(std::string const& fileName);
 +            bool hasKey(Glib::ustring const& group, Glib::ustring const& key) const noexcept;
 +            void removeValue(Glib::ustring const& group, Glib::ustring const& key);
-
+ 
              template<typename ValueType>
              void setValue(Glib::ustring const& group, Glib::ustring const& key, ValueType value);
 @@ -56,6 +58,30 @@ namespace wil::util
          }
      }
-
+ 
 +    inline bool SettingMap::hasKey(Glib::ustring const& group, Glib::ustring const& key) const noexcept
 +    {
 +        try
@@ -534,7 +764,7 @@ index 9ae9cb0..e904c58 100644
 @@ -45,6 +45,17 @@ namespace wil::util
          m_settingMap.saveToFile(m_configFilePath);
      }
-
+ 
 +    bool Settings::hasKey(Glib::ustring const& group, Glib::ustring const& key) noexcept
 +    {
 +        return m_settingMap.hasKey(group, key);
@@ -556,7 +786,7 @@ index 894d518..bf234b0 100644
 @@ -20,6 +20,9 @@ namespace wil::util
              template<typename ValueType>
              ValueType getValue(Glib::ustring const& group, Glib::ustring const& key, ValueType defaultValue = {});
-
+ 
 +            bool hasKey(Glib::ustring const& group, Glib::ustring const& key) noexcept;
 +            void removeValue(Glib::ustring const& group, Glib::ustring const& key);
 +
@@ -585,11 +815,11 @@ index 894d518..bf234b0 100644
 +                return;
 +            }
          }
-
+ 
 +        m_settingMap.setValue(group, key, value);
          m_settingMap.saveToFile(m_configFilePath);
      }
-
+ 
      template<typename ValueType>
      inline ValueType Settings::getValue(Glib::ustring const& group, Glib::ustring const& key, ValueType defaultValue)
      {

@@ -1,0 +1,258 @@
+diff --git a/resource/ui/MainWindow.ui b/resource/ui/MainWindow.ui
+index 153e648..832d339 100644
+--- a/resource/ui/MainWindow.ui
++++ b/resource/ui/MainWindow.ui
+@@ -136,6 +136,19 @@
+             <property name="position">4</property>
+           </packing>
+         </child>
++        <child>
++          <object class="GtkModelButton" id="button_paste_image">
++            <property name="visible">True</property>
++            <property name="can-focus">True</property>
++            <property name="receives-default">True</property>
++            <property name="text" translatable="yes">Paste Image from Clipboard</property>
++          </object>
++          <packing>
++            <property name="expand">False</property>
++            <property name="fill">True</property>
++            <property name="position">5</property>
++          </packing>
++        </child>
+         <child>
+           <object class="GtkSeparator" id="separator_2">
+             <property name="visible">True</property>
+@@ -144,7 +157,7 @@
+           <packing>
+             <property name="expand">False</property>
+             <property name="fill">True</property>
+-            <property name="position">5</property>
++            <property name="position">6</property>
+           </packing>
+         </child>
+         <child>
+@@ -157,7 +170,7 @@
+           <packing>
+             <property name="expand">False</property>
+             <property name="fill">True</property>
+-            <property name="position">6</property>
++            <property name="position">7</property>
+           </packing>
+         </child>
+         <child>
+@@ -170,7 +183,7 @@
+           <packing>
+             <property name="expand">False</property>
+             <property name="fill">True</property>
+-            <property name="position">7</property>
++            <property name="position">8</property>
+           </packing>
+         </child>
+         <child>
+@@ -183,7 +196,7 @@
+           <packing>
+             <property name="expand">False</property>
+             <property name="fill">True</property>
+-            <property name="position">8</property>
++            <property name="position">9</property>
+           </packing>
+         </child>
+         <child>
+@@ -196,7 +209,7 @@
+           <packing>
+             <property name="expand">False</property>
+             <property name="fill">True</property>
+-            <property name="position">9</property>
++            <property name="position">10</property>
+           </packing>
+         </child>
+       </object>
+diff --git a/src/ui/MainWindow.cpp b/src/ui/MainWindow.cpp
+index a8e48b9..a71f341 100644
+--- a/src/ui/MainWindow.cpp
++++ b/src/ui/MainWindow.cpp
+@@ -69,6 +69,10 @@ namespace wil::ui
+         refBuilder->get_widget("button_continuous_export", buttonContinuousExport);
+         buttonContinuousExport->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onConfigureContinuousExport));
+ 
++        Gtk::ModelButton* buttonPasteImage = nullptr;
++        refBuilder->get_widget("button_paste_image", buttonPasteImage);
++        buttonPasteImage->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onPasteImage));
++
+         Gtk::ModelButton* buttonPreferences = nullptr;
+         refBuilder->get_widget("button_preferences", buttonPreferences);
+         buttonPreferences->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onOpenPreferences));
+@@ -298,6 +302,11 @@ namespace wil::ui
+         m_webView.configureContinuousExport();
+     }
+ 
++    void MainWindow::onPasteImage()
++    {
++        m_webView.pasteImageFromClipboard();
++    }
++
+     void MainWindow::onNotificationChanged(bool show)
+     {
+         if (!is_visible())
+diff --git a/src/ui/MainWindow.hpp b/src/ui/MainWindow.hpp
+index f9210d9..df7b341 100644
+--- a/src/ui/MainWindow.hpp
++++ b/src/ui/MainWindow.hpp
+@@ -36,6 +36,7 @@ namespace wil::ui
+             void onPhoneNumberDialogResponse(int responseId);
+             void onExportChat();
+             void onConfigureContinuousExport();
++            void onPasteImage();
+             void onNotificationChanged(bool show);
+             void onShow();
+             void onQuit();
+diff --git a/src/ui/WebView.cpp b/src/ui/WebView.cpp
+index 26a6a10..e8c2ad9 100644
+--- a/src/ui/WebView.cpp
++++ b/src/ui/WebView.cpp
+@@ -16,6 +16,9 @@
+ #include <glibmm/ustring.h>
+ #include <gtkmm/messagedialog.h>
+ #include <gtkmm/filechooserdialog.h>
++#include <gtkmm/clipboard.h>
++#include <gdkmm/pixbuf.h>
++#include <glib.h>
+ #include "../util/Settings.hpp"
+ #include "Config.hpp"
+ 
+@@ -737,6 +740,78 @@ namespace wil::ui
+ 
+             return cssContent;
+         }
++
++        // Built on demand (not left running) to place a clipboard image into whatever
++        // chat's compose box is currently open, by simulating an image-file drop.
++        // WebKitGTK does not reliably surface GTK/X11/Wayland clipboard image data to
++        // the DOM's paste event the way Chrome/Firefox do -- a real Ctrl+V for an
++        // image copied from a native app (a screenshot tool, a file manager, GIMP...)
++        // often silently does nothing -- so this bypasses paste entirely and instead
++        // constructs a DataTransfer carrying the image as a File and dispatches it as
++        // a 'drop', which WhatsApp Web's own drop handler picks up the same as a
++        // real drag-and-drop. WebView::pasteImageFromClipboard() splices the
++        // base64-encoded PNG data in between these two halves before evaluating.
++        constexpr auto const PASTE_IMAGE_SCRIPT_PREFIX = R"JS(
++            (function() {
++                try {
++                    var binary = atob(')JS";
++
++        constexpr auto const PASTE_IMAGE_SCRIPT_SUFFIX = R"JS(');
++                    var bytes = new Uint8Array(binary.length);
++                    for (var i = 0; i < binary.length; i++) { bytes[i] = binary.charCodeAt(i); }
++                    var file = new File([bytes], 'pasted-image.png', {type: 'image/png'});
++
++                    var dataTransfer = new DataTransfer();
++                    dataTransfer.items.add(file);
++
++                    var target = document.querySelector('#main footer div[contenteditable="true"]')
++                        || document.querySelector('div[aria-label="Type a message"][contenteditable="true"]')
++                        || document.querySelector('#main div[contenteditable="true"][data-tab]');
++
++                    if (!target) { return 'no-target'; }
++
++                    target.focus();
++                    target.dispatchEvent(new DragEvent('drop', {bubbles: true, cancelable: true, dataTransfer: dataTransfer}));
++                    return 'ok';
++                } catch (e) {
++                    return 'error: ' + e.message;
++                }
++            })();
++        )JS";
++
++        void pasteImageFinished(GObject* sourceObject, GAsyncResult* result, gpointer)
++        {
++            GError* error      = nullptr;
++            auto* const value  = webkit_web_view_evaluate_javascript_finish(WEBKIT_WEB_VIEW(sourceObject), result, &error);
++
++            if (!value)
++            {
++                std::cerr << "WebView: Failed to paste image: " << (error ? error->message : "unknown error") << std::endl;
++                if (error)
++                {
++                    g_error_free(error);
++                }
++                return;
++            }
++
++            auto* const resultString = jsc_value_to_string(value);
++            auto const  status       = std::string{resultString ? resultString : ""};
++            g_free(resultString);
++            g_object_unref(value);
++
++            if (status == "no-target")
++            {
++                auto dialog = Gtk::MessageDialog{_("No Chat Open"), false, Gtk::MESSAGE_INFO, Gtk::BUTTONS_OK};
++                dialog.set_secondary_text(_("Open a chat before pasting an image."));
++                dialog.run();
++            }
++            else if (status.rfind("error:", 0) == 0)
++            {
++                auto dialog = Gtk::MessageDialog{_("Paste Failed"), false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK};
++                dialog.set_secondary_text(status);
++                dialog.run();
++            }
++        }
+     }
+ 
+     namespace detail
+@@ -875,6 +950,44 @@ namespace wil::ui
+         triggerImmediateContinuousExportScrape(*this);
+     }
+ 
++    void WebView::pasteImageFromClipboard()
++    {
++        auto const clipboard = Gtk::Clipboard::get();
++
++        if (!clipboard->wait_is_image_available())
++        {
++            auto dialog = Gtk::MessageDialog{_("No Image on Clipboard"), false, Gtk::MESSAGE_INFO, Gtk::BUTTONS_OK};
++            dialog.set_secondary_text(_("Copy an image first, then try again."));
++            dialog.run();
++            return;
++        }
++
++        auto const pixbuf = clipboard->wait_for_image();
++        if (!pixbuf)
++        {
++            return;
++        }
++
++        gchar* buffer     = nullptr;
++        gsize  bufferSize = 0;
++        try
++        {
++            pixbuf->save_to_buffer(buffer, bufferSize, "png");
++        }
++        catch (Glib::Error const& error)
++        {
++            std::cerr << "WebView: Failed to encode clipboard image: " << error.what().c_str() << std::endl;
++            return;
++        }
++
++        auto* const base64Data = g_base64_encode(reinterpret_cast<guchar const*>(buffer), bufferSize);
++        g_free(buffer);
++        auto const script = std::string{PASTE_IMAGE_SCRIPT_PREFIX} + base64Data + PASTE_IMAGE_SCRIPT_SUFFIX;
++        g_free(base64Data);
++
++        webkit_web_view_evaluate_javascript(*this, script.c_str(), -1, nullptr, nullptr, nullptr, pasteImageFinished, nullptr);
++    }
++
+     void WebView::zoomIn()
+     {
+         if (auto zoomLevel = webkit_web_view_get_zoom_level(*this); zoomLevel < 2.0)
+diff --git a/src/ui/WebView.hpp b/src/ui/WebView.hpp
+index 2c0ba81..1516a3f 100644
+--- a/src/ui/WebView.hpp
++++ b/src/ui/WebView.hpp
+@@ -27,6 +27,7 @@ namespace wil::ui
+             void            exportChatTranscript();
+             void            configureContinuousExport();
+             void            resyncContinuousExport();
++            void            pasteImageFromClipboard();
+             void            zoomIn();
+             void            zoomOut();
+             void            resetZoom();

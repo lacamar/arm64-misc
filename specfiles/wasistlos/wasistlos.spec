@@ -1,7 +1,7 @@
 %global tag 1.7.0
 Name: wasistlos
 Version: %{tag}
-Release: 4%{?dist}
+Release: 5%{?dist}
 Summary: An unofficial WhatsApp desktop application for Linux.
 
 License: GNU GPL v3
@@ -9,6 +9,7 @@ URL:     https://github.com/xeco23/WasIstLos
 Source0: %{url}/archive/v%{version}/wasistlos-%{version}.tar.gz
 Patch0:  0001-export-chat-transcript.patch
 Patch1:  0002-continuous-chat-export.patch
+Patch2:  0003-paste-image-clipboard.patch
 
 BuildRequires: cmake
 BuildRequires: pkgconfig
@@ -69,6 +70,10 @@ An unofficial WhatsApp desktop application for Linux.
 
 
 %changelog
+* Mon Sep 14 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-5
+ - Fix continuous chat export only ever writing whatever window of messages WhatsApp Web currently has rendered (it virtualizes the list) instead of the full history: native code now merges each scrape into the existing export file instead of overwriting it
+ - Add patch to place a clipboard image into the currently open chat's compose box (menu item "Paste Image from Clipboard"), since WebKitGTK does not reliably expose native clipboard image data to a page's paste event the way Chrome/Firefox do
+
 * Sat Sep 12 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-4
  - Fix continuous chat export silently going stale for any chat that isn't the one currently on screen: resync the visible chat immediately on chat switch instead of waiting on the debounce, and force a resync when the app window regains focus
 
