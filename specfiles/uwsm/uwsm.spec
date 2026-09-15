@@ -1,4 +1,4 @@
-%global tag 0.26.7
+%global tag 0.27.0
 Name:           uwsm
 Version:        %{tag}
 Release:        %autorelease -b3
@@ -83,6 +83,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/*.desktop
 %{_libexecdir}/uwsm/signal-handler.sh
 
 %changelog
+* Tue Sep 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.27.0-3
+ - Update to 0.27.0
+
 * Tue Aug 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.26.7-3
  - Update to 0.26.7
 
