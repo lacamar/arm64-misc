@@ -1,0 +1,103 @@
+--- a/src/backend/tty.rs
++++ b/src/backend/tty.rs
+@@ -398,7 +398,8 @@
+ struct GammaProps {
+     crtc: crtc::Handle,
+     gamma_lut: property::Handle,
+-    gamma_lut_size: property::Handle,
++    /// `None` when falling back to CTM, in which case `gamma_lut` is the CTM property.
++    gamma_lut_size: Option<property::Handle>,
+     previous_blob: Option<NonZeroU64>,
+ }
+ 
+@@ -2622,10 +2623,26 @@
+     }
+ }
+ 
++const CTM_GAMMA_SIZE: u32 = 256;
++
++/// Least-squares slope of the ramp as S31.32 fixed point.
++fn ctm_gain_from_ramp(ramp: &[u16]) -> u64 {
++    let denom = (ramp.len() - 1).max(1) as f64;
++    let (mut xy, mut xx) = (0., 0.);
++    for (i, &y) in ramp.iter().enumerate() {
++        let x = i as f64 / denom;
++        xy += x * f64::from(y) / f64::from(u16::MAX);
++        xx += x * x;
++    }
++    let gain = if xx > 0. { (xy / xx).clamp(0., 1.) } else { 1. };
++    (gain * (1u64 << 32) as f64).round() as u64
++}
++
+ impl GammaProps {
+     fn new(device: &DrmDevice, crtc: crtc::Handle) -> anyhow::Result<Self> {
+         let mut gamma_lut = None;
+         let mut gamma_lut_size = None;
++        let mut ctm = None;
+ 
+         let props = device
+             .get_properties(crtc)
+@@ -2654,12 +2671,18 @@
+                     );
+                     gamma_lut_size = Some(prop);
+                 }
++                "CTM" if matches!(info.value_type(), property::ValueType::Blob) => {
++                    ctm = Some(prop);
++                }
+                 _ => (),
+             }
+         }
+ 
+-        let gamma_lut = gamma_lut.context("missing GAMMA_LUT property")?;
+-        let gamma_lut_size = gamma_lut_size.context("missing GAMMA_LUT_SIZE property")?;
++        let (gamma_lut, gamma_lut_size) = match (gamma_lut, gamma_lut_size, ctm) {
++            (Some(lut), Some(size), _) => (lut, Some(size)),
++            (_, _, Some(ctm)) => (ctm, None),
++            _ => bail!("missing GAMMA_LUT, GAMMA_LUT_SIZE and CTM properties"),
++        };
+ 
+         Ok(Self {
+             crtc,
+@@ -2670,7 +2693,10 @@
+     }
+ 
+     fn gamma_size(&self, device: &DrmDevice) -> anyhow::Result<u32> {
+-        let value = get_drm_property(device, self.crtc, self.gamma_lut_size)
++        let Some(gamma_lut_size) = self.gamma_lut_size else {
++            return Ok(CTM_GAMMA_SIZE);
++        };
++        let value = get_drm_property(device, self.crtc, gamma_lut_size)
+             .context("missing GAMMA_LUT_SIZE property")?;
+         Ok(value as u32)
+     }
+@@ -2685,6 +2711,19 @@
+ 
+             ensure!(gamma.len() == gamma_size * 3, "wrong gamma length");
+ 
++            if self.gamma_lut_size.is_none() {
++                let mut matrix = [0u64; 9];
++                for (i, ramp) in gamma.chunks_exact(gamma_size).enumerate() {
++                    matrix[i * 4] = ctm_gain_from_ramp(ramp);
++                }
++                let blob = drm_ffi::mode::create_property_blob(
++                    device.as_fd(),
++                    cast_slice_mut(&mut matrix),
++                )
++                .context("error creating property blob")?;
++                return self.set_blob(device, NonZeroU64::new(u64::from(blob.blob_id)));
++            }
++
+             #[allow(non_camel_case_types)]
+             #[repr(C)]
+             #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+@@ -2714,6 +2753,10 @@
+             None
+         };
+ 
++        self.set_blob(device, blob)
++    }
++
++    fn set_blob(&mut self, device: &DrmDevice, blob: Option<NonZeroU64>) -> anyhow::Result<()> {
+         {
+             let _span = tracy_client::span!("set_property");
+ 
