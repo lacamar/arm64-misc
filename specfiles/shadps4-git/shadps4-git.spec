@@ -1,8 +1,8 @@
-%global bumpver 1
+%global bumpver 0
 %global _name shadps4
-%global tag 0.18.0
+%global tag 4.2026.09.18.42.555.7.5.0678.531.7.4.505560.0.8
 # Upstream shadps4-emu/shadPS4 commit the aarch64 patch series is based on
-%global commit ba7470206cd937456f0162d7fbffdbcf3e0e261d
+%global commit 42c555b7ab5d0678f531a7e4d505560ccc0f8add
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 # Prebuilt FFmpeg release matching externals/ffmpeg-core
 %global ffmpeg_sha 94dde08
@@ -176,6 +176,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/net.shadps4.shadPS4.d
 %{_datadir}/icons/hicolor/512x512/apps/net.shadps4.shadPS4.png
 
 %changelog
+* Fri Sep 18 2026 Lachlan Marie <lchlnm@pm.me> - 4.2026.09.18.42.555.7.5.0678.531.7.4.505560.0.8^0.git.42c555b-1
+ - Update to 4.2026.09.18.42.555.7.5.0678.531.7.4.505560.0.8
+
 * Fri Sep 18 2026 lm <lchlnm@pm.me> - 0.18.0^1.git.ba74702-1
 - Initial package
 - Native aarch64 port via box64 dynarec as patch on upstream
