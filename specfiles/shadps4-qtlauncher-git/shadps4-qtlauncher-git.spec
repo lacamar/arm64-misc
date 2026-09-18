@@ -59,6 +59,7 @@ BuildRequires:  qt6-qtbase-devel
 BuildRequires:  qt6-qtbase-private-devel
 BuildRequires:  qt6-qttools-devel
 BuildRequires:  qt6-qtmultimedia-devel
+BuildRequires:  openssl-devel
 BuildRequires:  libX11-devel
 BuildRequires:  libXext-devel
 BuildRequires:  libXcursor-devel

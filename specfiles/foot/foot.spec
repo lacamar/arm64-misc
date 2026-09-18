@@ -5,7 +5,7 @@
 
 Name:           foot
 Version:        %{tag}
-Release:        4%{?dist}
+Release:        5%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -21,11 +21,13 @@ Source2:        gpgkey-5BBD4992C116573F.asc
 # Patch0:         0001-Fix-discarded-const-qualifiers-from-string-functions.patch
 
 # Adds automatic terminal-session save/restore to the server (foot
-# --server) mode: open windows (cwd, size, and a text snapshot of
-# their screen + scrollback) are periodically checkpointed and saved
-# on clean shutdown, then silently reopened - each in a fresh shell -
-# the next time the server starts. See the new [session] section in
-# foot.ini(5). Not an upstream patch.
+# --server) mode: open windows (cwd, size, launch command, and a text
+# snapshot of their screen + scrollback) are periodically
+# checkpointed and saved on clean shutdown, then silently reopened
+# the next time the server starts. Programs that were running in a
+# window (lf, an editor, claude, ...) are re-launched or resumed
+# according to user rules. See the new [session] and
+# [session-restore] sections in foot.ini(5). Not an upstream patch.
 Patch0:         foot-session-restore.patch
 
 BuildRequires:  gcc
@@ -159,6 +161,22 @@ desktop-file-validate \
 
 
 %changelog
+* Wed Sep 17 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-5
+ - session-restore patch: restore interactive programs gracefully.
+   Windows now save the command line they were launched with (so a
+   'footclient lf' window comes back as lf, not a bare shell), and
+   foot follows the chain of interactive programs on the pty (stdin
+   and stdout on the terminal) instead of only the foreground
+   process group, which misses programs started from lf. Programs
+   are only re-launched when they have a rule in the new
+   [session-restore] section; the rule is expanded by sh while the
+   program is still running ($0, "$@", $FOOT_PID, $FOOT_CWD) so it
+   can resume rather than restart, e.g. 'claude --resume <id>'.
+   Unlisted programs are never re-run. The snapshot is always the
+   primary screen, so a full-screen program's stale frame no longer
+   lands in scrollback. Session state file format is now v2; v1
+   files are still read.
+
 * Tue Sep 15 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-4
  - session-restore patch: on restore, re-launch a window's foreground
    program (e.g. lf, an editor) instead of leaving a plain shell
