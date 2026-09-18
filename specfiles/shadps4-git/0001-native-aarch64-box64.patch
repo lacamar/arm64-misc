@@ -1,0 +1,2655 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 207c457e..005e958a 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -956,11 +956,18 @@ set(CORE src/core/aerolib/stubs.cpp
+          src/core/user_settings.h
+ )
+ 
++set(CORE ${CORE}
++         src/core/cpu/cpu.cpp
++         src/core/cpu/cpu.h)
++
+ if (ARCHITECTURE STREQUAL "x86_64")
+     set(CORE ${CORE}
+              src/core/cpu_patches.cpp
+              src/core/cpu_patches.h
+              ${FIBER_LIB})
++elseif (TARGET box64core)
++    set(CORE ${CORE}
++             src/core/cpu/box64/box64_glue.h)
+ endif()
+ 
+ set(SHADER_RECOMPILER src/shader_recompiler/profile.h
+@@ -1276,6 +1283,9 @@ create_target_directory_groups(shadps4)
+ target_link_libraries(shadps4 PRIVATE spdlog::spdlog)
+ target_link_libraries(shadps4 PRIVATE magic_enum::magic_enum fmt::fmt toml11::toml11 tsl::robin_map xbyak::xbyak Tracy::TracyClient RenderDoc::API FFmpeg::ffmpeg Dear_ImGui ImGuiFileDialog gcn half::half ZLIB::ZLIB PNG::PNG minimp3)
+ target_link_libraries(shadps4 PRIVATE Boost::headers GPUOpen::VulkanMemoryAllocator LibAtrac9 sirit Vulkan::Headers xxHash::xxhash Zydis::Zydis glslang::glslang SDL3::SDL3 pugixml::pugixml)
++if (TARGET box64core)
++    target_link_libraries(shadps4 PRIVATE box64core)
++endif()
+ target_link_libraries(shadps4 PRIVATE stb::headers lfreist-hwinfo::hwinfo nlohmann_json::nlohmann_json miniz::miniz fdk-aac CLI11::CLI11 OpenAL::OpenAL Cpp_Httplib miniupnpc::miniupnpc)
+ target_link_libraries(shadps4 PRIVATE Freetype::Freetype)
+ target_link_libraries(shadps4 PRIVATE libprotobuf)
+diff --git a/externals/CMakeLists.txt b/externals/CMakeLists.txt
+index d12e026b..0dc113fe 100644
+--- a/externals/CMakeLists.txt
++++ b/externals/CMakeLists.txt
+@@ -423,3 +423,97 @@ if (NOT TARGET ZArchive::zarchive)
+     target_compile_features(zarchive PRIVATE cxx_std_20)
+     add_library(ZArchive::zarchive ALIAS zarchive)
+ endif()
++
++# box64 CPU core (x86-64 guest execution on arm64 hosts)
++if (ARCHITECTURE STREQUAL "arm64" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
++    enable_language(ASM)
++    set(BOX64_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/box64)
++    set(BOX64_GEN ${CMAKE_CURRENT_BINARY_DIR}/box64-gen)
++    file(MAKE_DIRECTORY ${BOX64_GEN})
++    execute_process(COMMAND git rev-parse --short HEAD
++                    WORKING_DIRECTORY ${BOX64_ROOT}
++                    OUTPUT_VARIABLE BOX64_GITREV OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
++    file(WRITE ${BOX64_GEN}/git_head.h "#define GITREV \"${BOX64_GITREV}\"\n")
++    find_package(Python3 COMPONENTS Interpreter REQUIRED)
++    execute_process(COMMAND ${Python3_EXECUTABLE} ${BOX64_ROOT}/tools/gen_dynacache_hashes.py
++                            --root ${BOX64_ROOT} --output ${BOX64_GEN}/dynacache_hashes.h
++                    RESULT_VARIABLE BOX64_HASH_RESULT)
++    if (NOT BOX64_HASH_RESULT EQUAL 0)
++        message(FATAL_ERROR "Failed to generate box64 dynacache hashes")
++    endif()
++
++    set(BOX64_INTERPRETER
++        src/emu/x64run.c src/emu/x64run0f.c src/emu/x64run66.c src/emu/x64run660f.c
++        src/emu/x64run66f20f.c src/emu/x64run66f30f.c src/emu/x64run66d9.c src/emu/x64run66dd.c
++        src/emu/x64run66f0.c src/emu/x64rund8.c src/emu/x64rund9.c src/emu/x64runda.c
++        src/emu/x64rundb.c src/emu/x64rundc.c src/emu/x64rundd.c src/emu/x64runde.c
++        src/emu/x64rundf.c src/emu/x64runf0.c src/emu/x64runf20f.c src/emu/x64runf30f.c
++        src/emu/x64runavx.c src/emu/x64runavx0f.c src/emu/x64runavx0f38.c src/emu/x64runavx660f.c
++        src/emu/x64runavxf20f.c src/emu/x64runavxf30f.c src/emu/x64runavx660f38.c
++        src/emu/x64runavx660f3a.c src/emu/x64runavxf20f38.c src/emu/x64runavxf30f38.c
++        src/emu/x64runavxf20f3a.c src/emu/x64runavxf30f3a.c)
++    set(BOX64_CORE
++        src/build_info.c src/custommem.c
++        src/dynarec/dynablock.c src/dynarec/dynarec_native.c src/dynarec/dynarec_native_functions.c
++        src/dynarec/dynarec.c src/dynarec/dynacache_reloc.c src/dynarec/dynacache_compress.c
++        src/dynarec/arm64/arm64_immenc.c src/dynarec/arm64/arm64_printer.c
++        src/dynarec/arm64/dynarec_arm64_arch.c src/dynarec/arm64/dynarec_arm64_functions.c
++        src/dynarec/arm64/dynarec_arm64_jmpnext.c src/dynarec/arm64/dynarec_arm64_consts.c
++        src/dynarec/arm64/updateflags_arm64.c
++        src/tools/pathcoll.c src/os/backtrace.c src/libtools/sigtools.c
++        src/emu/x64compstrings.c src/emu/x64emu.c src/emu/x64primop.c src/emu/x64shaext.c
++        src/emu/x64test.c src/emu/x64trace.c src/emu/x64run_private.c src/emu/x87emu_private.c
++        src/os/hostext_common.c src/os/hostext_linux.c src/os/freq_linux.c src/os/random_linux.c
++        src/os/my_cpuid.c src/os/sysinfo.c src/os/perfmap.c
++        src/tools/alternate.c src/tools/bitutils.c src/tools/env.c src/tools/dynacache.c
++        src/tools/rbtree.c src/tools/cpumask.c)
++    set(BOX64_ASM
++        src/dynarec/arm64/arm64_prolog.S src/dynarec/arm64/arm64_epilog.S
++        src/dynarec/arm64/arm64_next.S src/dynarec/arm64/arm64_lock.S)
++    set(BOX64_PASS
++        ../dynarec_native_pass.c dynarec_arm64_helper.c dynarec_arm64_emit_tests.c dynarec_arm64_emit_math.c
++        dynarec_arm64_emit_logic.c dynarec_arm64_emit_shift.c dynarec_arm64_00.c
++        dynarec_arm64_0f.c dynarec_arm64_66.c dynarec_arm64_d8.c dynarec_arm64_d9.c
++        dynarec_arm64_da.c dynarec_arm64_db.c dynarec_arm64_dc.c dynarec_arm64_dd.c
++        dynarec_arm64_de.c dynarec_arm64_df.c dynarec_arm64_f0.c dynarec_arm64_660f.c
++        dynarec_arm64_66f20f.c dynarec_arm64_66f30f.c dynarec_arm64_66f0.c dynarec_arm64_f20f.c
++        dynarec_arm64_f30f.c dynarec_arm64_avx.c dynarec_arm64_avx_0f.c dynarec_arm64_avx_0f38.c
++        dynarec_arm64_avx_66_0f.c dynarec_arm64_avx_f2_0f.c dynarec_arm64_avx_f3_0f.c
++        dynarec_arm64_avx_66_0f38.c dynarec_arm64_avx_66_0f3a.c dynarec_arm64_avx_f2_0f38.c
++        dynarec_arm64_avx_f2_0f3a.c dynarec_arm64_avx_f3_0f38.c updateflags_arm64_pass.c)
++    list(TRANSFORM BOX64_INTERPRETER PREPEND ${BOX64_ROOT}/)
++    list(TRANSFORM BOX64_CORE PREPEND ${BOX64_ROOT}/)
++    list(TRANSFORM BOX64_ASM PREPEND ${BOX64_ROOT}/)
++    list(TRANSFORM BOX64_PASS PREPEND ${BOX64_ROOT}/src/dynarec/arm64/)
++    set_source_files_properties(${BOX64_ASM} PROPERTIES COMPILE_OPTIONS "-march=armv8.2-a+crc+crypto+lse")
++
++    set(BOX64_OS_LAYER
++        ${PROJECT_SOURCE_DIR}/src/core/cpu/box64/box64_os.c
++        ${PROJECT_SOURCE_DIR}/src/core/cpu/box64/box64_glue.c
++        ${PROJECT_SOURCE_DIR}/src/core/cpu/box64/box64_call.S)
++
++    function(box64_setup target)
++        target_include_directories(${target} PRIVATE
++            ${BOX64_ROOT}/src/include ${BOX64_ROOT}/src ${BOX64_ROOT}/src/dynarec/arm64 ${BOX64_GEN})
++        target_compile_definitions(${target} PRIVATE DYNAREC ARM64 NOGIT BOX64_SHADPS4)
++        target_compile_options(${target} PRIVATE -std=gnu11 -funwind-tables -fvisibility=hidden -w -fno-strict-aliasing
++            $<$<CONFIG:Release,RelWithDebInfo>:-O2>)
++    endfunction()
++
++    foreach(step RANGE 3)
++        add_library(box64_pass${step} OBJECT ${BOX64_PASS})
++        box64_setup(box64_pass${step})
++        target_compile_definitions(box64_pass${step} PRIVATE STEP=${step})
++    endforeach()
++    add_library(box64_test_interpreter OBJECT ${BOX64_INTERPRETER})
++    box64_setup(box64_test_interpreter)
++    target_compile_definitions(box64_test_interpreter PRIVATE TEST_INTERPRETER)
++
++    add_library(box64core STATIC ${BOX64_CORE} ${BOX64_INTERPRETER} ${BOX64_ASM} ${BOX64_OS_LAYER}
++        $<TARGET_OBJECTS:box64_pass0> $<TARGET_OBJECTS:box64_pass1>
++        $<TARGET_OBJECTS:box64_pass2> $<TARGET_OBJECTS:box64_pass3>
++        $<TARGET_OBJECTS:box64_test_interpreter>)
++    box64_setup(box64core)
++    target_include_directories(box64core INTERFACE ${BOX64_ROOT}/src/include ${BOX64_ROOT}/src ${BOX64_ROOT}/src/dynarec/arm64 ${BOX64_GEN})
++    target_compile_definitions(box64core INTERFACE DYNAREC ARM64)
++endif()
+diff --git a/src/common/signal_context.cpp b/src/common/signal_context.cpp
+index 67d8294f..52ae6f1d 100644
+--- a/src/common/signal_context.cpp
++++ b/src/common/signal_context.cpp
+@@ -1,8 +1,10 @@
+ // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
++#include <cstring>
+ #include "common/arch.h"
+ #include "common/signal_context.h"
++#include "common/types.h"
+ 
+ #ifdef _WIN32
+ #include <windows.h>
+@@ -26,11 +28,36 @@ void* GetRip(void* ctx) {
+     return (void*)((ucontext_t*)ctx)->uc_mcontext.mc_rip;
+ #elif defined(ARCH_X86_64)
+     return (void*)((ucontext_t*)ctx)->uc_mcontext.gregs[REG_RIP];
++#elif defined(ARCH_ARM64)
++    return (void*)((ucontext_t*)ctx)->uc_mcontext.pc;
+ #else
+ #error "Unsupported architecture"
+ #endif
+ }
+ 
++#if defined(__linux__) && defined(ARCH_ARM64)
++static bool Arm64IsWriteFault(const ucontext_t* uc) {
++    constexpr u32 ESR_MAGIC = 0x45535201;
++    const u8* p = uc->uc_mcontext.__reserved;
++    const u8* end = p + sizeof(uc->uc_mcontext.__reserved);
++    while (p + 8 <= end) {
++        u32 magic, size;
++        std::memcpy(&magic, p, 4);
++        std::memcpy(&size, p + 4, 4);
++        if (magic == 0 || size == 0) {
++            break;
++        }
++        if (magic == ESR_MAGIC) {
++            u64 esr;
++            std::memcpy(&esr, p + 8, 8);
++            return (esr & (1 << 6)) != 0;
++        }
++        p += size;
++    }
++    return false;
++}
++#endif
++
+ bool IsWriteError(void* ctx) {
+ #if defined(_WIN32)
+     return ((EXCEPTION_POINTERS*)ctx)->ExceptionRecord->ExceptionInformation[0] == 1;
+@@ -42,6 +69,8 @@ bool IsWriteError(void* ctx) {
+     return ((ucontext_t*)ctx)->uc_mcontext.mc_err & 0x2;
+ #elif defined(ARCH_X86_64)
+     return ((ucontext_t*)ctx)->uc_mcontext.gregs[REG_ERR] & 0x2;
++#elif defined(__linux__) && defined(ARCH_ARM64)
++    return Arm64IsWriteFault((ucontext_t*)ctx);
+ #else
+ #error "Unsupported architecture"
+ #endif
+diff --git a/src/core/address_space.cpp b/src/core/address_space.cpp
+index 2a726a19..92edb126 100644
+--- a/src/core/address_space.cpp
++++ b/src/core/address_space.cpp
+@@ -8,6 +8,7 @@
+ #include "common/elf_info.h"
+ #include "common/error.h"
+ #include "core/address_space.h"
++#include "core/cpu/cpu.h"
+ #include "core/emulator_settings.h"
+ #include "core/libraries/kernel/memory.h"
+ #include "core/memory.h"
+@@ -67,7 +68,13 @@ static u64 BackingSize = ORBIS_KERNEL_TOTAL_MEM_DEV_PRO + ORBIS_KERNEL_FLEXIBLE_
+         True(prot & Core::MemoryProt::CpuRead) || True(prot & Core::MemoryProt::GpuRead);
+     const bool write =
+         True(prot & Core::MemoryProt::CpuWrite) || True(prot & Core::MemoryProt::GpuWrite);
++#ifdef ARCH_X86_64
+     const bool execute = True(prot & Core::MemoryProt::CpuExec);
++#else
++    // Guest code is never executed natively; keeping it non-executable lets stray native calls
++    // into guest code fault and get rerouted through the CPU backend.
++    constexpr bool execute = false;
++#endif
+ 
+     if (write && !read) {
+         // While write-only CPU mappings aren't possible, write-only GPU mappings are.
+@@ -657,7 +664,7 @@ struct AddressSpace::Impl {
+             mmap(reinterpret_cast<void*>(USER_MIN), user_size, protection_flags, map_flags, -1, 0));
+ #else
+         const auto virtual_size = system_managed_size + system_reserved_size + user_size;
+-#if defined(ARCH_X86_64) && !defined(__FreeBSD__)
++#if !defined(__FreeBSD__)
+         const auto virtual_base =
+             reinterpret_cast<u8*>(mmap(reinterpret_cast<void*>(SYSTEM_MANAGED_MIN), virtual_size,
+                                        protection_flags, map_flags, -1, 0));
+@@ -826,7 +833,11 @@ void* AddressSpace::Map(VAddr virtual_addr, u64 size, PAddr phys_addr, bool is_e
+     // canonical copy of the memory and rely on the JIT to map translated code as executable.
+     constexpr auto prot = PAGE_READWRITE;
+ #endif
+-    return impl->Map(virtual_addr, phys_addr, size, prot);
++    void* ret = impl->Map(virtual_addr, phys_addr, size, prot);
++    if (ret) {
++        Cpu::OnMap(reinterpret_cast<VAddr>(ret), size, true, true, is_exec);
++    }
++    return ret;
+ }
+ 
+ void* AddressSpace::MapFile(VAddr virtual_addr, u64 size, u64 offset, u32 prot, uintptr_t fd) {
+@@ -834,12 +845,19 @@ void* AddressSpace::MapFile(VAddr virtual_addr, u64 size, u64 offset, u32 prot,
+     return impl->Map(virtual_addr, offset, size,
+                      ToWindowsProt(std::bit_cast<Core::MemoryProt>(prot)), fd);
+ #else
+-    return impl->Map(virtual_addr, offset, size, ToPosixProt(std::bit_cast<Core::MemoryProt>(prot)),
+-                     fd);
++    void* ret = impl->Map(virtual_addr, offset, size,
++                          ToPosixProt(std::bit_cast<Core::MemoryProt>(prot)), fd);
++    if (ret) {
++        const auto mem_prot = std::bit_cast<Core::MemoryProt>(prot);
++        Cpu::OnMap(reinterpret_cast<VAddr>(ret), size, True(mem_prot & MemoryProt::CpuRead),
++                   True(mem_prot & MemoryProt::CpuWrite), True(mem_prot & MemoryProt::CpuExec));
++    }
++    return ret;
+ #endif
+ }
+ 
+ void AddressSpace::Unmap(VAddr virtual_addr, u64 size) {
++    Cpu::OnUnmap(virtual_addr, size);
+     impl->Unmap(virtual_addr, size);
+ }
+ 
+@@ -847,6 +865,7 @@ void AddressSpace::Protect(VAddr virtual_addr, u64 size, MemoryPermission perms)
+     const bool read = True(perms & MemoryPermission::Read);
+     const bool write = True(perms & MemoryPermission::Write);
+     const bool execute = True(perms & MemoryPermission::Execute);
++    Cpu::OnProtect(virtual_addr, size, read, write, execute);
+     return impl->Protect(virtual_addr, size, read, write, execute);
+ }
+ 
+diff --git a/src/core/aerolib/stubs.cpp b/src/core/aerolib/stubs.cpp
+index d7f86dfa..27dac5ac 100644
+--- a/src/core/aerolib/stubs.cpp
++++ b/src/core/aerolib/stubs.cpp
+@@ -4,6 +4,7 @@
+ #include "common/logging/log.h"
+ #include "core/aerolib/aerolib.h"
+ #include "core/aerolib/stubs.h"
++#include "core/cpu/cpu.h"
+ 
+ namespace Core::AeroLib {
+ 
+@@ -57,7 +58,7 @@ static u32 UsedStubEntries;
+ 
+ u64 GetStub(const char* nid) {
+     if (UsedStubEntries >= MAX_STUBS) {
+-        return (u64)&UnknownStub;
++        return Cpu::MakeGuestCallable((const void*)&UnknownStub, "UnknownStub");
+     }
+ 
+     const auto entry = FindByNid(nid);
+@@ -67,7 +68,7 @@ u64 GetStub(const char* nid) {
+         stub_nids[UsedStubEntries] = entry;
+     }
+ 
+-    return (u64)stub_handlers[UsedStubEntries++];
++    return Cpu::MakeGuestCallable((const void*)stub_handlers[UsedStubEntries++], nid);
+ }
+ 
+ } // namespace Core::AeroLib
+diff --git a/src/core/cpu/box64/box64_call.S b/src/core/cpu/box64/box64_call.S
+new file mode 100644
+index 00000000..18ab905b
+--- /dev/null
++++ b/src/core/cpu/box64/box64_call.S
+@@ -0,0 +1,68 @@
++// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++// void shad_call_native(void* fn, const uint64_t gpr[16], const double fp[8], uint64_t out[4]);
++// gpr[0..7] -> x0..x7, gpr[8..15] -> stack, fp[0..7] -> d0..d7, x8 = gpr[0] (sret buffer).
++// out[0] = x0, out[1] = x1, out[2] = d0, out[3] = d1.
++.text
++.global shad_call_native
++.type shad_call_native, %function
++shad_call_native:
++    stp x29, x30, [sp, #-48]!
++    stp x19, x20, [sp, #16]
++    stp x21, x22, [sp, #32]
++    mov x29, sp
++    mov x19, x0
++    mov x20, x1
++    mov x21, x2
++    mov x22, x3
++    sub sp, sp, #64
++    ldp x8, x9, [x20, #64]
++    stp x8, x9, [sp]
++    ldp x8, x9, [x20, #80]
++    stp x8, x9, [sp, #16]
++    ldp x8, x9, [x20, #96]
++    stp x8, x9, [sp, #32]
++    ldp x8, x9, [x20, #112]
++    stp x8, x9, [sp, #48]
++    ldp d0, d1, [x21]
++    ldp d2, d3, [x21, #16]
++    ldp d4, d5, [x21, #32]
++    ldp d6, d7, [x21, #48]
++    ldp x0, x1, [x20]
++    ldp x2, x3, [x20, #16]
++    ldp x4, x5, [x20, #32]
++    ldp x6, x7, [x20, #48]
++    mov x8, x0
++    blr x19
++    stp x0, x1, [x22]
++    stp d0, d1, [x22, #16]
++    add sp, sp, #64
++    ldp x21, x22, [sp, #32]
++    ldp x19, x20, [sp, #16]
++    ldp x29, x30, [sp], #48
++    ret
++.size shad_call_native, .-shad_call_native
++.section .note.GNU-stack,"",%progbits
++
++// Entered via a redirected instruction-fetch fault when native code calls a guest function
++// pointer directly. x16 = guest target, x0-x7 = arguments, x30 = native return address.
++.text
++.global shad_guest_call_trampoline
++.type shad_guest_call_trampoline, %function
++shad_guest_call_trampoline:
++    stp x29, x30, [sp, #-16]!
++    mov x29, sp
++    sub sp, sp, #64
++    stp x0, x1, [sp]
++    stp x2, x3, [sp, #16]
++    stp x4, x5, [sp, #32]
++    stp x6, x7, [sp, #48]
++    mov x0, x16
++    mov x1, sp
++    mov x2, #8
++    bl shad_box64_call_from_native
++    add sp, sp, #64
++    ldp x29, x30, [sp], #16
++    ret
++.size shad_guest_call_trampoline, .-shad_guest_call_trampoline
+diff --git a/src/core/cpu/box64/box64_glue.c b/src/core/cpu/box64/box64_glue.c
+new file mode 100644
+index 00000000..082dbb31
+--- /dev/null
++++ b/src/core/cpu/box64/box64_glue.c
+@@ -0,0 +1,639 @@
++// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#define _GNU_SOURCE
++#include <pthread.h>
++#include <signal.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/mman.h>
++#include <unistd.h>
++
++// clang-format off
++#include "os.h"
++#include "debug.h"
++#include "box64context.h"
++#include "box64cpu.h"
++#include "box64cpu_util.h"
++#include "custommem.h"
++#include "dynablock.h"
++#include "env.h"
++#include "hostext.h"
++#include "rbtree.h"
++#include "sysinfo.h"
++#include "x64emu.h"
++#include "x64trace.h"
++#include "emu/x64emu_private.h"
++#include "emu/x64run_private.h"
++#include "emu/x87emu_private.h"
++#include "tools/bridge_private.h"
++#include "sigtools.h"
++#include "dynarec/dynablock_private.h"
++#include "dynarec/dynarec_arch.h"
++#include "dynarec/dynarec_next.h"
++#include "dynarec/arm64/arm64_mapping.h"
++#include <asm/sigcontext.h>
++#include <ucontext.h>
++// clang-format on
++
++#include "box64_glue.h"
++
++void shad_call_native(void* fn, const uint64_t gpr[16], const double fp[8], uint64_t out[4]);
++
++static shad_box64_callbacks_t g_callbacks;
++static box64context_t g_context;
++
++static __thread x64emu_t* t_emu;
++static __thread void* t_emu_stack;
++static __thread uintptr_t t_stack_top;
++
++#define EMU_STACK_SIZE (8u << 20)
++#define ORBIS_MXCSR 0x9fc0
++
++// ---- bridges -------------------------------------------------------------
++
++#define BRIDGES_PER_BRICK 4096
++
++typedef struct brick_s {
++    onebridge_t* entries;
++    int used;
++    struct brick_s* next;
++} brick_t;
++
++typedef struct bridge_entry_s {
++    void* fn;
++    uintptr_t addr;
++    const char* name;
++} bridge_entry_t;
++
++static pthread_mutex_t g_bridge_mutex = PTHREAD_MUTEX_INITIALIZER;
++static brick_t* g_bricks;
++static bridge_entry_t* g_bridge_map;
++static size_t g_bridge_count, g_bridge_cap;
++static uintptr_t g_exit_bridge;
++
++static void ps4_wrapper(x64emu_t* emu, uintptr_t fnc);
++
++static onebridge_t* alloc_bridge_slot(void) {
++    brick_t* b = g_bricks;
++    if (!b || b->used == BRIDGES_PER_BRICK) {
++        const size_t size = BRIDGES_PER_BRICK * sizeof(onebridge_t);
++        void* mem = mmap(NULL, size, PROT_READ | PROT_WRITE | PROT_EXEC,
++                         MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
++        if (mem == MAP_FAILED) {
++            return NULL;
++        }
++        setProtection_box((uintptr_t)mem, size, PROT_READ | PROT_WRITE | PROT_EXEC | PROT_NOPROT);
++        b = calloc(1, sizeof(brick_t));
++        b->entries = mem;
++        b->next = g_bricks;
++        g_bricks = b;
++    }
++    return &b->entries[b->used++];
++}
++
++static int bridge_map_find(void* fn, size_t* pos) {
++    size_t lo = 0, hi = g_bridge_count;
++    while (lo < hi) {
++        size_t mid = (lo + hi) / 2;
++        if (g_bridge_map[mid].fn < fn) {
++            lo = mid + 1;
++        } else if (g_bridge_map[mid].fn > fn) {
++            hi = mid;
++        } else {
++            *pos = mid;
++            return 1;
++        }
++    }
++    *pos = lo;
++    return 0;
++}
++
++static uintptr_t make_bridge(wrapper_t w, void* fn, const char* name) {
++    pthread_mutex_lock(&g_bridge_mutex);
++    size_t pos;
++    if (fn && bridge_map_find(fn, &pos)) {
++        uintptr_t ret = g_bridge_map[pos].addr;
++        pthread_mutex_unlock(&g_bridge_mutex);
++        return ret;
++    }
++    onebridge_t* e = alloc_bridge_slot();
++    if (!e) {
++        pthread_mutex_unlock(&g_bridge_mutex);
++        return 0;
++    }
++    e->CC = 0xCC;
++    e->S = 'S';
++    e->C = 'C';
++    e->w = w;
++    e->f = (uintptr_t)fn;
++    e->C3 = 0xC3;
++    e->N = 0;
++    e->func = 0;
++    e->name_or_func = (void*)name;
++    const uintptr_t addr = (uintptr_t)e;
++    if (fn) {
++        if (g_bridge_count == g_bridge_cap) {
++            g_bridge_cap = g_bridge_cap ? g_bridge_cap * 2 : 1024;
++            g_bridge_map = realloc(g_bridge_map, g_bridge_cap * sizeof(bridge_entry_t));
++        }
++        memmove(&g_bridge_map[pos + 1], &g_bridge_map[pos],
++                (g_bridge_count - pos) * sizeof(bridge_entry_t));
++        g_bridge_map[pos].fn = fn;
++        g_bridge_map[pos].addr = addr;
++        g_bridge_map[pos].name = name;
++        ++g_bridge_count;
++    }
++    pthread_mutex_unlock(&g_bridge_mutex);
++    return addr;
++}
++
++uintptr_t shad_box64_bridge(void* native_fn, const char* name) {
++    return make_bridge(ps4_wrapper, native_fn, name);
++}
++
++int shad_box64_is_bridge(uintptr_t addr) {
++    for (brick_t* b = g_bricks; b; b = b->next) {
++        const uintptr_t start = (uintptr_t)b->entries;
++        if (addr >= start && addr < start + BRIDGES_PER_BRICK * sizeof(onebridge_t)) {
++            return 1;
++        }
++    }
++    return 0;
++}
++
++void* shad_box64_bridge_target(uintptr_t addr) {
++    if (!shad_box64_is_bridge(addr)) {
++        return NULL;
++    }
++    onebridge_t* b = (onebridge_t*)addr;
++    return (b->CC == 0xCC && b->S == 'S' && b->C == 'C') ? (void*)b->f : NULL;
++}
++
++const char* shad_box64_bridge_name(uintptr_t addr) {
++    if (!shad_box64_is_bridge(addr)) {
++        return NULL;
++    }
++    onebridge_t* b = (onebridge_t*)(addr & ~(uintptr_t)(sizeof(onebridge_t) - 1));
++    return b->name_or_func;
++}
++
++// ---- host call marshalling ------------------------------------------------
++
++static int g_trace_hle = -1;
++
++static const char* bridge_name_for_fn(void* fn) {
++    size_t pos;
++    pthread_mutex_lock(&g_bridge_mutex);
++    const char* name = bridge_map_find(fn, &pos) ? g_bridge_map[pos].name : NULL;
++    pthread_mutex_unlock(&g_bridge_mutex);
++    return name;
++}
++
++static void ps4_wrapper(x64emu_t* emu, uintptr_t fnc) {
++    uint64_t gpr[16];
++    double fp[8];
++    uint64_t out[4];
++    char trace[256];
++    if (g_trace_hle < 0) {
++        g_trace_hle = getenv("SHADPS4_TRACE_HLE") != NULL;
++    }
++    if (g_trace_hle) {
++        const char* name = bridge_name_for_fn((void*)fnc);
++        snprintf(trace, sizeof(trace), "%04d|%p: %s(%#lx, %#lx, %#lx, %#lx, %#lx, %#lx)", GetTID(),
++                 *(void**)R_RSP, name ? name : "?", (unsigned long)R_RDI, (unsigned long)R_RSI,
++                 (unsigned long)R_RDX, (unsigned long)R_RCX, (unsigned long)R_R8,
++                 (unsigned long)R_R9);
++    }
++    gpr[0] = R_RDI;
++    gpr[1] = R_RSI;
++    gpr[2] = R_RDX;
++    gpr[3] = R_RCX;
++    gpr[4] = R_R8;
++    gpr[5] = R_R9;
++    // Stack arguments (above the return address), bounded by the top of the guest stack.
++    const uintptr_t sp = R_RSP;
++    const uintptr_t limit = t_stack_top > sp ? t_stack_top : (sp | (box64_pagesize - 1)) + 1;
++    int avail = (int)((limit - sp) / 8) - 1;
++    if (avail > 10) {
++        avail = 10;
++    }
++    for (int i = 0; i < 10; ++i) {
++        gpr[6 + i] = i < avail ? ((const uint64_t*)sp)[1 + i] : 0;
++    }
++    for (int i = 0; i < 8; ++i) {
++        fp[i] = emu->xmm[i].d[0];
++    }
++    shad_call_native((void*)fnc, gpr, fp, out);
++    R_RAX = out[0];
++    R_RDX = out[1];
++    emu->xmm[0].q[0] = out[2];
++    emu->xmm[1].q[0] = out[3];
++    if (g_trace_hle) {
++        char buf[320];
++        snprintf(buf, sizeof(buf), "%s = %#lx", trace, (unsigned long)out[0]);
++        shad_box64_log(buf);
++    }
++}
++
++// ---- emu lifetime ---------------------------------------------------------
++
++static x64emu_t* new_emu(uintptr_t stack, size_t stack_size, int own_stack) {
++    x64emu_t* emu = NewX64Emu(&g_context, 0, stack, (int)stack_size, own_stack);
++    emu->mxcsr.x32 = ORBIS_MXCSR;
++    emu->stack2free = NULL;
++    return emu;
++}
++
++x64emu_t* shad_box64_current_emu(void) {
++    return t_emu;
++}
++
++x64emu_t* shad_box64_thread_emu(void) {
++    if (t_emu) {
++        return t_emu;
++    }
++    void* stack = mmap(NULL, EMU_STACK_SIZE, PROT_READ | PROT_WRITE,
++                       MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
++    if (stack == MAP_FAILED) {
++        return NULL;
++    }
++    setProtection_mmap((uintptr_t)stack, EMU_STACK_SIZE, PROT_READ | PROT_WRITE);
++    t_emu_stack = stack;
++    t_stack_top = (uintptr_t)stack + EMU_STACK_SIZE;
++    t_emu = new_emu((uintptr_t)stack, EMU_STACK_SIZE, 0);
++    return t_emu;
++}
++
++void shad_box64_thread_exit(void) {
++    if (t_emu) {
++        FreeX64Emu(&t_emu);
++        t_emu = NULL;
++    }
++    if (t_emu_stack) {
++        freeProtection((uintptr_t)t_emu_stack, EMU_STACK_SIZE);
++        munmap(t_emu_stack, EMU_STACK_SIZE);
++        t_emu_stack = NULL;
++    }
++}
++
++void shad_box64_set_fs(uintptr_t base) {
++    x64emu_t* emu = shad_box64_thread_emu();
++    emu->segs_offs[_FS] = base;
++}
++
++// ---- running guest code ----------------------------------------------------
++
++uint64_t shad_box64_run_thread(uintptr_t fn, uintptr_t arg, uintptr_t stack_top) {
++    x64emu_t* emu = shad_box64_thread_emu();
++    t_stack_top = stack_top;
++    R_RSP = stack_top & ~(uintptr_t)15;
++    R_RBP = 0;
++    R_RDI = arg;
++    PushExit(emu);
++    R_RIP = fn;
++    emu->quit = 0;
++    emu->df = d_none;
++    EmuRun(emu, 1, 0);
++    emu->quit = 0;
++    return R_RAX;
++}
++
++void shad_box64_run_main(uintptr_t entry, uintptr_t rsp, uintptr_t rdi, uintptr_t rsi) {
++    x64emu_t* emu = shad_box64_thread_emu();
++    t_stack_top = (rsp + 32 + 15) & ~(uintptr_t)15;
++    R_RSP = rsp;
++    R_RBP = 0;
++    R_RDI = rdi;
++    R_RSI = rsi;
++    R_RIP = entry;
++    emu->quit = 0;
++    emu->df = d_none;
++    EmuRun(emu, 1, 0);
++}
++
++uint64_t shad_box64_call(uintptr_t fn, int nargs, const uint64_t* args) {
++    x64emu_t* emu = shad_box64_thread_emu();
++    const int stackn = nargs > 6 ? (nargs - 6) + ((nargs - 6) & 1) : 0;
++    Push64(emu, R_RBP);
++    R_RBP = R_RSP;
++    R_RSP -= stackn * sizeof(uint64_t);
++    uint64_t* p = (uint64_t*)R_RSP;
++    static const int regs[6] = {_DI, _SI, _DX, _CX, _R8, _R9};
++    for (int i = 0; i < nargs; ++i) {
++        if (i < 6) {
++            emu->regs[regs[i]].q[0] = args[i];
++        } else {
++            *p++ = args[i];
++        }
++    }
++    const uintptr_t old_ip = R_RIP;
++    const int old_quit = emu->quit;
++    emu->quit = 0;
++    DynaCall(emu, fn, 0);
++    if (old_ip == R_RIP) {
++        R_RSP = R_RBP;
++        R_RBP = Pop64(emu);
++    }
++    emu->quit = old_quit;
++    return R_RAX;
++}
++
++uint64_t shad_box64_call_from_native(uintptr_t fn, const uint64_t* args, int nargs) {
++    return shad_box64_call(fn, nargs, args);
++}
++
++// ---- memory tracking -------------------------------------------------------
++
++void shad_box64_on_map(uintptr_t addr, size_t size, int prot) {
++    setProtection_mmap(addr, size, (uint32_t)prot);
++}
++
++void shad_box64_on_protect(uintptr_t addr, size_t size, int prot) {
++    setProtection(addr, size, (uint32_t)prot);
++}
++
++void shad_box64_on_unmap(uintptr_t addr, size_t size) {
++    cleanDBFromAddressRange(addr, size, 1);
++    freeProtection(addr, size);
++}
++
++void shad_box64_invalidate(uintptr_t addr, size_t size) {
++    cleanDBFromAddressRange(addr, size, 0);
++}
++
++int shad_box64_handle_fault(void* addr, int si_code) {
++    if (!addr || si_code != SEGV_ACCERR) {
++        return 0;
++    }
++    const uint32_t prot = getProtection((uintptr_t)addr);
++    if (prot & PROT_DYNAREC) {
++        unprotectDB((uintptr_t)addr, 1, 1);
++        return 1;
++    }
++    if (prot & PROT_DYNAREC_R) {
++        unprotectDB((uintptr_t)addr, 1, 1);
++    }
++    return 0;
++}
++
++// ---- faults inside JIT code -------------------------------------------------------------
++
++static void* find_fpsimd(ucontext_t* p) {
++    struct _aarch64_ctx* ff = (struct _aarch64_ctx*)p->uc_mcontext.__reserved;
++    while (ff->magic) {
++        if (ff->magic == FPSIMD_MAGIC) {
++            return ff;
++        }
++        ff = (struct _aarch64_ctx*)((uintptr_t)ff + ff->size);
++    }
++    return NULL;
++}
++
++static x64emu_t* emu_from_context(ucontext_t* p) {
++    if (CONTEXT_REG(p, xEmu) > 0x10000) {
++        return (x64emu_t*)CONTEXT_REG(p, xEmu);
++    }
++    return t_emu;
++}
++
++static void leave_dynablock(ucontext_t* p, x64emu_t* emu, dynablock_t* db, uintptr_t x64pc,
++                            void* pc, int full) {
++    copyUCTXreg2Emu(emu, p, db, x64pc);
++    if (full) {
++        adjustregs(emu, pc);
++        if (db->arch_size) {
++            ARCH_ADJUST(db, emu, p, x64pc);
++        }
++    }
++    emu->test.clean = 0;
++    dynablock_leave_runtime(db);
++    copyEmu2USignalCTXreg(p, emu, native_epilog);
++}
++
++static int handle_callret_trap(ucontext_t* p, x64emu_t* emu, dynablock_t* db, void* pc,
++                               uintptr_t x64pc) {
++    int type_callret = -1;
++    for (int i = 0; i < db->callret_size; ++i) {
++        if (pc == (void*)((uintptr_t)db->block + db->callrets[i].offs)) {
++            type_callret = db->callrets[i].type;
++            break;
++        }
++    }
++    if (type_callret < 0) {
++        return 0;
++    }
++    if (!type_callret) {
++        x64pc = CONTEXT_REG(p, xRIP);
++    }
++    const int is_hotpage = checkInHotPage(x64pc);
++    const uint32_t hash = (db->gone || is_hotpage) ? 0 : X31_hash_code(db->x64_addr, db->x64_size);
++    if (!db->gone && (!is_hotpage || db->autocrc) && hash == db->hash) {
++        CONTEXT_PC(p) += 4;
++        if (db->always_test) {
++            protectDB((uintptr_t)db->x64_addr, 1);
++        } else {
++            for (int i = 0; i < db->callret_size; ++i) {
++                *(uint32_t*)((uintptr_t)db->block + db->callrets[i].offs) = ARCH_NOP;
++            }
++            ClearCache(db->block, db->size);
++            protectDBJumpTable((uintptr_t)db->x64_addr, db->x64_size, db->block, db->jmpnext);
++            for (int i = 0; i < db->sep_size; ++i) {
++                const uint32_t x64_offs = db->sep[i].x64_offs;
++                const uint32_t nat_offs = db->sep[i].nat_offs;
++                db->sep[i].active = addJumpTableIfDefault64(
++                    (void*)((uintptr_t)db->x64_addr + x64_offs),
++                    db->always_test ? db->jmpnext : (void*)((uintptr_t)db->block + nat_offs));
++            }
++        }
++        return 1;
++    }
++    leave_dynablock(p, emu, db, x64pc, pc, type_callret != 0);
++    return 1;
++}
++
++int shad_box64_jit_fault_begin(int sig, void* siginfo, void* ucontext) {
++    siginfo_t* info = (siginfo_t*)siginfo;
++    ucontext_t* p = (ucontext_t*)ucontext;
++    void* pc = (void*)CONTEXT_PC(p);
++    void* addr = info->si_addr;
++    dynablock_t* db = FindDynablockFromNativeAddress(pc);
++    if (!db) {
++        return 0;
++    }
++    x64emu_t* emu = emu_from_context(p);
++    uintptr_t x64pc = getX64Address(db, (uintptr_t)pc);
++
++    if (sig == SIGBUS && addr != pc) {
++        if (sigbus_specialcases(info, p, pc, find_fpsimd(p), db, x64pc, 0)) {
++            return 1;
++        }
++    }
++    if (sig == SIGILL && db->callret_size && handle_callret_trap(p, emu, db, pc, x64pc)) {
++        return 1;
++    }
++    if (sig == SIGSEGV && addr && info->si_code == SEGV_ACCERR) {
++        const uint32_t prot = getProtection((uintptr_t)addr);
++        if (prot & PROT_DYNAREC) {
++            CheckHotPage((uintptr_t)addr, prot);
++            unprotectDB((uintptr_t)addr, 1, 1);
++            const int in_block = (uintptr_t)addr >= (uintptr_t)db->x64_addr &&
++                                 (uintptr_t)addr < (uintptr_t)db->x64_addr + db->x64_size;
++            const int need_test =
++                BOX64ENV(dynarec_dirty) ? 0 : getNeedTest((uintptr_t)db->x64_addr);
++            if (in_block || need_test) {
++                if (in_block && BOX64ENV(dynarec_dirty)) {
++                    mark_db_autosmc(db, x64pc);
++                }
++                leave_dynablock(p, emu, db, x64pc, pc, 1);
++            }
++            return 1;
++        }
++        if (prot & PROT_DYNAREC_R) {
++            unprotectDB((uintptr_t)addr, 1, 1);
++        }
++    }
++    // Genuine guest fault inside translated code: rebuild the guest register state.
++    copyUCTXreg2Emu(emu, p, db, x64pc);
++    adjustregs(emu, pc);
++    if (db->arch_size) {
++        ARCH_ADJUST(db, emu, p, x64pc);
++    }
++    return 2;
++}
++
++void shad_box64_jit_fault_end(void* ucontext) {
++    ucontext_t* p = (ucontext_t*)ucontext;
++    x64emu_t* emu = emu_from_context(p);
++    void* pc = (void*)CONTEXT_PC(p);
++    dynablock_t* db = FindDynablockFromNativeAddress(pc);
++    if (db) {
++        emu->test.clean = 0;
++        dynablock_leave_runtime(db);
++    }
++    copyEmu2USignalCTXreg(p, emu, native_epilog);
++}
++
++// ---- register access ------------------------------------------------------
++
++void shad_box64_get_regs(x64emu_t* emu, shad_guest_regs_t* r) {
++    r->rax = R_RAX;
++    r->rbx = R_RBX;
++    r->rcx = R_RCX;
++    r->rdx = R_RDX;
++    r->rsi = R_RSI;
++    r->rdi = R_RDI;
++    r->rbp = R_RBP;
++    r->rsp = R_RSP;
++    r->r8 = R_R8;
++    r->r9 = R_R9;
++    r->r10 = R_R10;
++    r->r11 = R_R11;
++    r->r12 = R_R12;
++    r->r13 = R_R13;
++    r->r14 = R_R14;
++    r->r15 = R_R15;
++    r->rip = R_RIP;
++    r->rflags = emu->eflags.x64;
++    r->fs_base = emu->segs_offs[_FS];
++}
++
++void shad_box64_set_regs(x64emu_t* emu, const shad_guest_regs_t* r) {
++    R_RAX = r->rax;
++    R_RBX = r->rbx;
++    R_RCX = r->rcx;
++    R_RDX = r->rdx;
++    R_RSI = r->rsi;
++    R_RDI = r->rdi;
++    R_RBP = r->rbp;
++    R_RSP = r->rsp;
++    R_R8 = r->r8;
++    R_R9 = r->r9;
++    R_R10 = r->r10;
++    R_R11 = r->r11;
++    R_R12 = r->r12;
++    R_R13 = r->r13;
++    R_R14 = r->r14;
++    R_R15 = r->r15;
++    R_RIP = r->rip;
++    emu->eflags.x64 = (uint32_t)r->rflags;
++}
++
++// ---- callbacks into the emulator ---------------------------------------------
++
++void shad_box64_log(const char* msg) {
++    if (g_callbacks.log) {
++        g_callbacks.log(msg);
++    } else {
++        fputs(msg, stderr);
++    }
++}
++
++void shad_box64_on_guest_signal(x64emu_t* emu, int sig, void* addr, int code) {
++    if (g_callbacks.guest_signal) {
++        g_callbacks.guest_signal(emu, sig, addr, code);
++    } else {
++        abort();
++    }
++}
++
++void shad_box64_on_syscall(x64emu_t* emu) {
++    if (g_callbacks.syscall) {
++        g_callbacks.syscall(emu);
++    } else {
++        abort();
++    }
++}
++
++// ---- init --------------------------------------------------------------------
++
++int shad_box64_init(const shad_box64_callbacks_t* callbacks) {
++    if (my_context) {
++        return 1;
++    }
++    if (callbacks) {
++        g_callbacks = *callbacks;
++    }
++    box64_pagesize = sysconf(_SC_PAGESIZE);
++    if (box64_pagesize <= 0) {
++        box64_pagesize = 4096;
++    }
++    LoadEnvVariables();
++    InitializeSystemInfo();
++    if (!DetectHostCpuFeatures()) {
++        SET_BOX64ENV(dynarec, 0);
++    }
++    if (!BOX64ENV(nobanner)) {
++        PrintHostCpuFeatures();
++    }
++
++    my_context = &g_context;
++    memset(&g_context, 0, sizeof(g_context));
++    init_custommem_helper(&g_context);
++    g_context.db_sizes = rbtree_init("db_sizes");
++
++    pthread_mutexattr_t attr;
++    pthread_mutexattr_init(&attr);
++    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
++    pthread_mutex_init(&g_context.mutex_dyndump, &attr);
++    pthread_mutex_init(&g_context.mutex_trace, &attr);
++    pthread_mutex_init(&g_context.mutex_tls, &attr);
++    pthread_mutex_init(&g_context.mutex_thread, &attr);
++    pthread_mutex_init(&g_context.mutex_bridge, &attr);
++    pthread_mutexattr_destroy(&attr);
++
++    for (int i = 0; i < 16; i++) {
++        g_context.seggdt[i].limit = (uintptr_t)-1LL;
++    }
++    g_context.seggdt[10].present = 1;
++    g_context.seggdt[8].present = 1;
++    g_context.seggdt[6].present = 1;
++    g_context.seggdt[5].present = 1;
++
++    InitX64Trace(&g_context);
++
++    g_exit_bridge = make_bridge(NULL, NULL, "exit");
++    g_context.exit_bridge = g_exit_bridge;
++    return g_exit_bridge != 0;
++}
+diff --git a/src/core/cpu/box64/box64_glue.h b/src/core/cpu/box64/box64_glue.h
+new file mode 100644
+index 00000000..2c089a12
+--- /dev/null
++++ b/src/core/cpu/box64/box64_glue.h
+@@ -0,0 +1,66 @@
++// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#pragma once
++
++#include <stddef.h>
++#include <stdint.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++typedef struct x64emu_s x64emu_t;
++
++typedef struct shad_guest_regs_s {
++    uint64_t rax, rbx, rcx, rdx, rsi, rdi, rbp, rsp;
++    uint64_t r8, r9, r10, r11, r12, r13, r14, r15;
++    uint64_t rip, rflags, fs_base;
++} shad_guest_regs_t;
++
++typedef struct shad_box64_callbacks_s {
++    void (*log)(const char* msg);
++    // Fault raised by emulated code: sig is an x86 signal number, code the si_code.
++    void (*guest_signal)(x64emu_t* emu, int sig, void* addr, int code);
++    void (*syscall)(x64emu_t* emu);
++} shad_box64_callbacks_t;
++
++int shad_box64_init(const shad_box64_callbacks_t* callbacks);
++
++x64emu_t* shad_box64_current_emu(void);
++x64emu_t* shad_box64_thread_emu(void);
++void shad_box64_thread_exit(void);
++void shad_box64_set_fs(uintptr_t base);
++
++uint64_t shad_box64_run_thread(uintptr_t fn, uintptr_t arg, uintptr_t stack_top);
++void shad_box64_run_main(uintptr_t entry, uintptr_t rsp, uintptr_t rdi, uintptr_t rsi);
++uint64_t shad_box64_call(uintptr_t fn, int nargs, const uint64_t* args);
++uint64_t shad_box64_call_from_native(uintptr_t fn, const uint64_t* args, int nargs);
++void shad_guest_call_trampoline(void);
++
++uintptr_t shad_box64_bridge(void* native_fn, const char* name);
++int shad_box64_is_bridge(uintptr_t addr);
++void* shad_box64_bridge_target(uintptr_t addr);
++const char* shad_box64_bridge_name(uintptr_t addr);
++
++void shad_box64_on_map(uintptr_t addr, size_t size, int prot);
++void shad_box64_on_protect(uintptr_t addr, size_t size, int prot);
++void shad_box64_on_unmap(uintptr_t addr, size_t size);
++void shad_box64_invalidate(uintptr_t addr, size_t size);
++int shad_box64_handle_fault(void* addr, int si_code);
++// Fault raised while executing JIT code. Returns 0 if pc is not in a dynablock, 1 if fully
++// handled (return from the signal handler), 2 if the guest state was synced into the emu and the
++// caller should dispatch a guest exception and then call shad_box64_jit_fault_end.
++int shad_box64_jit_fault_begin(int sig, void* siginfo, void* ucontext);
++void shad_box64_jit_fault_end(void* ucontext);
++
++void shad_box64_get_regs(x64emu_t* emu, shad_guest_regs_t* regs);
++void shad_box64_set_regs(x64emu_t* emu, const shad_guest_regs_t* regs);
++
++void shad_box64_log(const char* msg);
++void shad_box64_on_guest_signal(x64emu_t* emu, int sig, void* addr, int code);
++void shad_box64_on_syscall(x64emu_t* emu);
++
++#ifdef __cplusplus
++}
++#endif
+diff --git a/src/core/cpu/box64/box64_os.c b/src/core/cpu/box64/box64_os.c
+new file mode 100644
+index 00000000..5d3d7add
+--- /dev/null
++++ b/src/core/cpu/box64/box64_os.c
+@@ -0,0 +1,344 @@
++// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#define _GNU_SOURCE
++#include <errno.h>
++#include <pthread.h>
++#include <stdarg.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/auxv.h>
++#include <sys/mman.h>
++#include <sys/stat.h>
++#include <sys/syscall.h>
++#include <unistd.h>
++
++#include "box64context.h"
++#include "bridge.h"
++#include "custommem.h"
++#include "debug.h"
++#include "emit_signals.h"
++#include "emu/x64emu_private.h"
++#include "emu/x64run_private.h"
++#include "hostext.h"
++#include "os.h"
++#include "pathcoll.h"
++#include "sysinfo.h"
++#include "tools/bridge_private.h"
++#include "x64_signals.h"
++#include "x64emu.h"
++
++#include "box64_glue.h"
++
++box64context_t* my_context = NULL;
++uintptr_t box64_pagesize = 4096;
++int box64_is32bits = 0;
++int box64_isAddressSpace32 = 0;
++int box64_rdtsc = 0;
++uint8_t box64_rdtsc_shift = 0;
++int box64_mapclean = 0;
++uint32_t default_gs = 0x2b;
++uint32_t default_fs = 0;
++int box64_unittest_mode = 0;
++int box64_wine = 0;
++sysinfo_t box64_sysinfo = {0};
++cpu_ext_t cpuext = {0};
++char* ftrace_name = NULL;
++int box64_cycle_log_initialized = 0;
++
++char* box_strdup(const char* s) {
++    return strdup(s);
++}
++
++void initCycleLog(box64context_t* context) {
++    (void)context;
++}
++
++int GetTID(void) {
++    return syscall(SYS_gettid);
++}
++
++int SchedYield(void) {
++    return sched_yield();
++}
++
++int IsBridgeSignature(char s, char c) {
++    return s == 'S' && c == 'C';
++}
++
++static uint64_t F64(uintptr_t* addr) {
++    uint64_t ret = *(uint64_t*)*addr;
++    *addr += 8;
++    return ret;
++}
++
++void EmuInt3(void* e, void* a) {
++    x64emu_t* emu = (x64emu_t*)e;
++    uintptr_t* addr = (uintptr_t*)a;
++    onebridge_t* bridge = (onebridge_t*)(*addr - 1);
++    if (IsBridgeSignature(bridge->S, bridge->C)) {
++        *addr += 2;
++        uintptr_t w = F64(addr);
++        if (w == 0) {
++            *addr += 8;
++            R_RIP = *addr;
++            emu->quit = 1;
++            return;
++        }
++        RESET_FLAGS(emu);
++        uintptr_t f = F64(addr);
++        R_RIP = *addr;
++        ((wrapper_t)w)(emu, f);
++        return;
++    }
++    R_RIP = *addr;
++    EmitSignal(emu, X64_SIGTRAP, NULL, 3);
++}
++
++int IsNativeCall(uintptr_t addr, int is32bits, uintptr_t* calladdress, uint16_t* retn) {
++    (void)is32bits;
++    if (!shad_box64_is_bridge(addr)) {
++        return 0;
++    }
++    onebridge_t* b = (onebridge_t*)addr;
++    if (b->CC == 0xCC && IsBridgeSignature(b->S, b->C) && b->w) {
++        if (retn) {
++            *retn = 0;
++        }
++        if (calladdress) {
++            *calladdress = addr + 1;
++        }
++        return 1;
++    }
++    return 0;
++}
++
++void* EmuFork(void* emu, int forktype) {
++    (void)forktype;
++    return emu;
++}
++
++void EmuX64Syscall(void* emu) {
++    shad_box64_on_syscall((x64emu_t*)emu);
++}
++
++void EmuX64Syscall_linux(void* emu) {
++    shad_box64_on_syscall((x64emu_t*)emu);
++}
++
++void EmuX86Syscall(void* emu) {
++    shad_box64_on_syscall((x64emu_t*)emu);
++}
++
++void* GetSeg43Base(void* emu) {
++    (void)emu;
++    return NULL;
++}
++
++void* GetSegmentBase(void* emu, uint32_t desc) {
++    (void)emu;
++    (void)desc;
++    return NULL;
++}
++
++const char* GetBridgeName(void* p) {
++    return shad_box64_bridge_name((uintptr_t)p);
++}
++
++static __thread char native_name[256];
++
++const char* GetNativeName(void* p, int lib) {
++    (void)lib;
++    const char* n = GetBridgeName(p);
++    if (n) {
++        return n;
++    }
++    snprintf(native_name, sizeof(native_name), "%p", p);
++    return native_name;
++}
++
++void* GetNativeFnc(uintptr_t fnc) {
++    if (!shad_box64_is_bridge(fnc)) {
++        return NULL;
++    }
++    onebridge_t* b = (onebridge_t*)fnc;
++    if (b->CC == 0xCC && IsBridgeSignature(b->S, b->C)) {
++        return (void*)b->f;
++    }
++    return NULL;
++}
++
++void PersonalityAddrLimit32Bit(void) {}
++
++int IsAddrElfOrFileMapped(uintptr_t addr) {
++    (void)addr;
++    return 0;
++}
++
++void* InternalMmap(void* addr, unsigned long length, int prot, int flags, int fd, ssize_t offset) {
++    return (void*)syscall(__NR_mmap, addr, length, prot, flags, fd, offset);
++}
++
++int InternalMunmap(void* addr, unsigned long length) {
++    return syscall(__NR_munmap, addr, length);
++}
++
++void PrintfFtrace(int prefix, const char* fmt, ...) {
++    (void)prefix;
++    char tmp[4096];
++    va_list args;
++    va_start(args, fmt);
++    vsnprintf(tmp, sizeof(tmp), fmt, args);
++    va_end(args);
++    shad_box64_log(tmp);
++}
++
++void* GetEnv(const char* name) {
++    return getenv(name);
++}
++
++int FileExist(const char* filename, int flags) {
++    struct stat sb;
++    if (stat(filename, &sb) == -1) {
++        return 0;
++    }
++    if (flags == -1) {
++        return 1;
++    }
++    if (flags & IS_FILE) {
++        if (!S_ISREG(sb.st_mode)) {
++            return 0;
++        }
++    } else if (!S_ISDIR(sb.st_mode)) {
++        return 0;
++    }
++    if ((flags & IS_EXECUTABLE) && (sb.st_mode & S_IXUSR) != S_IXUSR) {
++        return 0;
++    }
++    return 1;
++}
++
++int MakeDir(const char* folder) {
++    int ret = mkdir(folder, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
++    return (!ret || errno == EEXIST) ? 1 : 0;
++}
++
++size_t FileSize(const char* filename) {
++    struct stat sb;
++    if (stat(filename, &sb) == -1 || !S_ISREG(sb.st_mode)) {
++        return 0;
++    }
++    return sb.st_size;
++}
++
++unsigned long real_getauxval(unsigned long type) {
++    return getauxval(type);
++}
++
++// Elf loader / librarian functionality that shadPS4 provides itself.
++typedef struct elfheader_s elfheader_t;
++
++elfheader_t* FindElfAddress(box64context_t* context, uintptr_t addr) {
++    (void)context;
++    (void)addr;
++    return NULL;
++}
++
++const char* getAddrFunctionName(uintptr_t addr) {
++    (void)addr;
++    return "???";
++}
++
++int PrintFunctionAddr(uintptr_t nextaddr, const char* text) {
++    (void)nextaddr;
++    (void)text;
++    return 0;
++}
++
++void AddNewLibs(const char* list) {
++    (void)list;
++}
++
++void DetectUnityPlayer(char* filename) {
++    (void)filename;
++}
++
++void ParseVolatileMetadata(char* filename, void* addr) {
++    (void)filename;
++    (void)addr;
++}
++
++int VolatileRangesContains(uintptr_t addr) {
++    (void)addr;
++    return 0;
++}
++
++uintptr_t AddAltJump(bridge_t* bridge, uintptr_t addr, uintptr_t jump_to_addr) {
++    (void)bridge;
++    (void)addr;
++    (void)jump_to_addr;
++    return 0;
++}
++
++int isSimpleWrapper(wrapper_t fun) {
++    (void)fun;
++    return 0;
++}
++
++int isRetX87Wrapper(wrapper_t fun) {
++    (void)fun;
++    return 0;
++}
++
++void enter_critical_section(void) {
++    x64emu_t* emu = shad_box64_current_emu();
++    if (emu) {
++        ++emu->critical_section;
++    }
++}
++
++void leave_critical_section(void) {
++    x64emu_t* emu = shad_box64_current_emu();
++    if (emu && emu->critical_section > 0) {
++        --emu->critical_section;
++    }
++}
++
++// Guest-visible faults raised by the interpreter/dynarec.
++void EmitSignal(x64emu_t* emu, int sig, void* addr, int code) {
++    shad_box64_on_guest_signal(emu, sig, addr, code);
++}
++
++void EmitInterruption(x64emu_t* emu, int num, void* addr) {
++    (void)addr;
++    shad_box64_on_guest_signal(emu, X64_SIGSEGV, NULL, 0xdead0000 | num);
++}
++
++void EmitWineInt(x64emu_t* emu, int num, void* addr) {
++    EmitInterruption(emu, num, addr);
++}
++
++void EmitDiv0(x64emu_t* emu, void* addr, int code) {
++    shad_box64_on_guest_signal(emu, X64_SIGFPE, addr, code);
++}
++
++void CheckExec(x64emu_t* emu, uintptr_t addr) {
++    (void)emu;
++    (void)addr;
++}
++
++int VolatileOpcodesHas(uintptr_t addr) {
++    (void)addr;
++    return 0;
++}
++
++int checkUnlockMutex(void* m) {
++    (void)m;
++    return 0;
++}
++
++int checkNolockMutex(void* m) {
++    (void)m;
++    return 0;
++}
+diff --git a/src/core/cpu/cpu.cpp b/src/core/cpu/cpu.cpp
+new file mode 100644
+index 00000000..94f68835
+--- /dev/null
++++ b/src/core/cpu/cpu.cpp
+@@ -0,0 +1,254 @@
++// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include <cstring>
++#include <mutex>
++#include "common/assert.h"
++#include "common/logging/log.h"
++#include "core/cpu/cpu.h"
++#include "core/memory.h"
++
++#ifdef ARCH_ARM64
++#include <sys/mman.h>
++#include <sys/ucontext.h>
++#include "core/cpu/box64/box64_glue.h"
++#include "core/libraries/kernel/threads/pthread.h"
++#endif
++
++namespace Core::Cpu {
++
++#ifdef ARCH_ARM64
++
++static void LogCallback(const char* msg) {
++    std::string_view view{msg};
++    while (!view.empty() && (view.back() == '\n' || view.back() == '\r')) {
++        view.remove_suffix(1);
++    }
++    if (!view.empty()) {
++        LOG_INFO(Core, "box64: {}", view);
++    }
++}
++
++static void GuestSignalCallback(x64emu_t* emu, int sig, void* addr, int code) {
++    shad_guest_regs_t regs{};
++    shad_box64_get_regs(emu, &regs);
++    UNREACHABLE_MSG("Guest raised signal {} at rip={:#x} addr={} code={:#x}", sig, regs.rip,
++                    fmt::ptr(addr), code);
++}
++
++static void SyscallCallback(x64emu_t* emu) {
++    shad_guest_regs_t regs{};
++    shad_box64_get_regs(emu, &regs);
++    UNREACHABLE_MSG("Guest executed syscall {:#x} at rip={:#x}", regs.rax, regs.rip);
++}
++
++void Initialize() {
++    static std::once_flag flag;
++    std::call_once(flag, [] {
++        const shad_box64_callbacks_t callbacks{
++            .log = LogCallback,
++            .guest_signal = GuestSignalCallback,
++            .syscall = SyscallCallback,
++        };
++        ASSERT_MSG(shad_box64_init(&callbacks), "Failed to initialize box64 CPU core");
++    });
++}
++
++bool IsGuestAddress(VAddr addr) {
++    auto& space = Memory::Instance()->GetAddressSpace();
++    const VAddr sm = space.SystemManagedVirtualBase();
++    const VAddr sr = space.SystemReservedVirtualBase();
++    const VAddr user = space.UserVirtualBase();
++    return (addr >= sm && addr < sm + space.SystemManagedVirtualSize()) ||
++           (addr >= sr && addr < sr + space.SystemReservedVirtualSize()) ||
++           (addr >= user && addr < user + space.UserVirtualSize());
++}
++
++u64 MakeGuestCallable(const void* native_fn, const char* name) {
++    if (!native_fn) {
++        return 0;
++    }
++    Initialize();
++    const u64 addr = shad_box64_bridge(const_cast<void*>(native_fn), name);
++    ASSERT_MSG(addr != 0, "Failed to create bridge for {}", name ? name : "?");
++    return addr;
++}
++
++void* ResolveNative(VAddr addr) {
++    return shad_box64_bridge_target(addr);
++}
++
++u64 CallGuestRaw(VAddr fn, const u64* args, int nargs) {
++    Initialize();
++    return shad_box64_call(fn, nargs, args);
++}
++
++void* RunThreadEntry(void* PS4_SYSV_ABI (*start)(void*), void* arg, void* stack_top) {
++    const VAddr addr = reinterpret_cast<VAddr>(start);
++    if (!IsGuestAddress(addr)) {
++        if (void* native = ResolveNative(addr)) {
++            return reinterpret_cast<void* PS4_SYSV_ABI (*)(void*)>(native)(arg);
++        }
++        return start(arg);
++    }
++    Initialize();
++    return reinterpret_cast<void*>(
++        shad_box64_run_thread(addr, reinterpret_cast<u64>(arg), reinterpret_cast<u64>(stack_top)));
++}
++
++void RunMainEntry(VAddr entry, VAddr rsp, VAddr rdi, VAddr rsi) {
++    Initialize();
++    shad_box64_run_main(entry, rsp, rdi, rsi);
++    UNREACHABLE_MSG("Guest main entry returned");
++}
++
++void SetTlsBase(void* tcb) {
++    Initialize();
++    shad_box64_set_fs(reinterpret_cast<u64>(tcb));
++}
++
++void OnThreadExit() {
++    shad_box64_thread_exit();
++}
++
++static int ToProt(bool read, bool write, bool exec) {
++    return (read ? PROT_READ : 0) | (write ? PROT_WRITE : 0) | (exec ? PROT_EXEC : 0);
++}
++
++void OnMap(VAddr addr, u64 size, bool read, bool write, bool exec) {
++    Initialize();
++    shad_box64_on_map(addr, size, ToProt(read, write, exec));
++}
++
++void OnProtect(VAddr addr, u64 size, bool read, bool write, bool exec) {
++    Initialize();
++    shad_box64_on_protect(addr, size, ToProt(read, write, exec));
++}
++
++void OnUnmap(VAddr addr, u64 size) {
++    Initialize();
++    shad_box64_on_unmap(addr, size);
++}
++
++bool HandleFault(void* addr, int si_code) {
++    if (!shad_box64_current_emu()) {
++        return false;
++    }
++    return shad_box64_handle_fault(addr, si_code) != 0;
++}
++
++bool HandleGuestCallFault(void* raw_context, void* fault_addr) {
++    auto* uc = reinterpret_cast<ucontext_t*>(raw_context);
++    const VAddr pc = uc->uc_mcontext.pc;
++    if (pc != reinterpret_cast<VAddr>(fault_addr) || !IsGuestAddress(pc)) {
++        return false;
++    }
++    Initialize();
++    uc->uc_mcontext.regs[16] = pc;
++    uc->uc_mcontext.pc = reinterpret_cast<VAddr>(&shad_guest_call_trampoline);
++    return true;
++}
++
++JitFault BeginJitFault(int sig, void* siginfo, void* raw_context) {
++    switch (shad_box64_jit_fault_begin(sig, siginfo, raw_context)) {
++    case 1:
++        return JitFault::Handled;
++    case 2:
++        return JitFault::GuestFault;
++    default:
++        return JitFault::NotInJit;
++    }
++}
++
++void EndJitFault(void* raw_context) {
++    shad_box64_jit_fault_end(raw_context);
++}
++
++bool HandleBridgeCallFault(void* raw_context) {
++    auto* uc = reinterpret_cast<ucontext_t*>(raw_context);
++    void* target = shad_box64_bridge_target(uc->uc_mcontext.pc);
++    if (!target) {
++        return false;
++    }
++    uc->uc_mcontext.pc = reinterpret_cast<VAddr>(target);
++    return true;
++}
++
++bool GetCurrentGuestRegs(GuestRegs& regs) {
++    x64emu_t* emu = shad_box64_current_emu();
++    if (!emu) {
++        return false;
++    }
++    static_assert(sizeof(GuestRegs) == sizeof(shad_guest_regs_t));
++    shad_box64_get_regs(emu, reinterpret_cast<shad_guest_regs_t*>(&regs));
++    return true;
++}
++
++void SetCurrentGuestRegs(const GuestRegs& regs) {
++    x64emu_t* emu = shad_box64_current_emu();
++    if (emu) {
++        shad_box64_set_regs(emu, reinterpret_cast<const shad_guest_regs_t*>(&regs));
++    }
++}
++
++#else
++
++void Initialize() {}
++
++bool IsGuestAddress(VAddr) {
++    return true;
++}
++
++u64 MakeGuestCallable(const void* native_fn, const char*) {
++    return reinterpret_cast<u64>(native_fn);
++}
++
++void* ResolveNative(VAddr) {
++    return nullptr;
++}
++
++u64 CallGuestRaw(VAddr, const u64*, int) {
++    UNREACHABLE();
++}
++
++void* RunThreadEntry(void* PS4_SYSV_ABI (*start)(void*), void* arg, void*) {
++    return start(arg);
++}
++
++void RunMainEntry(VAddr, VAddr, VAddr, VAddr) {
++    UNREACHABLE();
++}
++
++void SetTlsBase(void*) {}
++void OnThreadExit() {}
++void OnMap(VAddr, u64, bool, bool, bool) {}
++void OnProtect(VAddr, u64, bool, bool, bool) {}
++void OnUnmap(VAddr, u64) {}
++
++bool HandleFault(void*, int) {
++    return false;
++}
++
++bool HandleGuestCallFault(void*, void*) {
++    return false;
++}
++
++bool HandleBridgeCallFault(void*) {
++    return false;
++}
++
++JitFault BeginJitFault(int, void*, void*) {
++    return JitFault::NotInJit;
++}
++
++void EndJitFault(void*) {}
++
++bool GetCurrentGuestRegs(GuestRegs&) {
++    return false;
++}
++
++void SetCurrentGuestRegs(const GuestRegs&) {}
++
++#endif
++
++} // namespace Core::Cpu
+diff --git a/src/core/cpu/cpu.h b/src/core/cpu/cpu.h
+new file mode 100644
+index 00000000..e012a040
+--- /dev/null
++++ b/src/core/cpu/cpu.h
+@@ -0,0 +1,89 @@
++// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#pragma once
++
++#include <array>
++#include <type_traits>
++#include "common/arch.h"
++#include "common/types.h"
++
++namespace Core::Cpu {
++
++struct GuestRegs {
++    u64 rax, rbx, rcx, rdx, rsi, rdi, rbp, rsp;
++    u64 r8, r9, r10, r11, r12, r13, r14, r15;
++    u64 rip, rflags, fs_base;
++};
++
++void Initialize();
++bool IsGuestAddress(VAddr addr);
++
++// Address the guest can call/jump to in order to reach a native function.
++u64 MakeGuestCallable(const void* native_fn, const char* name = nullptr);
++// Native function behind a guest-callable address, or nullptr if the address is guest code.
++void* ResolveNative(VAddr addr);
++
++u64 CallGuestRaw(VAddr fn, const u64* args, int nargs);
++void* RunThreadEntry(void* PS4_SYSV_ABI (*start)(void*), void* arg, void* stack_top);
++[[noreturn]] void RunMainEntry(VAddr entry, VAddr rsp, VAddr rdi, VAddr rsi);
++
++void SetTlsBase(void* tcb);
++void OnThreadExit();
++
++void OnMap(VAddr addr, u64 size, bool read, bool write, bool exec);
++void OnProtect(VAddr addr, u64 size, bool read, bool write, bool exec);
++void OnUnmap(VAddr addr, u64 size);
++bool HandleFault(void* addr, int si_code);
++// Native code jumped into (non-executable) guest memory: reroute the call through the emulator.
++bool HandleGuestCallFault(void* raw_context, void* fault_addr);
++// Native code jumped to a guest-callable bridge: continue at the bridged native function.
++bool HandleBridgeCallFault(void* raw_context);
++// Fault while running translated guest code. Handled: fully resolved, return from the signal.
++// GuestFault: guest registers were synced; dispatch the guest exception then call EndJitFault.
++enum class JitFault { NotInJit, Handled, GuestFault };
++JitFault BeginJitFault(int sig, void* siginfo, void* raw_context);
++void EndJitFault(void* raw_context);
++
++bool GetCurrentGuestRegs(GuestRegs& regs);
++void SetCurrentGuestRegs(const GuestRegs& regs);
++
++template <typename T>
++u64 ToArg(T v) {
++    static_assert(!std::is_floating_point_v<T>, "floating point callback args unsupported");
++    if constexpr (std::is_pointer_v<T>) {
++        return reinterpret_cast<u64>(v);
++    } else if constexpr (std::is_enum_v<T>) {
++        return static_cast<u64>(static_cast<std::underlying_type_t<T>>(v));
++    } else {
++        return static_cast<u64>(v);
++    }
++}
++
++// Calls a function pointer that may be guest code or native code.
++template <typename R, typename... Params, typename... Args>
++R Call(R PS4_SYSV_ABI (*fn)(Params...), Args&&... args) {
++#ifdef ARCH_X86_64
++    return fn(static_cast<Params>(args)...);
++#else
++    const VAddr addr = reinterpret_cast<VAddr>(fn);
++    if (!IsGuestAddress(addr)) {
++        if (void* native = ResolveNative(addr)) {
++            return reinterpret_cast<R PS4_SYSV_ABI (*)(Params...)>(native)(
++                static_cast<Params>(args)...);
++        }
++        return fn(static_cast<Params>(args)...);
++    }
++    const std::array<u64, sizeof...(Params)> raw{ToArg(static_cast<Params>(args))...};
++    const u64 ret = CallGuestRaw(addr, raw.data(), static_cast<int>(raw.size()));
++    if constexpr (std::is_void_v<R>) {
++        return;
++    } else if constexpr (std::is_pointer_v<R>) {
++        return reinterpret_cast<R>(ret);
++    } else {
++        return static_cast<R>(ret);
++    }
++#endif
++}
++
++} // namespace Core::Cpu
+diff --git a/src/core/libraries/kernel/threads/exception.cpp b/src/core/libraries/kernel/threads/exception.cpp
+index 37215a9e..811c5e53 100644
+--- a/src/core/libraries/kernel/threads/exception.cpp
++++ b/src/core/libraries/kernel/threads/exception.cpp
+@@ -3,6 +3,7 @@
+ 
+ #include "common/arch.h"
+ #include "common/assert.h"
++#include "core/cpu/cpu.h"
+ #include "core/libraries/kernel/kernel.h"
+ #include "core/libraries/kernel/orbis_error.h"
+ #include "core/libraries/kernel/posix_error.h"
+@@ -97,7 +98,26 @@ Ucontext::Ucontext(siginfo_t const* inf, ucontext_t* raw_context) {
+     uc_mcontext.mc_addr = reinterpret_cast<uint64_t>(inf->si_addr);
+ #endif
+ #else
+-#error "ucontext_t conversion not implemented for current architecture."
++    Core::Cpu::GuestRegs regs{};
++    Core::Cpu::GetCurrentGuestRegs(regs);
++    uc_mcontext.mc_r8 = regs.r8;
++    uc_mcontext.mc_r9 = regs.r9;
++    uc_mcontext.mc_r10 = regs.r10;
++    uc_mcontext.mc_r11 = regs.r11;
++    uc_mcontext.mc_r12 = regs.r12;
++    uc_mcontext.mc_r13 = regs.r13;
++    uc_mcontext.mc_r14 = regs.r14;
++    uc_mcontext.mc_r15 = regs.r15;
++    uc_mcontext.mc_rdi = regs.rdi;
++    uc_mcontext.mc_rsi = regs.rsi;
++    uc_mcontext.mc_rbp = regs.rbp;
++    uc_mcontext.mc_rbx = regs.rbx;
++    uc_mcontext.mc_rdx = regs.rdx;
++    uc_mcontext.mc_rax = regs.rax;
++    uc_mcontext.mc_rcx = regs.rcx;
++    uc_mcontext.mc_rsp = regs.rsp;
++    uc_mcontext.mc_rip = regs.rip;
++    uc_mcontext.mc_addr = reinterpret_cast<uint64_t>(inf->si_addr);
+ #endif
+ }
+ #else
+@@ -220,7 +240,27 @@ void Ucontext::SyncHostFromGuest() {
+     regs[REG_RIP] = uc_mcontext.mc_rip;
+ #endif
+ #else
+-#error "ucontext_t conversion not implemented for current architecture."
++    Core::Cpu::GuestRegs regs{};
++    if (Core::Cpu::GetCurrentGuestRegs(regs)) {
++        regs.r8 = uc_mcontext.mc_r8;
++        regs.r9 = uc_mcontext.mc_r9;
++        regs.r10 = uc_mcontext.mc_r10;
++        regs.r11 = uc_mcontext.mc_r11;
++        regs.r12 = uc_mcontext.mc_r12;
++        regs.r13 = uc_mcontext.mc_r13;
++        regs.r14 = uc_mcontext.mc_r14;
++        regs.r15 = uc_mcontext.mc_r15;
++        regs.rdi = uc_mcontext.mc_rdi;
++        regs.rsi = uc_mcontext.mc_rsi;
++        regs.rbp = uc_mcontext.mc_rbp;
++        regs.rbx = uc_mcontext.mc_rbx;
++        regs.rdx = uc_mcontext.mc_rdx;
++        regs.rax = uc_mcontext.mc_rax;
++        regs.rcx = uc_mcontext.mc_rcx;
++        regs.rsp = uc_mcontext.mc_rsp;
++        regs.rip = uc_mcontext.mc_rip;
++        Core::Cpu::SetCurrentGuestRegs(regs);
++    }
+ #endif
+ }
+ 
+diff --git a/src/core/libraries/kernel/threads/pthread.cpp b/src/core/libraries/kernel/threads/pthread.cpp
+index 666a2c77..dbedc50a 100644
+--- a/src/core/libraries/kernel/threads/pthread.cpp
++++ b/src/core/libraries/kernel/threads/pthread.cpp
+@@ -1,8 +1,10 @@
+ // SPDX-FileCopyrightText: Copyright 2025-2026 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
++#include "common/arch.h"
+ #include "common/assert.h"
+ #include "common/thread.h"
++#include "core/cpu/cpu.h"
+ #ifdef _WIN32
+ #include "common/ntapi.h"
+ #else
+@@ -270,7 +272,13 @@ static void* RunThread(void* arg) {
+     auto* const stack =
+         (void*)(((size_t)curthread->attr.stackaddr_attr + curthread->attr.stacksize_attr) & (~15));
+     LOG_INFO(Kernel_Pthread, "Running thread {} with stack {:#x}", curthread->name, VAddr(stack));
++#ifdef ARCH_X86_64
+     void* ret = _runOnAnotherStack(curthread->arg, (void*)curthread->start_routine, stack);
++#else
++    void* ret = Core::Cpu::RunThreadEntry(curthread->start_routine, curthread->arg, stack);
++    LOG_INFO(Kernel_Pthread, "Thread {} start routine {} returned {}", curthread->name,
++             fmt::ptr(curthread->start_routine), fmt::ptr(ret));
++#endif
+ 
+     /* Remove thread from tracking */
+     DebugState.RemoveCurrentThreadFromGuestList();
+diff --git a/src/core/linker.cpp b/src/core/linker.cpp
+index 650ebb12..a87e2a01 100644
+--- a/src/core/linker.cpp
++++ b/src/core/linker.cpp
+@@ -13,6 +13,7 @@
+ #include "common/thread.h"
+ #include "core/aerolib/aerolib.h"
+ #include "core/aerolib/stubs.h"
++#include "core/cpu/cpu.h"
+ #include "core/devtools/widget/module_list.h"
+ #include "core/emulator_settings.h"
+ #include "core/file_sys/backends/host_fs.h"
+@@ -60,7 +61,18 @@ static PS4_SYSV_ABI void* RunMainEntry [[noreturn]] (EntryParams* params) {
+                  : "rax", "rsi", "rdi");
+     UNREACHABLE();
+ #else
+-    UNREACHABLE_MSG("RunMainEntry unimplemented for current architecture.");
++    const auto* thread = Libraries::Kernel::g_curthread;
++    const VAddr stack_top =
++        reinterpret_cast<VAddr>(thread->attr.stackaddr_attr) + thread->attr.stacksize_attr;
++    VAddr rsp = (stack_top & ~VAddr(15)) - 8;
++    const auto* raw = reinterpret_cast<const u64*>(params);
++    rsp -= 8;
++    *reinterpret_cast<u64*>(rsp) = raw[1];
++    rsp -= 8;
++    *reinterpret_cast<u64*>(rsp) = raw[0];
++    const u64 exit_func =
++        Cpu::MakeGuestCallable(reinterpret_cast<const void*>(&ProgramExitFunc), "ProgramExitFunc");
++    Cpu::RunMainEntry(params->entry_addr, rsp, reinterpret_cast<VAddr>(params), exit_func);
+ #endif
+ }
+ 
+@@ -164,9 +176,9 @@ void Linker::Execute(const std::vector<std::string>& args) {
+ 
+             if (malloc_init && sceLibcInternalMemoryMutexEnable) {
+                 // Call _malloc_init
+-                s32 ret = malloc_init();
++                s32 ret = Cpu::Call(malloc_init);
+                 ASSERT_MSG(ret == 0, "malloc_init failed");
+-                sceLibcInternalMemoryMutexEnable();
++                Cpu::Call(sceLibcInternalMemoryMutexEnable);
+             }
+         }
+ 
+@@ -412,6 +424,10 @@ bool Linker::Resolve(const std::string& name, Loader::SymbolType sym_type, Modul
+     const auto* record = m_hle_symbols.FindSymbol(sr);
+     if (record) {
+         *return_info = *record;
++        if (sym_type == Loader::SymbolType::Function) {
++            return_info->virtual_address = Cpu::MakeGuestCallable(
++                reinterpret_cast<const void*>(record->virtual_address), record->name.c_str());
++        }
+         Core::Devtools::Widget::ModuleList::AddModule(sr.library);
+         return true;
+     }
+diff --git a/src/core/module.cpp b/src/core/module.cpp
+index 369239bc..9d730a60 100644
+--- a/src/core/module.cpp
++++ b/src/core/module.cpp
+@@ -9,6 +9,7 @@
+ #include "common/sha1.h"
+ #include "common/string_util.h"
+ #include "core/aerolib/aerolib.h"
++#include "core/cpu/cpu.h"
+ #include "core/cpu_patches.h"
+ #include "core/libraries/error_codes.h"
+ #include "core/loader/dwarf.h"
+@@ -101,7 +102,7 @@ Module::~Module() = default;
+ s32 Module::Start(u64 args, const void* argp, void* param) {
+     LOG_INFO(Core_Linker, "Module started : {}", name);
+     const VAddr addr = dynamic_info.init_virtual_addr + GetBaseAddress();
+-    return reinterpret_cast<EntryFunc>(addr)(args, argp, param);
++    return Core::Cpu::Call(reinterpret_cast<EntryFunc>(addr), args, argp, param);
+ }
+ 
+ void Module::LoadModuleToMemory(u32& max_tls_index) {
+diff --git a/src/core/signals.cpp b/src/core/signals.cpp
+index 5c3ff133..ac7dbe05 100644
+--- a/src/core/signals.cpp
++++ b/src/core/signals.cpp
+@@ -5,6 +5,7 @@
+ #include "common/assert.h"
+ #include "common/decoder.h"
+ #include "common/signal_context.h"
++#include "core/cpu/cpu.h"
+ #include "core/cpu_patches.h" // Windows static guest red-zone protection
+ #include "core/libraries/kernel/kernel.h"
+ #include "core/libraries/kernel/threads/exception.h"
+@@ -251,6 +252,18 @@ void SignalHandler(int sig, siginfo_t* info, void* raw_context) {
+     const auto* signals = Signals::Instance();
+ 
+     auto* code_address = Common::GetRip(raw_context);
++    bool in_jit = false;
++    if (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL) {
++        switch (Core::Cpu::BeginJitFault(sig, info, raw_context)) {
++        case Core::Cpu::JitFault::Handled:
++            return;
++        case Core::Cpu::JitFault::GuestFault:
++            in_jit = true;
++            break;
++        default:
++            break;
++        }
++    }
+ 
+     Ucontext context{info, reinterpret_cast<ucontext_t*>(raw_context)};
+     Siginfo guest_info{};
+@@ -267,9 +280,16 @@ void SignalHandler(int sig, siginfo_t* info, void* raw_context) {
+     switch (sig) {
+     case SIGSEGV:
+     case SIGBUS: {
++        if (Core::Cpu::HandleFault(info->si_addr, info->si_code) ||
++            Core::Cpu::HandleGuestCallFault(raw_context, info->si_addr)) {
++            return;
++        }
+         const bool is_write = Common::IsWriteError(raw_context);
+         if (!signals->DispatchAccessViolation(raw_context, info->si_addr)) {
+             if (thread && thread->DispatchSignal(NativeToOrbisSignal(sig), info_p, context_p)) {
++                if (in_jit) {
++                    Core::Cpu::EndJitFault(raw_context);
++                }
+                 return;
+             }
+             UNREACHABLE_MSG("Unhandled access violation at code address {}: {} address {}",
+@@ -279,13 +299,18 @@ void SignalHandler(int sig, siginfo_t* info, void* raw_context) {
+         break;
+     }
+     case SIGILL:
+-        if (signals->DispatchIllegalInstruction(raw_context)) {
++        if (Core::Cpu::HandleBridgeCallFault(raw_context) ||
++            Core::Cpu::HandleGuestCallFault(raw_context, code_address) ||
++            signals->DispatchIllegalInstruction(raw_context)) {
+             return;
+         }
+     case SIGFPE:
+     case SIGTRAP:
+     case SIGSYS: {
+         if (thread && thread->DispatchSignal(NativeToOrbisSignal(sig), info_p, context_p)) {
++            if (in_jit) {
++                Core::Cpu::EndJitFault(raw_context);
++            }
+             return;
+         }
+ 
+diff --git a/src/core/thread.cpp b/src/core/thread.cpp
+index e58f16e5..9e924bfb 100644
+--- a/src/core/thread.cpp
++++ b/src/core/thread.cpp
+@@ -3,6 +3,7 @@
+ 
+ #include "common/alignment.h"
+ #include "common/arch.h"
++#include "core/cpu/cpu.h"
+ #include "core/libraries/kernel/threads/pthread.h"
+ #include "thread.h"
+ #ifdef _WIN64
+@@ -60,6 +61,7 @@ void NativeThread::Exit() {
+         free(sig_stack_ptr);
+         sig_stack_ptr = nullptr;
+     }
++    Cpu::OnThreadExit();
+     pthread_exit(nullptr);
+ #endif
+ }
+diff --git a/src/core/tls.cpp b/src/core/tls.cpp
+index e0d7f3f8..723b1fb2 100644
+--- a/src/core/tls.cpp
++++ b/src/core/tls.cpp
+@@ -4,6 +4,7 @@
+ #include <mutex>
+ #include "common/arch.h"
+ #include "common/assert.h"
++#include "core/cpu/cpu.h"
+ #include "core/libraries/kernel/threads/pthread.h"
+ #include "core/tls.h"
+ 
+@@ -196,6 +197,7 @@ pthread_key_t GetTcbKey() {
+ 
+ void SetTcbBase(void* image_address) {
+     ASSERT(pthread_setspecific(GetTcbKey(), image_address) == 0);
++    Cpu::SetTlsBase(image_address);
+ }
+ 
+ Tcb* GetTcbBase() {
+diff --git a/src/emulator.cpp b/src/emulator.cpp
+index 3d98f390..8f73ac18 100644
+--- a/src/emulator.cpp
++++ b/src/emulator.cpp
+@@ -21,6 +21,7 @@
+ #ifdef ENABLE_DISCORD_RPC
+ #include "common/discord_rpc_handler.h"
+ #endif
++#include "common/arch.h"
+ #include "common/elf_info.h"
+ #include "common/memory_patcher.h"
+ #include "common/ntapi.h"
+@@ -433,9 +434,11 @@ void Emulator::Run(std::filesystem::path file, std::vector<std::string> args,
+     }
+ 
+     EmulatorSettings.Load(id);
++#ifdef ARCH_X86_64
+     // Windows static guest red-zone protection
+     WindowsGuestRedZoneProtection::SetActiveMode(
+         EmulatorSettings.GetWindowsGuestRedZoneProtectionMode());
++#endif
+     // Switch to configured log
+     Common::Log::Switch((!id.empty() && EmulatorSettings.IsLogSeparate()) ? id + ".log"
+                                                                           : "shad_log.txt");
+diff --git a/src/shader_recompiler/info.h b/src/shader_recompiler/info.h
+index 5d246cb8..d2070d4e 100644
+--- a/src/shader_recompiler/info.h
++++ b/src/shader_recompiler/info.h
+@@ -6,6 +6,7 @@
+ #include <span>
+ #include <vector>
+ #include <boost/container/static_vector.hpp>
++#include "common/arch.h"
+ #include "common/assert.h"
+ #include "common/types.h"
+ #include "shader_recompiler/backend/bindings.h"
+@@ -197,7 +198,11 @@ struct Info : InfoPersistent {
+         ASSERT(user_data.size() <= NUM_USER_DATA_REGS);
+         std::memcpy(flattened_ud_buf.data(), user_data.data(), user_data.size_bytes());
+         if (srt_info.walker_func) {
++#ifdef ARCH_X86_64
+             srt_info.walker_func(user_data.data(), flattened_ud_buf.data());
++#else
++            RunSrtWalker(srt_info, user_data.data(), flattened_ud_buf.data());
++#endif
+         }
+     }
+ 
+diff --git a/src/shader_recompiler/ir/passes/flatten_extended_userdata_pass.cpp b/src/shader_recompiler/ir/passes/flatten_extended_userdata_pass.cpp
+index e80d4fef..03e28a9b 100644
+--- a/src/shader_recompiler/ir/passes/flatten_extended_userdata_pass.cpp
++++ b/src/shader_recompiler/ir/passes/flatten_extended_userdata_pass.cpp
+@@ -4,14 +4,21 @@
+ #include <unordered_map>
+ #include <boost/container/flat_map.hpp>
+ #include <queue>
++#ifdef ARCH_X86_64
+ #include <xbyak/xbyak.h>
+ #include <xbyak/xbyak_util.h>
+-#include "common/arch.h"
+ #include "common/decoder.h"
+ #include "common/io_file.h"
+-#include "common/logging/log.h"
+ #include "common/path_util.h"
+ #include "common/signal_context.h"
++#else
++#include <csetjmp>
++#include <csignal>
++#include <memory>
++#include <mutex>
++#endif
++#include "common/arch.h"
++#include "common/logging/log.h"
+ #include "core/emulator_settings.h"
+ #include "core/signals.h"
+ #include "shader_recompiler/info.h"
+@@ -120,6 +127,17 @@ static bool SrtWalkerSignalHandler(void* context, void* fault_address) {
+     return true;
+ }
+ 
++#else
++
++namespace Shader {
++
++PFN_SrtWalker RegisterWalkerCode(const u8* ptr, size_t size);
++
++} // namespace Shader
++
++namespace {
++#endif
++
+ using namespace Shader;
+ 
+ struct PassInfo {
+@@ -217,6 +235,30 @@ static inline void SetFlatbufOffset(IR::Inst* inst, u16 offset) {
+     UNREACHABLE_MSG("Instruction not supported");
+ }
+ 
++static bool IsAllowedOffsetInstruction(const IR::Inst* inst) {
++    switch (inst->GetOpcode()) {
++    case IR::Opcode::GetUserData:
++    case IR::Opcode::ReadConst:
++    case IR::Opcode::ReadConstBuffer:
++    case IR::Opcode::IAdd32:
++    case IR::Opcode::ISub32:
++    case IR::Opcode::IMul32:
++    case IR::Opcode::ShiftLeftLogical32:
++    case IR::Opcode::ShiftRightLogical32:
++    case IR::Opcode::BitwiseAnd32:
++    case IR::Opcode::BitwiseOr32:
++    case IR::Opcode::BitwiseXor32:
++    case IR::Opcode::BitwiseNot32:
++    case IR::Opcode::UMin32:
++    case IR::Opcode::UMax32:
++    case IR::Opcode::BitFieldUExtract:
++        return true;
++    default:
++        return false;
++    }
++}
++
++#ifdef ARCH_X86_64
+ static bool ComputeOffset(Xbyak::CodeGenerator& c, Xbyak::Reg32 reg, PassInfo& pass_info,
+                           const IR::Value& off_dw);
+ 
+@@ -485,29 +527,6 @@ static bool EmitComputeOffsetBitFieldUExtract(Xbyak::CodeGenerator& c, Xbyak::Re
+     return true;
+ }
+ 
+-static bool IsAllowedOffsetInstruction(const IR::Inst* inst) {
+-    switch (inst->GetOpcode()) {
+-    case IR::Opcode::GetUserData:
+-    case IR::Opcode::ReadConst:
+-    case IR::Opcode::ReadConstBuffer:
+-    case IR::Opcode::IAdd32:
+-    case IR::Opcode::ISub32:
+-    case IR::Opcode::IMul32:
+-    case IR::Opcode::ShiftLeftLogical32:
+-    case IR::Opcode::ShiftRightLogical32:
+-    case IR::Opcode::BitwiseAnd32:
+-    case IR::Opcode::BitwiseOr32:
+-    case IR::Opcode::BitwiseXor32:
+-    case IR::Opcode::BitwiseNot32:
+-    case IR::Opcode::UMin32:
+-    case IR::Opcode::UMax32:
+-    case IR::Opcode::BitFieldUExtract:
+-        return true;
+-    default:
+-        return false;
+-    }
+-}
+-
+ static bool ComputeOffset(Xbyak::CodeGenerator& c, Xbyak::Reg32 reg, PassInfo& pass_info,
+                           const IR::Value& off_dw) {
+     ASSERT(reg != ecx && reg != edx);
+@@ -671,6 +690,331 @@ static void GenerateSrtProgram(Info& info, PassInfo& pass_info) {
+     info.srt_info.flattened_bufsize_dw = pass_info.dst_off_dw;
+ }
+ 
++#else
++
++// Portable SRT walker: a flat bytecode blob interpreted at runtime. Memory layout of the blob is
++// header, ops, exprs so it can be persisted as-is by the pipeline cache.
++namespace Bytecode {
++
++enum class ExprKind : u8 { Imm, UserData, FlatBuf, Binary, Not, Bfe };
++enum class BinOp : u8 { Add, Sub, Mul, Shl, Shr, And, Or, Xor, UMin, UMax };
++enum class OpKind : u8 { PushPtrImm, PushPtrExpr, PopPtr, CopyImm, CopyExpr };
++
++struct Expr {
++    ExprKind kind;
++    BinOp op;
++    u16 pad;
++    u32 imm;
++    u32 a, b, c;
++};
++
++struct Op {
++    OpKind kind;
++    u8 pad[3];
++    u32 arg;
++    u32 dst;
++};
++
++struct Header {
++    u32 num_ops;
++    u32 num_exprs;
++};
++
++struct Builder {
++    std::vector<Op> ops;
++    std::vector<Expr> exprs;
++
++    u32 Add(Expr e) {
++        exprs.push_back(e);
++        return static_cast<u32>(exprs.size() - 1);
++    }
++
++    std::vector<u8> Finish() const {
++        std::vector<u8> blob(sizeof(Header) + ops.size() * sizeof(Op) +
++                             exprs.size() * sizeof(Expr));
++        const Header hdr{static_cast<u32>(ops.size()), static_cast<u32>(exprs.size())};
++        std::memcpy(blob.data(), &hdr, sizeof(hdr));
++        std::memcpy(blob.data() + sizeof(Header), ops.data(), ops.size() * sizeof(Op));
++        std::memcpy(blob.data() + sizeof(Header) + ops.size() * sizeof(Op), exprs.data(),
++                    exprs.size() * sizeof(Expr));
++        return blob;
++    }
++};
++
++static thread_local jmp_buf* g_fault_jmp = nullptr;
++
++static bool FaultHandler(void* context, void* fault_address) {
++    if (!g_fault_jmp) {
++        return false;
++    }
++    sigset_t set;
++    sigemptyset(&set);
++    sigaddset(&set, SIGSEGV);
++    sigaddset(&set, SIGBUS);
++    sigprocmask(SIG_UNBLOCK, &set, nullptr);
++    longjmp(*g_fault_jmp, 1);
++}
++
++template <typename T>
++static T SafeRead(const void* addr) {
++    jmp_buf env;
++    T value{};
++    g_fault_jmp = &env;
++    if (setjmp(env) == 0) {
++        value = *static_cast<const volatile T*>(addr);
++    } else {
++        LOG_WARNING(Render_Recompiler, "SRT walker read fault at {}", fmt::ptr(addr));
++    }
++    g_fault_jmp = nullptr;
++    return value;
++}
++
++struct Interpreter {
++    const Header* hdr;
++    const Op* ops;
++    const Expr* exprs;
++    const u32* flat;
++
++    u32 Eval(u32 idx) const {
++        const Expr& e = exprs[idx];
++        switch (e.kind) {
++        case ExprKind::Imm:
++            return e.imm;
++        case ExprKind::UserData:
++        case ExprKind::FlatBuf:
++            return flat[e.imm];
++        case ExprKind::Not:
++            return ~Eval(e.a);
++        case ExprKind::Bfe: {
++            const u32 v = Eval(e.a) >> (Eval(e.b) & 31);
++            return v & ((1U << (Eval(e.c) & 31)) - 1);
++        }
++        case ExprKind::Binary: {
++            const u32 a = Eval(e.a);
++            const u32 b = Eval(e.b);
++            switch (e.op) {
++            case BinOp::Add:
++                return a + b;
++            case BinOp::Sub:
++                return a - b;
++            case BinOp::Mul:
++                return a * b;
++            case BinOp::Shl:
++                return a << (b & 31);
++            case BinOp::Shr:
++                return a >> (b & 31);
++            case BinOp::And:
++                return a & b;
++            case BinOp::Or:
++                return a | b;
++            case BinOp::Xor:
++                return a ^ b;
++            case BinOp::UMin:
++                return std::min(a, b);
++            case BinOp::UMax:
++                return std::max(a, b);
++            }
++            return 0;
++        }
++        }
++        return 0;
++    }
++
++    void Run(const u32* user_data, u32* flat_dst) {
++        flat = flat_dst;
++        boost::container::small_vector<uintptr_t, 8> stack;
++        uintptr_t ptr = reinterpret_cast<uintptr_t>(user_data);
++        for (u32 i = 0; i < hdr->num_ops; ++i) {
++            const Op& op = ops[i];
++            switch (op.kind) {
++            case OpKind::PushPtrImm:
++            case OpKind::PushPtrExpr: {
++                stack.push_back(ptr);
++                const u32 off_dw = op.kind == OpKind::PushPtrImm ? op.arg : Eval(op.arg);
++                const u64 next =
++                    SafeRead<u64>(reinterpret_cast<const void*>(ptr + (u64(off_dw) << 2)));
++                ptr = next & 0xFFFFFFFFFFFFULL;
++                break;
++            }
++            case OpKind::PopPtr:
++                ptr = stack.back();
++                stack.pop_back();
++                break;
++            case OpKind::CopyImm:
++            case OpKind::CopyExpr: {
++                const u32 off_dw = op.kind == OpKind::CopyImm ? op.arg : Eval(op.arg);
++                flat_dst[op.dst] =
++                    SafeRead<u32>(reinterpret_cast<const void*>(ptr + (u64(off_dw) << 2)));
++                break;
++            }
++            }
++        }
++    }
++};
++
++static std::mutex g_programs_mutex;
++static std::vector<std::unique_ptr<u8[]>> g_programs;
++static std::once_flag g_handler_flag;
++
++static const u8* Persist(const u8* blob, size_t size) {
++    std::call_once(g_handler_flag, [] {
++        constexpr u32 priority = 1;
++        Core::Signals::Instance()->RegisterAccessViolationHandler(FaultHandler, priority);
++    });
++    auto storage = std::make_unique<u8[]>(size);
++    std::memcpy(storage.get(), blob, size);
++    const u8* ret = storage.get();
++    std::scoped_lock lk{g_programs_mutex};
++    g_programs.push_back(std::move(storage));
++    return ret;
++}
++
++} // namespace Bytecode
++
++static bool BuildExpr(Bytecode::Builder& b, PassInfo& pass_info, const IR::Value& value, u32& out);
++
++static bool BuildBinary(Bytecode::Builder& b, PassInfo& pass_info, IR::Inst* inst,
++                        Bytecode::BinOp op, u32& out) {
++    ASSERT(!inst->AreAllArgsImmediates());
++    u32 lhs, rhs;
++    if (!BuildExpr(b, pass_info, inst->Arg(0), lhs) ||
++        !BuildExpr(b, pass_info, inst->Arg(1), rhs)) {
++        return false;
++    }
++    out = b.Add({.kind = Bytecode::ExprKind::Binary, .op = op, .a = lhs, .b = rhs});
++    return true;
++}
++
++static bool BuildExpr(Bytecode::Builder& b, PassInfo& pass_info, const IR::Value& value, u32& out) {
++    using namespace Bytecode;
++    if (value.IsImmediate()) {
++        out = b.Add({.kind = ExprKind::Imm, .imm = value.U32()});
++        return true;
++    }
++    IR::Inst* inst = value.Inst();
++    switch (inst->GetOpcode()) {
++    case IR::Opcode::GetUserData:
++        out =
++            b.Add({.kind = ExprKind::UserData, .imm = static_cast<u32>(inst->Arg(0).ScalarReg())});
++        return true;
++    case IR::Opcode::ReadConst:
++    case IR::Opcode::ReadConstBuffer:
++        if (u16 offset = GetFlatbufOffset(pass_info.DeduplicateInstruction(inst)); offset != 0) {
++            out = b.Add({.kind = ExprKind::FlatBuf, .imm = offset});
++            return true;
++        }
++        return false;
++    case IR::Opcode::IAdd32:
++        return BuildBinary(b, pass_info, inst, BinOp::Add, out);
++    case IR::Opcode::ISub32:
++        return BuildBinary(b, pass_info, inst, BinOp::Sub, out);
++    case IR::Opcode::IMul32:
++        return BuildBinary(b, pass_info, inst, BinOp::Mul, out);
++    case IR::Opcode::ShiftLeftLogical32:
++        return BuildBinary(b, pass_info, inst, BinOp::Shl, out);
++    case IR::Opcode::ShiftRightLogical32:
++        return BuildBinary(b, pass_info, inst, BinOp::Shr, out);
++    case IR::Opcode::BitwiseAnd32:
++        return BuildBinary(b, pass_info, inst, BinOp::And, out);
++    case IR::Opcode::BitwiseOr32:
++        return BuildBinary(b, pass_info, inst, BinOp::Or, out);
++    case IR::Opcode::BitwiseXor32:
++        return BuildBinary(b, pass_info, inst, BinOp::Xor, out);
++    case IR::Opcode::UMin32:
++        return BuildBinary(b, pass_info, inst, BinOp::UMin, out);
++    case IR::Opcode::UMax32:
++        return BuildBinary(b, pass_info, inst, BinOp::UMax, out);
++    case IR::Opcode::BitwiseNot32: {
++        u32 a;
++        if (!BuildExpr(b, pass_info, inst->Arg(0), a)) {
++            return false;
++        }
++        out = b.Add({.kind = ExprKind::Not, .a = a});
++        return true;
++    }
++    case IR::Opcode::BitFieldUExtract: {
++        u32 a, sh, cnt;
++        if (!BuildExpr(b, pass_info, inst->Arg(0), a) ||
++            !BuildExpr(b, pass_info, inst->Arg(1), sh) ||
++            !BuildExpr(b, pass_info, inst->Arg(2), cnt)) {
++            return false;
++        }
++        out = b.Add({.kind = ExprKind::Bfe, .a = a, .b = sh, .c = cnt});
++        return true;
++    }
++    default:
++        LOG_ERROR(Render_Recompiler, "Unexpected instruction for offset computation, {}",
++                  magic_enum::enum_name(inst->GetOpcode()));
++        return false;
++    }
++}
++
++static void VisitPointer(const IR::Value& off_dw, IR::Inst* subtree, PassInfo& pass_info,
++                         Bytecode::Builder& b) {
++    using namespace Bytecode;
++    if (subtree->GetOpcode() == IR::Opcode::ReadConst && subtree->Flags<u16>() == 0 ||
++        subtree->GetOpcode() == IR::Opcode::ReadConstBuffer &&
++            subtree->Flags<IR::BufferInstInfo>().flatbuf_off_dw == 0) {
++        return;
++    }
++    if (off_dw.IsImmediate()) {
++        b.ops.push_back({.kind = OpKind::PushPtrImm, .arg = off_dw.U32()});
++    } else {
++        u32 expr;
++        if (!BuildExpr(b, pass_info, off_dw, expr)) {
++            LOG_ERROR(Render_Recompiler, "Failed to compute offset for SRT walker");
++            return;
++        }
++        b.ops.push_back({.kind = OpKind::PushPtrExpr, .arg = expr});
++    }
++    PassInfo::PtrUserList* use_list = pass_info.GetUsesAsPointer(subtree);
++    ASSERT(use_list);
++
++    for (auto [src_off_dw, use] : *use_list) {
++        if (src_off_dw.IsImmediate()) {
++            b.ops.push_back(
++                {.kind = OpKind::CopyImm, .arg = src_off_dw.U32(), .dst = pass_info.dst_off_dw});
++        } else {
++            u32 expr;
++            if (!BuildExpr(b, pass_info, src_off_dw, expr)) {
++                LOG_ERROR(Render_Recompiler, "Failed to compute offset for SRT walker");
++                continue;
++            }
++            b.ops.push_back({.kind = OpKind::CopyExpr, .arg = expr, .dst = pass_info.dst_off_dw});
++        }
++        SetFlatbufOffset(use, pass_info.dst_off_dw);
++        pass_info.dst_off_dw++;
++    }
++
++    for (const auto [src_off_dw, use] : *use_list) {
++        if (pass_info.GetUsesAsPointer(use)) {
++            VisitPointer(src_off_dw, use, pass_info, b);
++        }
++    }
++
++    b.ops.push_back({.kind = OpKind::PopPtr});
++}
++
++static void GenerateSrtProgram(Info& info, PassInfo& pass_info) {
++    if (pass_info.srt_roots.empty()) {
++        return;
++    }
++    Bytecode::Builder b;
++    pass_info.dst_off_dw = NUM_USER_DATA_REGS;
++    ASSERT(pass_info.dst_off_dw == info.srt_info.flattened_bufsize_dw);
++
++    for (const auto& [sgpr_base, root] : pass_info.srt_roots) {
++        VisitPointer(IR::Value(static_cast<u32>(sgpr_base)), root, pass_info, b);
++    }
++
++    const auto blob = b.Finish();
++    info.srt_info.walker_func = reinterpret_cast<PFN_SrtWalker>(
++        const_cast<u8*>(Bytecode::Persist(blob.data(), blob.size())));
++    info.srt_info.walker_func_size = blob.size();
++    info.srt_info.flattened_bufsize_dw = pass_info.dst_off_dw;
++}
++
++#endif
+ static bool IsReadConstSource(const IR::Value base) {
+     auto* inst = base.TryInst();
+     if (!inst) {
+@@ -862,22 +1206,25 @@ void FlattenExtendedUserdataPass(IR::Program& program) {
+ 
+ } // namespace Shader::Optimization
+ 
+-#else
+-
++#ifndef ARCH_X86_64
+ namespace Shader {
+ 
+ PFN_SrtWalker RegisterWalkerCode(const u8* ptr, size_t size) {
+-    UNREACHABLE_MSG("RegisterWalkerCode unimplemented for target architecture.");
++    return reinterpret_cast<PFN_SrtWalker>(
++        const_cast<u8*>(Optimization::Bytecode::Persist(ptr, size)));
+ }
+ 
+-namespace Optimization {
+-
+-void FlattenExtendedUserdataPass(IR::Program& program) {
+-    UNREACHABLE_MSG("FlattenExtendedUserdataPass unimplemented for target architecture.");
++void RunSrtWalker(const PersistentSrtInfo& srt_info, const u32* user_data, u32* flat_dst) {
++    using namespace Optimization::Bytecode;
++    const auto* blob = reinterpret_cast<const u8*>(srt_info.walker_func);
++    const auto* hdr = reinterpret_cast<const Header*>(blob);
++    Interpreter interp{
++        .hdr = hdr,
++        .ops = reinterpret_cast<const Op*>(blob + sizeof(Header)),
++        .exprs = reinterpret_cast<const Expr*>(blob + sizeof(Header) + hdr->num_ops * sizeof(Op)),
++    };
++    interp.Run(user_data, flat_dst);
+ }
+ 
+-} // namespace Optimization
+-
+ } // namespace Shader
+-
+ #endif
+diff --git a/src/shader_recompiler/ir/passes/srt.h b/src/shader_recompiler/ir/passes/srt.h
+index 918b832e..10768b58 100644
+--- a/src/shader_recompiler/ir/passes/srt.h
++++ b/src/shader_recompiler/ir/passes/srt.h
+@@ -15,6 +15,8 @@ namespace Shader {
+ 
+ using PFN_SrtWalker = void PS4_SYSV_ABI (*)(const u32* /*user_data*/, u32* /*flat_dst*/);
+ PFN_SrtWalker RegisterWalkerCode(const u8* ptr, size_t size);
++struct PersistentSrtInfo;
++void RunSrtWalker(const PersistentSrtInfo& srt_info, const u32* user_data, u32* flat_dst);
+ 
+ struct PersistentSrtInfo {
+     // Special case when fetch shader uses step rates.
+diff --git a/src/video_core/buffer_cache/region_definitions.h b/src/video_core/buffer_cache/region_definitions.h
+index 260047d4..21869f2c 100644
+--- a/src/video_core/buffer_cache/region_definitions.h
++++ b/src/video_core/buffer_cache/region_definitions.h
+@@ -3,12 +3,17 @@
+ 
+ #pragma once
+ 
++#include "common/arch.h"
+ #include "common/bit_array.h"
+ #include "common/types.h"
+ 
+ namespace VideoCore {
+ 
++#if defined(ARCH_ARM64) && defined(__linux__)
++constexpr u64 TRACKER_PAGE_BITS = 14; // 16K pages (Asahi and other 16K kernels)
++#else
+ constexpr u64 TRACKER_PAGE_BITS = 12; // 4K pages
++#endif
+ constexpr u64 TRACKER_BYTES_PER_PAGE = 1ULL << TRACKER_PAGE_BITS;
+ 
+ constexpr u64 TRACKER_HIGHER_PAGE_BITS = 22; // each region is 4MB
+diff --git a/src/video_core/page_manager.cpp b/src/video_core/page_manager.cpp
+index 89568472..2bd902e4 100644
+--- a/src/video_core/page_manager.cpp
++++ b/src/video_core/page_manager.cpp
+@@ -34,8 +34,8 @@
+ 
+ namespace VideoCore {
+ 
+-constexpr size_t PM_PAGE_SIZE = 4_KB;
+-constexpr size_t PM_PAGE_BITS = 12;
++constexpr size_t PM_PAGE_SIZE = TRACKER_BYTES_PER_PAGE;
++constexpr size_t PM_PAGE_BITS = TRACKER_PAGE_BITS;
+ 
+ struct PageManager::Impl {
+     struct PageState {
