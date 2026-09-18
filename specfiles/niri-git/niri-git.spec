@@ -30,7 +30,7 @@
 
 Name:           niri
 Version:        %{version}
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -172,5 +172,8 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Fri Sep 18 2026 lm <lchlnm@pm.me> - 0.0.git.2911.ee8a04bb-3
+- Add NIRI_CTM_GAMMA knob
+
 * Fri Sep 18 2026 lm <lchlnm@pm.me> - 0.0.git.2911.ee8a04bb-2
 - Add CTM gamma fallback for night light

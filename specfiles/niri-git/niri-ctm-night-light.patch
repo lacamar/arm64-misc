@@ -1,5 +1,14 @@
 --- a/src/backend/tty.rs
 +++ b/src/backend/tty.rs
+@@ -8,7 +8,7 @@
+ use std::rc::Rc;
+ use std::sync::{Arc, Mutex};
+ use std::time::Duration;
+-use std::{io, mem};
++use std::{env, io, mem};
+ 
+ use anyhow::{anyhow, bail, ensure, Context};
+ use bytemuck::cast_slice_mut;
 @@ -398,7 +398,8 @@
  struct GammaProps {
      crtc: crtc::Handle,
@@ -10,7 +19,7 @@
      previous_blob: Option<NonZeroU64>,
  }
  
-@@ -2622,10 +2623,26 @@
+@@ -2622,10 +2623,32 @@
      }
  }
  
@@ -26,7 +35,13 @@
 +        xx += x * x;
 +    }
 +    let gain = if xx > 0. { (xy / xx).clamp(0., 1.) } else { 1. };
-+    (gain * (1u64 << 32) as f64).round() as u64
++    // Ramp gains are in encoded space; the CTM may be applied in linear light.
++    let gamma = env::var("NIRI_CTM_GAMMA")
++        .ok()
++        .and_then(|v| v.parse::<f64>().ok())
++        .filter(|g| *g > 0.)
++        .unwrap_or(1.);
++    (gain.powf(gamma) * (1u64 << 32) as f64).round() as u64
 +}
 +
  impl GammaProps {
@@ -37,7 +52,7 @@
  
          let props = device
              .get_properties(crtc)
-@@ -2654,12 +2671,18 @@
+@@ -2654,12 +2677,18 @@
                      );
                      gamma_lut_size = Some(prop);
                  }
@@ -58,7 +73,7 @@
  
          Ok(Self {
              crtc,
-@@ -2670,7 +2693,10 @@
+@@ -2670,7 +2699,10 @@
      }
  
      fn gamma_size(&self, device: &DrmDevice) -> anyhow::Result<u32> {
@@ -70,7 +85,7 @@
              .context("missing GAMMA_LUT_SIZE property")?;
          Ok(value as u32)
      }
-@@ -2685,6 +2711,19 @@
+@@ -2685,6 +2717,19 @@
  
              ensure!(gamma.len() == gamma_size * 3, "wrong gamma length");
  
@@ -90,7 +105,7 @@
              #[allow(non_camel_case_types)]
              #[repr(C)]
              #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-@@ -2714,6 +2753,10 @@
+@@ -2714,6 +2759,10 @@
              None
          };
  
