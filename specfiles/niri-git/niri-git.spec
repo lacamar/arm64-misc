@@ -24,13 +24,14 @@
 # Convince rust-srpm-macros to use Cargo.lock with the Smithay commit.
 %global __cargo_common_opts %{?_smp_mflags} -Z avoid-dev-deps --locked
 
+%global bumpver 1
+%global tag 26.04
 %global commit ee8a04bbaa9a20c53b9544cdd098ff54d8c509b4
 %global shortcommit %{sub %{commit} 1 8}
-%global version 0.0.git.2911.%{shortcommit}
 
 Name:           niri
-Version:        %{version}
-Release:        4%{?dist}
+Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
+Release:        1%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -64,7 +65,6 @@ URL:            https://github.com/niri-wm/niri
 VCS:            git+%{url}#%{commit}:
 Source:         %{url}/archive/%{commit}/niri-%{shortcommit}.tar.gz
 Patch:          niri-ctm-night-light.patch
-Patch:          niri-display-only-scanout.patch
 
 BuildRequires:  cargo-rpm-macros >= 26
 BuildRequires:  pkgconfig(udev)
@@ -173,6 +173,10 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Fri Sep 18 2026 lm <lchlnm@pm.me> - 26.04^1.git.ee8a04bb-1
+- Drop display-only scanout patch
+- Switch to tag/bumpver versioning
+
 * Fri Sep 18 2026 lm <lchlnm@pm.me> - 0.0.git.2911.ee8a04bb-4
 - Allow direct scanout on display-only devices
 
