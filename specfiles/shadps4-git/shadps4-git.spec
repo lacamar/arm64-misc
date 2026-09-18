@@ -1,7 +1,7 @@
 %global bumpver 1
 %global _name shadps4
 %global tag 0.18.0
-%global commit 2e4b770898a292daa72102a4162d0441eec028f3
+%global commit 6cce91b787702388c0435ff8b7fbb1ab8f0a572e
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 # Prebuilt FFmpeg from shadps4-emu/ext-ffmpeg-core, matching externals/ffmpeg-core
 %global ffmpeg_sha 94dde08
