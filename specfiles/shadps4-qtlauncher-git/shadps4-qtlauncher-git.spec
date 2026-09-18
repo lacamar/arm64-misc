@@ -1,6 +1,6 @@
-%global bumpver 1
+%global bumpver 0
 %global _name shadps4-qtlauncher
-%global tag 2026.09.12
+%global tag 4.2026.09.12.864.30.5372.7.95.609188942.77.6.4
 %global commit 4ce2f029c824fe3cb9dac80673b406baa6d22617
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
@@ -118,6 +118,9 @@ appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/net.shadps4.sh
 %{_datadir}/icons/hicolor/scalable/apps/net.shadps4.shadPS4.svg
 
 %changelog
+* Fri Sep 18 2026 Lachlan Marie <lchlnm@pm.me> - 4.2026.09.12.864.30.5372.7.95.609188942.77.6.4^0.git.4ce2f02-1
+ - Update to 4.2026.09.12.864.30.5372.7.95.609188942.77.6.4
+
 * Fri Sep 18 2026 lm <lchlnm@pm.me> - 2026.09.12^1.git.4ce2f02-1
 - Initial package
 - Seed system emulator into version manager
