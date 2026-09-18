@@ -30,7 +30,7 @@
 
 Name:           niri
 Version:        %{version}
-Release:        3%{?dist}
+Release:        4%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -64,6 +64,7 @@ URL:            https://github.com/niri-wm/niri
 VCS:            git+%{url}#%{commit}:
 Source:         %{url}/archive/%{commit}/niri-%{shortcommit}.tar.gz
 Patch:          niri-ctm-night-light.patch
+Patch:          niri-display-only-scanout.patch
 
 BuildRequires:  cargo-rpm-macros >= 26
 BuildRequires:  pkgconfig(udev)
@@ -172,6 +173,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Fri Sep 18 2026 lm <lchlnm@pm.me> - 0.0.git.2911.ee8a04bb-4
+- Allow direct scanout on display-only devices
+
 * Fri Sep 18 2026 lm <lchlnm@pm.me> - 0.0.git.2911.ee8a04bb-3
 - Add NIRI_CTM_GAMMA knob
 

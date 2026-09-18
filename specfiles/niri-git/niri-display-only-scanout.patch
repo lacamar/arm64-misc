@@ -1,0 +1,29 @@
+--- a/src/backend/tty.rs
++++ b/src/backend/tty.rs
+@@ -1446,13 +1446,16 @@
+         .iter()
+         .copied();
+ 
++        // Display-only devices scan out buffers from the primary GPU.
++        let import_node = device.render_node.unwrap_or(self.primary_render_node);
++
+         // Create the compositor.
+         let res = DrmCompositor::new(
+             OutputModeSource::Auto(output.downgrade()),
+             surface,
+             None,
+             device.allocator.clone(),
+-            GbmFramebufferExporter::new(device.gbm.clone(), device.render_node.into()),
++            GbmFramebufferExporter::new(device.gbm.clone(), import_node.into()),
+             color_formats.clone(),
+             // This is only used to pick a good internal format, so it can use the surface's render
+             // formats, even though we only ever render on the primary GPU.
+@@ -1482,7 +1485,7 @@
+                     surface,
+                     None,
+                     device.allocator.clone(),
+-                    GbmFramebufferExporter::new(device.gbm.clone(), device.render_node.into()),
++                    GbmFramebufferExporter::new(device.gbm.clone(), import_node.into()),
+                     color_formats,
+                     render_formats,
+                     device.drm.cursor_size(),
