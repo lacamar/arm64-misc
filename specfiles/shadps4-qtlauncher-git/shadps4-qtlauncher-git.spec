@@ -21,7 +21,7 @@ local externals = {
  { name="ext-fmt", ref="64db979", owner="shadps4-emu", path="fmt", version="12.0.0", license="MIT" },
  { name="json", ref="54be9b0", owner="nlohmann", path="json", version="3.12", license="MIT" },
  { name="openal-soft", ref="f120be6", owner="shadexternals", path="openal-soft", version="1.24.3", license="LGPL-2.0-or-later" },
- { name="ext-SDL", ref="d5af35e", owner="shadps4-emu", path="sdl3", version="3.4", license="Zlib" },
+ { name="sdl3", ref="d5af35e3fbb5bb6555ed00e69740d52af2a4e877", owner="shadexternals", path="sdl3", version="3.4", license="Zlib" },
  { name="spdlog", ref="b8944a4", owner="gabime", path="spdlog", version="1.15", license="MIT" },
  { name="toml11", ref="a01fe3b", owner="ToruNiina", path="toml11", version="4.4", license="MIT" },
  { name="volk", ref="e51c647", owner="zeux", path="volk", version="1.4", license="MIT" },
