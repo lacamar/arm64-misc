@@ -133,7 +133,7 @@ index 73244c2..f9210d9 100644
              void onShow();
              void onQuit();
 diff --git a/src/ui/WebView.cpp b/src/ui/WebView.cpp
-index b2c423b..26a6a10 100644
+index b2c423b..90946df 100644
 --- a/src/ui/WebView.cpp
 +++ b/src/ui/WebView.cpp
 @@ -5,10 +5,15 @@
@@ -152,7 +152,7 @@ index b2c423b..26a6a10 100644
  #include <gtkmm/messagedialog.h>
  #include <gtkmm/filechooserdialog.h>
  #include "../util/Settings.hpp"
-@@ -50,6 +55,103 @@ namespace wil::ui
+@@ -50,6 +55,157 @@ namespace wil::ui
              })();
          )JS";
  
@@ -193,6 +193,14 @@ index b2c423b..26a6a10 100644
 +                    return titleEl ? titleEl.innerText.trim() : '';
 +                }
 +
++                // A reply's quoted message comes first; the reply text is the last top-level span.
++                function messageTextNode(node) {
++                    var spans = Array.prototype.filter.call(node.querySelectorAll('span.selectable-text'), function(span) {
++                        return !span.parentElement.closest('span.selectable-text');
++                    });
++                    return spans.length ? spans[spans.length - 1] : node;
++                }
++
 +                function scrapeAndNotify() {
 +                    var title = currentTitle();
 +                    if (!title) { return; }
@@ -201,8 +209,7 @@ index b2c423b..26a6a10 100644
 +                    document.querySelectorAll('#main div.copyable-text[data-pre-plain-text]').forEach(function(node) {
 +                        var meta     = (node.getAttribute('data-pre-plain-text') || '').trim();
 +                        var match    = meta.match(/^\[(.*?)\]\s*(.*?):\s*$/);
-+                        var textNode = node.querySelector('span.selectable-text') || node;
-+                        var text     = (textNode.innerText || '').trim();
++                        var text     = (messageTextNode(node).innerText || '').trim();
 +
 +                        if (!match && !text) { return; }
 +
@@ -225,6 +232,53 @@ index b2c423b..26a6a10 100644
 +                }
 +
 +                window.__wilForceContinuousExportScrape = scrapeAndNotify;
++
++                function messageScroller() {
++                    var message = document.querySelector('#main div.copyable-text[data-pre-plain-text]');
++                    for (var el = message && message.parentElement; el && el !== document.body; el = el.parentElement) {
++                        var overflowY = getComputedStyle(el).overflowY;
++                        if ((overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
++                            return el;
++                        }
++                    }
++                    return null;
++                }
++
++                // Walks the chat upwards in overlapping steps so every message passes through
++                // the virtualized window once; stops after the top stops loading older history.
++                var backfilling = false;
++                window.__wilContinuousExportBackfill = function() {
++                    var scroller = messageScroller();
++                    if (backfilling || !scroller) { return; }
++                    backfilling = true;
++
++                    var title      = currentTitle();
++                    var lastHeight = scroller.scrollHeight;
++                    var idleSteps  = 0;
++
++                    function step() {
++                        if (!scroller.isConnected || currentTitle() !== title) {
++                            backfilling = false;
++                            return;
++                        }
++
++                        scrapeAndNotify();
++
++                        idleSteps  = (scroller.scrollTop <= 0 && scroller.scrollHeight === lastHeight) ? idleSteps + 1 : 0;
++                        lastHeight = scroller.scrollHeight;
++
++                        if (idleSteps >= 10) {
++                            backfilling = false;
++                            scroller.scrollTop = scroller.scrollHeight;
++                            return;
++                        }
++
++                        scroller.scrollTop = Math.max(0, scroller.scrollTop - scroller.clientHeight * 0.6);
++                        setTimeout(step, 500);
++                    }
++
++                    step();
++                };
 +
 +                // WhatsApp Web only ever renders the currently-open chat under #main, so a
 +                // chat that loses focus stops generating mutations and its export file goes
@@ -256,7 +310,7 @@ index b2c423b..26a6a10 100644
          std::string sanitizeFilename(std::string name)
          {
              for (auto& character : name)
-@@ -64,6 +166,22 @@ namespace wil::ui
+@@ -64,6 +220,22 @@ namespace wil::ui
              return name.empty() ? "whatsapp-chat" : name;
          }
  
@@ -279,13 +333,19 @@ index b2c423b..26a6a10 100644
          void saveChatTranscript(std::string const& suggestedTitle, std::string const& transcript)
          {
              auto dialog = Gtk::FileChooserDialog{_("Export Chat Transcript"), Gtk::FILE_CHOOSER_ACTION_SAVE};
-@@ -118,6 +236,362 @@ namespace wil::ui
+@@ -118,6 +290,496 @@ namespace wil::ui
              saveChatTranscript(title, transcript);
          }
  
 +        void triggerImmediateContinuousExportScrape(WebKitWebView* view)
 +        {
 +            webkit_web_view_evaluate_javascript(view, "if (window.__wilForceContinuousExportScrape) { window.__wilForceContinuousExportScrape(); }",
++                -1, nullptr, nullptr, nullptr, nullptr, nullptr);
++        }
++
++        void startContinuousExportBackfill(WebKitWebView* view)
++        {
++            webkit_web_view_evaluate_javascript(view, "if (window.__wilContinuousExportBackfill) { window.__wilContinuousExportBackfill(); }",
 +                -1, nullptr, nullptr, nullptr, nullptr, nullptr);
 +        }
 +
@@ -344,12 +404,17 @@ index b2c423b..26a6a10 100644
 +
 +                auto dialog = Gtk::MessageDialog{_("Continuous Export Enabled"), false, Gtk::MESSAGE_QUESTION, Gtk::BUTTONS_NONE};
 +                dialog.set_secondary_text(Glib::ustring::compose(_("“%1” is currently exporting to:\n%2"), title, currentPath));
++                dialog.add_button(_("Fetch Full History"), Gtk::RESPONSE_ACCEPT);
 +                dialog.add_button(_("Stop Exporting"), Gtk::RESPONSE_REJECT);
 +                dialog.add_button(_("Change Location"), Gtk::RESPONSE_APPLY);
 +                dialog.add_button(_("Cancel"), Gtk::RESPONSE_CANCEL);
 +
 +                switch (dialog.run())
 +                {
++                    case Gtk::RESPONSE_ACCEPT:
++                        startContinuousExportBackfill(view);
++                        break;
++
 +                    case Gtk::RESPONSE_REJECT:
 +                        util::Settings::getInstance().removeValue(CONTINUOUS_EXPORT_GROUP, key);
 +                        break;
@@ -357,7 +422,7 @@ index b2c423b..26a6a10 100644
 +                    case Gtk::RESPONSE_APPLY:
 +                        if (promptForContinuousExportPath(title))
 +                        {
-+                            triggerImmediateContinuousExportScrape(view);
++                            startContinuousExportBackfill(view);
 +                        }
 +                        break;
 +
@@ -373,7 +438,7 @@ index b2c423b..26a6a10 100644
 +
 +                if ((dialog.run() == Gtk::RESPONSE_YES) && promptForContinuousExportPath(title))
 +                {
-+                    triggerImmediateContinuousExportScrape(view);
++                    startContinuousExportBackfill(view);
 +                }
 +            }
 +        }
@@ -592,6 +657,128 @@ index b2c423b..26a6a10 100644
 +            return existing;
 +        }
 +
++        struct Timestamp
++        {
++            int hour, minute, a, b, c;
++            char separator;
++        };
++
++        std::optional<Timestamp> parseTimestamp(std::string const& time)
++        {
++            auto const comma = time.find(',');
++            if (comma == std::string::npos)
++            {
++                return std::nullopt;
++            }
++
++            auto numbers = [](std::string const& part)
++            {
++                std::vector<int> result;
++                for (std::size_t i = 0; i < part.size();)
++                {
++                    if (std::isdigit(static_cast<unsigned char>(part[i])))
++                    {
++                        auto const start = i;
++                        while (i < part.size() && std::isdigit(static_cast<unsigned char>(part[i])))
++                        {
++                            ++i;
++                        }
++                        result.push_back(std::stoi(part.substr(start, i - start)));
++                    }
++                    else
++                    {
++                        ++i;
++                    }
++                }
++                return result;
++            };
++
++            auto const clock = time.substr(0, comma);
++            auto const date  = time.substr(comma + 1);
++            auto const hm    = numbers(clock);
++            auto const dmy   = numbers(date);
++            if (hm.size() < 2 || dmy.size() != 3)
++            {
++                return std::nullopt;
++            }
++
++            auto hour  = hm[0];
++            auto lower = clock;
++            std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch) { return std::tolower(ch); });
++            if (lower.find("pm") != std::string::npos && hour < 12)
++            {
++                hour += 12;
++            }
++            else if (lower.find("am") != std::string::npos && hour == 12)
++            {
++                hour = 0;
++            }
++
++            auto const separator = date.find_first_of("./-");
++            return Timestamp{hour, hm[1], dmy[0], dmy[1], dmy[2], separator == std::string::npos ? '/' : date[separator]};
++        }
++
++        // Anchor merging can't place a window that shares nothing with the file, so
++        // order by timestamp; stable, since timestamps only have minute resolution.
++        void sortByTimestamp(std::vector<ChatEntry>& entries)
++        {
++            std::vector<Timestamp> stamps;
++            bool dayFirst   = false;
++            bool monthFirst = false;
++
++            for (auto const& entry : entries)
++            {
++                auto const stamp = parseTimestamp(entry.time);
++                if (!stamp)
++                {
++                    return;
++                }
++                dayFirst   |= stamp->a > 12 && stamp->a < 1000;
++                monthFirst |= stamp->b > 12 && stamp->a < 1000;
++                stamps.push_back(*stamp);
++            }
++
++            if (dayFirst && monthFirst)
++            {
++                return;
++            }
++            if (!dayFirst && !monthFirst)
++            {
++                dayFirst = std::any_of(stamps.begin(), stamps.end(), [](Timestamp const& stamp) { return stamp.separator != '/'; });
++            }
++
++            auto key = [dayFirst](Timestamp const& stamp)
++            {
++                int year, month, day;
++                if (stamp.a >= 1000)
++                {
++                    year = stamp.a, month = stamp.b, day = stamp.c;
++                }
++                else
++                {
++                    year  = stamp.c < 100 ? stamp.c + 2000 : stamp.c;
++                    month = dayFirst ? stamp.b : stamp.a;
++                    day   = dayFirst ? stamp.a : stamp.b;
++                }
++                return ((((static_cast<long long>(year) * 13 + month) * 32 + day) * 24 + stamp.hour) * 60) + stamp.minute;
++            };
++
++            std::vector<std::size_t> order(entries.size());
++            for (std::size_t i = 0; i < order.size(); ++i)
++            {
++                order[i] = i;
++            }
++            std::stable_sort(order.begin(), order.end(), [&](std::size_t x, std::size_t y) { return key(stamps[x]) < key(stamps[y]); });
++
++            std::vector<ChatEntry> sorted;
++            sorted.reserve(entries.size());
++            for (auto const index : order)
++            {
++                sorted.push_back(std::move(entries[index]));
++            }
++            entries = std::move(sorted);
++        }
++
 +        void continuousExportMessageReceived(WebKitUserContentManager*, WebKitJavascriptResult* jsResult, gpointer)
 +        {
 +            auto* const value         = webkit_javascript_result_get_js_value(jsResult);
@@ -633,7 +820,8 @@ index b2c423b..26a6a10 100644
 +                existingEntries              = parseExistingMarkdown(existingMarkdown);
 +            }
 +
-+            auto const mergedEntries = mergeEntries(std::move(existingEntries), windowEntries);
++            auto mergedEntries = mergeEntries(std::move(existingEntries), windowEntries);
++            sortByTimestamp(mergedEntries);
 +
 +            auto outFile = std::ofstream{path.raw()};
 +            outFile << renderChatMarkdown(title, mergedEntries);
@@ -642,7 +830,7 @@ index b2c423b..26a6a10 100644
          std::optional<std::string> getSystemLanguage()
          {
              try
-@@ -319,6 +793,8 @@ namespace wil::ui
+@@ -319,6 +981,8 @@ namespace wil::ui
              applyCustomCss(cssFilePath);
          }
  
@@ -651,7 +839,7 @@ index b2c423b..26a6a10 100644
          webkit_web_view_load_uri(*this, WHATSAPP_WEB_URI);
      }
  
-@@ -386,6 +862,19 @@ namespace wil::ui
+@@ -386,6 +1050,19 @@ namespace wil::ui
              *this, EXPORT_CHAT_SCRIPT, -1, nullptr, nullptr, nullptr, exportChatTranscriptFinished, nullptr);
      }
  
@@ -671,7 +859,7 @@ index b2c423b..26a6a10 100644
      void WebView::zoomIn()
      {
          if (auto zoomLevel = webkit_web_view_get_zoom_level(*this); zoomLevel < 2.0)
-@@ -487,4 +976,20 @@ namespace wil::ui
+@@ -487,4 +1164,20 @@ namespace wil::ui
          auto* manager = webkit_web_view_get_user_content_manager(*this);
          webkit_user_content_manager_add_style_sheet(manager, styleSheet);
      }

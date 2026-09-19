@@ -1,7 +1,7 @@
 %global tag 1.7.0
 Name: wasistlos
 Version: %{tag}
-Release: 5%{?dist}
+Release: 6%{?dist}
 Summary: An unofficial WhatsApp desktop application for Linux.
 
 License: GNU GPL v3
@@ -70,6 +70,12 @@ An unofficial WhatsApp desktop application for Linux.
 
 
 %changelog
+* Fri Sep 18 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-6
+ - Backfill full chat history on continuous export enable
+ - Add "Fetch Full History" option
+ - Sort export by timestamp
+ - Fix replies exporting quoted text
+
 * Mon Sep 14 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-5
  - Fix continuous chat export only ever writing whatever window of messages WhatsApp Web currently has rendered (it virtualizes the list) instead of the full history: native code now merges each scrape into the existing export file instead of overwriting it
  - Add patch to place a clipboard image into the currently open chat's compose box (menu item "Paste Image from Clipboard"), since WebKitGTK does not reliably expose native clipboard image data to a page's paste event the way Chrome/Firefox do
