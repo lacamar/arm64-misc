@@ -1,4 +1,4 @@
-%global bumpver 0
+%global bumpver 1
 %global _name shadps4
 %global tag 4.2026.09.18.42.555.7.5.0678.531.7.4.505560.0.8
 # Upstream shadps4-emu/shadPS4 commit the aarch64 patch series is based on
@@ -176,6 +176,11 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/net.shadps4.shadPS4.d
 %{_datadir}/icons/hicolor/512x512/apps/net.shadps4.shadPS4.png
 
 %changelog
+* Sat Sep 19 2026 lm <lchlnm@pm.me> - 1
+- Skip block re-validation for immutable text segments
+- Cheaper fault handling inside JIT code
+- Rebase on upstream 42c555b
+
 * Fri Sep 18 2026 Lachlan Marie <lchlnm@pm.me> - 4.2026.09.18.42.555.7.5.0678.531.7.4.505560.0.8^0.git.42c555b-1
  - Update to 4.2026.09.18.42.555.7.5.0678.531.7.4.505560.0.8
 

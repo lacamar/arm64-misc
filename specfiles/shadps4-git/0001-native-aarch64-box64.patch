@@ -378,10 +378,10 @@ index 00000000..18ab905b
 +.size shad_guest_call_trampoline, .-shad_guest_call_trampoline
 diff --git a/src/core/cpu/box64/box64_glue.c b/src/core/cpu/box64/box64_glue.c
 new file mode 100644
-index 00000000..082dbb31
+index 00000000..de84f4c4
 --- /dev/null
 +++ b/src/core/cpu/box64/box64_glue.c
-@@ -0,0 +1,639 @@
+@@ -0,0 +1,649 @@
 +// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -878,13 +878,23 @@ index 00000000..082dbb31
 +            unprotectDB((uintptr_t)addr, 1, 1);
 +        }
 +    }
-+    // Genuine guest fault inside translated code: rebuild the guest register state.
++    return 2;
++}
++
++void shad_box64_jit_fault_sync(void* ucontext) {
++    ucontext_t* p = (ucontext_t*)ucontext;
++    void* pc = (void*)CONTEXT_PC(p);
++    dynablock_t* db = FindDynablockFromNativeAddress(pc);
++    if (!db) {
++        return;
++    }
++    x64emu_t* emu = emu_from_context(p);
++    const uintptr_t x64pc = getX64Address(db, (uintptr_t)pc);
 +    copyUCTXreg2Emu(emu, p, db, x64pc);
 +    adjustregs(emu, pc);
 +    if (db->arch_size) {
 +        ARCH_ADJUST(db, emu, p, x64pc);
 +    }
-+    return 2;
 +}
 +
 +void shad_box64_jit_fault_end(void* ucontext) {
@@ -1023,10 +1033,10 @@ index 00000000..082dbb31
 +}
 diff --git a/src/core/cpu/box64/box64_glue.h b/src/core/cpu/box64/box64_glue.h
 new file mode 100644
-index 00000000..2c089a12
+index 00000000..a605b8f7
 --- /dev/null
 +++ b/src/core/cpu/box64/box64_glue.h
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,69 @@
 +// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -1081,6 +1091,9 @@ index 00000000..2c089a12
 +// handled (return from the signal handler), 2 if the guest state was synced into the emu and the
 +// caller should dispatch a guest exception and then call shad_box64_jit_fault_end.
 +int shad_box64_jit_fault_begin(int sig, void* siginfo, void* ucontext);
++// Rebuilds the guest register state from the JIT context (only needed before dispatching a guest
++// exception).
++void shad_box64_jit_fault_sync(void* ucontext);
 +void shad_box64_jit_fault_end(void* ucontext);
 +
 +void shad_box64_get_regs(x64emu_t* emu, shad_guest_regs_t* regs);
@@ -1445,10 +1458,10 @@ index 00000000..5d3d7add
 +}
 diff --git a/src/core/cpu/cpu.cpp b/src/core/cpu/cpu.cpp
 new file mode 100644
-index 00000000..94f68835
+index 00000000..0dfc8cca
 --- /dev/null
 +++ b/src/core/cpu/cpu.cpp
-@@ -0,0 +1,254 @@
+@@ -0,0 +1,259 @@
 +// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -1611,6 +1624,10 @@ index 00000000..94f68835
 +    }
 +}
 +
++void SyncJitGuestState(void* raw_context) {
++    shad_box64_jit_fault_sync(raw_context);
++}
++
 +void EndJitFault(void* raw_context) {
 +    shad_box64_jit_fault_end(raw_context);
 +}
@@ -1692,6 +1709,7 @@ index 00000000..94f68835
 +    return JitFault::NotInJit;
 +}
 +
++void SyncJitGuestState(void*) {}
 +void EndJitFault(void*) {}
 +
 +bool GetCurrentGuestRegs(GuestRegs&) {
@@ -1705,10 +1723,10 @@ index 00000000..94f68835
 +} // namespace Core::Cpu
 diff --git a/src/core/cpu/cpu.h b/src/core/cpu/cpu.h
 new file mode 100644
-index 00000000..e012a040
+index 00000000..06b511f3
 --- /dev/null
 +++ b/src/core/cpu/cpu.h
-@@ -0,0 +1,89 @@
+@@ -0,0 +1,90 @@
 +// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -1754,6 +1772,7 @@ index 00000000..e012a040
 +// GuestFault: guest registers were synced; dispatch the guest exception then call EndJitFault.
 +enum class JitFault { NotInJit, Handled, GuestFault };
 +JitFault BeginJitFault(int sig, void* siginfo, void* raw_context);
++void SyncJitGuestState(void* raw_context);
 +void EndJitFault(void* raw_context);
 +
 +bool GetCurrentGuestRegs(GuestRegs& regs);
@@ -1952,7 +1971,7 @@ index 650ebb12..a87e2a01 100644
          return true;
      }
 diff --git a/src/core/module.cpp b/src/core/module.cpp
-index 369239bc..9d730a60 100644
+index 369239bc..9b0cf44d 100644
 --- a/src/core/module.cpp
 +++ b/src/core/module.cpp
 @@ -9,6 +9,7 @@
@@ -1972,8 +1991,19 @@ index 369239bc..9d730a60 100644
  }
  
  void Module::LoadModuleToMemory(u32& max_tls_index) {
+@@ -206,6 +207,10 @@ void Module::LoadModuleToMemory(u32& max_tls_index) {
+             LOG_INFO(Core_Linker, "segment_mode ..........: {}", segment_mode);
+ 
+             add_segment(elf_pheader[i]);
++            if ((elf_pheader[i].p_flags & PF_EXEC) && !(elf_pheader[i].p_flags & PF_WRITE)) {
++                // Lets the CPU backend treat text as immutable instead of re-validating it.
++                Core::Cpu::OnProtect(segment_addr, segment_memory_size, true, false, true);
++            }
+ #ifdef ARCH_X86_64
+             if (elf_pheader[i].p_flags & PF_EXEC) {
+                 PrePatchInstructions(segment_addr, segment_file_size);
 diff --git a/src/core/signals.cpp b/src/core/signals.cpp
-index 5c3ff133..ac7dbe05 100644
+index 5c3ff133..dd85097b 100644
 --- a/src/core/signals.cpp
 +++ b/src/core/signals.cpp
 @@ -5,6 +5,7 @@
@@ -1984,7 +2014,7 @@ index 5c3ff133..ac7dbe05 100644
  #include "core/cpu_patches.h" // Windows static guest red-zone protection
  #include "core/libraries/kernel/kernel.h"
  #include "core/libraries/kernel/threads/exception.h"
-@@ -251,6 +252,18 @@ void SignalHandler(int sig, siginfo_t* info, void* raw_context) {
+@@ -251,6 +252,36 @@ void SignalHandler(int sig, siginfo_t* info, void* raw_context) {
      const auto* signals = Signals::Instance();
  
      auto* code_address = Common::GetRip(raw_context);
@@ -2000,36 +2030,52 @@ index 5c3ff133..ac7dbe05 100644
 +            break;
 +        }
 +    }
- 
-     Ucontext context{info, reinterpret_cast<ucontext_t*>(raw_context)};
-     Siginfo guest_info{};
-@@ -267,9 +280,16 @@ void SignalHandler(int sig, siginfo_t* info, void* raw_context) {
-     switch (sig) {
-     case SIGSEGV:
-     case SIGBUS: {
++
++    // Resolve faults that need no guest context first: they are by far the most frequent.
++    if (sig == SIGSEGV || sig == SIGBUS) {
 +        if (Core::Cpu::HandleFault(info->si_addr, info->si_code) ||
-+            Core::Cpu::HandleGuestCallFault(raw_context, info->si_addr)) {
++            Core::Cpu::HandleGuestCallFault(raw_context, info->si_addr) ||
++            signals->DispatchAccessViolation(raw_context, info->si_addr)) {
 +            return;
 +        }
-         const bool is_write = Common::IsWriteError(raw_context);
-         if (!signals->DispatchAccessViolation(raw_context, info->si_addr)) {
-             if (thread && thread->DispatchSignal(NativeToOrbisSignal(sig), info_p, context_p)) {
-+                if (in_jit) {
-+                    Core::Cpu::EndJitFault(raw_context);
-+                }
-                 return;
-             }
-             UNREACHABLE_MSG("Unhandled access violation at code address {}: {} address {}",
-@@ -279,13 +299,18 @@ void SignalHandler(int sig, siginfo_t* info, void* raw_context) {
-         break;
-     }
-     case SIGILL:
--        if (signals->DispatchIllegalInstruction(raw_context)) {
++    } else if (sig == SIGILL) {
 +        if (Core::Cpu::HandleBridgeCallFault(raw_context) ||
 +            Core::Cpu::HandleGuestCallFault(raw_context, code_address) ||
 +            signals->DispatchIllegalInstruction(raw_context)) {
-             return;
++            return;
++        }
++    }
++    if (in_jit) {
++        Core::Cpu::SyncJitGuestState(raw_context);
++    }
+ 
+     Ucontext context{info, reinterpret_cast<ucontext_t*>(raw_context)};
+     Siginfo guest_info{};
+@@ -268,24 +299,24 @@ void SignalHandler(int sig, siginfo_t* info, void* raw_context) {
+     case SIGSEGV:
+     case SIGBUS: {
+         const bool is_write = Common::IsWriteError(raw_context);
+-        if (!signals->DispatchAccessViolation(raw_context, info->si_addr)) {
+-            if (thread && thread->DispatchSignal(NativeToOrbisSignal(sig), info_p, context_p)) {
+-                return;
++        if (thread && thread->DispatchSignal(NativeToOrbisSignal(sig), info_p, context_p)) {
++            if (in_jit) {
++                Core::Cpu::EndJitFault(raw_context);
+             }
+-            UNREACHABLE_MSG("Unhandled access violation at code address {}: {} address {}",
+-                            fmt::ptr(code_address), is_write ? "Write to" : "Read from",
+-                            fmt::ptr(info->si_addr));
++            return;
          }
+-        break;
++        UNREACHABLE_MSG("Unhandled access violation at code address {}: {} address {}",
++                        fmt::ptr(code_address), is_write ? "Write to" : "Read from",
++                        fmt::ptr(info->si_addr));
+     }
+     case SIGILL:
+-        if (signals->DispatchIllegalInstruction(raw_context)) {
+-            return;
+-        }
      case SIGFPE:
      case SIGTRAP:
      case SIGSYS: {
@@ -2639,7 +2685,7 @@ index 260047d4..21869f2c 100644
  
  constexpr u64 TRACKER_HIGHER_PAGE_BITS = 22; // each region is 4MB
 diff --git a/src/video_core/page_manager.cpp b/src/video_core/page_manager.cpp
-index 89568472..2bd902e4 100644
+index c7836080..bd011b3e 100644
 --- a/src/video_core/page_manager.cpp
 +++ b/src/video_core/page_manager.cpp
 @@ -34,8 +34,8 @@
