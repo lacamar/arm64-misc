@@ -5,7 +5,7 @@
 
 Name:           foot
 Version:        %{tag}
-Release:        5%{?dist}
+Release:        6%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -161,7 +161,11 @@ desktop-file-validate \
 
 
 %changelog
-* Wed Sep 17 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-5
+* Fri Sep 18 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-6
+- Skip session save within 5s of a window closing
+- Fixes logout overwriting saved state
+
+* Thu Sep 17 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-5
  - session-restore patch: restore interactive programs gracefully.
    Windows now save the command line they were launched with (so a
    'footclient lf' window comes back as lf, not a bare shell), and

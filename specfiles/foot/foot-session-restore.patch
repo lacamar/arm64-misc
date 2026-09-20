@@ -1,6 +1,6 @@
 diff -Nru '--exclude=build' -x '*.o' pristine/config.c foot-src/config.c
---- pristine/config.c	2026-09-17 12:32:08.927072049 +0200
-+++ foot-src/config.c	2026-09-17 12:34:12.463163247 +0200
+--- pristine/config.c	2026-09-02 13:02:26.000000000 +0200
++++ foot-src/config.c	2026-09-18 12:21:33.893418422 +0200
 @@ -1300,6 +1300,55 @@
  }
  
@@ -120,8 +120,8 @@ diff -Nru '--exclude=build' -x '*.o' pristine/config.c foot-src/config.c
      user_notifications_free(&conf->notifications);
  }
 diff -Nru '--exclude=build' -x '*.o' pristine/config.h foot-src/config.h
---- pristine/config.h	2026-09-17 12:32:08.927112299 +0200
-+++ foot-src/config.h	2026-09-17 12:34:12.462674869 +0200
+--- pristine/config.h	2026-09-02 13:02:26.000000000 +0200
++++ foot-src/config.h	2026-09-18 12:21:33.893673174 +0200
 @@ -227,6 +227,11 @@
      UNDERLINE_DASHED,
  };
@@ -150,8 +150,8 @@ diff -Nru '--exclude=build' -x '*.o' pristine/config.h foot-src/config.h
          struct config_spawn_template launch;
          enum {
 diff -Nru '--exclude=build' -x '*.o' pristine/doc/foot.ini.5.scd foot-src/doc/foot.ini.5.scd
---- pristine/doc/foot.ini.5.scd	2026-09-17 12:32:08.927252550 +0200
-+++ foot-src/doc/foot.ini.5.scd	2026-09-17 12:38:16.612737104 +0200
+--- pristine/doc/foot.ini.5.scd	2026-09-02 13:02:26.000000000 +0200
++++ foot-src/doc/foot.ini.5.scd	2026-09-18 12:21:33.893824175 +0200
 @@ -861,6 +861,81 @@
  	string. This option is ignored if
  	*indicator-position=none*. Default: _empty string_.
@@ -235,8 +235,8 @@ diff -Nru '--exclude=build' -x '*.o' pristine/doc/foot.ini.5.scd foot-src/doc/fo
  
  Note that you can also add custom regular expressions, see the 'regex'
 diff -Nru '--exclude=build' -x '*.o' pristine/meson.build foot-src/meson.build
---- pristine/meson.build	2026-09-17 12:32:08.927845053 +0200
-+++ foot-src/meson.build	2026-09-17 12:32:08.939747238 +0200
+--- pristine/meson.build	2026-09-02 13:02:26.000000000 +0200
++++ foot-src/meson.build	2026-09-18 12:21:33.893932676 +0200
 @@ -334,6 +334,7 @@
    'render.c', 'render.h',
    'search.c', 'search.h',
@@ -246,8 +246,8 @@ diff -Nru '--exclude=build' -x '*.o' pristine/meson.build foot-src/meson.build
    'slave.c', 'slave.h',
    'spawn.c', 'spawn.h',
 diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
---- pristine/server.c	2026-09-17 12:32:08.928240263 +0200
-+++ foot-src/server.c	2026-09-17 12:37:28.642971438 +0200
+--- pristine/server.c	2026-09-02 13:02:26.000000000 +0200
++++ foot-src/server.c	2026-09-18 12:21:49.380069559 +0200
 @@ -1,5 +1,7 @@
  #include "server.h"
  
@@ -281,16 +281,17 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
  #include "util.h"
  #include "wayland.h"
  #include "xmalloc.h"
-@@ -40,6 +52,8 @@
+@@ -40,6 +52,9 @@
  
      tll(struct client *) clients;
      tll(struct terminal_instance *) terminals;
 +
 +    int session_timer_fd;
++    struct timespec last_close;
  };
  
  struct client {
-@@ -56,12 +70,27 @@
+@@ -56,12 +71,27 @@
  };
  static void client_destroy(struct client *client);
  
@@ -318,7 +319,16 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
  static void instance_destroy(struct terminal_instance *instance, int exit_code);
  
  static void
-@@ -127,6 +156,9 @@
+@@ -105,6 +135,8 @@
+ static void
+ instance_destroy(struct terminal_instance *instance, int exit_code)
+ {
++    clock_gettime(CLOCK_MONOTONIC, &instance->server->last_close);
++
+     if (instance->terminal != NULL)
+         term_destroy(instance->terminal);
+ 
+@@ -127,6 +159,9 @@
          config_free(instance->conf);
          free(instance->conf);
      }
@@ -328,7 +338,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
      free(instance);
  
  }
-@@ -386,6 +418,9 @@
+@@ -386,6 +421,9 @@
          .client = NULL,
          .server = server,
          .conf = conf,
@@ -338,7 +348,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
      };
  
      instance->terminal = term_init(
-@@ -555,6 +590,868 @@
+@@ -555,6 +593,875 @@
      return true;
  }
  
@@ -942,6 +952,13 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
 +    if (!server->conf->session.enabled)
 +        return;
 +
++    /* At logout windows die one by one; don't let that shrink the state */
++    struct timespec now;
++    clock_gettime(CLOCK_MONOTONIC, &now);
++    if ((server->last_close.tv_sec != 0 || server->last_close.tv_nsec != 0) &&
++        now.tv_sec - server->last_close.tv_sec < 5)
++        return;
++
 +    char *path = session_state_path();
 +    if (path == NULL)
 +        return;
@@ -1207,7 +1224,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
  struct server *
  server_init(struct config *conf, struct fdm *fdm, struct reaper *reaper,
              struct wayland *wayl)
-@@ -626,11 +1523,35 @@
+@@ -626,11 +1533,35 @@
  
          .clients = tll_init(),
          .terminals = tll_init(),
@@ -1243,7 +1260,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
      LOG_INFO("accepting connections on %s", sock_path != NULL ? sock_path : "socket provided through socket activation");
  
      return server;
-@@ -648,6 +1569,13 @@
+@@ -648,6 +1579,13 @@
      if (server == NULL)
          return;
  
@@ -1259,7 +1276,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
  
 diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 --- pristine/session.c	1970-01-01 01:00:00.000000000 +0100
-+++ foot-src/session.c	2026-09-17 12:39:43.128273358 +0200
++++ foot-src/session.c	2026-09-18 12:21:33.894199053 +0200
 @@ -0,0 +1,374 @@
 +#include "session.h"
 +
@@ -1637,7 +1654,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +}
 diff -Nru '--exclude=build' -x '*.o' pristine/session.h foot-src/session.h
 --- pristine/session.h	1970-01-01 01:00:00.000000000 +0100
-+++ foot-src/session.h	2026-09-17 12:34:40.780347841 +0200
++++ foot-src/session.h	2026-09-18 12:21:33.894236178 +0200
 @@ -0,0 +1,50 @@
 +#pragma once
 +
@@ -1690,8 +1707,8 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.h foot-src/session.h
 +void session_command_list_free(session_command_list_t *list);
 +void session_window_list_free(session_window_list_t *list);
 diff -Nru '--exclude=build' -x '*.o' pristine/terminal.c foot-src/terminal.c
---- pristine/terminal.c	2026-09-17 12:32:08.928413889 +0200
-+++ foot-src/terminal.c	2026-09-17 12:34:12.463530916 +0200
+--- pristine/terminal.c	2026-09-02 13:02:26.000000000 +0200
++++ foot-src/terminal.c	2026-09-18 12:21:33.894464138 +0200
 @@ -24,6 +24,7 @@
  #include "log.h"
  
@@ -1937,8 +1954,8 @@ diff -Nru '--exclude=build' -x '*.o' pristine/terminal.c foot-src/terminal.c
  term_destroy(struct terminal *term)
  {
 diff -Nru '--exclude=build' -x '*.o' pristine/terminal.h foot-src/terminal.h
---- pristine/terminal.h	2026-09-17 12:32:08.928446139 +0200
-+++ foot-src/terminal.h	2026-09-17 12:32:08.940359741 +0200
+--- pristine/terminal.h	2026-09-02 13:02:26.000000000 +0200
++++ foot-src/terminal.h	2026-09-18 12:21:33.894653848 +0200
 @@ -849,6 +849,16 @@
  bool term_shutdown(struct terminal *term);
  int term_destroy(struct terminal *term);
