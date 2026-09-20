@@ -1,4 +1,4 @@
-%global tag 0.17.0
+%global tag 0.17.2
 Name:           mangowc
 Version:        %{tag}
 Release:        1%?dist
@@ -24,6 +24,7 @@ BuildRequires:  pkgconfig(libcjson)
 BuildRequires:  pkgconfig(pangocairo)
 BuildRequires:  pkgconfig(libdrm)
 BuildRequires:  pkgconfig(pixman-1)
+BuildRequires:  systemd-rpm-macros
 
 %description
 MangoWC is a lightweight, high-performance Wayland compositor built on dwl, designed for speed, flexibility, and a modern, customizable desktop experience.
@@ -46,9 +47,13 @@ MangoWC is a lightweight, high-performance Wayland compositor built on dwl, desi
 %{_sysconfdir}/mango/config.conf
 %{_datadir}/wayland-sessions/mango.desktop
 %{_datadir}/xdg-desktop-portal/mango-portals.conf
+%{_userunitdir}/mango-session.target
 %{_mandir}/man1/mmsg.1.gz
 
 %changelog
+* Sun Sep 20 2026 Lachlan Marie <lchlnm@pm.me> - 0.17.2-1
+ - Update to 0.17.2
+
 * Sat Sep 12 2026 Lachlan Marie <lchlnm@pm.me> - 0.17.0-1
  - Update to 0.17.0
 
