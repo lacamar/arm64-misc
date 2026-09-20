@@ -1,0 +1,101 @@
+--- a/rawler/src/imgop/develop.rs
++++ b/rawler/src/imgop/develop.rs
+@@ -73,6 +73,7 @@
+   WhiteBalance,
+   Calibrate,
+   CropDefault,
++  AutoBright,
+   SRgb,
+ }
+
+@@ -136,12 +137,57 @@
+         ProcessingStep::WhiteBalance,
+         ProcessingStep::Calibrate,
+         ProcessingStep::CropDefault,
++        ProcessingStep::AutoBright,
+         ProcessingStep::SRgb,
+       ],
+     }
+   }
+ }
+
++/// Finds the linear brightness level below which all but `clip_fraction` of
++/// pixels fall (by max-channel value), then returns the scale factor that
++/// maps that level to full white -- LibRaw's "auto bright" (its default,
++/// `use_camera_wb`-independent exposure normalization; `dcraw_process()` is
++/// what swayimg's raw.cpp calls). Without an equivalent step here, a
++/// properly-exposed (headroom-preserving) shot renders noticeably darker and
++/// flatter via plain WB + camera color matrix + sRGB gamma alone than in
++/// basically every other raw viewer, since none of those steps touch overall
++/// exposure. Never darkens (clamped to >= 1.0) and capped at 8x so a
++/// genuinely underexposed frame doesn't get blown out chasing the
++/// percentile.
++fn auto_bright_scale(values: impl Iterator<Item = f32>, clip_fraction: f32) -> f32 {
++  const HIST_BINS: usize = 4096;
++  const HIST_MAX: f32 = 2.0;
++  const MAX_SCALE: f32 = 8.0;
++
++  let mut hist = [0u64; HIST_BINS];
++  let mut total: u64 = 0;
++  for v in values {
++    total += 1;
++    let bin = ((v.max(0.0) / HIST_MAX) * HIST_BINS as f32) as usize;
++    hist[bin.min(HIST_BINS - 1)] += 1;
++  }
++  if total == 0 {
++    return 1.0;
++  }
++
++  let clip_budget = (total as f32 * clip_fraction) as u64;
++  let mut accum: u64 = 0;
++  let mut threshold_bin = HIST_BINS - 1;
++  for (i, count) in hist.iter().enumerate().rev() {
++    accum += count;
++    if accum > clip_budget {
++      threshold_bin = i;
++      break;
++    }
++  }
++  let threshold = (threshold_bin as f32 + 1.0) / HIST_BINS as f32 * HIST_MAX;
++  if threshold <= 0.0 {
++    return 1.0;
++  }
++  (1.0 / threshold).clamp(1.0, MAX_SCALE)
++}
++
+ impl RawDevelop {
+   pub fn new_with(steps: &[ProcessingStep]) -> Self {
+     Self { steps: Vec::from(steps) }
+@@ -315,6 +361,32 @@
+       }
+     }
+
++    if self.steps.contains(&ProcessingStep::AutoBright) {
++      let clip_fraction = 0.01;
++      let scale = match &intermediate {
++        Intermediate::Monochrome(pixels) => auto_bright_scale(pixels.pixels().iter().copied(), clip_fraction),
++        Intermediate::ThreeColor(pixels) => auto_bright_scale(pixels.pixels().iter().map(|p| p[0].max(p[1]).max(p[2])), clip_fraction),
++        Intermediate::FourColor(pixels) => auto_bright_scale(pixels.pixels().iter().map(|p| p[0].max(p[1]).max(p[2]).max(p[3])), clip_fraction),
++      };
++      log::debug!("Auto-bright scale: {}", scale);
++      if scale > 1.0 {
++        intermediate = match intermediate {
++          Intermediate::Monochrome(mut pixels) => {
++            pixels.for_each(|v| v * scale);
++            Intermediate::Monochrome(pixels)
++          }
++          Intermediate::ThreeColor(mut pixels) => {
++            pixels.for_each(|v| v.map(|c| c * scale));
++            Intermediate::ThreeColor(pixels)
++          }
++          Intermediate::FourColor(mut pixels) => {
++            pixels.for_each(|v| v.map(|c| c * scale));
++            Intermediate::FourColor(pixels)
++          }
++        };
++      }
++    }
++
+     if self.steps.contains(&ProcessingStep::SRgb) {
+       match &mut intermediate {
+         Intermediate::Monochrome(pixels) => pixels.for_each(super::srgb::srgb_apply_gamma),
