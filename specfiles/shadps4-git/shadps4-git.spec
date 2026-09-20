@@ -1,6 +1,6 @@
 %global bumpver 0
 %global _name shadps4
-%global tag 4.2026.09.20.277.671.9.2357.392.9339.89.8.8
+%global tag 0.18.0
 # Upstream shadps4-emu/shadPS4 commit the aarch64 patch series is based on
 %global commit 4a151b811634a7bcf1c0140cb0959cefeedf7439
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
@@ -11,6 +11,7 @@
 %global _lto_cflags %{nil}
 
 Name:           %{_name}-git
+Epoch:          1
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
 Release:        1%{?dist}
 Summary:        PlayStation 4 emulator (native aarch64 port using box64 dynarec)
