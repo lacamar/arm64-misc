@@ -1,5 +1,5 @@
 %bcond  tests   1
-%global tag 5.5
+%global tag 5.6
 
 Name:           swayimg
 Version:        %{tag}
@@ -48,7 +48,10 @@ BuildRequires:  pkgconfig(freetype2)
 %if %{with tests}
 BuildRequires:  pkgconfig(gtest)
 %endif
+BuildRequires:  pkgconfig(libavcodec) >= 60.31.102
+BuildRequires:  pkgconfig(libavformat) >= 60.16.100
 BuildRequires:  pkgconfig(libavif)
+BuildRequires:  pkgconfig(libavutil) >= 58.29.100
 BuildRequires:  pkgconfig(libdrm)
 BuildRequires:  pkgconfig(libheif)
 BuildRequires:  pkgconfig(libjpeg)
@@ -58,6 +61,7 @@ BuildRequires:  pkgconfig(libpng)
 BuildRequires:  pkgconfig(libraw)
 BuildRequires:  pkgconfig(librsvg-2.0) >= 2.46
 BuildRequires:  pkgconfig(libsixel)
+BuildRequires:  pkgconfig(libswscale) >= 7.5.100
 BuildRequires:  pkgconfig(libtiff-4)
 BuildRequires:  pkgconfig(libwebp)
 BuildRequires:  pkgconfig(libwebpdemux)
@@ -128,6 +132,9 @@ export LANG=en_US.UTF-8 # ImageListTest.SortAlphaUnicode fails with LANG=C
 
 
 %changelog
+* Sun Sep 20 2026 Lachlan Marie <lchlnm@pm.me> - 5.6-4
+ - Update to 5.6
+
 * Mon Aug 31 2026 Lachlan Marie <lchlnm@pm.me> - 5.5-4
  - Add a patch fixing upside-down/sideways display of portrait DNGs whose
    raw layer libraw can't decode (confirmed live: an iPhone 17 Pro Max
