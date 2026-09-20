@@ -1,0 +1,20 @@
+--- a/monero/contrib/epee/src/net_ssl.cpp
++++ b/monero/contrib/epee/src/net_ssl.cpp
+@@ -197,7 +197,7 @@
+     X509_free(cert);
+     return false;
+   }
+-  X509_NAME *name = X509_get_subject_name(cert);
++  const X509_NAME *name = X509_get_subject_name(cert);
+   X509_set_issuer_name(cert, name);
+ 
+   if (X509_sign(cert, pkey, EVP_sha256()) == 0)
+@@ -278,7 +278,7 @@
+     X509_free(cert);
+     return false;
+   }
+-  X509_NAME *name = X509_get_subject_name(cert);
++  const X509_NAME *name = X509_get_subject_name(cert);
+   X509_set_issuer_name(cert, name);
+ 
+   if (X509_sign(cert, pkey, EVP_sha256()) == 0)
