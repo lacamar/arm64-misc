@@ -1,8 +1,8 @@
-%global bumpver 1
+%global bumpver 0
 %global _name shadps4
-%global tag 4.2026.09.18.42.555.7.5.0678.531.7.4.505560.0.8
+%global tag 4.2026.09.20.277.671.9.2357.392.9339.89.8.8
 # Upstream shadps4-emu/shadPS4 commit the aarch64 patch series is based on
-%global commit 42c555b7ab5d0678f531a7e4d505560ccc0f8add
+%global commit 4a151b811634a7bcf1c0140cb0959cefeedf7439
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 # Prebuilt FFmpeg release matching externals/ffmpeg-core
 %global ffmpeg_sha 94dde08
@@ -176,6 +176,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/net.shadps4.shadPS4.d
 %{_datadir}/icons/hicolor/512x512/apps/net.shadps4.shadPS4.png
 
 %changelog
+* Sun Sep 20 2026 Lachlan Marie <lchlnm@pm.me> - 4.2026.09.20.277.671.9.2357.392.9339.89.8.8^0.git.4a151b8-1
+ - Update to 4.2026.09.20.277.671.9.2357.392.9339.89.8.8
+
 * Sat Sep 19 2026 lm <lchlnm@pm.me> - 1
 - Skip block re-validation for immutable text segments
 - Cheaper fault handling inside JIT code
