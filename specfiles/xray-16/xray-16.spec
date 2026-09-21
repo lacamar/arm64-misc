@@ -4,7 +4,7 @@
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       xray-16
-Version:    git%{?bumpver:^%{bumpver}.git.%{shortcommit}}
+Version:        2921.2025.1
 Release:    3%{?dist}
 Summary:    Open Source XRay engine for S.T.A.L.K.E.R.
 
@@ -103,6 +103,9 @@ export CXXFLAGS="%{build_cxxflags} -Wno-error=overloaded-virtual"
 %{_datadir}/openxray/*
 
 %changelog
+* Mon Sep 21 2026 Lachlan Marie <lchlnm@pm.me> - 2921.2025.1-3
+ - Update to 2921.2025.1
+
 * Sun Sep 20 2026 Lachlan Marie <lchlnm@pm.me> - git^35.git.247d727-3
  - Update to commit 247d72764eb7ec33cbaf02d59786617ab63751fd
 
