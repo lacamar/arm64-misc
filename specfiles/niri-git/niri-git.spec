@@ -31,7 +31,7 @@
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -65,6 +65,7 @@ URL:            https://github.com/niri-wm/niri
 VCS:            git+%{url}#%{commit}:
 Source:         %{url}/archive/%{commit}/niri-%{shortcommit}.tar.gz
 Patch:          niri-ctm-night-light.patch
+Patch:          niri-argb2101010.patch
 
 BuildRequires:  cargo-rpm-macros >= 26
 BuildRequires:  pkgconfig(udev)
@@ -173,6 +174,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Mon Sep 21 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^3.git.8be4c6df-2
+ - Add Argb2101010 output format
+
 * Mon Sep 21 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^3.git.8be4c6df-1
  - Update to commit 8be4c6df68ddef2afd4ccdde7f27dbc782c30603
 
