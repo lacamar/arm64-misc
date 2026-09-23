@@ -1,0 +1,173 @@
+diff --git a/rawler/data/cameras/sony/a7rm3.toml b/rawler/data/cameras/sony/a7rm3.toml
+index 8f46a07..bd267f9 100644
+--- a/rawler/data/cameras/sony/a7rm3.toml
++++ b/rawler/data/cameras/sony/a7rm3.toml
+@@ -7,6 +7,15 @@ clean_model = "ILCE-7RM3"
+ color_pattern = "RGGB"
+ bps = 8
+ 
++[cameras.params]
++dng_baseline_exposure = 0.15
++dng_baseline_noise = 0.6
++dng_baseline_sharpness = 1.33
++dng_bayer_green_split = 250
++dng_camera_calibration = [0.984, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
++dng_camera_calibration_signature = "com.adobe"
++focal_plane_resolution = 2164.4328
++
+ [cameras.color_matrix]
+ A = [0.7683, -0.3276, 0.0299, -0.363, 1.0892, 0.3161, -0.0162, 0.0671, 0.7133]
+ D65 = [0.664, -0.1847, -0.0503, -0.5238, 1.301, 0.2474, -0.0993, 0.1673, 0.6527]
+diff --git a/rawler/src/decoders/camera.rs b/rawler/src/decoders/camera.rs
+index 6a81be0..bd5d162 100644
+--- a/rawler/src/decoders/camera.rs
++++ b/rawler/src/decoders/camera.rs
+@@ -77,6 +77,18 @@ impl Camera {
+     self.params.get(name).and_then(|p| p.as_integer()).map(|i| i as i32)
+   }
+ 
++  pub fn param_f64(&self, name: &str) -> Option<f64> {
++    self.params.get(name).and_then(|p| p.as_float().or_else(|| p.as_integer().map(|i| i as f64)))
++  }
++
++  pub fn param_f64_array(&self, name: &str) -> Option<Vec<f64>> {
++    self.params.get(name).and_then(|p| p.as_array()).map(|a| {
++      a.iter()
++        .map(|v| v.as_float().or_else(|| v.as_integer().map(|i| i as f64)).expect("param array values must be numbers"))
++        .collect()
++    })
++  }
++
+   pub fn param_str(&self, name: &str) -> Option<&str> {
+     self.params.get(name).and_then(|p| p.as_str())
+   }
+diff --git a/rawler/src/dng/convert.rs b/rawler/src/dng/convert.rs
+index 2a54d00..c357e12 100644
+--- a/rawler/src/dng/convert.rs
++++ b/rawler/src/dng/convert.rs
+@@ -13,7 +13,7 @@ use crate::{
+   RawImage, RawImageData,
+   decoders::{Decoder, RawDecodeParams, RawPhotometricInterpretation, WellKnownIFD, WhiteLevel},
+   dng::{DNG_VERSION_V1_4, PREVIEW_JPEG_QUALITY, original::OriginalCompressed, writer::DngWriter},
+-  formats::tiff::Entry,
++  formats::tiff::{Entry, Rational, SRational},
+   imgop::{
+     develop::RawDevelop,
+     fuji_rotate::fuji_normalize_rotation,
+@@ -149,6 +149,41 @@ impl ConvertParams {
+   }
+ }
+ 
++/// Adobe DNG Converter's per-camera tags, where the camera config provides them.
++fn write_camera_dng_tags<W: Write + Seek + Send>(dng: &mut DngWriter<W>, rawimage: &RawImage) {
++  let camera = &rawimage.camera;
++  let root = dng.root_ifd_mut();
++  root.add_tag(DngTag::AnalogBalance, [Rational::new(1, 1), Rational::new(1, 1), Rational::new(1, 1)]);
++  root.add_tag(DngTag::LinearResponseLimit, Rational::new(1, 1));
++  root.add_tag(DngTag::ShadowScale, Rational::new(1, 1));
++  if let Some(v) = camera.param_f64("dng_baseline_exposure") {
++    root.add_tag(DngTag::BaselineExposure, SRational::new((v * 100.0).round() as i32, 100));
++  }
++  if let Some(v) = camera.param_f64("dng_baseline_noise") {
++    root.add_tag(DngTag::BaselineNoise, Rational::new((v * 100.0).round() as u32, 100));
++  }
++  if let Some(v) = camera.param_f64("dng_baseline_sharpness") {
++    root.add_tag(DngTag::BaselineSharpness, Rational::new((v * 100.0).round() as u32, 100));
++  }
++  if let Some(m) = camera.param_f64_array("dng_camera_calibration").filter(|m| m.len() == 9) {
++    let m: Vec<SRational> = m.iter().map(|v| SRational::new((v * 10000.0).round() as i32, 10000)).collect();
++    root.add_tag(DngTag::CameraCalibration1, m.as_slice());
++    root.add_tag(DngTag::CameraCalibration2, m.as_slice());
++    if let Some(sig) = camera.param_str("dng_camera_calibration_signature") {
++      root.add_tag(DngTag::CameraCalibrationSignature, sig);
++    }
++  }
++  if let Some(v) = camera.param_f64("focal_plane_resolution") {
++    let exif = dng.exif_ifd_mut();
++    if !exif.contains(ExifTag::FocalPlaneXResolution2) {
++      let res = Rational::new((v * 32768.0).round() as u32, 32768);
++      exif.add_tag(ExifTag::FocalPlaneXResolution2, res);
++      exif.add_tag(ExifTag::FocalPlaneYResolution2, res);
++      exif.add_tag(ExifTag::FocalPlaneResolutionUnit2, 3_u16);
++    }
++  }
++}
++
+ /// Convert a raw input file into DNG
+ ///
+ /// We don't accept a DNG file path here, because we don't know
+@@ -241,6 +276,12 @@ where
+   // root IFD instead.
+   let mut raw = if params.thumbnail { dng.subframe(0) } else { dng.subframe_on_root(0) };
+   raw.raw_image(&rawimage, params.crop, params.compression, params.photometric_conversion, params.predictor)?;
++  if rawimage.cpp == 1 {
++    raw.ifd_mut().add_tag(DngTag::AntiAliasStrength, Rational::new(1, 1));
++  }
++  if let Some(split) = rawimage.camera.param_usize("dng_bayer_green_split") {
++    raw.ifd_mut().add_tag(DngTag::BayerGreenSplit, split as u32);
++  }
+   // Check for DNG raw IFD related tags
+   if let Some(dng_raw_ifd) = decoder.ifd(WellKnownIFD::VirtualDngRawTags)? {
+     raw.ifd_mut().copy(dng_raw_ifd.value_iter());
+@@ -269,6 +310,7 @@ where
+   if !dng.root_ifd().contains(ExifTag::Orientation) {
+     dng.root_ifd_mut().add_tag(ExifTag::Orientation, rawimage.orientation.to_u16());
+   }
++  write_camera_dng_tags(&mut dng, &rawimage);
+ 
+   // Check for DNG root IFD related tags
+   if let Some(dng_root_ifd) = decoder.ifd(WellKnownIFD::VirtualDngRootTags)? {
+diff --git a/rawler/src/dng/writer.rs b/rawler/src/dng/writer.rs
+index a9ec086..9355568 100644
+--- a/rawler/src/dng/writer.rs
++++ b/rawler/src/dng/writer.rs
+@@ -469,7 +469,7 @@ where
+ 
+   /// Write thumbnail image into DNG
+   pub fn thumbnail(&mut self, img: &DynamicImage) -> Result<()> {
+-    let thumb_img = img.resize(240, 120, FilterType::Nearest).to_rgb8();
++    let thumb_img = img.resize(256, 256, FilterType::Triangle).to_rgb8();
+     self.root_ifd.add_tag(TiffCommonTag::NewSubFileType, 1_u32);
+     self.root_ifd.add_tag(TiffCommonTag::ImageWidth, thumb_img.width() as u32);
+     self.root_ifd.add_tag(TiffCommonTag::ImageLength, thumb_img.height() as u32);
+@@ -550,7 +550,7 @@ fn wbcoeff_to_tiff_value(rawimage: &RawImage) -> Vec<Rational> {
+ }
+ 
+ fn matrix_to_tiff_value(xyz_to_cam: &[f32], d: i32) -> Vec<SRational> {
+-  xyz_to_cam.iter().map(|a| SRational::new((a * d as f32) as i32, d)).collect()
++  xyz_to_cam.iter().map(|a| SRational::new((a * d as f32).round() as i32, d)).collect()
+ }
+ 
+ /// Compress RAW image with LJPEG-92
+diff --git a/rawler/src/exif.rs b/rawler/src/exif.rs
+index 93b3084..6b8a012 100644
+--- a/rawler/src/exif.rs
++++ b/rawler/src/exif.rs
+@@ -58,6 +58,7 @@ pub struct Exif {
+   pub lens_model: Option<String>,
+   pub gps: Option<ExifGPS>,
+   pub user_comment: Option<String>,
++  pub exif_version: Option<Vec<u8>>,
+   pub file_source: Option<Vec<u8>>,
+   pub scene_type: Option<Vec<u8>>,
+   pub custom_rendered: Option<u16>,
+@@ -179,6 +180,7 @@ impl Exif {
+           (ExifTag::LensMake, Value::Ascii(data)) => self.lens_make = data.strings().get(0).map(trim).filter(|s| !s.is_empty()),
+           (ExifTag::LensModel, Value::Ascii(data)) => self.lens_model = data.strings().get(0).map(trim).filter(|s| !s.is_empty()),
+           (ExifTag::UserComment, Value::Ascii(data)) => self.user_comment = data.strings().get(0).map(trim),
++          (ExifTag::ExifVersion, Value::Undefined(data)) => self.exif_version = Some(data.clone()),
+           (ExifTag::FileSource, Value::Undefined(data)) => self.file_source = Some(data.clone()),
+           (ExifTag::SceneType, Value::Undefined(data)) => self.scene_type = Some(data.clone()),
+           (ExifTag::CustomRendered, Value::Short(data)) => self.custom_rendered = data.get(0).cloned(),
+diff --git a/rawler/src/formats/tiff/writer.rs b/rawler/src/formats/tiff/writer.rs
+index 1342cf5..f5f25d4 100644
+--- a/rawler/src/formats/tiff/writer.rs
++++ b/rawler/src/formats/tiff/writer.rs
+@@ -330,6 +330,7 @@ impl crate::decoders::RawMetadata {
+     transfer_entry(exif_ifd, ExifTag::LensMake, &exif.lens_make)?;
+     transfer_entry(exif_ifd, ExifTag::LensModel, &exif.lens_model)?;
+     transfer_entry(exif_ifd, ExifTag::UserComment, &exif.user_comment)?;
++    transfer_entry_undefined(exif_ifd, ExifTag::ExifVersion, &exif.exif_version)?;
+     transfer_entry_undefined(exif_ifd, ExifTag::FileSource, &exif.file_source)?;
+     transfer_entry_undefined(exif_ifd, ExifTag::SceneType, &exif.scene_type)?;
+     transfer_entry(exif_ifd, ExifTag::CustomRendered, &exif.custom_rendered)?;

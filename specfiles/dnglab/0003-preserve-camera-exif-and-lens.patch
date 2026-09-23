@@ -1,0 +1,165 @@
+diff --git a/rawler/data/lenses/e_mount/tamron.toml b/rawler/data/lenses/e_mount/tamron.toml
+index fb372f0..089b7a4 100644
+--- a/rawler/data/lenses/e_mount/tamron.toml
++++ b/rawler/data/lenses/e_mount/tamron.toml
+@@ -100,7 +100,7 @@ lens_id = 49469
+ make = "Tamron"
+ model = "35-150mm F2-F2.8 Di III VXD"
+ focal_range = [[35, 1], [150, 1]]
+-aperture_range = [[2, 1], [0, 1]]
++aperture_range = [[2, 1], [28, 10]]
+ 
+ [[lenses]]
+ mount = "e-mount"
+diff --git a/rawler/src/decoders/mod.rs b/rawler/src/decoders/mod.rs
+index 3785444..3167665 100644
+--- a/rawler/src/decoders/mod.rs
++++ b/rawler/src/decoders/mod.rs
+@@ -245,7 +245,8 @@ pub struct RawMetadata {
+ }
+ 
+ impl RawMetadata {
+-  pub(crate) fn new(camera: &Camera, exif: Exif) -> Self {
++  pub(crate) fn new(camera: &Camera, mut exif: Exif) -> Self {
++    exif.fill_apex_values();
+     Self {
+       exif,
+       model: camera.clean_model.clone(),
+@@ -257,6 +258,7 @@ impl RawMetadata {
+   }
+ 
+   pub(crate) fn new_with_lens(camera: &Camera, mut exif: Exif, lens: Option<LensDescription>) -> Self {
++    exif.fill_apex_values();
+     if let Some(lens) = &lens {
+       exif.extend_from_lens(lens);
+     } else {
+diff --git a/rawler/src/dng/convert.rs b/rawler/src/dng/convert.rs
+index d880010..a5eec40 100644
+--- a/rawler/src/dng/convert.rs
++++ b/rawler/src/dng/convert.rs
+@@ -310,6 +310,8 @@ where
+       .join()
+       .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to join compression thread: {:?}", err)))??;
+     dng.original_file(&original, original_filename)?;
++  } else if !original_filename.as_ref().is_empty() {
++    dng.root_ifd_mut().add_tag(DngTag::OriginalRawFileName, original_filename.as_ref());
+   }
+ 
+   if let Some(artist) = &params.artist {
+diff --git a/rawler/src/dng/writer.rs b/rawler/src/dng/writer.rs
+index 8b3e736..a9ec086 100644
+--- a/rawler/src/dng/writer.rs
++++ b/rawler/src/dng/writer.rs
+@@ -427,7 +427,7 @@ where
+   }
+ 
+   pub fn load_base_tags(&mut self, rawimage: &RawImage) -> Result<()> {
+-    self.root_ifd.add_tag(TiffCommonTag::Make, rawimage.clean_make.as_str());
++    self.root_ifd.add_tag(TiffCommonTag::Make, rawimage.camera.make.as_str());
+     self.root_ifd.add_tag(TiffCommonTag::Model, rawimage.clean_model.as_str());
+     let uq_model = format!("{} {}", rawimage.clean_make, rawimage.clean_model);
+     self.root_ifd.add_tag(DngTag::UniqueCameraModel, uq_model.as_str());
+diff --git a/rawler/src/exif.rs b/rawler/src/exif.rs
+index 2c03fde..93b3084 100644
+--- a/rawler/src/exif.rs
++++ b/rawler/src/exif.rs
+@@ -58,6 +58,17 @@ pub struct Exif {
+   pub lens_model: Option<String>,
+   pub gps: Option<ExifGPS>,
+   pub user_comment: Option<String>,
++  pub file_source: Option<Vec<u8>>,
++  pub scene_type: Option<Vec<u8>>,
++  pub custom_rendered: Option<u16>,
++  pub digital_zoom_ratio: Option<Rational>,
++  pub focal_length_in_35mm_format: Option<u16>,
++  pub contrast: Option<u16>,
++  pub saturation: Option<u16>,
++  pub sharpness: Option<u16>,
++  pub focal_plane_x_resolution: Option<Rational>,
++  pub focal_plane_y_resolution: Option<Rational>,
++  pub focal_plane_resolution_unit: Option<u16>,
+   //pub makernotes: Option<Vec<u8>>,
+ }
+ 
+@@ -168,6 +179,17 @@ impl Exif {
+           (ExifTag::LensMake, Value::Ascii(data)) => self.lens_make = data.strings().get(0).map(trim).filter(|s| !s.is_empty()),
+           (ExifTag::LensModel, Value::Ascii(data)) => self.lens_model = data.strings().get(0).map(trim).filter(|s| !s.is_empty()),
+           (ExifTag::UserComment, Value::Ascii(data)) => self.user_comment = data.strings().get(0).map(trim),
++          (ExifTag::FileSource, Value::Undefined(data)) => self.file_source = Some(data.clone()),
++          (ExifTag::SceneType, Value::Undefined(data)) => self.scene_type = Some(data.clone()),
++          (ExifTag::CustomRendered, Value::Short(data)) => self.custom_rendered = data.get(0).cloned(),
++          (ExifTag::DigitalZoomRatio, Value::Rational(data)) => self.digital_zoom_ratio = data.get(0).cloned(),
++          (ExifTag::FocalLengthIn35mmFormat, Value::Short(data)) => self.focal_length_in_35mm_format = data.get(0).cloned(),
++          (ExifTag::Contrast, Value::Short(data)) => self.contrast = data.get(0).cloned(),
++          (ExifTag::Saturation, Value::Short(data)) => self.saturation = data.get(0).cloned(),
++          (ExifTag::Sharpness, Value::Short(data)) => self.sharpness = data.get(0).cloned(),
++          (ExifTag::FocalPlaneXResolution2, Value::Rational(data)) => self.focal_plane_x_resolution = data.get(0).cloned(),
++          (ExifTag::FocalPlaneYResolution2, Value::Rational(data)) => self.focal_plane_y_resolution = data.get(0).cloned(),
++          (ExifTag::FocalPlaneResolutionUnit2, Value::Short(data)) => self.focal_plane_resolution_unit = data.get(0).cloned(),
+           //(ExifTag::MakerNotes, Value::Undefined(data)) => self.makernotes = Some(data.clone()),
+           (tag, _value) => {
+             log::debug!("Ignoring EXIF tag: {:?}", tag);
+@@ -231,15 +253,34 @@ impl Exif {
+     Ok(())
+   }
+ 
+-  /// Overwrite the lens information with the resolved lens description.
+-  ///
+-  /// This is only called when the lens resolver was able to find a matching
+-  /// lens in the database. Otherwise the lens information parsed from the
+-  /// source EXIF data (if any) is kept.
++  /// Fill in lens information from the resolved lens description, but only
++  /// where the camera left it out: lens profile matching (e.g. Lightroom)
++  /// keys on the camera's own LensModel/LensSpecification strings.
+   pub(crate) fn extend_from_lens(&mut self, lens: &LensDescription) {
++    if self.lens_model.is_some() {
++      return;
++    }
+     let lens_info: [Rational; 4] = [lens.focal_range[0], lens.focal_range[1], lens.aperture_range[0], lens.aperture_range[1]];
+-    self.lens_spec = Some(lens_info);
+-    self.lens_make = Some(lens.lens_make.clone());
++    self.lens_spec.get_or_insert(lens_info);
++    self.lens_make.get_or_insert_with(|| lens.lens_make.clone());
+     self.lens_model = Some(lens.lens_model.clone());
+   }
++
++  /// Derive APEX values the camera didn't record, like Adobe DNG Converter.
++  pub(crate) fn fill_apex_values(&mut self) {
++    if self.aperture_value.is_none() {
++      if let Some(f) = self.fnumber.filter(|f| f.n > 0 && f.d > 0) {
++        let av = 2.0 * (f.n as f64 / f.d as f64).log2();
++        if av >= 0.0 {
++          self.aperture_value = Some(Rational::new((av * 1_000_000.0).round() as u32, 1_000_000));
++        }
++      }
++    }
++    if self.shutter_speed_value.is_none() {
++      if let Some(t) = self.exposure_time.filter(|t| t.n > 0 && t.d > 0) {
++        let tv = -(t.n as f64 / t.d as f64).log2();
++        self.shutter_speed_value = Some(SRational::new((tv * 1_000_000.0).round() as i32, 1_000_000));
++      }
++    }
++  }
+ }
+diff --git a/rawler/src/formats/tiff/writer.rs b/rawler/src/formats/tiff/writer.rs
+index 2d738a7..1342cf5 100644
+--- a/rawler/src/formats/tiff/writer.rs
++++ b/rawler/src/formats/tiff/writer.rs
+@@ -330,6 +330,17 @@ impl crate::decoders::RawMetadata {
+     transfer_entry(exif_ifd, ExifTag::LensMake, &exif.lens_make)?;
+     transfer_entry(exif_ifd, ExifTag::LensModel, &exif.lens_model)?;
+     transfer_entry(exif_ifd, ExifTag::UserComment, &exif.user_comment)?;
++    transfer_entry_undefined(exif_ifd, ExifTag::FileSource, &exif.file_source)?;
++    transfer_entry_undefined(exif_ifd, ExifTag::SceneType, &exif.scene_type)?;
++    transfer_entry(exif_ifd, ExifTag::CustomRendered, &exif.custom_rendered)?;
++    transfer_entry(exif_ifd, ExifTag::DigitalZoomRatio, &exif.digital_zoom_ratio)?;
++    transfer_entry(exif_ifd, ExifTag::FocalLengthIn35mmFormat, &exif.focal_length_in_35mm_format)?;
++    transfer_entry(exif_ifd, ExifTag::Contrast, &exif.contrast)?;
++    transfer_entry(exif_ifd, ExifTag::Saturation, &exif.saturation)?;
++    transfer_entry(exif_ifd, ExifTag::Sharpness, &exif.sharpness)?;
++    transfer_entry(exif_ifd, ExifTag::FocalPlaneXResolution2, &exif.focal_plane_x_resolution)?;
++    transfer_entry(exif_ifd, ExifTag::FocalPlaneYResolution2, &exif.focal_plane_y_resolution)?;
++    transfer_entry(exif_ifd, ExifTag::FocalPlaneResolutionUnit2, &exif.focal_plane_resolution_unit)?;
+     //transfer_entry(exif_ifd, ExifTag::MakerNotes, &exif.makernotes.as_ref().map(|x| Value::Undefined(x.clone())))?;
+ 
+     Ok(())

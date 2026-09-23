@@ -4,7 +4,7 @@
 
 Name:           dnglab
 Version:        0.8.0
-Release:        5%{?dist}
+Release:        6%{?dist}
 Summary:        Camera RAW to DNG file format converter
 
 License:        LGPL-2.1-only
@@ -27,6 +27,12 @@ Patch0:         0001-full-size-preview.patch
 # decodes via LibRaw's dcraw_process() with auto-bright on by default. Not
 # upstream.
 Patch1:         0002-auto-bright-preview.patch
+# Adobe DNG Converter parity: keep camera Make/lens/EXIF tags. Not upstream.
+Patch2:         0003-preserve-camera-exif-and-lens.patch
+# Adobe DNG Converter parity: makernotes in DNGPrivateData (ARW). Not upstream.
+Patch3:         0004-adobe-dng-private-data.patch
+# Adobe DNG Converter parity: per-camera DNG tags (ILCE-7RM3). Not upstream.
+Patch4:         0005-adobe-dng-camera-tags.patch
 
 BuildRequires:  cargo
 BuildRequires:  anda-srpm-macros
@@ -67,6 +73,21 @@ install -Dm644 bin/%{name}/completions/_%{name} %{buildroot}%{_datadir}/zsh/site
 %{_datadir}/zsh/site-functions/_%{name}
 
 %changelog
+* Wed Sep 23 2026 Lachlan Marie <lchlnm@pm.me> - 0.8.0-6
+- Keep camera LensModel/LensSpecification, don't substitute lens DB names
+- Write camera EXIF Make (e.g. SONY)
+- Copy ExifVersion, FileSource, SceneType, CustomRendered, DigitalZoomRatio,
+  FocalLengthIn35mmFormat, Contrast, Saturation, Sharpness
+- Derive ApertureValue/ShutterSpeedValue
+- Always write OriginalRawFileName
+- Fix Tamron 35-150mm F2-2.8 (A058) max aperture
+- Store ARW makernotes + SR2 data in DNGPrivateData
+- Add BaselineExposure/Noise/Sharpness, BayerGreenSplit, CameraCalibration,
+  FocalPlaneResolution for ILCE-7RM3
+- Add AnalogBalance, LinearResponseLimit, ShadowScale, AntiAliasStrength
+- Round color matrices instead of truncating
+- 256px thumbnail
+
 * Tue Sep 01 2026 Lachlan Marie <lchlnm@pm.me> - 0.8.0-5
 - Add an auto-bright exposure-normalization step to RawDevelop's default
   pipeline, closing the gap between the --full-size-preview render and a

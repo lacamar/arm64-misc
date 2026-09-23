@@ -1,0 +1,79 @@
+diff --git a/rawler/src/decoders/arw.rs b/rawler/src/decoders/arw.rs
+index 9552f00..aa94969 100644
+--- a/rawler/src/decoders/arw.rs
++++ b/rawler/src/decoders/arw.rs
+@@ -254,6 +254,43 @@ impl<'a> Decoder for ArwDecoder<'a> {
+   fn format_hint(&self) -> FormatHint {
+     FormatHint::ARW
+   }
++
++  fn dng_private_data(&self, file: &RawSource) -> Result<Option<Vec<u8>>> {
++    let buf = file.as_vec()?;
++    let mut out = b"Adobe\0".to_vec();
++    let mut push_block = |tag: &[u8; 4], orig_offset: usize, data: &[u8]| {
++      out.extend_from_slice(tag);
++      out.extend_from_slice(&((data.len() + 6) as u32).to_be_bytes());
++      out.extend_from_slice(b"II");
++      out.extend_from_slice(&(orig_offset as u32).to_be_bytes());
++      out.extend_from_slice(data);
++    };
++
++    if let Some(entry) = self.get_exif()?.get_entry(ExifTag::MakerNotes) {
++      if let (Some(offset), Value::Undefined(data)) = (entry.offset(), &entry.value) {
++        push_block(b"MakN", offset, data);
++      }
++    }
++
++    if let Some(entry) = self.tiff.get_entry(TiffCommonTag::DNGPrivateArea) {
++      let start = LEu32(entry.get_data(), 0) as usize;
++      let sr2 = IFD::new(&mut file.reader(), start as u32, 0, 0, Endian::Little, &[])?;
++      let mut end = start + 2 + 12 * sr2.entry_count() as usize + 4;
++      for entry in sr2.entries().values() {
++        if let Some(offset) = entry.offset() {
++          end = end.max(offset + entry.byte_size());
++        }
++      }
++      if let (Some(offset), Some(length)) = (sr2.get_entry(TiffCommonTag::SonyOffset), sr2.get_entry(TiffCommonTag::SonyLength)) {
++        end = end.max(offset.force_usize(0) + length.force_usize(0));
++      }
++      if end <= buf.len() {
++        push_block(b"SR2 ", start, &buf[start..end]);
++      }
++    }
++
++    Ok(if out.len() > 6 { Some(out) } else { None })
++  }
+ }
+ 
+ impl<'a> ArwDecoder<'a> {
+diff --git a/rawler/src/decoders/mod.rs b/rawler/src/decoders/mod.rs
+index 3167665..4b8d756 100644
+--- a/rawler/src/decoders/mod.rs
++++ b/rawler/src/decoders/mod.rs
+@@ -344,6 +344,11 @@ pub trait Decoder: Send {
+     Ok(None)
+   }
+ 
++  /// Vendor data for the DNGPrivateData tag, in Adobe's "Adobe\0" block format.
++  fn dng_private_data(&self, _file: &RawSource) -> Result<Option<Vec<u8>>> {
++    Ok(None)
++  }
++
+   fn thumbnail_image(&self, _file: &RawSource, _params: &RawDecodeParams) -> Result<Option<DynamicImage>> {
+     info!("Decoder has no thumbnail image support");
+     Ok(None)
+diff --git a/rawler/src/dng/convert.rs b/rawler/src/dng/convert.rs
+index a5eec40..2a54d00 100644
+--- a/rawler/src/dng/convert.rs
++++ b/rawler/src/dng/convert.rs
+@@ -301,6 +301,10 @@ where
+     }
+   }
+ 
++  if let Some(data) = decoder.dng_private_data(rawfile)? {
++    dng.root_ifd_mut().add_tag(DngTag::DNGPrivateData, data.as_slice());
++  }
++
+   if let Some(xpacket) = decoder.xpacket(rawfile, &raw_params)? {
+     dng.xpacket(&xpacket)?;
+   }
