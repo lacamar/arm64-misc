@@ -1,0 +1,85 @@
+diff -ru lutris-a/lutris/util/wine/dll_manager.py lutris-b/lutris/util/wine/dll_manager.py
+--- a/lutris/util/wine/dll_manager.py
++++ b/lutris/util/wine/dll_manager.py
+@@ -2,6 +2,7 @@
+ 
+ import json
+ import os
++import platform
+ import shutil
+ from gettext import gettext as _
+ 
+@@ -16,6 +17,9 @@
+ from lutris.util.wine.prefix import WinePrefixManager
+ 
+ 
++SYSTEM_VERSION = "system"
++
++
+ class DLLManager:
+     """Utility class to install dlls to a Wine prefix"""
+ 
+@@ -26,6 +30,7 @@
+     releases_url = NotImplemented
+     archs = {32: "x32", 64: "x64"}
+     proton_compatible = False  # Proton manages its own DLLs
++    has_system_version = False  # Wine's builtins may provide the DLLs
+ 
+     def __init__(self, prefix=None, arch="win64", version=None):
+         self.prefix = prefix
+@@ -49,6 +54,12 @@
+             for local_version in os.listdir(self.base_dir):
+                 if os.path.isdir(os.path.join(self.base_dir, local_version)) and local_version not in self._versions:
+                     self._versions.append(local_version)
++        if self.has_system_version and SYSTEM_VERSION not in self._versions:
++            # x86 builds would run under emulation on aarch64
++            if platform.machine() == "aarch64":
++                self._versions.insert(0, SYSTEM_VERSION)
++            else:
++                self._versions.append(SYSTEM_VERSION)
+         return self._versions
+ 
+     @property
+@@ -269,7 +280,9 @@
+ 
+         # manual version only sets the dlls to native (in get_enabling_dll_overrides())
+         manager_version = self.version
+-        if not manager_version or manager_version.lower() != "manual":
++        if manager_version == SYSTEM_VERSION:
++            self.disable()
++        elif not manager_version or manager_version.lower() != "manual":
+             if enable:
+                 self.enable()
+             else:
+@@ -278,6 +291,9 @@
+     def get_enabling_dll_overrides(self):
+         """Returns aa dll-override dict for the dlls in this manager; these options will
+         enable the manager's dll, so call this only for enabled managers."""
++        if self.version == SYSTEM_VERSION:
++            return {dll: "b" for dll in self.managed_dlls}
++
+         overrides = {}
+ 
+         for dll in self.managed_dlls:
+diff -ru lutris-a/lutris/util/wine/dxvk.py lutris-b/lutris/util/wine/dxvk.py
+--- a/lutris/util/wine/dxvk.py
++++ b/lutris/util/wine/dxvk.py
+@@ -14,6 +14,7 @@
+     human_name = "DXVK"
+     managed_dlls = ("dxgi", "d3d11", "d3d10core", "d3d9", "d3d8")
+     releases_url = "https://api.github.com/repos/lutris/dxvk/releases"
++    has_system_version = True
+ 
+     def can_enable(self):
+         if os.environ.get("LUTRIS_NO_VKQUERY"):
+diff -ru lutris-a/lutris/util/wine/vkd3d.py lutris-b/lutris/util/wine/vkd3d.py
+--- a/lutris/util/wine/vkd3d.py
++++ b/lutris/util/wine/vkd3d.py
+@@ -7,6 +7,7 @@
+     human_name = "VKD3D"
+     managed_dlls = ("d3d12", "d3d12core")
+     releases_url = "https://api.github.com/repos/lutris/vkd3d/releases"
++    has_system_version = True
+ 
+     def can_enable(self):
+         return LINUX_SYSTEM.is_vulkan_supported()
