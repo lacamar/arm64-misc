@@ -1,0 +1,804 @@
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 3ae6f68..7a4c24a 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -24,6 +24,8 @@ include_directories(${APPINDICATOR_INCLUDE_DIRS})
+ pkg_check_modules(CANBERRA libcanberra REQUIRED)
+ include_directories(${CANBERRA_INCLUDE_DIRS})
+ 
++find_package(whisper REQUIRED)
++
+ include_directories(${CMAKE_CURRENT_BINARY_DIR})
+ 
+ list(APPEND
+@@ -48,6 +50,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
+         ${APPINDICATOR_LIBRARIES}
+         ${CANBERRA_LIBRARIES}
+         ${Intl_LIBRARIES}
++        whisper
+     )
+ 
+ install(TARGETS ${CMAKE_PROJECT_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
+diff --git a/src/ui/WebView.cpp b/src/ui/WebView.cpp
+index faf6d3a..640e254 100644
+--- a/src/ui/WebView.cpp
++++ b/src/ui/WebView.cpp
+@@ -9,16 +9,26 @@
+ #include <sstream>
+ #include <vector>
+ #include <algorithm>
++#include <map>
++#include <set>
++#include <deque>
++#include <memory>
++#include <thread>
++#include <mutex>
++#include <condition_variable>
+ #include <jsc/jsc.h>
++#include <whisper.h>
+ #include <glibmm/i18n.h>
+ #include <glibmm/main.h>
+ #include <glibmm/miscutils.h>
++#include <glibmm/fileutils.h>
+ #include <glibmm/ustring.h>
+ #include <gtkmm/messagedialog.h>
+ #include <gtkmm/filechooserdialog.h>
+ #include <gtkmm/clipboard.h>
+ #include <gdkmm/pixbuf.h>
+ #include <glib.h>
++#include <glib/gstdio.h>
+ #include "../util/Settings.hpp"
+ #include "Config.hpp"
+ 
+@@ -103,25 +113,137 @@ namespace wil::ui
+                     return spans.length ? spans[spans.length - 1] : node;
+                 }
+ 
++                function storeMessage(id) {
++                    try { return (id && window.require('WAWebCollections').Msg.get(id)) || null; } catch (e) { return null; }
++                }
++
++                var VOICE_SELECTOR = '[data-icon="audio-play"], [data-icon="audio-pause"], [data-icon^="ptt"], [aria-label*="voice message" i]';
++                var CLOCK_PATTERN  = /^\d{1,2}[:.]\d{2}(\s*[ap]\.?\s?m\.?)?$/i;
++
++                function voiceNote(row, seen) {
++                    var id = row.getAttribute('data-id');
++                    if (!id || seen[id] || row.querySelector('div.copyable-text[data-pre-plain-text]')) { return null; }
++
++                    var msg = storeMessage(id);
++                    if (msg ? !/^(ptt|audio)$/.test(msg.type) : !row.querySelector(VOICE_SELECTOR)) { return null; }
++                    seen[id] = true;
++
++                    var clocks = Array.prototype.map.call(row.querySelectorAll('span'), function(span) {
++                        return (span.innerText || '').trim();
++                    }).filter(function(text) { return CLOCK_PATTERN.test(text); });
++
++                    var seconds  = msg ? parseInt(msg.duration, 10) : NaN;
++                    var duration = isNaN(seconds) ? (clocks.length > 1 ? clocks[0] : '')
++                        : Math.floor(seconds / 60) + ':' + ('0' + seconds % 60).slice(-2);
++                    var group    = id.indexOf('@g.us') !== -1;
++                    var sender   = msg && msg.senderObj ? (msg.senderObj.formattedName || msg.senderObj.pushname || '') : '';
++
++                    return {
++                        voice:    true,
++                        id:       id,
++                        duration: duration,
++                        clock:    clocks.length ? clocks[clocks.length - 1] : '',
++                        t:        msg ? msg.t : 0,
++                        out:      msg ? msg.id.fromMe : id.indexOf('true_') === 0,
++                        sender:   group ? sender : ''
++                    };
++                }
++
++                function sameDay(a, b) {
++                    return new Date(a * 1000).toDateString() === new Date(b * 1000).toDateString();
++                }
++
++                function formatClock(date, like) {
++                    var hours   = date.getHours();
++                    var minutes = ('0' + date.getMinutes()).slice(-2);
++                    if (/[ap]\.?\s?m/i.test(like)) {
++                        var suffix = hours < 12 ? 'AM' : 'PM';
++                        return (hours % 12 || 12) + ':' + minutes + ' ' + (/[ap]m/.test(like) ? suffix.toLowerCase() : suffix);
++                    }
++                    return ('0' + hours).slice(-2) + ':' + minutes;
++                }
++
++                function formatDate(date, template) {
++                    var day   = date.getDate(), month = date.getMonth() + 1, year = date.getFullYear();
++                    var parts = (template.split(',')[1] || '').trim().match(/^(\d+)(\D)(\d+)\D(\d+)$/);
++                    if (!parts || parts[1].length === 4) {
++                        return year + '-' + ('0' + month).slice(-2) + '-' + ('0' + day).slice(-2);
++                    }
++                    var pad = function(value, like) { return like.charAt(0) === '0' ? ('0' + value).slice(-2) : String(value); };
++                    var y   = parts[4].length === 2 ? String(year).slice(-2) : year;
++                    return parts[2] === '/' && parseInt(parts[3], 10) > 12
++                        ? pad(month, parts[1]) + '/' + pad(day, parts[3]) + '/' + y
++                        : pad(day, parts[1]) + parts[2] + pad(month, parts[3]) + parts[2] + y;
++                }
++
++                // Voice notes carry no data-pre-plain-text, so borrow the date format from a same-day text message.
++                function resolveVoiceNotes(entries, title) {
++                    var ownName = '';
++                    entries.forEach(function(entry) { if (!entry.voice && entry.out && entry.sender) { ownName = entry.sender; } });
++
++                    var template = '';
++                    entries.forEach(function(entry) { if (!entry.voice && entry.time.indexOf(',') !== -1) { template = entry.time; } });
++
++                    return entries.filter(function(entry, index) {
++                        if (!entry.voice) { return true; }
++
++                        var neighbour = null;
++                        for (var distance = 1; !neighbour && distance < entries.length; ++distance) {
++                            [entries[index - distance], entries[index + distance]].forEach(function(candidate) {
++                                if (!neighbour && candidate && !candidate.voice && candidate.time.indexOf(',') !== -1
++                                    && (!entry.t || !candidate.t || sameDay(entry.t, candidate.t))) {
++                                    neighbour = candidate;
++                                }
++                            });
++                        }
++
++                        var date = new Date(entry.t * 1000);
++                        if (neighbour && (entry.t || entry.clock)) {
++                            var parts   = neighbour.time.split(',');
++                            entry.time  = (entry.t ? formatClock(date, parts[0]) : entry.clock) + ',' + parts.slice(1).join(',');
++                        } else if (entry.t) {
++                            entry.time = formatClock(date, template ? template.split(',')[0] : '00') + ', ' + formatDate(date, template);
++                        } else {
++                            return false;
++                        }
++
++                        entry.sender = entry.out ? (ownName || 'You') : (entry.id.indexOf('@g.us') !== -1 ? (entry.sender || 'Unknown') : title);
++                        entry.text   = '\x04' + entry.id + '\x04' + entry.duration;
++                        return true;
++                    });
++                }
++
+                 function scrapeAndNotify() {
+                     var title = currentTitle();
+                     if (!title) { return; }
+ 
+                     var entries = [];
+-                    document.querySelectorAll('#main div.copyable-text[data-pre-plain-text]').forEach(function(node) {
++                    var seen    = {};
++                    document.querySelectorAll('#main div.copyable-text[data-pre-plain-text], #main [data-id]').forEach(function(node) {
++                        if (node.hasAttribute('data-id')) {
++                            var voice = voiceNote(node, seen);
++                            if (voice) { entries.push(voice); }
++                            return;
++                        }
++
+                         var meta     = (node.getAttribute('data-pre-plain-text') || '').trim();
+                         var match    = meta.match(/^\[(.*?)\]\s*(.*?):\s*$/);
+                         var text     = (messageTextNode(node).innerText || '').trim();
++                        var row      = node.closest('[data-id]');
++                        var msg      = row ? storeMessage(row.getAttribute('data-id')) : null;
+ 
+                         if (!match && !text) { return; }
+ 
+                         entries.push({
+                             time:   match ? match[1] : '',
+                             sender: match ? match[2] : '',
+-                            text:   text
++                            text:   text,
++                            t:      msg ? msg.t : 0,
++                            out:    !!node.closest('.message-out')
+                         });
+                     });
+ 
++                    entries = resolveVoiceNotes(entries, title);
+                     if (entries.length === 0) { return; }
+ 
+                     var records = entries.map(function(entry) {
+@@ -135,6 +257,64 @@ namespace wil::ui
+ 
+                 window.__wilForceContinuousExportScrape = scrapeAndNotify;
+ 
++                function postVoiceNote(id, bytes) {
++                    var binary = '';
++                    for (var i = 0; bytes && i < bytes.length; i += 0x8000) {
++                        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
++                    }
++                    try {
++                        window.webkit.messageHandlers.wilVoiceNote.postMessage(id + '\x01' + btoa(binary));
++                    } catch (e) { /* handler not registered yet */ }
++                }
++
++                async function downloadVoiceNote(id) {
++                    var msg = storeMessage(id);
++                    if (!msg) { return null; }
++                    if (msg.mediaData && msg.mediaData.mediaStage !== 'RESOLVED') {
++                        await msg.downloadMedia({downloadEvenIfExpensive: true, rmrReason: 1});
++                    }
++                    var buffer = await window.require('WAWebDownloadManager').downloadManager.downloadAndMaybeDecrypt({
++                        directPath:        msg.directPath,
++                        encFilehash:       msg.encFilehash,
++                        filehash:          msg.filehash,
++                        mediaKey:          msg.mediaKey,
++                        mediaKeyTimestamp: msg.mediaKeyTimestamp,
++                        type:              msg.type,
++                        signal:            new AbortController().signal
++                    });
++                    return new Uint8Array(buffer);
++                }
++
++                // Fallback when WhatsApp's internal modules move: grab the decrypted blob when the user plays it.
++                var capturedAudio  = {};
++                var lastVoiceClick = null;
++                document.addEventListener('click', function(event) {
++                    var row = event.target.closest && event.target.closest('#main [data-id]');
++                    if (row) { lastVoiceClick = {id: row.getAttribute('data-id'), at: Date.now()}; }
++                }, true);
++
++                var createObjectURL = URL.createObjectURL;
++                URL.createObjectURL = function(object) {
++                    if (object instanceof Blob && /^audio\//.test(object.type) && lastVoiceClick && Date.now() - lastVoiceClick.at < 10000) {
++                        var id = lastVoiceClick.id;
++                        lastVoiceClick = null;
++                        if (!capturedAudio[id]) {
++                            capturedAudio[id] = object;
++                            object.arrayBuffer().then(function(buffer) { postVoiceNote(id, new Uint8Array(buffer)); });
++                        }
++                    }
++                    return createObjectURL.apply(this, arguments);
++                };
++
++                window.__wilFetchVoiceNote = function(id) {
++                    downloadVoiceNote(id).catch(function() { return null; }).then(function(bytes) {
++                        if (!bytes && capturedAudio[id]) {
++                            return capturedAudio[id].arrayBuffer().then(function(buffer) { return new Uint8Array(buffer); });
++                        }
++                        return bytes;
++                    }).then(function(bytes) { postVoiceNote(id, bytes); });
++                };
++
+                 function messageScroller() {
+                     var message = document.querySelector('#main div.copyable-text[data-pre-plain-text]');
+                     for (var el = message && message.parentElement; el && el !== document.body; el = el.parentElement) {
+@@ -735,11 +915,449 @@ namespace wil::ui
+             entries = std::move(sorted);
+         }
+ 
+-        void continuousExportMessageReceived(WebKitUserContentManager*, WebKitJavascriptResult* jsResult, gpointer)
++        std::string exportPathFor(std::string const& title)
+         {
+-            auto* const value         = webkit_javascript_result_get_js_value(jsResult);
+-            auto* const resultString  = jsc_value_to_string(value);
+-            auto const  raw           = std::string{resultString ? resultString : ""};
++            auto const key = sanitizeSettingsKey(title);
++            if (!util::Settings::getInstance().hasKey(CONTINUOUS_EXPORT_GROUP, key))
++            {
++                return {};
++            }
++
++            return util::Settings::getInstance().getValue<Glib::ustring>(CONTINUOUS_EXPORT_GROUP, key, Glib::ustring{}).raw();
++        }
++
++        void mergeIntoExport(std::string const& path, std::string const& title, std::vector<ChatEntry> const& windowEntries)
++        {
++            auto existingEntries = std::vector<ChatEntry>{};
++            if (auto inFile = std::ifstream{path}; inFile)
++            {
++                auto const existingMarkdown = std::string{std::istreambuf_iterator<char>(inFile), std::istreambuf_iterator<char>()};
++                existingEntries              = parseExistingMarkdown(existingMarkdown);
++            }
++
++            auto mergedEntries = mergeEntries(std::move(existingEntries), windowEntries);
++            sortByTimestamp(mergedEntries);
++
++            auto outFile = std::ofstream{path};
++            outFile << renderChatMarkdown(title, mergedEntries);
++        }
++
++        constexpr auto const VOICE_NOTES_GROUP = "voice-notes";
++        constexpr auto const VOICE_MODEL_URL   = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin";
++
++        struct PendingVoiceNote
++        {
++            std::string title;
++            ChatEntry   entry;
++            std::string duration;
++        };
++
++        struct TranscriptionJob
++        {
++            std::string id;
++            std::string audio;
++            std::string modelPath;
++            std::string language;
++        };
++
++        struct TranscriptionResult
++        {
++            std::string                id;
++            std::optional<std::string> transcript;
++            std::string                error;
++        };
++
++        struct VoiceNoteState
++        {
++            WebKitWebView*                          view = nullptr;
++            std::map<std::string, PendingVoiceNote> pending;
++            std::set<std::string>                   requested;
++            std::set<std::string>                   transcribing;
++            std::set<std::string>                   failed;
++            bool                                    modelPrompted = false;
++            bool                                    errorShown    = false;
++
++            std::mutex                   mutex;
++            std::condition_variable      wake;
++            std::deque<TranscriptionJob> jobs;
++            bool                         workerStarted = false;
++        };
++
++        VoiceNoteState& voiceNotes()
++        {
++            static auto state = VoiceNoteState{};
++            return state;
++        }
++
++        std::string voiceModelPath()
++        {
++            // Shared with pywhispercpp's model cache.
++            auto const fallback = Glib::build_filename(Glib::get_user_data_dir(), std::string{"pywhispercpp"}, std::string{"models"}, std::string{"ggml-large-v3.bin"});
++            return util::Settings::getInstance().getValue<Glib::ustring>(VOICE_NOTES_GROUP, "model", fallback).raw();
++        }
++
++        std::string transcriptPath(std::string const& id)
++        {
++            return Glib::build_filename(std::string{g_get_user_state_dir()}, std::string{WIL_NAME}, std::string{"voice-notes"}, sanitizeSettingsKey(id) + ".txt");
++        }
++
++        std::optional<std::string> cachedTranscript(std::string const& id)
++        {
++            auto inFile = std::ifstream{transcriptPath(id)};
++            if (!inFile)
++            {
++                return std::nullopt;
++            }
++            return std::string{std::istreambuf_iterator<char>(inFile), std::istreambuf_iterator<char>()};
++        }
++
++        void saveTranscript(std::string const& id, std::string const& transcript)
++        {
++            auto const path = transcriptPath(id);
++            g_mkdir_with_parents(Glib::path_get_dirname(path).c_str(), 0700);
++            auto outFile = std::ofstream{path};
++            outFile << transcript;
++        }
++
++        std::string voiceNoteText(std::string const& duration, std::string const& transcript)
++        {
++            auto text = std::string{"🎤 Voice note"};
++            if (!duration.empty())
++            {
++                text += " (" + duration + ")";
++            }
++            return transcript.empty() ? text : text + ": " + transcript;
++        }
++
++        std::optional<std::vector<float>> decodeAudio(std::string const& audio, std::string& error)
++        {
++            GError* gerror  = nullptr;
++            auto* const process = g_subprocess_new(
++                static_cast<GSubprocessFlags>(G_SUBPROCESS_FLAGS_STDIN_PIPE | G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_PIPE), &gerror,
++                "ffmpeg", "-loglevel", "error", "-i", "pipe:0", "-f", "f32le", "-ac", "1", "-ar", "16000", "pipe:1", nullptr);
++            if (!process)
++            {
++                error = gerror->message;
++                g_error_free(gerror);
++                return std::nullopt;
++            }
++
++            auto* const input  = g_bytes_new(audio.data(), audio.size());
++            GBytes*     output = nullptr;
++            GBytes*     stderrBytes = nullptr;
++            auto const  ok     = g_subprocess_communicate(process, input, nullptr, &output, &stderrBytes, &gerror)
++                && g_subprocess_get_if_exited(process) && (g_subprocess_get_exit_status(process) == 0);
++            g_bytes_unref(input);
++
++            std::optional<std::vector<float>> samples;
++            if (ok)
++            {
++                gsize size        = 0;
++                auto const* data  = static_cast<float const*>(g_bytes_get_data(output, &size));
++                samples           = std::vector<float>(data, data + size / sizeof(float));
++            }
++            else if (gerror)
++            {
++                error = gerror->message;
++                g_error_free(gerror);
++            }
++            else
++            {
++                gsize size = 0;
++                auto const* data = static_cast<char const*>(stderrBytes ? g_bytes_get_data(stderrBytes, &size) : nullptr);
++                error = "ffmpeg: " + (data ? std::string{data, size} : std::string{"failed"});
++            }
++
++            if (output)
++            {
++                g_bytes_unref(output);
++            }
++            if (stderrBytes)
++            {
++                g_bytes_unref(stderrBytes);
++            }
++            g_object_unref(process);
++            return samples;
++        }
++
++        TranscriptionResult transcribe(TranscriptionJob const& job, whisper_context*& context, std::string& loadedModel)
++        {
++            auto result = TranscriptionResult{job.id, std::nullopt, {}};
++
++            if (!context || (loadedModel != job.modelPath))
++            {
++                if (context)
++                {
++                    whisper_free(context);
++                }
++                context     = whisper_init_from_file_with_params(job.modelPath.c_str(), whisper_context_default_params());
++                loadedModel = context ? job.modelPath : std::string{};
++                if (!context)
++                {
++                    result.error = "failed to load model " + job.modelPath;
++                    return result;
++                }
++            }
++
++            auto const samples = decodeAudio(job.audio, result.error);
++            if (!samples)
++            {
++                return result;
++            }
++
++            auto params             = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
++            params.language         = job.language.c_str();
++            params.n_threads        = static_cast<int>(std::clamp(std::thread::hardware_concurrency(), 1u, 8u));
++            params.print_progress   = false;
++            params.print_realtime   = false;
++            params.print_special    = false;
++            params.print_timestamps = false;
++
++            if (whisper_full(context, params, samples->data(), static_cast<int>(samples->size())) != 0)
++            {
++                result.error = "whisper_full failed";
++                return result;
++            }
++
++            std::string transcript;
++            for (int i = 0; i < whisper_full_n_segments(context); ++i)
++            {
++                std::string segment = whisper_full_get_segment_text(context, i);
++                auto const  first   = segment.find_first_not_of(" \t\n");
++                if (first == std::string::npos)
++                {
++                    continue;
++                }
++                segment = segment.substr(first, segment.find_last_not_of(" \t\n") - first + 1);
++                transcript += (transcript.empty() ? "" : " ") + segment;
++            }
++
++            result.transcript = transcript;
++            return result;
++        }
++
++        void showVoiceNoteError(std::string const& message)
++        {
++            std::cerr << "WebView: Voice note transcription failed: " << message << std::endl;
++
++            auto& state = voiceNotes();
++            if (state.errorShown)
++            {
++                return;
++            }
++            state.errorShown = true;
++
++            auto dialog = Gtk::MessageDialog{_("Voice Note Transcription Failed"), false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK};
++            dialog.set_secondary_text(message);
++            dialog.run();
++        }
++
++        gboolean voiceNoteTranscribed(gpointer data)
++        {
++            auto const result = std::unique_ptr<TranscriptionResult>{static_cast<TranscriptionResult*>(data)};
++            auto&      state  = voiceNotes();
++            state.requested.erase(result->id);
++            state.transcribing.erase(result->id);
++
++            if (!result->transcript)
++            {
++                state.failed.insert(result->id);
++                showVoiceNoteError(result->error);
++                return G_SOURCE_REMOVE;
++            }
++
++            saveTranscript(result->id, *result->transcript);
++
++            if (auto const it = state.pending.find(result->id); it != state.pending.end())
++            {
++                auto entry = it->second.entry;
++                entry.text = voiceNoteText(it->second.duration, *result->transcript);
++                if (auto const path = exportPathFor(it->second.title); !path.empty())
++                {
++                    mergeIntoExport(path, it->second.title, {entry});
++                }
++                state.pending.erase(it);
++            }
++            else if (state.view)
++            {
++                triggerImmediateContinuousExportScrape(state.view);
++            }
++
++            return G_SOURCE_REMOVE;
++        }
++
++        void transcriptionWorker()
++        {
++            auto&            state   = voiceNotes();
++            whisper_context* context = nullptr;
++            std::string      loadedModel;
++
++            whisper_log_set([](ggml_log_level, char const*, void*) {}, nullptr);
++
++            while (true)
++            {
++                auto job = TranscriptionJob{};
++                {
++                    auto lock = std::unique_lock{state.mutex};
++                    state.wake.wait(lock, [&state] { return !state.jobs.empty(); });
++                    job = std::move(state.jobs.front());
++                    state.jobs.pop_front();
++                }
++
++                g_idle_add(voiceNoteTranscribed, new TranscriptionResult{transcribe(job, context, loadedModel)});
++            }
++        }
++
++        void enqueueTranscription(std::string const& id, std::string audio)
++        {
++            auto& state = voiceNotes();
++            {
++                auto const lock = std::lock_guard{state.mutex};
++                state.jobs.push_back(TranscriptionJob{id, std::move(audio), voiceModelPath(),
++                    util::Settings::getInstance().getValue<Glib::ustring>(VOICE_NOTES_GROUP, "language", "auto").raw()});
++            }
++            state.wake.notify_one();
++
++            if (!state.workerStarted)
++            {
++                state.workerStarted = true;
++                std::thread{transcriptionWorker}.detach();
++            }
++        }
++
++        void voiceModelDownloaded(GObject* sourceObject, GAsyncResult* result, gpointer userData)
++        {
++            auto const partialPath = std::unique_ptr<std::string>{static_cast<std::string*>(userData)};
++            auto const finalPath   = partialPath->substr(0, partialPath->size() - std::string{".part"}.size());
++
++            GError* error = nullptr;
++            if (!g_subprocess_wait_check_finish(G_SUBPROCESS(sourceObject), result, &error) || (g_rename(partialPath->c_str(), finalPath.c_str()) != 0))
++            {
++                showVoiceNoteError(error ? std::string{error->message} : std::string{"failed to download "} + VOICE_MODEL_URL);
++                if (error)
++                {
++                    g_error_free(error);
++                }
++                g_unlink(partialPath->c_str());
++                return;
++            }
++
++            voiceNotes().failed.clear();
++            if (auto* const view = voiceNotes().view)
++            {
++                triggerImmediateContinuousExportScrape(view);
++            }
++        }
++
++        bool ensureVoiceModel()
++        {
++            auto& state = voiceNotes();
++            if (Glib::file_test(voiceModelPath(), Glib::FILE_TEST_IS_REGULAR))
++            {
++                return true;
++            }
++            if (state.modelPrompted)
++            {
++                return false;
++            }
++            state.modelPrompted = true;
++
++            auto dialog = Gtk::MessageDialog{_("Transcribe Voice Notes?"), false, Gtk::MESSAGE_QUESTION, Gtk::BUTTONS_NONE};
++            dialog.set_secondary_text(_("Continuous export can transcribe voice notes into the chat log. This needs a Whisper speech recognition model (about 3 GB)."));
++            dialog.add_button(_("Download Model"), Gtk::RESPONSE_ACCEPT);
++            dialog.add_button(_("Choose Model File…"), Gtk::RESPONSE_APPLY);
++            dialog.add_button(_("Not Now"), Gtk::RESPONSE_CANCEL);
++
++            switch (dialog.run())
++            {
++                case Gtk::RESPONSE_ACCEPT:
++                {
++                    auto const path = voiceModelPath();
++                    g_mkdir_with_parents(Glib::path_get_dirname(path).c_str(), 0755);
++
++                    GError* error   = nullptr;
++                    auto* const partialPath = new std::string{path + ".part"};
++                    auto* const process = g_subprocess_new(G_SUBPROCESS_FLAGS_NONE, &error, "curl", "-fsSL", "-o", partialPath->c_str(), VOICE_MODEL_URL, nullptr);
++                    if (!process)
++                    {
++                        delete partialPath;
++                        showVoiceNoteError(error->message);
++                        g_error_free(error);
++                        return false;
++                    }
++                    g_subprocess_wait_check_async(process, nullptr, voiceModelDownloaded, partialPath);
++                    g_object_unref(process);
++                    return false;
++                }
++
++                case Gtk::RESPONSE_APPLY:
++                {
++                    auto chooser = Gtk::FileChooserDialog{_("Choose Whisper Model"), Gtk::FILE_CHOOSER_ACTION_OPEN};
++                    chooser.add_button(_("Cancel"), Gtk::RESPONSE_CANCEL);
++                    chooser.add_button(_("Open"), Gtk::RESPONSE_OK);
++                    if (chooser.run() != Gtk::RESPONSE_OK)
++                    {
++                        return false;
++                    }
++                    util::Settings::getInstance().setValue<Glib::ustring>(VOICE_NOTES_GROUP, "model", chooser.get_filename());
++                    return true;
++                }
++
++                default:
++                    return false;
++            }
++        }
++
++        void requestVoiceNote(std::string const& title, ChatEntry const& entry, std::string const& id, std::string const& duration)
++        {
++            auto& state = voiceNotes();
++            state.pending[id] = PendingVoiceNote{title, entry, duration};
++
++            if (!state.view || state.requested.count(id) || state.failed.count(id)
++                || (id.find_first_of("'\\\n") != std::string::npos) || !ensureVoiceModel())
++            {
++                return;
++            }
++
++            state.requested.insert(id);
++            auto const script = "if (window.__wilFetchVoiceNote) { window.__wilFetchVoiceNote('" + id + "'); }";
++            webkit_web_view_evaluate_javascript(state.view, script.c_str(), -1, nullptr, nullptr, nullptr, nullptr, nullptr);
++        }
++
++        // Voice notes arrive as "\x04id\x04duration"; untranscribed ones are held back until their transcript is ready.
++        std::vector<ChatEntry> resolveVoiceNotes(std::string const& title, std::vector<ChatEntry> entries)
++        {
++            std::vector<ChatEntry> resolved;
++            for (auto& entry : entries)
++            {
++                if (entry.text.empty() || (entry.text[0] != '\x04'))
++                {
++                    resolved.push_back(std::move(entry));
++                    continue;
++                }
++
++                auto const sep      = entry.text.find('\x04', 1);
++                auto const id       = entry.text.substr(1, sep == std::string::npos ? std::string::npos : sep - 1);
++                auto const duration = (sep == std::string::npos) ? std::string{} : entry.text.substr(sep + 1);
++
++                if (auto const transcript = cachedTranscript(id))
++                {
++                    entry.text = voiceNoteText(duration, *transcript);
++                    resolved.push_back(std::move(entry));
++                }
++                else
++                {
++                    requestVoiceNote(title, entry, id, duration);
++                }
++            }
++            return resolved;
++        }
++
++        void voiceNoteReceived(WebKitUserContentManager*, WebKitJavascriptResult* jsResult, gpointer)
++        {
++            auto* const value        = webkit_javascript_result_get_js_value(jsResult);
++            auto* const resultString = jsc_value_to_string(value);
++            auto const  raw          = std::string{resultString ? resultString : ""};
+             g_free(resultString);
+ 
+             auto const delimiterPos = raw.find('\x01');
+@@ -748,39 +1366,65 @@ namespace wil::ui
+                 return;
+             }
+ 
+-            auto const title   = raw.substr(0, delimiterPos);
+-            auto const records = raw.substr(delimiterPos + 1);
+-            auto const key     = sanitizeSettingsKey(title);
++            auto&      state = voiceNotes();
++            auto const id    = raw.substr(0, delimiterPos);
++            auto const data  = raw.substr(delimiterPos + 1);
+ 
+-            if (!util::Settings::getInstance().hasKey(CONTINUOUS_EXPORT_GROUP, key))
++            if (data.empty())
+             {
++                state.requested.erase(id);
++                state.failed.insert(id);
++                std::cerr << "WebView: Could not fetch audio for voice note " << id << std::endl;
+                 return;
+             }
+ 
+-            auto const path = util::Settings::getInstance().getValue<Glib::ustring>(CONTINUOUS_EXPORT_GROUP, key, Glib::ustring{});
+-            if (path.empty())
++            if (state.transcribing.count(id))
+             {
+                 return;
+             }
++            if (cachedTranscript(id) || (!state.requested.count(id) && !ensureVoiceModel()))
++            {
++                state.requested.erase(id);
++                return;
++            }
+ 
+-            auto const windowEntries = parseIncomingRecords(records);
+-            if (windowEntries.empty())
++            gsize       size    = 0;
++            auto* const decoded = g_base64_decode(data.c_str(), &size);
++            state.requested.insert(id);
++            state.transcribing.insert(id);
++            state.failed.erase(id);
++            enqueueTranscription(id, std::string{reinterpret_cast<char const*>(decoded), size});
++            g_free(decoded);
++        }
++
++        void continuousExportMessageReceived(WebKitUserContentManager*, WebKitJavascriptResult* jsResult, gpointer)
++        {
++            auto* const value         = webkit_javascript_result_get_js_value(jsResult);
++            auto* const resultString  = jsc_value_to_string(value);
++            auto const  raw           = std::string{resultString ? resultString : ""};
++            g_free(resultString);
++
++            auto const delimiterPos = raw.find('\x01');
++            if (delimiterPos == std::string::npos)
+             {
+                 return;
+             }
+ 
+-            auto existingEntries = std::vector<ChatEntry>{};
+-            if (auto inFile = std::ifstream{path.raw()}; inFile)
++            auto const title   = raw.substr(0, delimiterPos);
++            auto const records = raw.substr(delimiterPos + 1);
++            auto const path    = exportPathFor(title);
++            if (path.empty())
+             {
+-                auto const existingMarkdown = std::string{std::istreambuf_iterator<char>(inFile), std::istreambuf_iterator<char>()};
+-                existingEntries              = parseExistingMarkdown(existingMarkdown);
++                return;
+             }
+ 
+-            auto mergedEntries = mergeEntries(std::move(existingEntries), windowEntries);
+-            sortByTimestamp(mergedEntries);
++            auto const windowEntries = resolveVoiceNotes(title, parseIncomingRecords(records));
++            if (windowEntries.empty())
++            {
++                return;
++            }
+ 
+-            auto outFile = std::ofstream{path.raw()};
+-            outFile << renderChatMarkdown(title, mergedEntries);
++            mergeIntoExport(path, title, windowEntries);
+         }
+ 
+         std::optional<std::string> getSystemLanguage()
+@@ -1288,6 +1932,10 @@ namespace wil::ui
+         g_signal_connect(manager, "script-message-received::wilContinuousExport", G_CALLBACK(continuousExportMessageReceived), nullptr);
+         webkit_user_content_manager_register_script_message_handler(manager, "wilContinuousExport");
+ 
++        voiceNotes().view = *this;
++        g_signal_connect(manager, "script-message-received::wilVoiceNote", G_CALLBACK(voiceNoteReceived), nullptr);
++        webkit_user_content_manager_register_script_message_handler(manager, "wilVoiceNote");
++
+         auto* const script = webkit_user_script_new(
+             CONTINUOUS_EXPORT_INIT_SCRIPT, WEBKIT_USER_CONTENT_INJECT_TOP_FRAME, WEBKIT_USER_SCRIPT_INJECT_AT_DOCUMENT_END, nullptr, nullptr);
+         webkit_user_content_manager_add_script(manager, script);

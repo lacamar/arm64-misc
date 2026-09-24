@@ -1,7 +1,7 @@
 %global tag 1.7.0
 Name: wasistlos
 Version: %{tag}
-Release: 6%{?dist}
+Release: 7%{?dist}
 Summary: An unofficial WhatsApp desktop application for Linux.
 
 License: GNU GPL v3
@@ -10,6 +10,7 @@ Source0: %{url}/archive/v%{version}/wasistlos-%{version}.tar.gz
 Patch0:  0001-export-chat-transcript.patch
 Patch1:  0002-continuous-chat-export.patch
 Patch2:  0003-paste-image-clipboard.patch
+Patch3:  0004-voice-note-transcription.patch
 
 BuildRequires: cmake
 BuildRequires: pkgconfig
@@ -20,6 +21,10 @@ BuildRequires: gtkmm3.0-devel
 BuildRequires: webkit2gtk4.1-devel
 BuildRequires: libayatana-appindicator-gtk3-devel
 BuildRequires: libcanberra-devel
+BuildRequires: whisper-cpp-devel
+
+Requires: /usr/bin/ffmpeg
+Requires: /usr/bin/curl
 
 
 %description
@@ -70,6 +75,9 @@ An unofficial WhatsApp desktop application for Linux.
 
 
 %changelog
+* Thu Sep 24 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-7
+ - Transcribe voice notes into continuous export
+
 * Fri Sep 18 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-6
  - Backfill full chat history on continuous export enable
  - Add "Fetch Full History" option
