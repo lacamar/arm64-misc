@@ -1,13 +1,13 @@
 %global _name swayimg
 %global tag 5.6
-%global bumpver 0
+%global bumpver 1
 
-%global commit 60158bfa75e45ace09fb8d5d75c1d6914a72e750
+%global commit d7d42b47524904d91165b52e639f83a00d7ae990
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           %{_name}-git
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        4%{?dist}
+Release:        5%{?dist}
 Conflicts:      %{_name}
 Provides:       %{_name} = %{version}-%{release}
 Summary:        Lightweight image viewer for Wayland display servers
@@ -21,6 +21,9 @@ Source:         %{url}/archive/%{shortcommit}/%{_name}-%{shortcommit}.tar.gz
 # (DateTimeOriginal/DateTimeDigitized/DateTime, via exiv2), falling back to
 # path order when unavailable. Not upstream.
 Patch1:          0001-imagelist-add-exif-capture-time-sort-order.patch
+# Color managed OpenGL ES renderer: ICC/CICP, wide gamut, HDR (PQ output
+# via wp_color_management_v1), software fallback. Not upstream.
+Patch3:          0003-render-color-managed-gpu-hdr.patch
 
 # Exclude x86 and all the platforms where luajit is not available
 ExcludeArch:    %{ix86} riscv64 ppc64 ppc64le
@@ -35,9 +38,12 @@ BuildRequires:  meson >= 1.1
 BuildRequires:  giflib-devel
 # BuildRequires:  pkgconfig(OpenEXR) >= 3.4
 BuildRequires:  pkgconfig(bash-completion)
+BuildRequires:  pkgconfig(egl)
 BuildRequires:  pkgconfig(exiv2)
 BuildRequires:  pkgconfig(fontconfig)
 BuildRequires:  pkgconfig(freetype2)
+BuildRequires:  pkgconfig(glesv2)
+BuildRequires:  pkgconfig(lcms2)
 %if %{with tests}
 BuildRequires:  pkgconfig(gtest)
 %endif
@@ -59,8 +65,10 @@ BuildRequires:  pkgconfig(libtiff-4)
 BuildRequires:  pkgconfig(libwebp)
 BuildRequires:  pkgconfig(libwebpdemux)
 BuildRequires:  pkgconfig(luajit)
+BuildRequires:  pkgconfig(minizip-ng)
 BuildRequires:  pkgconfig(wayland-client)
-BuildRequires:  pkgconfig(wayland-protocols) >= 1.35
+BuildRequires:  pkgconfig(wayland-egl)
+BuildRequires:  pkgconfig(wayland-protocols) >= 1.45
 BuildRequires:  pkgconfig(wayland-scanner)
 BuildRequires:  pkgconfig(xkbcommon)
 
@@ -79,11 +87,13 @@ Swayimg is a lightweight image viewer for Wayland display servers.
 %autosetup -N -n %{_name}-%{commit}
 #patch -P 0 -p1 -F3
 %patch -P 1 -p1 -F3
+%patch -P 3 -p1 -F3
 
 
 %build
 %meson \
     -Dexr=disabled \
+    -Dgpu=enabled \
     -Dlicense=false \
     -Dtests=%[%{with tests}?"enabled":"disabled"] \
     -Dversion=%{version}
@@ -124,6 +134,14 @@ export LANG=en_US.UTF-8 # ImageListTest.SortAlphaUnicode fails with LANG=C
 
 
 %changelog
+* Sat Sep 26 2026 Lachlan Marie <lchlnm@pm.me> - 5.6^1.git.d7d42b4-5
+ - Update to commit d7d42b47524904d91165b52e639f83a00d7ae990
+
+* Sat Sep 26 2026 Lachlan Marie <lchlnm@pm.me> - 5.6^0.git.60158bf-5
+ - Add color managed GPU renderer
+ - Add ICC/CICP color space support
+ - Add HDR and wide gamut output
+
 * Sun Sep 20 2026 Lachlan Marie <lchlnm@pm.me> - 5.6^0.git.60158bf-4
  - Update to 5.6
 
