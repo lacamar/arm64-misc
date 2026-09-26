@@ -1,8 +1,8 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 207c457e..005e958a 100644
+index 7087a63d..e68b899d 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -956,11 +956,18 @@ set(CORE src/core/aerolib/stubs.cpp
+@@ -964,11 +964,18 @@ set(CORE src/core/aerolib/stubs.cpp
           src/core/user_settings.h
  )
  
@@ -21,10 +21,10 @@ index 207c457e..005e958a 100644
  endif()
  
  set(SHADER_RECOMPILER src/shader_recompiler/profile.h
-@@ -1276,6 +1283,9 @@ create_target_directory_groups(shadps4)
+@@ -1288,6 +1295,9 @@ create_target_directory_groups(shadps4)
  target_link_libraries(shadps4 PRIVATE spdlog::spdlog)
  target_link_libraries(shadps4 PRIVATE magic_enum::magic_enum fmt::fmt toml11::toml11 tsl::robin_map xbyak::xbyak Tracy::TracyClient RenderDoc::API FFmpeg::ffmpeg Dear_ImGui ImGuiFileDialog gcn half::half ZLIB::ZLIB PNG::PNG minimp3)
- target_link_libraries(shadps4 PRIVATE Boost::headers GPUOpen::VulkanMemoryAllocator LibAtrac9 sirit Vulkan::Headers xxHash::xxhash Zydis::Zydis glslang::glslang SDL3::SDL3 pugixml::pugixml)
+ target_link_libraries(shadps4 PRIVATE Boost::headers GPUOpen::VulkanMemoryAllocator LibAtrac9 sirit Vulkan::Headers xxHash::xxhash Zydis::Zydis SDL3::SDL3 pugixml::pugixml)
 +if (TARGET box64core)
 +    target_link_libraries(shadps4 PRIVATE box64core)
 +endif()
@@ -32,7 +32,7 @@ index 207c457e..005e958a 100644
  target_link_libraries(shadps4 PRIVATE Freetype::Freetype)
  target_link_libraries(shadps4 PRIVATE libprotobuf)
 diff --git a/externals/CMakeLists.txt b/externals/CMakeLists.txt
-index d12e026b..0dc113fe 100644
+index 5d59aaa4..d3f195f0 100644
 --- a/externals/CMakeLists.txt
 +++ b/externals/CMakeLists.txt
 @@ -423,3 +423,97 @@ if (NOT TARGET ZArchive::zarchive)
@@ -134,21 +134,22 @@ index d12e026b..0dc113fe 100644
 +    target_compile_definitions(box64core INTERFACE DYNAREC ARM64)
 +endif()
 diff --git a/src/common/signal_context.cpp b/src/common/signal_context.cpp
-index 67d8294f..52ae6f1d 100644
+index 874b6a49..200f90a7 100644
 --- a/src/common/signal_context.cpp
 +++ b/src/common/signal_context.cpp
-@@ -1,8 +1,10 @@
+@@ -1,8 +1,11 @@
  // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
  // SPDX-License-Identifier: GPL-2.0-or-later
  
 +#include <cstring>
++#include <optional>
  #include "common/arch.h"
  #include "common/signal_context.h"
 +#include "common/types.h"
  
  #ifdef _WIN32
  #include <windows.h>
-@@ -26,11 +28,36 @@ void* GetRip(void* ctx) {
+@@ -26,11 +29,50 @@ void* GetRip(void* ctx) {
      return (void*)((ucontext_t*)ctx)->uc_mcontext.mc_rip;
  #elif defined(ARCH_X86_64)
      return (void*)((ucontext_t*)ctx)->uc_mcontext.gregs[REG_RIP];
@@ -160,7 +161,7 @@ index 67d8294f..52ae6f1d 100644
  }
  
 +#if defined(__linux__) && defined(ARCH_ARM64)
-+static bool Arm64IsWriteFault(const ucontext_t* uc) {
++static std::optional<u64> Arm64GetEsr(const ucontext_t* uc) {
 +    constexpr u32 ESR_MAGIC = 0x45535201;
 +    const u8* p = uc->uc_mcontext.__reserved;
 +    const u8* end = p + sizeof(uc->uc_mcontext.__reserved);
@@ -174,18 +175,32 @@ index 67d8294f..52ae6f1d 100644
 +        if (magic == ESR_MAGIC) {
 +            u64 esr;
 +            std::memcpy(&esr, p + 8, 8);
-+            return (esr & (1 << 6)) != 0;
++            return esr;
 +        }
 +        p += size;
 +    }
-+    return false;
++    return std::nullopt;
++}
++
++static bool Arm64IsWriteFault(const ucontext_t* uc) {
++    const auto esr = Arm64GetEsr(uc);
++    return esr && (*esr & (1 << 6)) != 0;
++}
++
++static bool Arm64IsExecFault(const ucontext_t* uc) {
++    const auto esr = Arm64GetEsr(uc);
++    if (!esr) {
++        return false;
++    }
++    const u64 ec = (*esr >> 26) & 0x3f;
++    return ec == 0x20 || ec == 0x21;
 +}
 +#endif
 +
  bool IsWriteError(void* ctx) {
  #if defined(_WIN32)
      return ((EXCEPTION_POINTERS*)ctx)->ExceptionRecord->ExceptionInformation[0] == 1;
-@@ -42,6 +69,8 @@ bool IsWriteError(void* ctx) {
+@@ -42,6 +84,8 @@ bool IsWriteError(void* ctx) {
      return ((ucontext_t*)ctx)->uc_mcontext.mc_err & 0x2;
  #elif defined(ARCH_X86_64)
      return ((ucontext_t*)ctx)->uc_mcontext.gregs[REG_ERR] & 0x2;
@@ -194,11 +209,20 @@ index 67d8294f..52ae6f1d 100644
  #else
  #error "Unsupported architecture"
  #endif
+@@ -56,6 +100,8 @@ bool IsExecuteError(void* ctx) {
+     return ((ucontext_t*)ctx)->uc_mcontext.mc_err & 0x10;
+ #elif defined(ARCH_X86_64)
+     return ((ucontext_t*)ctx)->uc_mcontext.gregs[REG_ERR] & 0x10;
++#elif defined(__linux__) && defined(ARCH_ARM64)
++    return Arm64IsExecFault((ucontext_t*)ctx);
+ #else
+ #error "Unsupported architecture"
+ #endif
 diff --git a/src/core/address_space.cpp b/src/core/address_space.cpp
-index 2a726a19..92edb126 100644
+index 20438e53..3cfc5339 100644
 --- a/src/core/address_space.cpp
 +++ b/src/core/address_space.cpp
-@@ -8,6 +8,7 @@
+@@ -9,6 +9,7 @@
  #include "common/elf_info.h"
  #include "common/error.h"
  #include "core/address_space.h"
@@ -206,7 +230,7 @@ index 2a726a19..92edb126 100644
  #include "core/emulator_settings.h"
  #include "core/libraries/kernel/memory.h"
  #include "core/memory.h"
-@@ -67,7 +68,13 @@ static u64 BackingSize = ORBIS_KERNEL_TOTAL_MEM_DEV_PRO + ORBIS_KERNEL_FLEXIBLE_
+@@ -68,7 +69,13 @@ static u64 BackingSize = ORBIS_KERNEL_TOTAL_MEM_DEV_PRO + ORBIS_KERNEL_FLEXIBLE_
          True(prot & Core::MemoryProt::CpuRead) || True(prot & Core::MemoryProt::GpuRead);
      const bool write =
          True(prot & Core::MemoryProt::CpuWrite) || True(prot & Core::MemoryProt::GpuWrite);
@@ -220,7 +244,7 @@ index 2a726a19..92edb126 100644
  
      if (write && !read) {
          // While write-only CPU mappings aren't possible, write-only GPU mappings are.
-@@ -657,7 +664,7 @@ struct AddressSpace::Impl {
+@@ -660,7 +667,7 @@ struct AddressSpace::Impl {
              mmap(reinterpret_cast<void*>(USER_MIN), user_size, protection_flags, map_flags, -1, 0));
  #else
          const auto virtual_size = system_managed_size + system_reserved_size + user_size;
@@ -229,7 +253,7 @@ index 2a726a19..92edb126 100644
          const auto virtual_base =
              reinterpret_cast<u8*>(mmap(reinterpret_cast<void*>(SYSTEM_MANAGED_MIN), virtual_size,
                                         protection_flags, map_flags, -1, 0));
-@@ -826,7 +833,11 @@ void* AddressSpace::Map(VAddr virtual_addr, u64 size, PAddr phys_addr, bool is_e
+@@ -843,7 +850,11 @@ void* AddressSpace::Map(VAddr virtual_addr, u64 size, PAddr phys_addr, bool is_e
      // canonical copy of the memory and rely on the JIT to map translated code as executable.
      constexpr auto prot = PAGE_READWRITE;
  #endif
@@ -242,7 +266,7 @@ index 2a726a19..92edb126 100644
  }
  
  void* AddressSpace::MapFile(VAddr virtual_addr, u64 size, u64 offset, u32 prot, uintptr_t fd) {
-@@ -834,12 +845,19 @@ void* AddressSpace::MapFile(VAddr virtual_addr, u64 size, u64 offset, u32 prot,
+@@ -851,12 +862,19 @@ void* AddressSpace::MapFile(VAddr virtual_addr, u64 size, u64 offset, u32 prot,
      return impl->Map(virtual_addr, offset, size,
                       ToWindowsProt(std::bit_cast<Core::MemoryProt>(prot)), fd);
  #else
@@ -259,12 +283,12 @@ index 2a726a19..92edb126 100644
  #endif
  }
  
- void AddressSpace::Unmap(VAddr virtual_addr, u64 size) {
-+    Cpu::OnUnmap(virtual_addr, size);
-     impl->Unmap(virtual_addr, size);
- }
- 
-@@ -847,6 +865,7 @@ void AddressSpace::Protect(VAddr virtual_addr, u64 size, MemoryPermission perms)
+ VAddr AddressSpace::Unmap(VAddr virtual_addr, u64* size) {
++    Cpu::OnUnmap(virtual_addr, *size);
+     const VAddr end_addr = virtual_addr + *size - 1;
+     if (std::bit_width(end_addr) <= Traits::ADDRESS_SPACE_BITS) {
+         const u64 base_page = virtual_addr >> Traits::PAGE_BITS;
+@@ -871,6 +889,7 @@ void AddressSpace::Protect(VAddr virtual_addr, u64 size, MemoryPermission perms)
      const bool read = True(perms & MemoryPermission::Read);
      const bool write = True(perms & MemoryPermission::Write);
      const bool execute = True(perms & MemoryPermission::Execute);
@@ -273,10 +297,25 @@ index 2a726a19..92edb126 100644
  }
  
 diff --git a/src/core/aerolib/stubs.cpp b/src/core/aerolib/stubs.cpp
-index d7f86dfa..27dac5ac 100644
+index abcef8d6..3c4d7159 100644
 --- a/src/core/aerolib/stubs.cpp
 +++ b/src/core/aerolib/stubs.cpp
-@@ -4,6 +4,7 @@
+@@ -1,16 +1,22 @@
+ // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
++#include <array>
+ #include <memory>
+ #include <mutex>
+ #include <string>
++#include <utility>
+ #include <vector>
+ 
++#include "common/arch.h"
++#ifdef ARCH_X86_64
+ #include <xbyak/xbyak.h>
++#endif
+ 
  #include "common/logging/log.h"
  #include "core/aerolib/aerolib.h"
  #include "core/aerolib/stubs.h"
@@ -284,21 +323,74 @@ index d7f86dfa..27dac5ac 100644
  
  namespace Core::AeroLib {
  
-@@ -57,7 +58,7 @@ static u32 UsedStubEntries;
+@@ -22,7 +28,10 @@ namespace Core::AeroLib {
+ struct StubEntry {
+     const NidEntry* nid = nullptr;
+     std::string nid_unknown;
++#ifdef ARCH_X86_64
+     std::unique_ptr<Xbyak::CodeGenerator> code;
++#endif
++    u64 addr = 0;
+ };
  
+ static std::vector<StubEntry> g_stub_entries;
+@@ -40,6 +49,27 @@ static u64 PS4_SYSV_ABI CommonStub(u64 index) {
+     return 0;
+ }
+ 
++#ifndef ARCH_X86_64
++constexpr size_t MAX_STUBS = 8192;
++
++template <size_t I>
++static u64 PS4_SYSV_ABI IndexedStub() {
++    return CommonStub(I);
++}
++
++template <size_t... Is>
++consteval auto MakeStubArray(std::index_sequence<Is...>) {
++    return std::array<u64 PS4_SYSV_ABI (*)(), sizeof...(Is)>{&IndexedStub<Is>...};
++}
++
++constexpr auto stub_handlers = MakeStubArray(std::make_index_sequence<MAX_STUBS>{});
++
++static u64 PS4_SYSV_ABI UnknownStub() {
++    LOG_ERROR(Core, "Unknown stub called, returning zero");
++    return 0;
++}
++#endif
++
  u64 GetStub(const char* nid) {
-     if (UsedStubEntries >= MAX_STUBS) {
--        return (u64)&UnknownStub;
+     std::scoped_lock lock{g_stub_mutex};
+ 
+@@ -54,21 +84,29 @@ u64 GetStub(const char* nid) {
+         if (auto const& it = std::ranges::find_if(
+                 g_stub_entries, [entry](StubEntry const& en) { return en.nid && en.nid == entry; });
+             it != g_stub_entries.end()) {
+-            return reinterpret_cast<u64>(it->code->getCode());
++            return it->addr;
+         }
+         e.nid = entry;
+     } else {
+         e.nid_unknown = nid;
+     }
+ 
++#ifdef ARCH_X86_64
+     e.code = std::make_unique<Xbyak::CodeGenerator>(32, Xbyak::AutoGrow);
+     e.code->mov(e.code->rdi, index);
+     e.code->mov(e.code->rax, reinterpret_cast<u64>(&CommonStub));
+     e.code->jmp(e.code->rax);
+     e.code->ready();
++    e.addr = reinterpret_cast<u64>(e.code->getCode());
++#else
++    if (index >= MAX_STUBS) {
 +        return Cpu::MakeGuestCallable((const void*)&UnknownStub, "UnknownStub");
-     }
++    }
++    e.addr = Cpu::MakeGuestCallable((const void*)stub_handlers[index], nid);
++#endif
  
-     const auto entry = FindByNid(nid);
-@@ -67,7 +68,7 @@ u64 GetStub(const char* nid) {
-         stub_nids[UsedStubEntries] = entry;
-     }
- 
--    return (u64)stub_handlers[UsedStubEntries++];
-+    return Cpu::MakeGuestCallable((const void*)stub_handlers[UsedStubEntries++], nid);
+     g_stub_entries.push_back(std::move(e));
+-    return reinterpret_cast<u64>(g_stub_entries.back().code->getCode());
++    return g_stub_entries.back().addr;
  }
  
  } // namespace Core::AeroLib
@@ -1458,15 +1550,16 @@ index 00000000..5d3d7add
 +}
 diff --git a/src/core/cpu/cpu.cpp b/src/core/cpu/cpu.cpp
 new file mode 100644
-index 00000000..0dfc8cca
+index 00000000..5d4183c7
 --- /dev/null
 +++ b/src/core/cpu/cpu.cpp
-@@ -0,0 +1,259 @@
+@@ -0,0 +1,260 @@
 +// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
 +#include <cstring>
 +#include <mutex>
++#include <fmt/format.h>
 +#include "common/assert.h"
 +#include "common/logging/log.h"
 +#include "core/cpu/cpu.h"
@@ -1887,13 +1980,14 @@ index 37215a9e..811c5e53 100644
  }
  
 diff --git a/src/core/libraries/kernel/threads/pthread.cpp b/src/core/libraries/kernel/threads/pthread.cpp
-index 666a2c77..dbedc50a 100644
+index ff26d408..3405d7e3 100644
 --- a/src/core/libraries/kernel/threads/pthread.cpp
 +++ b/src/core/libraries/kernel/threads/pthread.cpp
-@@ -1,8 +1,10 @@
+@@ -1,8 +1,11 @@
  // SPDX-FileCopyrightText: Copyright 2025-2026 shadPS4 Emulator Project
  // SPDX-License-Identifier: GPL-2.0-or-later
  
++#include <fmt/format.h>
 +#include "common/arch.h"
  #include "common/assert.h"
  #include "common/thread.h"
@@ -1901,10 +1995,10 @@ index 666a2c77..dbedc50a 100644
  #ifdef _WIN32
  #include "common/ntapi.h"
  #else
-@@ -270,7 +272,13 @@ static void* RunThread(void* arg) {
+@@ -269,7 +272,13 @@ static void* RunThread(void* arg) {
+     /* Run the current thread's start routine with argument: */
      auto* const stack =
          (void*)(((size_t)curthread->attr.stackaddr_attr + curthread->attr.stacksize_attr) & (~15));
-     LOG_INFO(Kernel_Pthread, "Running thread {} with stack {:#x}", curthread->name, VAddr(stack));
 +#ifdef ARCH_X86_64
      void* ret = _runOnAnotherStack(curthread->arg, (void*)curthread->start_routine, stack);
 +#else
@@ -1916,7 +2010,7 @@ index 666a2c77..dbedc50a 100644
      /* Remove thread from tracking */
      DebugState.RemoveCurrentThreadFromGuestList();
 diff --git a/src/core/linker.cpp b/src/core/linker.cpp
-index 650ebb12..a87e2a01 100644
+index bd1dbd80..4b356560 100644
 --- a/src/core/linker.cpp
 +++ b/src/core/linker.cpp
 @@ -13,6 +13,7 @@
@@ -1959,22 +2053,22 @@ index 650ebb12..a87e2a01 100644
              }
          }
  
-@@ -412,6 +424,10 @@ bool Linker::Resolve(const std::string& name, Loader::SymbolType sym_type, Modul
+@@ -419,6 +431,10 @@ bool Linker::Resolve(const std::string& name, Loader::SymbolType sym_type, Modul
      const auto* record = m_hle_symbols.FindSymbol(sr);
      if (record) {
          *return_info = *record;
 +        if (sym_type == Loader::SymbolType::Function) {
 +            return_info->virtual_address = Cpu::MakeGuestCallable(
-+                reinterpret_cast<const void*>(record->virtual_address), record->name.c_str());
++                reinterpret_cast<const void*>(record->virtual_address), record->symbol.name.c_str());
 +        }
          Core::Devtools::Widget::ModuleList::AddModule(sr.library);
          return true;
      }
 diff --git a/src/core/module.cpp b/src/core/module.cpp
-index 369239bc..9b0cf44d 100644
+index 839c20ed..293cf7e0 100644
 --- a/src/core/module.cpp
 +++ b/src/core/module.cpp
-@@ -9,6 +9,7 @@
+@@ -10,6 +10,7 @@
  #include "common/sha1.h"
  #include "common/string_util.h"
  #include "core/aerolib/aerolib.h"
@@ -1982,7 +2076,7 @@ index 369239bc..9b0cf44d 100644
  #include "core/cpu_patches.h"
  #include "core/libraries/error_codes.h"
  #include "core/loader/dwarf.h"
-@@ -101,7 +102,7 @@ Module::~Module() = default;
+@@ -102,7 +103,7 @@ Module::~Module() = default;
  s32 Module::Start(u64 args, const void* argp, void* param) {
      LOG_INFO(Core_Linker, "Module started : {}", name);
      const VAddr addr = dynamic_info.init_virtual_addr + GetBaseAddress();
@@ -1991,7 +2085,7 @@ index 369239bc..9b0cf44d 100644
  }
  
  void Module::LoadModuleToMemory(u32& max_tls_index) {
-@@ -206,6 +207,10 @@ void Module::LoadModuleToMemory(u32& max_tls_index) {
+@@ -207,6 +208,10 @@ void Module::LoadModuleToMemory(u32& max_tls_index) {
              LOG_INFO(Core_Linker, "segment_mode ..........: {}", segment_mode);
  
              add_segment(elf_pheader[i]);
@@ -2003,10 +2097,10 @@ index 369239bc..9b0cf44d 100644
              if (elf_pheader[i].p_flags & PF_EXEC) {
                  PrePatchInstructions(segment_addr, segment_file_size);
 diff --git a/src/core/signals.cpp b/src/core/signals.cpp
-index 5c3ff133..dd85097b 100644
+index b750484c..11a79ef4 100644
 --- a/src/core/signals.cpp
 +++ b/src/core/signals.cpp
-@@ -5,6 +5,7 @@
+@@ -6,6 +6,7 @@
  #include "common/assert.h"
  #include "common/decoder.h"
  #include "common/signal_context.h"
@@ -2014,7 +2108,7 @@ index 5c3ff133..dd85097b 100644
  #include "core/cpu_patches.h" // Windows static guest red-zone protection
  #include "core/libraries/kernel/kernel.h"
  #include "core/libraries/kernel/threads/exception.h"
-@@ -251,6 +252,36 @@ void SignalHandler(int sig, siginfo_t* info, void* raw_context) {
+@@ -252,6 +253,36 @@ void SignalHandler(int sig, siginfo_t* info, void* raw_context) {
      const auto* signals = Signals::Instance();
  
      auto* code_address = Common::GetRip(raw_context);
@@ -2051,10 +2145,10 @@ index 5c3ff133..dd85097b 100644
  
      Ucontext context{info, reinterpret_cast<ucontext_t*>(raw_context)};
      Siginfo guest_info{};
-@@ -268,24 +299,24 @@ void SignalHandler(int sig, siginfo_t* info, void* raw_context) {
-     case SIGSEGV:
+@@ -270,27 +301,27 @@ void SignalHandler(int sig, siginfo_t* info, void* raw_context) {
      case SIGBUS: {
          const bool is_write = Common::IsWriteError(raw_context);
+         const bool is_exec = Common::IsExecuteError(raw_context);
 -        if (!signals->DispatchAccessViolation(raw_context, info->si_addr)) {
 -            if (thread && thread->DispatchSignal(NativeToOrbisSignal(sig), info_p, context_p)) {
 -                return;
@@ -2063,13 +2157,19 @@ index 5c3ff133..dd85097b 100644
 +                Core::Cpu::EndJitFault(raw_context);
              }
 -            UNREACHABLE_MSG("Unhandled access violation at code address {}: {} address {}",
--                            fmt::ptr(code_address), is_write ? "Write to" : "Read from",
+-                            fmt::ptr(code_address),
+-                            is_write  ? "Write to"
+-                            : is_exec ? "Executed from"
+-                                      : "Read from",
 -                            fmt::ptr(info->si_addr));
 +            return;
          }
 -        break;
 +        UNREACHABLE_MSG("Unhandled access violation at code address {}: {} address {}",
-+                        fmt::ptr(code_address), is_write ? "Write to" : "Read from",
++                        fmt::ptr(code_address),
++                        is_write  ? "Write to"
++                        : is_exec ? "Executed from"
++                                  : "Read from",
 +                        fmt::ptr(info->si_addr));
      }
      case SIGILL:
@@ -2127,7 +2227,7 @@ index e0d7f3f8..723b1fb2 100644
  
  Tcb* GetTcbBase() {
 diff --git a/src/emulator.cpp b/src/emulator.cpp
-index 3d98f390..8f73ac18 100644
+index e802d4ad..c448f9b6 100644
 --- a/src/emulator.cpp
 +++ b/src/emulator.cpp
 @@ -21,6 +21,7 @@
@@ -2138,7 +2238,7 @@ index 3d98f390..8f73ac18 100644
  #include "common/elf_info.h"
  #include "common/memory_patcher.h"
  #include "common/ntapi.h"
-@@ -433,9 +434,11 @@ void Emulator::Run(std::filesystem::path file, std::vector<std::string> args,
+@@ -429,9 +430,11 @@ void Emulator::Run(std::filesystem::path file, std::vector<std::string> args,
      }
  
      EmulatorSettings.Load(id);
@@ -2149,7 +2249,7 @@ index 3d98f390..8f73ac18 100644
 +#endif
      // Switch to configured log
      Common::Log::Switch((!id.empty() && EmulatorSettings.IsLogSeparate()) ? id + ".log"
-                                                                           : "shad_log.txt");
+                                                                           : "shad_log.txt",
 diff --git a/src/shader_recompiler/info.h b/src/shader_recompiler/info.h
 index 5d246cb8..d2070d4e 100644
 --- a/src/shader_recompiler/info.h
@@ -2175,10 +2275,14 @@ index 5d246cb8..d2070d4e 100644
      }
  
 diff --git a/src/shader_recompiler/ir/passes/flatten_extended_userdata_pass.cpp b/src/shader_recompiler/ir/passes/flatten_extended_userdata_pass.cpp
-index e80d4fef..03e28a9b 100644
+index e80d4fef..60c0c51c 100644
 --- a/src/shader_recompiler/ir/passes/flatten_extended_userdata_pass.cpp
 +++ b/src/shader_recompiler/ir/passes/flatten_extended_userdata_pass.cpp
-@@ -4,14 +4,21 @@
+@@ -1,17 +1,25 @@
+ // SPDX-FileCopyrightText: Copyright 2024-2026 shadPS4 Emulator Project
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
++#include <fmt/format.h>
  #include <unordered_map>
  #include <boost/container/flat_map.hpp>
  #include <queue>
@@ -2202,7 +2306,7 @@ index e80d4fef..03e28a9b 100644
  #include "core/emulator_settings.h"
  #include "core/signals.h"
  #include "shader_recompiler/info.h"
-@@ -120,6 +127,17 @@ static bool SrtWalkerSignalHandler(void* context, void* fault_address) {
+@@ -120,6 +128,17 @@ static bool SrtWalkerSignalHandler(void* context, void* fault_address) {
      return true;
  }
  
@@ -2220,7 +2324,7 @@ index e80d4fef..03e28a9b 100644
  using namespace Shader;
  
  struct PassInfo {
-@@ -217,6 +235,30 @@ static inline void SetFlatbufOffset(IR::Inst* inst, u16 offset) {
+@@ -217,6 +236,30 @@ static inline void SetFlatbufOffset(IR::Inst* inst, u16 offset) {
      UNREACHABLE_MSG("Instruction not supported");
  }
  
@@ -2251,7 +2355,7 @@ index e80d4fef..03e28a9b 100644
  static bool ComputeOffset(Xbyak::CodeGenerator& c, Xbyak::Reg32 reg, PassInfo& pass_info,
                            const IR::Value& off_dw);
  
-@@ -485,29 +527,6 @@ static bool EmitComputeOffsetBitFieldUExtract(Xbyak::CodeGenerator& c, Xbyak::Re
+@@ -485,29 +528,6 @@ static bool EmitComputeOffsetBitFieldUExtract(Xbyak::CodeGenerator& c, Xbyak::Re
      return true;
  }
  
@@ -2281,7 +2385,7 @@ index e80d4fef..03e28a9b 100644
  static bool ComputeOffset(Xbyak::CodeGenerator& c, Xbyak::Reg32 reg, PassInfo& pass_info,
                            const IR::Value& off_dw) {
      ASSERT(reg != ecx && reg != edx);
-@@ -671,6 +690,331 @@ static void GenerateSrtProgram(Info& info, PassInfo& pass_info) {
+@@ -671,6 +691,331 @@ static void GenerateSrtProgram(Info& info, PassInfo& pass_info) {
      info.srt_info.flattened_bufsize_dw = pass_info.dst_off_dw;
  }
  
@@ -2613,7 +2717,7 @@ index e80d4fef..03e28a9b 100644
  static bool IsReadConstSource(const IR::Value base) {
      auto* inst = base.TryInst();
      if (!inst) {
-@@ -862,22 +1206,25 @@ void FlattenExtendedUserdataPass(IR::Program& program) {
+@@ -862,22 +1207,25 @@ void FlattenExtendedUserdataPass(IR::Program& program) {
  
  } // namespace Shader::Optimization
  
@@ -2663,15 +2767,14 @@ index 918b832e..10768b58 100644
  struct PersistentSrtInfo {
      // Special case when fetch shader uses step rates.
 diff --git a/src/video_core/buffer_cache/region_definitions.h b/src/video_core/buffer_cache/region_definitions.h
-index 260047d4..21869f2c 100644
+index 920d507e..aa96ac42 100644
 --- a/src/video_core/buffer_cache/region_definitions.h
 +++ b/src/video_core/buffer_cache/region_definitions.h
-@@ -3,12 +3,17 @@
- 
- #pragma once
+@@ -6,12 +6,18 @@
+ #include <array>
+ #include <utility>
  
 +#include "common/arch.h"
- #include "common/bit_array.h"
  #include "common/types.h"
  
  namespace VideoCore {
@@ -2679,23 +2782,24 @@ index 260047d4..21869f2c 100644
 +#if defined(ARCH_ARM64) && defined(__linux__)
 +constexpr u64 TRACKER_PAGE_BITS = 14; // 16K pages (Asahi and other 16K kernels)
 +#else
- constexpr u64 TRACKER_PAGE_BITS = 12; // 4K pages
++constexpr u64 TRACKER_PAGE_BITS = 12; // 4K pages
 +#endif
- constexpr u64 TRACKER_BYTES_PER_PAGE = 1ULL << TRACKER_PAGE_BITS;
+ constexpr u64 PAGES_PER_WORD = 64;
+-constexpr u64 BYTES_PER_PAGE = 4_KB;
++constexpr u64 BYTES_PER_PAGE = 1ULL << TRACKER_PAGE_BITS;
+ constexpr u64 BYTES_PER_WORD = PAGES_PER_WORD * BYTES_PER_PAGE;
  
- constexpr u64 TRACKER_HIGHER_PAGE_BITS = 22; // each region is 4MB
-diff --git a/src/video_core/page_manager.cpp b/src/video_core/page_manager.cpp
-index c7836080..bd011b3e 100644
---- a/src/video_core/page_manager.cpp
-+++ b/src/video_core/page_manager.cpp
-@@ -34,8 +34,8 @@
+ constexpr u64 HIGHER_PAGE_BITS = 24;
+diff --git a/src/video_core/page_manager.h b/src/video_core/page_manager.h
+index 6a38030d..b9260d9e 100644
+--- a/src/video_core/page_manager.h
++++ b/src/video_core/page_manager.h
+@@ -25,7 +25,7 @@ enum class PageOp : s8 {
+ };
  
- namespace VideoCore {
+ class PageManager {
+-    static constexpr size_t PM_PAGE_BITS = 12;
++    static constexpr size_t PM_PAGE_BITS = TRACKER_PAGE_BITS;
+     static constexpr size_t PM_PAGE_SIZE = 1ULL << PM_PAGE_BITS;
  
--constexpr size_t PM_PAGE_SIZE = 4_KB;
--constexpr size_t PM_PAGE_BITS = 12;
-+constexpr size_t PM_PAGE_SIZE = TRACKER_BYTES_PER_PAGE;
-+constexpr size_t PM_PAGE_BITS = TRACKER_PAGE_BITS;
- 
- struct PageManager::Impl {
-     struct PageState {
+ public:
