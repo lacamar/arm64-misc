@@ -1,8 +1,8 @@
-%global bumpver 6
+%global bumpver 7
 %global _name shadps4
 %global tag 0.18.0
 # Upstream shadps4-emu/shadPS4 commit the aarch64 patch series is based on
-%global commit 282f64454bc60faa6af633145d58bba9acc549e0
+%global commit e518a65157b04d0cefec9930e31a86c5685af28e
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 # Prebuilt FFmpeg release matching externals/ffmpeg-core
 %global ffmpeg_sha 94dde08
@@ -177,6 +177,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/net.shadps4.shadPS4.d
 %{_datadir}/icons/hicolor/512x512/apps/net.shadps4.shadPS4.png
 
 %changelog
+* Sun Sep 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.0^7.git.e518a65-1
+ - Update to commit e518a65157b04d0cefec9930e31a86c5685af28e
+
 * Sun Sep 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.0^6.git.282f644-1
  - Update to commit 282f64454bc60faa6af633145d58bba9acc549e0
 
