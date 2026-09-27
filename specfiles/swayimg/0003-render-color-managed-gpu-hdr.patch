@@ -1,0 +1,3526 @@
+From 4c8122bef5826d09b1f75067edf83ea060ea4a16 Mon Sep 17 00:00:00 2001
+From: Lachlan Marie <lchlnm@pm.me>
+Date: Sat, 26 Sep 2026 13:35:23 +0200
+Subject: [PATCH] render: color managed GPU renderer with HDR output
+
+---
+ meson.build           |  20 +-
+ meson.options         |   8 +
+ src/colorspace.cpp    | 494 +++++++++++++++++++++++
+ src/colorspace.hpp    | 120 ++++++
+ src/formatfactory.cpp |  11 +-
+ src/formats/avif.cpp  |  57 ++-
+ src/formats/heif.cpp  |  85 +++-
+ src/formats/jpeg.cpp  |  70 +++-
+ src/formats/jxl.cpp   | 133 +++++-
+ src/formats/png.cpp   | 118 +++++-
+ src/formats/raw.cpp   |  25 +-
+ src/formats/svg.cpp   |  17 +
+ src/formats/tiff.cpp  |   6 +
+ src/formats/webp.cpp  |  10 +
+ src/gpu.hpp           |  25 ++
+ src/gpu_gles.cpp      | 911 ++++++++++++++++++++++++++++++++++++++++++
+ src/gpu_gles.hpp      | 107 +++++
+ src/imageformat.cpp   |   4 +
+ src/pixmap.cpp        | 121 ++++--
+ src/pixmap.hpp        |  20 +-
+ src/render.cpp        |  28 ++
+ src/ui_wayland.cpp    | 308 +++++++++++++-
+ src/ui_wayland.hpp    |  36 ++
+ src/viewer.cpp        |   2 +-
+ 24 files changed, 2628 insertions(+), 108 deletions(-)
+ create mode 100644 src/colorspace.cpp
+ create mode 100644 src/colorspace.hpp
+ create mode 100644 src/gpu.hpp
+ create mode 100644 src/gpu_gles.cpp
+ create mode 100644 src/gpu_gles.hpp
+
+diff --git a/meson.build b/meson.build
+index cb4b7aa..0d9a350 100644
+--- a/meson.build
++++ b/meson.build
+@@ -33,6 +33,7 @@ endif
+ # mandatory dependencies
+ xkb = dependency('xkbcommon')
+ fontconfig = dependency('fontconfig')
++lcms = dependency('lcms2')
+ freetype = dependency('freetype2')
+ threads = dependency('threads')
+ lua = dependency(get_option('liblua'))
+@@ -41,7 +42,7 @@ lua = dependency(get_option('liblua'))
+ wl_protocols = []
+ wlcln = dependency('wayland-client', required: get_option('wayland'))
+ if wlcln.found()
+-    wlproto = dependency('wayland-protocols', version: '>=1.35')
++    wlproto = dependency('wayland-protocols', version: '>=1.45')
+     wlproto_dir = wlproto.get_variable(pkgconfig: 'pkgdatadir')
+     wlscan = dependency('wayland-scanner', required: false, native: true)
+     if wlscan.found()
+@@ -57,6 +58,7 @@ if wlcln.found()
+         wlproto_dir / 'stable/xdg-shell/xdg-shell.xml',
+         wlproto_dir / 'stable/tablet/tablet-v2.xml',
+         wlproto_dir / 'stable/viewporter/viewporter.xml',
++        wlproto_dir / 'staging/color-management/color-management-v1.xml',
+         wlproto_dir / 'staging/content-type/content-type-v1.xml',
+         wlproto_dir / 'staging/cursor-shape/cursor-shape-v1.xml',
+         wlproto_dir / 'staging/ext-idle-notify/ext-idle-notify-v1.xml',
+@@ -81,6 +83,13 @@ if wlcln.found()
+     endforeach
+ endif
+ 
++# GPU rendering
++gpu_opt = get_option('gpu').require(wlcln.found())
++egl = dependency('egl', required: gpu_opt)
++glesv2 = dependency('glesv2', required: gpu_opt)
++wlegl = dependency('wayland-egl', required: gpu_opt)
++gpu = wlcln.found() and egl.found() and glesv2.found() and wlegl.found()
++
+ # DRM support
+ drm = dependency('libdrm', required: get_option('drm'))
+ 
+@@ -151,6 +160,7 @@ conf = configuration_data()
+ conf.set('HAVE_COMPOSITOR', wlcln.found() and get_option('compositor').allowed())
+ conf.set('HAVE_WAYLAND', wlcln.found())
+ conf.set('HAVE_DRM', drm.found())
++conf.set('HAVE_GPU', gpu)
+ conf.set('HAVE_INOTIFY', cc.has_header('sys/inotify.h', dependencies: inotify))
+ conf.set('HAVE_LIBEXIV2', exiv.found())
+ conf.set('HAVE_LIBEXR', exr.found())
+@@ -296,6 +306,7 @@ endif
+ sources = [
+     'src/application.cpp',
+     'src/appmode.cpp',
++    'src/colorspace.cpp',
+     'src/defaults.cpp',
+     'src/fdevent.cpp',
+     'src/font.cpp',
+@@ -332,6 +343,9 @@ sources = [
+ if wlcln.found()
+     sources += 'src/ui_wayland.cpp'
+ endif
++if gpu
++    sources += 'src/gpu_gles.cpp'
++endif
+ if drm.found()
+     sources += 'src/ui_drm.cpp'
+ endif
+@@ -387,11 +401,15 @@ dependencies = [
+     epoll,
+     fontconfig,
+     freetype,
++    lcms,
+     inotify,
+     lua,
+     threads,
+     wlcln,
+     xkb,
++    egl,
++    glesv2,
++    wlegl,
+     exiv,
+     # image support
+     avif,
+diff --git a/meson.options b/meson.options
+index 85f5a29..f21bd09 100644
+--- a/meson.options
++++ b/meson.options
+@@ -108,6 +108,14 @@ option(
+     description: 'Enable Wayland support',
+ )
+ 
++# GPU accelerated rendering (Wayland only)
++option(
++    'gpu',
++    type: 'feature',
++    value: 'auto',
++    description: 'Enable OpenGL ES rendering',
++)
++
+ # DRM UI
+ option(
+     'drm',
+diff --git a/src/colorspace.cpp b/src/colorspace.cpp
+new file mode 100644
+index 0000000..fe9bc16
+--- /dev/null
++++ b/src/colorspace.cpp
+@@ -0,0 +1,494 @@
++// SPDX-License-Identifier: MIT
++// Color spaces and color management.
++
++#include "colorspace.hpp"
++
++#include "pixmap.hpp"
++
++#include <lcms2.h>
++
++#include <algorithm>
++#include <cmath>
++#include <cstring>
++#include <thread>
++
++bool ColorSpace::native = false;
++
++namespace {
++
++using Mat = std::array<double, 9>;
++using Vec = std::array<double, 3>;
++
++constexpr std::array<float, 8> SRGB_XY = { 0.640F, 0.330F, 0.300F, 0.600F,
++                                           0.150F, 0.060F, 0.3127F, 0.3290F };
++constexpr Vec D50 = { 0.9642, 1.0, 0.8249 };
++
++constexpr double PQ_M1 = 0.1593017578125;
++constexpr double PQ_M2 = 78.84375;
++constexpr double PQ_C1 = 0.8359375;
++constexpr double PQ_C2 = 18.8515625;
++constexpr double PQ_C3 = 18.6875;
++constexpr double HLG_A = 0.17883277;
++constexpr double HLG_B = 0.28466892;
++constexpr double HLG_C = 0.55991073;
++
++Mat mul(const Mat& a, const Mat& b)
++{
++    Mat r {};
++    for (size_t i = 0; i < 3; ++i) {
++        for (size_t j = 0; j < 3; ++j) {
++            for (size_t k = 0; k < 3; ++k) {
++                r[i * 3 + j] += a[i * 3 + k] * b[k * 3 + j];
++            }
++        }
++    }
++    return r;
++}
++
++Vec mul(const Mat& m, const Vec& v)
++{
++    return { m[0] * v[0] + m[1] * v[1] + m[2] * v[2],
++             m[3] * v[0] + m[4] * v[1] + m[5] * v[2],
++             m[6] * v[0] + m[7] * v[1] + m[8] * v[2] };
++}
++
++Mat inverse(const Mat& m)
++{
++    const double det = m[0] * (m[4] * m[8] - m[5] * m[7]) -
++        m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
++    const double k = 1.0 / det;
++    return { (m[4] * m[8] - m[5] * m[7]) * k, (m[2] * m[7] - m[1] * m[8]) * k,
++             (m[1] * m[5] - m[2] * m[4]) * k, (m[5] * m[6] - m[3] * m[8]) * k,
++             (m[0] * m[8] - m[2] * m[6]) * k, (m[2] * m[3] - m[0] * m[5]) * k,
++             (m[3] * m[7] - m[4] * m[6]) * k, (m[1] * m[6] - m[0] * m[7]) * k,
++             (m[0] * m[4] - m[1] * m[3]) * k };
++}
++
++Vec xy_to_xyz(const double x, const double y)
++{
++    return { x / y, 1.0, (1.0 - x - y) / y };
++}
++
++Mat rgb_to_xyz(const std::array<float, 8>& xy)
++{
++    const Vec r = xy_to_xyz(xy[0], xy[1]);
++    const Vec g = xy_to_xyz(xy[2], xy[3]);
++    const Vec b = xy_to_xyz(xy[4], xy[5]);
++    const Mat p = { r[0], g[0], b[0], r[1], g[1], b[1], r[2], g[2], b[2] };
++    const Vec s = mul(inverse(p), xy_to_xyz(xy[6], xy[7]));
++    return { p[0] * s[0], p[1] * s[1], p[2] * s[2], p[3] * s[0], p[4] * s[1],
++             p[5] * s[2], p[6] * s[0], p[7] * s[1], p[8] * s[2] };
++}
++
++Mat bradford(const Vec& src, const Vec& dst)
++{
++    constexpr Mat BFD = { 0.8951,  0.2664, -0.1614, -0.7502, 1.7135,
++                          0.0367,  0.0389, -0.0685, 1.0296 };
++    const Vec s = mul(BFD, src);
++    const Vec d = mul(BFD, dst);
++    const Mat scale = { d[0] / s[0], 0, 0, 0, d[1] / s[1], 0, 0, 0,
++                        d[2] / s[2] };
++    return mul(inverse(BFD), mul(scale, BFD));
++}
++
++const Mat& srgb_to_xyz()
++{
++    static const Mat m = rgb_to_xyz(SRGB_XY);
++    return m;
++}
++
++const Mat& xyz_to_srgb()
++{
++    static const Mat m = inverse(srgb_to_xyz());
++    return m;
++}
++
++void set_matrix(ColorSpace& cs, const Mat& m)
++{
++    double dev = 0;
++    for (size_t i = 0; i < 9; ++i) {
++        dev = std::max(dev, std::abs(m[i] - ColorSpace::IDENTITY[i]));
++    }
++    for (size_t i = 0; i < 9; ++i) {
++        cs.matrix[i] = dev < 2e-3 ? ColorSpace::IDENTITY[i]
++                                  : static_cast<float>(m[i]);
++    }
++    const Mat& xyz = srgb_to_xyz();
++    for (size_t i = 0; i < 3; ++i) {
++        cs.luma[i] = static_cast<float>(xyz[3] * cs.matrix[i] +
++                                        xyz[4] * cs.matrix[3 + i] +
++                                        xyz[5] * cs.matrix[6 + i]);
++    }
++}
++
++double srgb_eotf(const double v)
++{
++    const double a = std::abs(v);
++    return std::copysign(
++        a <= 0.04045 ? a / 12.92 : std::pow((a + 0.055) / 1.055, 2.4), v);
++}
++
++double srgb_oetf(const double v)
++{
++    return v <= 0.0031308 ? v * 12.92
++                          : 1.055 * std::pow(v, 1.0 / 2.4) - 0.055;
++}
++
++double pq_eotf(const double v)
++{
++    const double p = std::pow(std::clamp(v, 0.0, 1.0), 1.0 / PQ_M2);
++    const double l =
++        std::pow(std::max(p - PQ_C1, 0.0) / (PQ_C2 - PQ_C3 * p), 1.0 / PQ_M1);
++    return l * 10000.0 / ColorSpace::REFERENCE_WHITE;
++}
++
++double hlg_inverse_oetf(double v)
++{
++    v = std::clamp(v, 0.0, 1.0);
++    return v <= 0.5 ? v * v / 3.0 : (std::exp((v - HLG_C) / HLG_A) + HLG_B) / 12.0;
++}
++
++using Profile = std::unique_ptr<void, decltype(&cmsCloseProfile)>;
++
++} // namespace
++
++std::shared_ptr<ColorSpace> ColorSpace::from_cicp(const uint16_t primaries,
++                                                  const uint16_t transfer)
++{
++    std::array<float, 8> xy = SRGB_XY;
++    switch (primaries) {
++        case 4: // BT.470M
++            xy = { 0.67F, 0.33F, 0.21F, 0.71F, 0.14F, 0.08F, 0.310F, 0.316F };
++            break;
++        case 5: // BT.601 625
++            xy = { 0.64F, 0.33F, 0.29F, 0.60F, 0.15F, 0.06F, 0.3127F, 0.3290F };
++            break;
++        case 6: // BT.601 525
++        case 7: // SMPTE 240M
++            xy = { 0.630F, 0.340F, 0.310F, 0.595F,
++                   0.155F, 0.070F, 0.3127F, 0.3290F };
++            break;
++        case 9: // BT.2020
++            xy = { 0.708F, 0.292F, 0.170F, 0.797F,
++                   0.131F, 0.046F, 0.3127F, 0.3290F };
++            break;
++        case 11: // DCI-P3
++            xy = { 0.680F, 0.320F, 0.265F, 0.690F,
++                   0.150F, 0.060F, 0.314F,  0.351F };
++            break;
++        case 12: // Display P3
++            xy = { 0.680F, 0.320F, 0.265F, 0.690F,
++                   0.150F, 0.060F, 0.3127F, 0.3290F };
++            break;
++        case 22: // EBU 3213
++            xy = { 0.630F, 0.340F, 0.295F, 0.605F,
++                   0.155F, 0.077F, 0.3127F, 0.3290F };
++            break;
++        default:
++            break;
++    }
++
++    switch (transfer) {
++        case 1:
++        case 6:
++        case 14:
++        case 15: // BT.709/BT.2020 camera curve, displayed with BT.1886
++            return from_chromaticities(xy, Transfer::Gamma, 2.4F);
++        case 4:
++            return from_chromaticities(xy, Transfer::Gamma, 2.2F);
++        case 5:
++            return from_chromaticities(xy, Transfer::Gamma, 2.8F);
++        case 8:
++            return from_chromaticities(xy, Transfer::Linear);
++        case 16:
++            return from_chromaticities(xy, Transfer::PQ);
++        case 18:
++            return from_chromaticities(xy, Transfer::HLG);
++        default:
++            return from_chromaticities(xy, Transfer::SRGB);
++    }
++}
++
++std::shared_ptr<ColorSpace>
++ColorSpace::from_chromaticities(const std::array<float, 8>& xy,
++                                const Transfer transfer, const float gamma)
++{
++    auto cs = std::make_shared<ColorSpace>();
++    cs->transfer = transfer;
++    cs->gamma = gamma;
++    const Vec d65 = xy_to_xyz(SRGB_XY[6], SRGB_XY[7]);
++    const Mat adapt = bradford(xy_to_xyz(xy[6], xy[7]), d65);
++    set_matrix(*cs, mul(xyz_to_srgb(), mul(adapt, rgb_to_xyz(xy))));
++    if (transfer == Transfer::PQ || transfer == Transfer::HLG) {
++        cs->set_peak_nits(HDR_PEAK);
++    }
++    return cs;
++}
++
++std::shared_ptr<ColorSpace> ColorSpace::from_icc(const void* data,
++                                                 const size_t size)
++{
++    if (!data || !size) {
++        return nullptr;
++    }
++    const Profile profile(
++        cmsOpenProfileFromMem(data, static_cast<cmsUInt32Number>(size)),
++        &cmsCloseProfile);
++    if (!profile || !cmsIsMatrixShaper(profile.get())) {
++        return nullptr;
++    }
++
++    const cmsColorSpaceSignature sig = cmsGetColorSpace(profile.get());
++    std::array<cmsTagSignature, 3> trc;
++    auto cs = std::make_shared<ColorSpace>();
++    if (sig == cmsSigRgbData) {
++        trc = { cmsSigRedTRCTag, cmsSigGreenTRCTag, cmsSigBlueTRCTag };
++        const auto* r = static_cast<const cmsCIEXYZ*>(
++            cmsReadTag(profile.get(), cmsSigRedColorantTag));
++        const auto* g = static_cast<const cmsCIEXYZ*>(
++            cmsReadTag(profile.get(), cmsSigGreenColorantTag));
++        const auto* b = static_cast<const cmsCIEXYZ*>(
++            cmsReadTag(profile.get(), cmsSigBlueColorantTag));
++        if (!r || !g || !b) {
++            return nullptr;
++        }
++        const Mat d50 = { r->X, g->X, b->X, r->Y, g->Y, b->Y, r->Z, g->Z, b->Z };
++        const Mat adapt = bradford(D50, xy_to_xyz(SRGB_XY[6], SRGB_XY[7]));
++        set_matrix(*cs, mul(xyz_to_srgb(), mul(adapt, d50)));
++    } else if (sig == cmsSigGrayData) {
++        trc = { cmsSigGrayTRCTag, cmsSigGrayTRCTag, cmsSigGrayTRCTag };
++    } else {
++        return nullptr;
++    }
++
++    cs->table.resize(TABLE_SIZE * 3);
++    for (size_t c = 0; c < 3; ++c) {
++        const auto* curve =
++            static_cast<const cmsToneCurve*>(cmsReadTag(profile.get(), trc[c]));
++        if (!curve) {
++            return nullptr;
++        }
++        for (size_t i = 0; i < TABLE_SIZE; ++i) {
++            cs->table[c * TABLE_SIZE + i] = cmsEvalToneCurveFloat(
++                curve, static_cast<float>(i) / (TABLE_SIZE - 1));
++        }
++    }
++
++    const auto deviation = [&cs](auto&& fn) {
++        double dev = 0;
++        for (size_t c = 0; c < 3; ++c) {
++            for (size_t i = 0; i < TABLE_SIZE; ++i) {
++                const double x = static_cast<double>(i) / (TABLE_SIZE - 1);
++                dev = std::max(dev,
++                               std::abs(cs->table[c * TABLE_SIZE + i] - fn(x)));
++            }
++        }
++        return dev;
++    };
++    const double mid = cs->table[TABLE_SIZE / 2];
++    const double gamma =
++        std::log(std::max(mid, 1e-6)) / std::log(0.5 * TABLE_SIZE / (TABLE_SIZE - 1));
++
++    if (deviation(srgb_eotf) < 2e-3) {
++        cs->transfer = Transfer::SRGB;
++    } else if (deviation([](double x) { return x; }) < 1e-3) {
++        cs->transfer = Transfer::Linear;
++    } else if (deviation([gamma](double x) { return std::pow(x, gamma); }) <
++               2e-3) {
++        cs->transfer = Transfer::Gamma;
++        cs->gamma = static_cast<float>(gamma);
++    } else {
++        cs->transfer = Transfer::Table;
++        return cs;
++    }
++    cs->table.clear();
++    return cs;
++}
++
++void ColorSpace::apply_icc(Pixmap& pm, const void* data, const size_t size)
++{
++    if (const auto cs = from_icc(data, size)) {
++        if (!cs->is_srgb()) {
++            pm.set_color(cs);
++        }
++        return;
++    }
++
++    const Profile in(
++        cmsOpenProfileFromMem(data, static_cast<cmsUInt32Number>(size)),
++        &cmsCloseProfile);
++    if (!in || cmsGetColorSpace(in.get()) != cmsSigRgbData) {
++        return;
++    }
++    const Profile out(cmsCreate_sRGBProfile(), &cmsCloseProfile);
++    const cmsUInt32Number fmt =
++        pm.format() == Pixmap::F16 ? TYPE_RGBA_HALF_FLT : TYPE_BGRA_8;
++    cmsHTRANSFORM transform =
++        cmsCreateTransform(in.get(), fmt, out.get(), fmt, INTENT_PERCEPTUAL,
++                           cmsFLAGS_COPY_ALPHA);
++    if (!transform) {
++        return;
++    }
++    std::vector<uint8_t> buffer(pm.width() * (pm.stride() / pm.width()));
++    for (size_t y = 0; y < pm.height(); ++y) {
++        void* line = pm.ptr(0, y);
++        std::memcpy(buffer.data(), line, buffer.size());
++        cmsDoTransform(transform, buffer.data(), line,
++                       static_cast<cmsUInt32Number>(pm.width()));
++    }
++    cmsDeleteTransform(transform);
++}
++
++bool ColorSpace::needs_conversion(const Pixmap& pm)
++{
++    return pm.format() == Pixmap::F16 || (pm.color() && !pm.color()->is_srgb());
++}
++
++Pixmap ColorSpace::to_srgb(const Pixmap& pm)
++{
++    static const ColorSpace srgb;
++    const ColorSpace& cs = pm.color() ? *pm.color() : srgb;
++    const bool f16 = pm.format() == Pixmap::F16;
++
++    Pixmap out;
++    out.create(pm.format() == Pixmap::RGB ? Pixmap::RGB : Pixmap::ARGB,
++               pm.width(), pm.height());
++
++    std::vector<float> dec8;
++    if (!f16) {
++        dec8.resize(256 * 3);
++        for (size_t c = 0; c < 3; ++c) {
++            for (size_t i = 0; i < 256; ++i) {
++                dec8[c * 256 + i] = cs.decode(i / 255.0F, c);
++            }
++        }
++    }
++    static const std::vector<uint8_t> enc = [] {
++        std::vector<uint8_t> t(16384);
++        for (size_t i = 0; i < t.size(); ++i) {
++            const double v = srgb_oetf(static_cast<double>(i) / (t.size() - 1));
++            t[i] = static_cast<uint8_t>(std::lround(v * 255));
++        }
++        return t;
++    }();
++
++    const auto worker = [&](const size_t from, const size_t to) {
++        for (size_t y = from; y < to; ++y) {
++            for (size_t x = 0; x < pm.width(); ++x) {
++                float rgb[3];
++                float alpha;
++                if (f16) {
++                    const auto* px = static_cast<const uint16_t*>(pm.ptr(x, y));
++                    for (size_t c = 0; c < 3; ++c) {
++                        rgb[c] = cs.decode(half_to_float(px[c]), c);
++                    }
++                    alpha = std::clamp(half_to_float(px[3]), 0.0F, 1.0F);
++                } else {
++                    const argb_t& px = pm.at(x, y);
++                    rgb[0] = dec8[px.r];
++                    rgb[1] = dec8[256 + px.g];
++                    rgb[2] = dec8[512 + px.b];
++                    alpha = px.a / 255.0F;
++                }
++                if (cs.transfer == Transfer::HLG) {
++                    const float lum =
++                        cs.luma[0] * rgb[0] + cs.luma[1] * rgb[1] + cs.luma[2] * rgb[2];
++                    const float k = HDR_PEAK / REFERENCE_WHITE *
++                        std::pow(std::max(lum, 1e-6F), 0.2F);
++                    for (float& v : rgb) {
++                        v *= k;
++                    }
++                }
++                const Matrix3& m = cs.matrix;
++                const float lin[3] = {
++                    m[0] * rgb[0] + m[1] * rgb[1] + m[2] * rgb[2],
++                    m[3] * rgb[0] + m[4] * rgb[1] + m[5] * rgb[2],
++                    m[6] * rgb[0] + m[7] * rgb[1] + m[8] * rgb[2],
++                };
++                std::copy(lin, lin + 3, rgb);
++                tonemap(rgb, cs.peak, 1.0F);
++
++                const auto encode = [](const float v) {
++                    return enc[static_cast<size_t>(std::clamp(v, 0.0F, 1.0F) *
++                                                   (enc.size() - 1))];
++                };
++                out.at(x, y) = argb_t(static_cast<uint8_t>(std::lround(alpha * 255)),
++                                      encode(rgb[0]), encode(rgb[1]),
++                                      encode(rgb[2]));
++            }
++        }
++    };
++
++    const size_t threads = std::clamp<size_t>(
++        std::min<size_t>(std::thread::hardware_concurrency(),
++                         pm.height() / 64),
++        1, 64);
++    std::vector<std::thread> pool;
++    const size_t step = pm.height() / threads;
++    for (size_t i = 0; i < threads; ++i) {
++        const size_t from = i * step;
++        const size_t to = i == threads - 1 ? pm.height() : from + step;
++        pool.emplace_back(worker, from, to);
++    }
++    for (auto& t : pool) {
++        t.join();
++    }
++
++    return out;
++}
++
++void ColorSpace::tonemap(float rgb[3], const float peak, const float headroom)
++{
++    if (peak <= headroom) {
++        return;
++    }
++    const float knee = 0.75F * headroom;
++    const float m = std::max({ rgb[0], rgb[1], rgb[2] });
++    if (m <= knee) {
++        return;
++    }
++    // extended Reinhard above the knee, maps peak to headroom
++    const float range = headroom - knee;
++    const float s = (m - knee) / range;
++    const float sp = (peak - knee) / range;
++    const float y = knee + range * s * (1.0F + s / (sp * sp)) / (1.0F + s);
++    for (size_t i = 0; i < 3; ++i) {
++        rgb[i] *= y / m;
++    }
++}
++
++void ColorSpace::set_peak_nits(const float nits)
++{
++    if (nits > 0) {
++        peak = std::max(nits / REFERENCE_WHITE, 1.0F);
++    }
++}
++
++float ColorSpace::decode(const float value, const size_t channel) const
++{
++    switch (transfer) {
++        case Transfer::SRGB:
++            return static_cast<float>(srgb_eotf(value));
++        case Transfer::Linear:
++            return value;
++        case Transfer::Gamma:
++            return std::copysign(std::pow(std::abs(value), gamma), value);
++        case Transfer::PQ:
++            return static_cast<float>(pq_eotf(value));
++        case Transfer::HLG:
++            return static_cast<float>(hlg_inverse_oetf(value));
++        case Transfer::Table: {
++            const float pos =
++                std::clamp(value, 0.0F, 1.0F) * (TABLE_SIZE - 1);
++            const auto idx = std::min(static_cast<size_t>(pos), TABLE_SIZE - 2);
++            const float* t = &table[channel * TABLE_SIZE];
++            return t[idx] + (t[idx + 1] - t[idx]) * (pos - idx);
++        }
++    }
++    return value;
++}
++
++bool ColorSpace::is_srgb() const
++{
++    return transfer == Transfer::SRGB && matrix == IDENTITY && peak <= 1.0F;
++}
+diff --git a/src/colorspace.hpp b/src/colorspace.hpp
+new file mode 100644
+index 0000000..7b1b6bd
+--- /dev/null
++++ b/src/colorspace.hpp
+@@ -0,0 +1,120 @@
++// SPDX-License-Identifier: MIT
++// Color spaces and color management.
++
++#pragma once
++
++#include <array>
++#include <bit>
++#include <cstddef>
++#include <cstdint>
++#include <memory>
++#include <vector>
++
++class Pixmap;
++
++using Matrix3 = std::array<float, 9>;
++
++// Working space: linear light, sRGB primaries (extended range, D65),
++// 1.0 is the SDR reference white.
++class ColorSpace {
++public:
++    enum class Transfer : uint8_t { SRGB, Linear, Gamma, PQ, HLG, Table };
++
++    using Ptr = std::shared_ptr<const ColorSpace>;
++
++    static constexpr float REFERENCE_WHITE = 203.0F; // cd/m², BT.2408
++    static constexpr float HDR_PEAK = 1000.0F;       // default mastering peak
++    static constexpr size_t TABLE_SIZE = 4096;
++    static constexpr Matrix3 IDENTITY = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
++
++    // CICP (ITU-T H.273) code points
++    static std::shared_ptr<ColorSpace> from_cicp(uint16_t primaries,
++                                                 uint16_t transfer);
++    // Chromaticities: red, green, blue, white (x, y)
++    static std::shared_ptr<ColorSpace>
++    from_chromaticities(const std::array<float, 8>& xy, Transfer transfer,
++                        float gamma = 1.0F);
++    // Matrix/shaper ICC profiles only
++    static std::shared_ptr<ColorSpace> from_icc(const void* data,
++                                                size_t size);
++
++    // Tag pixmap with ICC profile, or convert it to sRGB for LUT profiles
++    static void apply_icc(Pixmap& pm, const void* data, size_t size);
++
++    // Convert pixmap to 8-bit sRGB, tone mapped to SDR
++    static Pixmap to_srgb(const Pixmap& pm);
++    static bool needs_conversion(const Pixmap& pm);
++
++    static void tonemap(float rgb[3], float peak, float headroom);
++
++    void set_peak_nits(float nits);
++    float decode(float value, size_t channel) const;
++
++    [[nodiscard]] bool is_srgb() const;
++
++    Transfer transfer = Transfer::SRGB;
++    float gamma = 1.0F;
++    std::vector<float> table;
++    Matrix3 matrix = IDENTITY;
++    std::array<float, 3> luma = { 0.2126729F, 0.7151522F, 0.0721750F };
++    float peak = 1.0F;
++
++    static bool native;
++};
++
++inline float half_to_float(const uint16_t h)
++{
++    const uint32_t sign = static_cast<uint32_t>(h & 0x8000U) << 16;
++    uint32_t exp = (h >> 10) & 0x1fU;
++    uint32_t mant = h & 0x3ffU;
++    uint32_t bits;
++    if (exp == 0) {
++        if (mant == 0) {
++            bits = sign;
++        } else {
++            exp = 113;
++            while (!(mant & 0x400U)) {
++                mant <<= 1;
++                --exp;
++            }
++            bits = sign | (exp << 23) | ((mant & 0x3ffU) << 13);
++        }
++    } else if (exp == 31) {
++        bits = sign | 0x7f800000U | (mant << 13);
++    } else {
++        bits = sign | ((exp + 112) << 23) | (mant << 13);
++    }
++    return std::bit_cast<float>(bits);
++}
++
++inline uint16_t float_to_half(const float f)
++{
++    const uint32_t x = std::bit_cast<uint32_t>(f);
++    const auto sign = static_cast<uint16_t>((x >> 16) & 0x8000U);
++    const uint32_t fexp = (x >> 23) & 0xffU;
++    uint32_t mant = x & 0x7fffffU;
++    if (fexp == 0xff) {
++        return sign | 0x7c00U | (mant ? 0x200U : 0);
++    }
++    const int32_t exp = static_cast<int32_t>(fexp) - 112;
++    if (exp >= 31) {
++        return sign | 0x7c00U;
++    }
++    if (exp <= 0) {
++        if (exp < -10) {
++            return sign;
++        }
++        mant |= 0x800000U;
++        const uint32_t shift = 14 - exp;
++        uint32_t h = mant >> shift;
++        if ((mant >> (shift - 1)) & 1U) {
++            ++h;
++        }
++        return sign | static_cast<uint16_t>(h);
++    }
++    uint32_t h = (static_cast<uint32_t>(exp) << 10) | (mant >> 13);
++    if (mant & 0x1000U) {
++        ++h;
++    }
++    return sign | static_cast<uint16_t>(h);
++}
+diff --git a/src/formatfactory.cpp b/src/formatfactory.cpp
+index 6eae9fa..dcf8a0d 100644
+--- a/src/formatfactory.cpp
++++ b/src/formatfactory.cpp
+@@ -269,6 +269,14 @@ ImagePtr FormatFactory::load(const ImageEntryPtr& entry) const
+         }
+         entry->size = data.size;
+         image->entry = entry;
++
++        if (!ColorSpace::native) {
++            for (auto& frame : image->frames) {
++                if (ColorSpace::needs_conversion(frame.pm)) {
++                    frame.pm = ColorSpace::to_srgb(frame.pm);
++                }
++            }
++        }
+     }
+ 
+     return image;
+@@ -284,7 +292,8 @@ bool FormatFactory::save(
+         return false;
+     }
+ 
+-    const std::vector<uint8_t> data = png->encode(pm, meta);
++    const std::vector<uint8_t> data = png->encode(
++        ColorSpace::needs_conversion(pm) ? ColorSpace::to_srgb(pm) : pm, meta);
+     if (data.empty()) {
+         Log::error("Unable to export pixmap, PNG encode failed");
+         return false;
+diff --git a/src/formats/avif.cpp b/src/formats/avif.cpp
+index 1a39d3d..d26f0e4 100644
+--- a/src/formats/avif.cpp
++++ b/src/formats/avif.cpp
+@@ -6,6 +6,7 @@
+ 
+ #include <avif/avif.h>
+ 
++#include <cstring>
+ #include <format>
+ #include <memory>
+ 
+@@ -98,32 +99,54 @@ private:
+      */
+     static avifResult decode_frame(AvifDecoder& avif, Pixmap& pm)
+     {
+-        avifResult rc;
+-        avifRGBImage rgb;
+-
+-        avifRGBImageSetDefaults(&rgb, avif->image);
++        const avifImage* img = avif->image;
++        const bool deep = img->depth > 8;
+ 
+-        rgb.depth = 8;
+-        rgb.format = AVIF_RGB_FORMAT_BGRA;
+-
+-        rc = avifRGBImageAllocatePixels(&rgb);
++        avifRGBImage rgb;
++        avifRGBImageSetDefaults(&rgb, img);
++        if (deep) {
++            rgb.depth = 16;
++            rgb.isFloat = AVIF_TRUE;
++            rgb.format = AVIF_RGB_FORMAT_RGBA;
++        } else {
++            rgb.depth = 8;
++            rgb.format = AVIF_RGB_FORMAT_BGRA;
++        }
++        avifResult rc = avifRGBImageAllocatePixels(&rgb);
+         if (rc != AVIF_RESULT_OK) {
+             return rc;
+         }
+-
+-        rc = avifImageYUVToRGB(avif->image, &rgb);
++        rc = avifImageYUVToRGB(img, &rgb);
+         if (rc == AVIF_RESULT_OK) {
+-            pm.create(avif->alphaPresent ? Pixmap::ARGB : Pixmap::RGB,
+-                      rgb.width, rgb.height);
+-            std::memcpy(&pm.at(0, 0), rgb.pixels,
+-                        static_cast<size_t>(rgb.width) * rgb.height *
+-                            sizeof(argb_t));
++            if (deep) {
++                pm.create(Pixmap::F16, rgb.width, rgb.height);
++            } else {
++                pm.create(avif->alphaPresent ? Pixmap::ARGB : Pixmap::RGB,
++                          rgb.width, rgb.height);
++            }
++            for (size_t y = 0; y < pm.height(); ++y) {
++                std::memcpy(pm.ptr(0, y), rgb.pixels + y * rgb.rowBytes,
++                            pm.stride());
++            }
++            set_color(img, pm);
+         }
+-
+         avifRGBImageFreePixels(&rgb);
+-
+         return rc;
+     }
++
++    static void set_color(const avifImage* img, Pixmap& pm)
++    {
++        const auto cs =
++            ColorSpace::from_cicp(img->colorPrimaries, img->transferCharacteristics);
++        if (img->icc.size && cs->peak <= 1.0F) {
++            ColorSpace::apply_icc(pm, img->icc.data, img->icc.size);
++            return;
++        }
++        cs->set_peak_nits(img->clli.maxCLL);
++        if (!cs->is_srgb()) {
++            pm.set_color(cs);
++        }
++    }
+ };
+ 
+ // register format in factory
+diff --git a/src/formats/heif.cpp b/src/formats/heif.cpp
+index 3179b66..59d2932 100644
+--- a/src/formats/heif.cpp
++++ b/src/formats/heif.cpp
+@@ -9,7 +9,7 @@
+ 
+ #include <cstring>
+ #include <memory>
+-#include <utility>
++#include <vector>
+ 
+ namespace {
+ 
+@@ -54,9 +54,18 @@ public:
+             hopt->ignore_transformations = 1;
+         }
+ 
++        const bool alpha = heif_image_handle_has_alpha_channel(himh.get());
++        const bool deep =
++            heif_image_handle_get_luma_bits_per_pixel(himh.get()) > 8;
++        heif_chroma chroma = heif_chroma_interleaved_RGBA;
++        if (deep) {
++            chroma = alpha ? heif_chroma_interleaved_RRGGBBAA_LE
++                           : heif_chroma_interleaved_RRGGBB_LE;
++        }
++
+         heif_image* him = nullptr;
+-        err = heif_decode_image(himh.get(), &him, heif_colorspace_RGB,
+-                                heif_chroma_interleaved_RGBA, hopt.get());
++        err = heif_decode_image(himh.get(), &him, heif_colorspace_RGB, chroma,
++                                hopt.get());
+         if (err.code != heif_error_Ok) {
+             return nullptr;
+         }
+@@ -75,19 +84,36 @@ public:
+         Pixmap& pm = image->frames[0].pm;
+ 
+         // put decoded data into pixmap
+-        pm.create(heif_image_handle_has_alpha_channel(himh.get()) ? Pixmap::ARGB
+-                                                                  : Pixmap::RGB,
+-                  heif_image_get_primary_width(himg.get()),
+-                  heif_image_get_primary_height(himg.get()));
+-        if (std::cmp_equal(stride, pm.stride())) {
+-            std::memcpy(pm.ptr(0, 0), decoded, pm.stride() * pm.height());
++        const size_t width = heif_image_get_primary_width(himg.get());
++        const size_t height = heif_image_get_primary_height(himg.get());
++        if (deep) {
++            pm.create(Pixmap::F16, width, height);
++            const int bits = heif_image_get_bits_per_pixel_range(
++                himg.get(), heif_channel_interleaved);
++            const auto max = static_cast<float>((1U << bits) - 1);
++            const size_t channels = alpha ? 4 : 3;
++            for (size_t y = 0; y < height; ++y) {
++                const auto* src =
++                    reinterpret_cast<const uint16_t*>(decoded + y * stride);
++                auto* dst = static_cast<uint16_t*>(pm.ptr(0, y));
++                for (size_t x = 0; x < width; ++x) {
++                    for (size_t c = 0; c < 3; ++c) {
++                        dst[x * 4 + c] =
++                            float_to_half(src[x * channels + c] / max);
++                    }
++                    dst[x * 4 + 3] = alpha
++                        ? float_to_half(src[x * channels + 3] / max)
++                        : float_to_half(1.0F);
++                }
++            }
+         } else {
+-            for (size_t y = 0; y < pm.height(); ++y) {
+-                const uint8_t* src = decoded + y * stride;
+-                std::memcpy(pm.ptr(0, y), src, pm.stride());
++            pm.create(alpha ? Pixmap::ARGB : Pixmap::RGB, width, height);
++            for (size_t y = 0; y < height; ++y) {
++                std::memcpy(pm.ptr(0, y), decoded + y * stride, pm.stride());
+             }
++            pm.abgr_to_argb();
+         }
+-        pm.abgr_to_argb();
++        set_color(himh.get(), pm);
+ 
+         image->format = "HEIF";
+         return image;
+@@ -97,6 +123,39 @@ public:
+     void fix_orientation(ImagePtr&, const int) const override {}
+ 
+ private:
++    static void set_color(const heif_image_handle* handle, Pixmap& pm)
++    {
++        std::shared_ptr<ColorSpace> cs;
++        heif_color_profile_nclx* nclx = nullptr;
++        if (heif_image_handle_get_nclx_color_profile(handle, &nclx).code ==
++            heif_error_Ok) {
++            cs = ColorSpace::from_cicp(nclx->color_primaries,
++                                       nclx->transfer_characteristics);
++            heif_nclx_color_profile_free(nclx);
++        }
++
++        const size_t icc_size =
++            heif_image_handle_get_raw_color_profile_size(handle);
++        if (icc_size && (!cs || cs->peak <= 1.0F)) {
++            std::vector<uint8_t> icc(icc_size);
++            if (heif_image_handle_get_raw_color_profile(handle, icc.data())
++                    .code == heif_error_Ok) {
++                ColorSpace::apply_icc(pm, icc.data(), icc.size());
++                return;
++            }
++        }
++
++        if (cs) {
++            heif_content_light_level clli {};
++            if (heif_image_handle_get_content_light_level(handle, &clli)) {
++                cs->set_peak_nits(clli.max_content_light_level);
++            }
++            if (!cs->is_srgb()) {
++                pm.set_color(cs);
++            }
++        }
++    }
++
+     // HEIF decoder wrappers
+     using HeifContext =
+         std::unique_ptr<heif_context, decltype(&heif_context_free)>;
+diff --git a/src/formats/jpeg.cpp b/src/formats/jpeg.cpp
+index aea1a3e..f447836 100644
+--- a/src/formats/jpeg.cpp
++++ b/src/formats/jpeg.cpp
+@@ -6,9 +6,13 @@
+ #include "../log.hpp"
+ 
+ #include <jpeglib.h>
++#include <lcms2.h>
+ 
+ #include <csetjmp>
++#include <cstdlib>
++#include <cstring>
+ #include <format>
++#include <vector>
+ 
+ namespace {
+ 
+@@ -38,8 +42,23 @@ public:
+ 
+         jpeg_create_decompress(&jpg);
+         jpeg_mem_src(&jpg, data.data, data.size);
++        jpeg_save_markers(&jpg, JPEG_APP0 + 2, 0xffff);
+         jpeg_read_header(&jpg, TRUE);
+ 
++        std::vector<uint8_t> icc;
++#ifdef LIBJPEG_TURBO_VERSION
++        JOCTET* icc_data = nullptr;
++        unsigned int icc_size = 0;
++        if (jpeg_read_icc_profile(&jpg, &icc_data, &icc_size)) {
++            icc.assign(icc_data, icc_data + icc_size);
++            std::free(icc_data);
++        }
++#endif // LIBJPEG_TURBO_VERSION
++        const bool cmyk_icc = jpg.jpeg_color_space == JCS_CMYK ||
++                jpg.jpeg_color_space == JCS_YCCK
++            ? is_cmyk_profile(icc)
++            : false;
++
+ #ifdef LIBJPEG_TURBO_VERSION
+         switch (jpg.jpeg_color_space) {
+             case JCS_CMYK:
+@@ -87,7 +106,7 @@ public:
+                     pixel[x].g = color[1];
+                     pixel[x].b = color[2];
+                 }
+-            } else if (jpg.out_color_space == JCS_CMYK) {
++            } else if (jpg.out_color_space == JCS_CMYK && !cmyk_icc) {
+                 argb_t* pixel = line;
+                 for (size_t x = 0; x < pm.width(); ++x) {
+                     const uint8_t* color =
+@@ -104,6 +123,12 @@ public:
+             }
+         }
+ 
++        if (cmyk_icc) {
++            cmyk_to_srgb(pm, icc, jpg.saw_Adobe_marker);
++        } else if (!icc.empty()) {
++            ColorSpace::apply_icc(pm, icc.data(), icc.size());
++        }
++
+         image->format = std::format("JPEG {}bit", jpg.num_components * 8);
+ 
+         jpeg_finish_decompress(&jpg);
+@@ -113,6 +138,49 @@ public:
+     }
+ 
+ private:
++    static bool is_cmyk_profile(const std::vector<uint8_t>& icc)
++    {
++        if (icc.empty()) {
++            return false;
++        }
++        cmsHPROFILE profile = cmsOpenProfileFromMem(
++            icc.data(), static_cast<cmsUInt32Number>(icc.size()));
++        if (!profile) {
++            return false;
++        }
++        const bool cmyk = cmsGetColorSpace(profile) == cmsSigCmykData;
++        cmsCloseProfile(profile);
++        return cmyk;
++    }
++
++    static void cmyk_to_srgb(Pixmap& pm, const std::vector<uint8_t>& icc,
++                             const bool inverted)
++    {
++        cmsHPROFILE in = cmsOpenProfileFromMem(
++            icc.data(), static_cast<cmsUInt32Number>(icc.size()));
++        cmsHPROFILE out = cmsCreate_sRGBProfile();
++        // Adobe applications write inverted CMYK
++        cmsHTRANSFORM transform = cmsCreateTransform(
++            in, inverted ? TYPE_CMYK_8_REV : TYPE_CMYK_8, out, TYPE_BGRA_8,
++            INTENT_PERCEPTUAL, 0);
++        if (transform) {
++            std::vector<uint8_t> cmyk(pm.width() * 4);
++            for (size_t y = 0; y < pm.height(); ++y) {
++                void* line = pm.ptr(0, y);
++                std::memcpy(cmyk.data(), line, cmyk.size());
++                cmsDoTransform(transform, cmyk.data(), line,
++                               static_cast<cmsUInt32Number>(pm.width()));
++                argb_t* px = static_cast<argb_t*>(line);
++                for (size_t x = 0; x < pm.width(); ++x) {
++                    px[x].a = argb_t::max;
++                }
++            }
++            cmsDeleteTransform(transform);
++        }
++        cmsCloseProfile(out);
++        cmsCloseProfile(in);
++    }
++
+     /** JPG error description. */
+     struct Error {
+         jpeg_error_mgr manager;
+diff --git a/src/formats/jxl.cpp b/src/formats/jxl.cpp
+index 9b62084..1730562 100644
+--- a/src/formats/jxl.cpp
++++ b/src/formats/jxl.cpp
+@@ -7,7 +7,9 @@
+ #include <jxl/decode_cxx.h>
+ #include <jxl/resizable_parallel_runner_cxx.h>
+ 
++#include <array>
+ #include <format>
++#include <vector>
+ 
+ namespace {
+ 
+@@ -39,8 +41,8 @@ public:
+             JxlResizableParallelRunnerMake(nullptr);
+ 
+         JxlDecoderSubscribeEvents(jxl_dec.get(),
+-                                  JXL_DEC_BASIC_INFO | JXL_DEC_FRAME |
+-                                      JXL_DEC_FULL_IMAGE);
++                                  JXL_DEC_BASIC_INFO | JXL_DEC_COLOR_ENCODING |
++                                      JXL_DEC_FRAME | JXL_DEC_FULL_IMAGE);
+         JxlDecoderSetParallelRunner(jxl_dec.get(), JxlResizableParallelRunner,
+                                     jxl_prl.get());
+ 
+@@ -48,16 +50,17 @@ public:
+         JxlDecoderCloseInput(jxl_dec.get());
+ 
+         JxlBasicInfo jxl_inf;
+-        const JxlPixelFormat jxl_fmt { .num_channels = 4, // ARBG
++        JxlPixelFormat jxl_fmt { .num_channels = 4, // ARBG
+                                        .data_type = JXL_TYPE_UINT8,
+                                        .endianness = JXL_NATIVE_ENDIAN,
+                                        .align = 0 };
+ 
+         // docode image
+         ImagePtr image = std::make_shared<Image>();
++        Color color;
+         while (true) {
+             const DecodeStatus status =
+-                decode_step(jxl_dec, jxl_inf, jxl_fmt, jxl_prl, *image);
++                decode_step(jxl_dec, jxl_inf, jxl_fmt, jxl_prl, *image, color);
+             if (status == DecodeStatus::Error) {
+                 return nullptr;
+             }
+@@ -74,6 +77,74 @@ public:
+     }
+ 
+ private:
++    struct Color {
++        std::shared_ptr<ColorSpace> cs;
++        std::vector<uint8_t> icc;
++    };
++
++    static std::shared_ptr<ColorSpace> from_encoding(const JxlColorEncoding& enc)
++    {
++        std::array<float, 8> xy = { 0.640F, 0.330F, 0.300F, 0.600F,
++                                    0.150F, 0.060F, 0.3127F, 0.3290F };
++        if (enc.color_space == JXL_COLOR_SPACE_RGB) {
++            switch (enc.primaries) {
++                case JXL_PRIMARIES_2100:
++                    xy = { 0.708F, 0.292F, 0.170F, 0.797F,
++                           0.131F, 0.046F, 0.3127F, 0.3290F };
++                    break;
++                case JXL_PRIMARIES_P3:
++                    xy = { 0.680F, 0.320F, 0.265F, 0.690F,
++                           0.150F, 0.060F, 0.3127F, 0.3290F };
++                    break;
++                case JXL_PRIMARIES_CUSTOM:
++                    xy = { static_cast<float>(enc.primaries_red_xy[0]),
++                           static_cast<float>(enc.primaries_red_xy[1]),
++                           static_cast<float>(enc.primaries_green_xy[0]),
++                           static_cast<float>(enc.primaries_green_xy[1]),
++                           static_cast<float>(enc.primaries_blue_xy[0]),
++                           static_cast<float>(enc.primaries_blue_xy[1]),
++                           0.3127F, 0.3290F };
++                    break;
++                default:
++                    break;
++            }
++        }
++        switch (enc.white_point) {
++            case JXL_WHITE_POINT_CUSTOM:
++                xy[6] = static_cast<float>(enc.white_point_xy[0]);
++                xy[7] = static_cast<float>(enc.white_point_xy[1]);
++                break;
++            case JXL_WHITE_POINT_E:
++                xy[6] = xy[7] = 1.0F / 3;
++                break;
++            case JXL_WHITE_POINT_DCI:
++                xy[6] = 0.314F;
++                xy[7] = 0.351F;
++                break;
++            default:
++                break;
++        }
++
++        using Transfer = ColorSpace::Transfer;
++        switch (enc.transfer_function) {
++            case JXL_TRANSFER_FUNCTION_709:
++                return ColorSpace::from_chromaticities(xy, Transfer::Gamma, 2.4F);
++            case JXL_TRANSFER_FUNCTION_LINEAR:
++                return ColorSpace::from_chromaticities(xy, Transfer::Linear);
++            case JXL_TRANSFER_FUNCTION_PQ:
++                return ColorSpace::from_chromaticities(xy, Transfer::PQ);
++            case JXL_TRANSFER_FUNCTION_HLG:
++                return ColorSpace::from_chromaticities(xy, Transfer::HLG);
++            case JXL_TRANSFER_FUNCTION_DCI:
++                return ColorSpace::from_chromaticities(xy, Transfer::Gamma, 2.6F);
++            case JXL_TRANSFER_FUNCTION_GAMMA:
++                return ColorSpace::from_chromaticities(
++                    xy, Transfer::Gamma, static_cast<float>(1.0 / enc.gamma));
++            default:
++                return ColorSpace::from_chromaticities(xy, Transfer::SRGB);
++        }
++    }
++
+     /** Decoder status. */
+     enum class DecodeStatus : uint8_t {
+         InProgress,
+@@ -92,8 +163,9 @@ private:
+      */
+     static DecodeStatus
+     decode_step(const JxlDecoderPtr& jxl_dec, JxlBasicInfo& jxl_inf,
+-                const JxlPixelFormat& jxl_fmt,
+-                const JxlResizableParallelRunnerPtr& jxl_prl, Image& image)
++                JxlPixelFormat& jxl_fmt,
++                const JxlResizableParallelRunnerPtr& jxl_prl, Image& image,
++                Color& color)
+     {
+         const JxlDecoderStatus status = JxlDecoderProcessInput(jxl_dec.get());
+         if (status == JXL_DEC_SUCCESS) {
+@@ -110,6 +182,33 @@ private:
+                                                          jxl_inf.ysize));
+             return DecodeStatus::InProgress;
+         }
++        if (status == JXL_DEC_COLOR_ENCODING) {
++            JxlColorEncoding enc;
++            size_t icc_size = 0;
++            if (JxlDecoderGetColorAsEncodedProfile(
++                    jxl_dec.get(), JXL_COLOR_PROFILE_TARGET_DATA, &enc) ==
++                JXL_DEC_SUCCESS) {
++                color.cs = from_encoding(enc);
++                if (color.cs->peak > 1.0F) {
++                    color.cs->set_peak_nits(jxl_inf.intensity_target);
++                }
++            } else if (JxlDecoderGetICCProfileSize(
++                           jxl_dec.get(), JXL_COLOR_PROFILE_TARGET_DATA,
++                           &icc_size) == JXL_DEC_SUCCESS) {
++                color.icc.resize(icc_size);
++                if (JxlDecoderGetColorAsICCProfile(
++                        jxl_dec.get(), JXL_COLOR_PROFILE_TARGET_DATA,
++                        color.icc.data(), icc_size) != JXL_DEC_SUCCESS) {
++                    color.icc.clear();
++                }
++            }
++            if (jxl_inf.bits_per_sample > 8 ||
++                (color.cs && color.cs->peak > 1.0F)) {
++                jxl_fmt.data_type = JXL_TYPE_FLOAT16;
++            }
++            return DecodeStatus::InProgress;
++        }
++
+         if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER) {
+             size_t buffer_size;
+             if (JxlDecoderImageOutBufferSize(jxl_dec.get(), &jxl_fmt,
+@@ -121,7 +220,7 @@ private:
+                 return DecodeStatus::Error;
+             }
+             if (JxlDecoderSetImageOutBuffer(jxl_dec.get(), &jxl_fmt,
+-                                            &pm.at(0, 0),
++                                            pm.ptr(0, 0),
+                                             buffer_size) != JXL_DEC_SUCCESS) {
+                 return DecodeStatus::Error;
+             }
+@@ -131,8 +230,12 @@ private:
+             // allocate new frame
+             image.frames.resize(image.frames.size() + 1);
+             Image::Frame& frame = image.frames[image.frames.size() - 1];
+-            frame.pm.create(jxl_inf.alpha_bits ? Pixmap::ARGB : Pixmap::RGB,
+-                            jxl_inf.xsize, jxl_inf.ysize);
++            Pixmap::Format format =
++                jxl_inf.alpha_bits ? Pixmap::ARGB : Pixmap::RGB;
++            if (jxl_fmt.data_type == JXL_TYPE_FLOAT16) {
++                format = Pixmap::F16;
++            }
++            frame.pm.create(format, jxl_inf.xsize, jxl_inf.ysize);
+             // calculate frame timing
+             if (jxl_inf.have_animation) {
+                 JxlFrameHeader jxl_hdr;
+@@ -146,7 +249,17 @@ private:
+             return DecodeStatus::InProgress;
+         }
+         if (status == JXL_DEC_FULL_IMAGE) {
+-            image.frames[image.frames.size() - 1].pm.abgr_to_argb();
++            Pixmap& pm = image.frames[image.frames.size() - 1].pm;
++            if (pm.format() != Pixmap::F16) {
++                pm.abgr_to_argb();
++            }
++            if (color.cs) {
++                if (!color.cs->is_srgb()) {
++                    pm.set_color(color.cs);
++                }
++            } else if (!color.icc.empty()) {
++                ColorSpace::apply_icc(pm, color.icc.data(), color.icc.size());
++            }
+             return DecodeStatus::InProgress;
+         }
+ 
+diff --git a/src/formats/png.cpp b/src/formats/png.cpp
+index 1d421c7..79dc282 100644
+--- a/src/formats/png.cpp
++++ b/src/formats/png.cpp
+@@ -6,6 +6,8 @@
+ 
+ #include <png.h>
+ 
++#include <array>
++#include <cmath>
+ #include <csetjmp>
+ #include <cstring>
+ #include <format>
+@@ -60,6 +62,12 @@ public:
+         // setup decoder
+         const png_byte color_type = png_get_color_type(png, png);
+         const png_byte bit_depth = png_get_bit_depth(png, png);
++        bool animated = false;
++#ifdef PNG_APNG_SUPPORTED
++        animated = png_get_valid(png, png, PNG_INFO_acTL) &&
++            png_get_num_frames(png, png) > 1;
++#endif
++        const bool deep = bit_depth == 16 && !animated;
+         if (png_get_interlace_type(png, png) != PNG_INTERLACE_NONE) {
+             png_set_interlace_handling(png);
+         }
+@@ -76,13 +84,18 @@ public:
+         if (png_get_valid(png, png, PNG_INFO_tRNS)) {
+             png_set_tRNS_to_alpha(png);
+         }
+-        if (bit_depth == 16) {
+-            png_set_strip_16(png);
++        if (deep) {
++            png_set_swap(png);
++            png_set_filler(png, 0xffff, PNG_FILLER_AFTER);
++        } else {
++            if (bit_depth == 16) {
++                png_set_strip_16(png);
++            }
++            png_set_filler(png, 0xff, PNG_FILLER_AFTER);
++            png_set_packing(png);
++            png_set_packswap(png);
++            png_set_bgr(png);
+         }
+-        png_set_filler(png, 0xff, PNG_FILLER_AFTER);
+-        png_set_packing(png);
+-        png_set_packswap(png);
+-        png_set_bgr(png);
+         png_set_expand(png);
+ 
+         png_read_update_info(png, png);
+@@ -91,16 +104,17 @@ public:
+ 
+         // decode image
+ #ifdef PNG_APNG_SUPPORTED
+-        if (png_get_valid(png, png, PNG_INFO_acTL) &&
+-            png_get_num_frames(png, png) > 1) {
++        if (animated) {
+             decode_multiple(png, image->frames);
+         } else {
+-            decode_single(png, image->frames);
++            decode_single(png, image->frames, deep);
+         }
+ #else
+-        decode_single(png, image->frames);
++        decode_single(png, image->frames, deep);
+ #endif // PNG_APNG_SUPPORTED
+ 
++        set_color(png, image->frames);
++
+         // read text info
+         png_text* txt;
+         int total;
+@@ -377,16 +391,94 @@ private:
+      * @param png PNG decoder
+      * @param frames image frames
+      */
+-    static void decode_single(PngObject& png, std::vector<Image::Frame>& frames)
++    static void decode_single(PngObject& png, std::vector<Image::Frame>& frames,
++                              const bool deep)
+     {
+         const png_uint_32 width = png_get_image_width(png, png);
+         const png_uint_32 height = png_get_image_height(png, png);
+ 
+         frames.resize(1);
+-        frames[0].pm.create(Pixmap::ARGB, width, height);
++        Pixmap& pm = frames[0].pm;
++        pm.create(deep ? Pixmap::F16 : Pixmap::ARGB, width, height);
+ 
+-        std::vector<png_bytep> bind = bind_pixmap(frames[0].pm);
++        std::vector<png_bytep> bind(pm.height(), nullptr);
++        for (size_t i = 0; i < pm.height(); ++i) {
++            bind[i] = reinterpret_cast<png_bytep>(pm.ptr(0, i));
++        }
+         png_read_image(png, bind.data());
++
++        if (deep) {
++            for (size_t y = 0; y < pm.height(); ++y) {
++                auto* px = static_cast<uint16_t*>(pm.ptr(0, y));
++                for (size_t i = 0; i < pm.width() * 4; ++i) {
++                    px[i] = float_to_half(px[i] / 65535.0F);
++                }
++            }
++        }
++    }
++
++    static void set_color(PngObject& png, std::vector<Image::Frame>& frames)
++    {
++        std::shared_ptr<ColorSpace> cs;
++#ifdef PNG_cICP_SUPPORTED
++        png_byte primaries;
++        png_byte transfer;
++        png_byte matrix;
++        png_byte full_range;
++        if (png_get_cICP(png, png, &primaries, &transfer, &matrix,
++                         &full_range)) {
++            cs = ColorSpace::from_cicp(primaries, transfer);
++        }
++#endif
++        png_charp name;
++        int compression;
++        png_bytep icc;
++        png_uint_32 icc_size;
++        if (!cs && png_get_iCCP(png, png, &name, &compression, &icc,
++                                &icc_size)) {
++            for (auto& frame : frames) {
++                ColorSpace::apply_icc(frame.pm, icc, icc_size);
++            }
++            return;
++        }
++        double gamma = 0;
++        if (!cs && !png_get_valid(png, png, PNG_INFO_sRGB) &&
++            png_get_gAMA(png, png, &gamma) && gamma > 0) {
++            std::array<double, 8> c {};
++            const bool chrm =
++                png_get_cHRM(png, png, &c[6], &c[7], &c[0], &c[1], &c[2],
++                             &c[3], &c[4], &c[5]);
++            const double exponent = 1.0 / gamma;
++            if (chrm || std::abs(exponent - 2.2) > 0.05) {
++                std::array<float, 8> xy = { 0.640F, 0.330F, 0.300F, 0.600F,
++                                            0.150F, 0.060F, 0.3127F, 0.3290F };
++                if (chrm) {
++                    std::copy(c.begin(), c.end(), xy.begin());
++                }
++                cs = ColorSpace::from_chromaticities(
++                    xy,
++                    std::abs(exponent - 1.0) < 0.01
++                        ? ColorSpace::Transfer::Linear
++                        : ColorSpace::Transfer::Gamma,
++                    static_cast<float>(exponent));
++            }
++        }
++        if (!cs) {
++            return;
++        }
++#ifdef PNG_cLLI_SUPPORTED
++        double max_cll = 0;
++        double max_fall = 0;
++        if (png_get_cLLI(png, png, &max_cll, &max_fall)) {
++            cs->set_peak_nits(static_cast<float>(max_cll));
++        }
++#endif
++        if (cs->is_srgb()) {
++            return;
++        }
++        for (auto& frame : frames) {
++            frame.pm.set_color(cs);
++        }
+     }
+ 
+     // PNG writer callback, see `png_rw_ptr` in png.h
+diff --git a/src/formats/raw.cpp b/src/formats/raw.cpp
+index 4015a40..b345d2a 100644
+--- a/src/formats/raw.cpp
++++ b/src/formats/raw.cpp
+@@ -37,7 +37,10 @@ public:
+         }
+ 
+         libraw_output_params_t* out_params = decoder.output_params_ptr();
+-        out_params->output_bps = 8; // 8-bit color
++        out_params->output_bps = 16;
++        out_params->output_color = 8; // Rec.2020
++        out_params->gamm[0] = 1.0;    // linear
++        out_params->gamm[1] = 1.0;
+         if (camera_wb) {
+             out_params->use_camera_wb = 1;
+         }
+@@ -48,7 +51,7 @@ public:
+         }
+         RawImage img(decoder.dcraw_make_mem_image(), &libraw_dcraw_clear_mem);
+         if (!img || img->type != LIBRAW_IMAGE_BITMAP || img->colors != 3 ||
+-            img->bits != 8) {
++            img->bits != 16) {
+             return nullptr;
+         }
+ 
+@@ -56,19 +59,19 @@ public:
+         ImagePtr image = std::make_shared<Image>();
+         image->frames.resize(1);
+         Pixmap& pm = image->frames[0].pm;
+-        pm.create(Pixmap::RGB, img->width, img->height);
+-
+-        // copy data to image frame
++        pm.create(Pixmap::F16, img->width, img->height);
++        const auto* src = reinterpret_cast<const uint16_t*>(img->data);
++        const uint16_t one = float_to_half(1.0F);
+         for (size_t y = 0; y < pm.height(); ++y) {
++            auto* dst = static_cast<uint16_t*>(pm.ptr(0, y));
+             for (size_t x = 0; x < pm.width(); ++x) {
+-                const uint8_t* src = img->data + (y * img->width + x) * 3;
+-                argb_t& dst = pm.at(x, y);
+-                dst.a = argb_t::max;
+-                dst.r = src[0];
+-                dst.g = src[1];
+-                dst.b = src[2];
++                for (size_t c = 0; c < 3; ++c) {
++                    dst[x * 4 + c] = float_to_half(*src++ / 65535.0F);
++                }
++                dst[x * 4 + 3] = one;
+             }
+         }
++        pm.set_color(ColorSpace::from_cicp(9, 8));
+ 
+         image->format = "RAW";
+ 
+diff --git a/src/formats/svg.cpp b/src/formats/svg.cpp
+index 4ef91ea..86f9f20 100644
+--- a/src/formats/svg.cpp
++++ b/src/formats/svg.cpp
+@@ -3,6 +3,7 @@
+ // Copyright (C) 2020 Artem Senichev <artemsen@gmail.com>
+ 
+ #include "../imageformat.hpp"
++#include "../render.hpp"
+ 
+ #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wpragmas"
+@@ -252,6 +253,22 @@ private:
+         void draw(const size_t, Pixmap& target, const double scale,
+                   const ssize_t x, const ssize_t y) override
+         {
++            if (target.gpu()) {
++                Pixmap tmp;
++                tmp.create(Pixmap::ARGB, target.width(), target.height());
++                draw(0, tmp, scale, x, y);
++                // cairo output is premultiplied
++                tmp.foreach([](argb_t& c) {
++                    if (c.a && c.a != argb_t::max) {
++                        c.r = c.r * argb_t::max / c.a;
++                        c.g = c.g * argb_t::max / c.a;
++                        c.b = c.b * argb_t::max / c.a;
++                    }
++                });
++                Render::self().draw(target, tmp, { .x = 0, .y = 0 }, 1.0);
++                return;
++            }
++
+             const Pixmap& pm = frames[0].pm;
+             const RsvgRectangle viewbox = {
+                 .x = x + scale * svg_offset_x,
+diff --git a/src/formats/tiff.cpp b/src/formats/tiff.cpp
+index 17ea257..05a515f 100644
+--- a/src/formats/tiff.cpp
++++ b/src/formats/tiff.cpp
+@@ -75,6 +75,12 @@ public:
+ 
+         pm.abgr_to_argb();
+ 
++        uint32_t icc_size = 0;
++        void* icc = nullptr;
++        if (TIFFGetField(tiff.get(), TIFFTAG_ICCPROFILE, &icc_size, &icc)) {
++            ColorSpace::apply_icc(pm, icc, icc_size);
++        }
++
+         image->format = "TIFF";
+ 
+         return image;
+diff --git a/src/formats/webp.cpp b/src/formats/webp.cpp
+index 3761ad0..cdddd04 100644
+--- a/src/formats/webp.cpp
++++ b/src/formats/webp.cpp
+@@ -87,6 +87,16 @@ public:
+             }
+         }
+ 
++        WebPChunkIterator icc;
++        if (WebPDemuxGetChunk(WebPAnimDecoderGetDemuxer(webp_dec.get()),
++                              "ICCP", 1, &icc)) {
++            for (auto& frame : image->frames) {
++                ColorSpace::apply_icc(frame.pm, icc.chunk.bytes,
++                                      icc.chunk.size);
++            }
++            WebPDemuxReleaseChunkIterator(&icc);
++        }
++
+         // set format description
+         image->format = "WebP";
+         if (webp_prop.format == 1) {
+diff --git a/src/gpu.hpp b/src/gpu.hpp
+new file mode 100644
+index 0000000..2a76f84
+--- /dev/null
++++ b/src/gpu.hpp
+@@ -0,0 +1,25 @@
++// SPDX-License-Identifier: MIT
++// GPU drawing backend interface.
++
++#pragma once
++
++#include "color.hpp"
++#include "geometry.hpp"
++
++class Pixmap;
++
++class Gpu {
++public:
++    virtual ~Gpu() = default;
++
++    virtual void fill(const Pixmap& dst, const Rectangle& rect,
++                      const argb_t& color, bool blend) = 0;
++    virtual void grid(const Pixmap& dst, const Rectangle& rect, size_t size,
++                      const argb_t& clr0, const argb_t& clr1) = 0;
++    virtual void mask(const Pixmap& dst, const Pixmap& src, const Point& pos,
++                      const argb_t& color) = 0;
++    virtual void draw(const Pixmap& dst, const Pixmap& src, const Point& pos,
++                      double scale, bool antialiasing) = 0;
++    virtual void background(const Pixmap& dst, const Rectangle& preserve,
++                            bool mirror) = 0;
++};
+diff --git a/src/gpu_gles.cpp b/src/gpu_gles.cpp
+new file mode 100644
+index 0000000..0ac1994
+--- /dev/null
++++ b/src/gpu_gles.cpp
+@@ -0,0 +1,911 @@
++// SPDX-License-Identifier: MIT
++// OpenGL ES renderer for Wayland surfaces.
++
++#include "gpu_gles.hpp"
++
++#include "log.hpp"
++
++#include <EGL/eglext.h>
++
++#include <algorithm>
++#include <cmath>
++#include <cstring>
++
++namespace {
++
++constexpr size_t BLUR_DOWNSCALE = 4;
++constexpr size_t TEXTURE_BUDGET = 1024UL * 1024 * 1024;
++
++constexpr Matrix3 SRGB_TO_BT2020 = { 0.6274040F, 0.3292820F, 0.0433136F,
++                                     0.0690970F, 0.9195400F, 0.0113612F,
++                                     0.0163916F, 0.0880132F, 0.8955950F };
++
++constexpr const char* VERTEX = R"(#version 300 es
++uniform vec2 viewport;
++uniform vec4 dst;
++uniform vec4 src;
++layout(location = 0) in vec2 vertex;
++out vec2 uv;
++void main() {
++    uv = mix(src.xy, src.zw, vertex);
++    vec2 pos = (dst.xy + vertex * dst.zw) / viewport;
++    gl_Position = vec4(pos * 2.0 - 1.0, 0.0, 1.0);
++})";
++
++// encoded pixels to premultiplied linear working space
++constexpr const char* FRAG_DECODE = R"(#version 300 es
++precision highp float;
++uniform sampler2D tex;
++uniform sampler2D table;
++uniform int transfer;
++uniform float gamma;
++uniform mat3 matrix;
++uniform vec3 luma;
++in vec2 uv;
++out vec4 color;
++const float TABLE_SIZE = 4096.0;
++vec3 eotf(vec3 v) {
++    if (transfer == 0) {
++        vec3 a = abs(v);
++        return sign(v) * mix(a / 12.92, pow((a + 0.055) / 1.055, vec3(2.4)),
++                             step(0.04045, a));
++    }
++    if (transfer == 2) {
++        return sign(v) * pow(abs(v), vec3(gamma));
++    }
++    if (transfer == 3) {
++        vec3 p = pow(clamp(v, 0.0, 1.0), vec3(1.0 / 78.84375));
++        vec3 l = pow(max(p - 0.8359375, 0.0) / (18.8515625 - 18.6875 * p),
++                     vec3(1.0 / 0.1593017578125));
++        return l * (10000.0 / 203.0);
++    }
++    if (transfer == 4) {
++        vec3 e = clamp(v, 0.0, 1.0);
++        vec3 s = mix(e * e / 3.0,
++                     (exp((e - 0.55991073) / 0.17883277) + 0.28466892) / 12.0,
++                     step(0.5, e));
++        return s * (1000.0 / 203.0) * pow(max(dot(luma, s), 1e-6), 0.2);
++    }
++    if (transfer == 5) {
++        vec3 x = clamp(v, 0.0, 1.0) * ((TABLE_SIZE - 1.0) / TABLE_SIZE) +
++            0.5 / TABLE_SIZE;
++        return vec3(texture(table, vec2(x.r, 0.5 / 3.0)).r,
++                    texture(table, vec2(x.g, 1.5 / 3.0)).r,
++                    texture(table, vec2(x.b, 2.5 / 3.0)).r);
++    }
++    return v;
++}
++void main() {
++    vec4 c = texture(tex, uv);
++    color = vec4(matrix * eotf(c.rgb) * c.a, c.a);
++})";
++
++constexpr const char* FRAG_TEXTURE = R"(#version 300 es
++precision highp float;
++uniform sampler2D tex;
++uniform mat3 matrix;
++uniform bool premultiplied;
++uniform float peak;
++uniform float headroom;
++in vec2 uv;
++out vec4 color;
++void main() {
++    vec4 c = texture(tex, uv);
++    vec3 rgb = c.rgb;
++    if (premultiplied) {
++        rgb = c.a > 0.0 ? rgb / c.a : vec3(0.0);
++    }
++    rgb = matrix * rgb;
++    if (peak > headroom) {
++        float knee = 0.75 * headroom;
++        float m = max(rgb.r, max(rgb.g, rgb.b));
++        if (m > knee) {
++            float range = headroom - knee;
++            float s = (m - knee) / range;
++            float sp = (peak - knee) / range;
++            rgb *= (knee + range * s * (1.0 + s / (sp * sp)) / (1.0 + s)) / m;
++        }
++    }
++    color = vec4(rgb * c.a, c.a);
++})";
++
++constexpr const char* FRAG_SOLID = R"(#version 300 es
++precision highp float;
++uniform vec4 fill;
++out vec4 color;
++void main() {
++    color = fill;
++})";
++
++constexpr const char* FRAG_MASK = R"(#version 300 es
++precision highp float;
++uniform sampler2D tex;
++uniform vec4 fill;
++in vec2 uv;
++out vec4 color;
++void main() {
++    float a = min(texture(tex, uv).r, fill.a);
++    color = vec4(fill.rgb * a, a);
++})";
++
++constexpr const char* FRAG_GRID = R"(#version 300 es
++precision highp float;
++uniform vec2 origin;
++uniform float size;
++uniform vec4 clr0;
++uniform vec4 clr1;
++out vec4 color;
++void main() {
++    vec2 cell = floor((gl_FragCoord.xy - origin) / size);
++    color = mod(cell.x + cell.y, 2.0) >= 1.0 ? clr0 : clr1;
++})";
++
++constexpr const char* FRAG_BLUR = R"(#version 300 es
++precision highp float;
++uniform sampler2D tex;
++uniform vec2 texel;
++in vec2 uv;
++out vec4 color;
++const int RADIUS = 12;
++const float SIGMA = 4.0;
++void main() {
++    vec4 sum = vec4(0.0);
++    float total = 0.0;
++    for (int i = -RADIUS; i <= RADIUS; ++i) {
++        float w = exp(-float(i * i) / (2.0 * SIGMA * SIGMA));
++        sum += texture(tex, uv + texel * float(i)) * w;
++        total += w;
++    }
++    color = sum / total;
++})";
++
++// working space to output encoding
++constexpr const char* FRAG_PRESENT = R"(#version 300 es
++precision highp float;
++uniform sampler2D tex;
++uniform bool pq;
++uniform mat3 matrix;
++uniform float headroom;
++uniform float dither;
++in vec2 uv;
++out vec4 color;
++float noise(vec2 p) {
++    return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
++}
++void main() {
++    vec4 c = texture(tex, uv);
++    vec3 rgb = c.a > 0.0 ? c.rgb / c.a : vec3(0.0);
++    rgb = clamp(matrix * rgb, 0.0, headroom);
++    vec3 enc;
++    if (pq) {
++        vec3 p = pow(rgb * (203.0 / 10000.0), vec3(0.1593017578125));
++        enc = pow((0.8359375 + 18.8515625 * p) / (1.0 + 18.6875 * p),
++                  vec3(78.84375));
++    } else {
++        enc = mix(rgb * 12.92, 1.055 * pow(rgb, vec3(1.0 / 2.4)) - 0.055,
++                  step(0.0031308, rgb));
++    }
++    float n = noise(gl_FragCoord.xy) +
++        noise(gl_FragCoord.xy + vec2(47.0, 17.0)) - 1.0;
++    enc = clamp(enc + n * dither, 0.0, 1.0);
++    color = vec4(enc * c.a, c.a);
++})";
++
++GLuint compile_shader(const GLenum type, const char* source)
++{
++    const GLuint shader = glCreateShader(type);
++    glShaderSource(shader, 1, &source, nullptr);
++    glCompileShader(shader);
++    GLint status = 0;
++    glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
++    if (!status) {
++        char info[1024] = {};
++        glGetShaderInfoLog(shader, sizeof(info), nullptr, info);
++        Log::error("Failed to compile shader: {}", info);
++        glDeleteShader(shader);
++        return 0;
++    }
++    return shader;
++}
++
++GLuint compile(const char* fragment)
++{
++    const GLuint vs = compile_shader(GL_VERTEX_SHADER, VERTEX);
++    const GLuint fs = compile_shader(GL_FRAGMENT_SHADER, fragment);
++    GLuint program = 0;
++    if (vs && fs) {
++        program = glCreateProgram();
++        glAttachShader(program, vs);
++        glAttachShader(program, fs);
++        glLinkProgram(program);
++        GLint status = 0;
++        glGetProgramiv(program, GL_LINK_STATUS, &status);
++        if (!status) {
++            Log::error("Failed to link shader program");
++            glDeleteProgram(program);
++            program = 0;
++        }
++    }
++    glDeleteShader(vs);
++    glDeleteShader(fs);
++    return program;
++}
++
++bool has_extension(const char* name)
++{
++    GLint num = 0;
++    glGetIntegerv(GL_NUM_EXTENSIONS, &num);
++    for (GLint i = 0; i < num; ++i) {
++        const auto* ext = reinterpret_cast<const char*>(
++            glGetStringi(GL_EXTENSIONS, static_cast<GLuint>(i)));
++        if (ext && std::strcmp(ext, name) == 0) {
++            return true;
++        }
++    }
++    return false;
++}
++
++float srgb_to_linear(const uint8_t value)
++{
++    const float v = value / 255.0F;
++    return v <= 0.04045F ? v / 12.92F : std::pow((v + 0.055F) / 1.055F, 2.4F);
++}
++
++void set_filter(const GLint min, const GLint mag)
++{
++    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, min);
++    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, mag);
++}
++
++void set_wrap(const GLint wrap)
++{
++    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap);
++    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap);
++}
++
++void set_bgra_swizzle(const bool opaque)
++{
++    // pixmap is BGRA in memory
++    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, GL_BLUE);
++    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED);
++    if (opaque) {
++        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, GL_ONE);
++    }
++}
++
++} // namespace
++
++GpuGles::~GpuGles()
++{
++    if (egl_display != EGL_NO_DISPLAY) {
++        eglMakeCurrent(egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
++                       EGL_NO_CONTEXT);
++        if (egl_surface != EGL_NO_SURFACE) {
++            eglDestroySurface(egl_display, egl_surface);
++        }
++        if (egl_context != EGL_NO_CONTEXT) {
++            eglDestroyContext(egl_display, egl_context);
++        }
++        eglTerminate(egl_display);
++    }
++    if (egl_window) {
++        wl_egl_window_destroy(egl_window);
++    }
++}
++
++bool GpuGles::initialize(wl_display* display, wl_surface* surface,
++                         const bool hdr)
++{
++    egl_display =
++        eglGetPlatformDisplay(EGL_PLATFORM_WAYLAND_KHR, display, nullptr);
++    if (egl_display == EGL_NO_DISPLAY ||
++        !eglInitialize(egl_display, nullptr, nullptr)) {
++        Log::error("Failed to initialize EGL display");
++        return false;
++    }
++    if (!eglBindAPI(EGL_OPENGL_ES_API)) {
++        Log::error("Failed to bind OpenGL ES API");
++        return false;
++    }
++
++    deep_color = hdr && choose_config(true);
++    if (!deep_color && !choose_config(false)) {
++        Log::error("No suitable EGL config found");
++        return false;
++    }
++
++    const EGLint context_attrs[] = { EGL_CONTEXT_MAJOR_VERSION, 3, EGL_NONE };
++    egl_context = eglCreateContext(egl_display, egl_config, EGL_NO_CONTEXT,
++                                   context_attrs);
++    if (egl_context == EGL_NO_CONTEXT) {
++        Log::error("Failed to create OpenGL ES 3 context");
++        return false;
++    }
++    if (!eglMakeCurrent(egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
++                        egl_context)) {
++        Log::error("Failed to activate OpenGL ES context");
++        return false;
++    }
++
++    const bool rc = init_gl();
++    // rendering may happen on another thread
++    eglMakeCurrent(egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE,
++                   EGL_NO_CONTEXT);
++
++    wl_surf = surface;
++
++    return rc;
++}
++
++bool GpuGles::choose_config(const bool hdr)
++{
++    const EGLint bits = hdr ? 10 : 8;
++    const EGLint alpha = hdr ? 2 : 8;
++    const EGLint attrs[] = {
++        EGL_SURFACE_TYPE,
++        EGL_WINDOW_BIT,
++        EGL_RENDERABLE_TYPE,
++        EGL_OPENGL_ES3_BIT,
++        EGL_RED_SIZE,
++        bits,
++        EGL_GREEN_SIZE,
++        bits,
++        EGL_BLUE_SIZE,
++        bits,
++        EGL_ALPHA_SIZE,
++        alpha,
++        EGL_NONE,
++    };
++    EGLint num = 0;
++    eglChooseConfig(egl_display, attrs, nullptr, 0, &num);
++    std::vector<EGLConfig> configs(num);
++    eglChooseConfig(egl_display, attrs, configs.data(), num, &num);
++    for (EGLConfig cfg : configs) {
++        EGLint r = 0;
++        EGLint g = 0;
++        EGLint b = 0;
++        EGLint a = 0;
++        eglGetConfigAttrib(egl_display, cfg, EGL_RED_SIZE, &r);
++        eglGetConfigAttrib(egl_display, cfg, EGL_GREEN_SIZE, &g);
++        eglGetConfigAttrib(egl_display, cfg, EGL_BLUE_SIZE, &b);
++        eglGetConfigAttrib(egl_display, cfg, EGL_ALPHA_SIZE, &a);
++        if (r == bits && g == bits && b == bits && a == alpha) {
++            egl_config = cfg;
++            return true;
++        }
++    }
++    return false;
++}
++
++bool GpuGles::init_gl()
++{
++    if (!has_extension("GL_EXT_color_buffer_half_float") &&
++        !has_extension("GL_EXT_color_buffer_float")) {
++        Log::error("Floating point render targets not supported");
++        return false;
++    }
++
++    prog_texture = compile(FRAG_TEXTURE);
++    prog_decode = compile(FRAG_DECODE);
++    prog_solid = compile(FRAG_SOLID);
++    prog_mask = compile(FRAG_MASK);
++    prog_grid = compile(FRAG_GRID);
++    prog_blur = compile(FRAG_BLUR);
++    prog_present = compile(FRAG_PRESENT);
++    if (!prog_texture || !prog_decode || !prog_solid || !prog_mask ||
++        !prog_grid || !prog_blur || !prog_present) {
++        return false;
++    }
++
++    use(prog_decode);
++    glUniform1i(uniform("table"), 1);
++
++    const float vertices[] = { 0, 0, 1, 0, 0, 1, 1, 1 };
++    glGenVertexArrays(1, &vao);
++    glBindVertexArray(vao);
++    glGenBuffers(1, &vbo);
++    glBindBuffer(GL_ARRAY_BUFFER, vbo);
++    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
++    glEnableVertexAttribArray(0);
++    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
++
++    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture);
++    glGenFramebuffers(1, &work_fbo);
++    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
++    glActiveTexture(GL_TEXTURE0);
++
++    return glGetError() == GL_NO_ERROR;
++}
++
++void GpuGles::begin(const size_t width, const size_t height)
++{
++    if (!egl_window) {
++        egl_window = wl_egl_window_create(wl_surf, static_cast<int>(width),
++                                          static_cast<int>(height));
++        egl_surface = eglCreatePlatformWindowSurface(egl_display, egl_config,
++                                                     egl_window, nullptr);
++        if (egl_surface == EGL_NO_SURFACE) {
++            Log::error("Failed to create EGL surface");
++        }
++        eglMakeCurrent(egl_display, egl_surface, egl_surface, egl_context);
++        eglSwapInterval(egl_display, 0);
++    } else {
++        if (width != frame_target.width || height != frame_target.height) {
++            wl_egl_window_resize(egl_window, static_cast<int>(width),
++                                 static_cast<int>(height), 0, 0);
++        }
++        eglMakeCurrent(egl_display, egl_surface, egl_surface, egl_context);
++    }
++
++    if (request_pq != output_pq) {
++        output_pq = request_pq;
++        if (on_encoding) {
++            on_encoding(output_pq);
++        }
++    }
++
++    resize(frame_target, width, height);
++    glBindFramebuffer(GL_FRAMEBUFFER, frame_target.fbo);
++    glViewport(0, 0, static_cast<GLsizei>(width), static_cast<GLsizei>(height));
++    glDisable(GL_SCISSOR_TEST);
++    glClearColor(0, 0, 0, 0);
++    glClear(GL_COLOR_BUFFER_BIT);
++
++    ++frame;
++}
++
++void GpuGles::set_output(const bool hdr, const float value)
++{
++    headroom = hdr ? std::max(value, 1.0F) : 1.0F;
++    request_pq = hdr && deep_color;
++}
++
++void GpuGles::end()
++{
++    const auto width = static_cast<float>(frame_target.width);
++    const auto height = static_cast<float>(frame_target.height);
++
++    glBindFramebuffer(GL_FRAMEBUFFER, 0);
++    glViewport(0, 0, static_cast<GLsizei>(width),
++               static_cast<GLsizei>(height));
++    glDisable(GL_SCISSOR_TEST);
++    glDisable(GL_BLEND);
++
++    use(prog_present);
++    glBindTexture(GL_TEXTURE_2D, frame_target.tex);
++    set_filter(GL_NEAREST, GL_NEAREST);
++    glUniform1i(uniform("pq"), output_pq);
++    glUniformMatrix3fv(uniform("matrix"), 1, GL_TRUE,
++                       output_pq ? SRGB_TO_BT2020.data()
++                                 : ColorSpace::IDENTITY.data());
++    glUniform1f(uniform("headroom"), output_pq ? headroom.load() : 1.0F);
++    glUniform1f(uniform("dither"), deep_color ? 1.0F / 1023 : 1.0F / 255);
++    // offscreen frame is stored top-down
++    quad(0, 0, width, height, 0, 1, 1, 0);
++
++    if (!eglSwapBuffers(egl_display, egl_surface)) {
++        Log::error("Failed to swap EGL buffers");
++    }
++
++    evict();
++}
++
++void GpuGles::fill(const Pixmap& dst, const Rectangle& rect,
++                   const argb_t& color, const bool blend)
++{
++    if (!rect) {
++        return;
++    }
++
++    bind(dst);
++    use(prog_solid);
++    if (blend) {
++        glEnable(GL_BLEND);
++    } else {
++        glDisable(GL_BLEND);
++    }
++    set_color("fill", color, true);
++
++    const Point org = dst.origin();
++    quad(org.x + rect.x, org.y + rect.y, rect.width, rect.height);
++}
++
++void GpuGles::grid(const Pixmap& dst, const Rectangle& rect, const size_t size,
++                   const argb_t& clr0, const argb_t& clr1)
++{
++    const Rectangle visible = rect.intersect({ 0, 0, dst.width(), dst.height() });
++    if (!visible) {
++        return;
++    }
++
++    bind(dst);
++    use(prog_grid);
++    glDisable(GL_BLEND);
++
++    const Point org = dst.origin();
++    const float x = org.x + visible.x;
++    const float y = org.y + visible.y;
++    glUniform2f(uniform("origin"), x, y);
++    glUniform1f(uniform("size"), static_cast<float>(std::max(size, 1UL)));
++    set_color("clr0", clr0, true);
++    set_color("clr1", clr1, true);
++
++    quad(x, y, visible.width, visible.height);
++}
++
++void GpuGles::mask(const Pixmap& dst, const Pixmap& src, const Point& pos,
++                   const argb_t& color)
++{
++    if (!src) {
++        return;
++    }
++
++    const Texture& texture = upload(src);
++
++    bind(dst);
++    use(prog_mask);
++    glEnable(GL_BLEND);
++    set_color("fill", color, false);
++
++    const Point org = dst.origin();
++    for (const Tile& tile : texture.tiles) {
++        glBindTexture(GL_TEXTURE_2D, tile.tex);
++        set_filter(GL_NEAREST, GL_NEAREST);
++        quad(org.x + pos.x + tile.rect.x, org.y + pos.y + tile.rect.y,
++             tile.rect.width, tile.rect.height);
++    }
++}
++
++void GpuGles::draw(const Pixmap& dst, const Pixmap& src, const Point& pos,
++                   const double scale, const bool antialiasing)
++{
++    if (!src || scale <= 0) {
++        return;
++    }
++
++    Texture& texture = upload(src);
++
++    const bool mipmap = antialiasing && scale < 1.0;
++    if (mipmap && !texture.mipmaps) {
++        for (const Tile& tile : texture.tiles) {
++            glBindTexture(GL_TEXTURE_2D, tile.tex);
++            glGenerateMipmap(GL_TEXTURE_2D);
++        }
++        texture.mipmaps = true;
++        texture.bytes += texture.bytes / 3;
++    }
++
++    GLint min_filter = GL_NEAREST;
++    GLint mag_filter = GL_NEAREST;
++    if (antialiasing) {
++        min_filter = mipmap ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR;
++        mag_filter = GL_LINEAR;
++    }
++
++    bind(dst);
++    use(prog_texture);
++    glUniformMatrix3fv(uniform("matrix"), 1, GL_TRUE, texture.matrix.data());
++    glUniform1i(uniform("premultiplied"), texture.premultiplied);
++    glUniform1f(uniform("peak"), texture.peak);
++    glUniform1f(uniform("headroom"), output_pq ? headroom.load() : 1.0F);
++    glEnable(GL_BLEND);
++
++    const Point org = dst.origin();
++    for (const Tile& tile : texture.tiles) {
++        glBindTexture(GL_TEXTURE_2D, tile.tex);
++        set_filter(min_filter, mag_filter);
++        quad(org.x + pos.x + tile.rect.x * scale,
++             org.y + pos.y + tile.rect.y * scale, tile.rect.width * scale,
++             tile.rect.height * scale);
++    }
++}
++
++void GpuGles::background(const Pixmap& dst, const Rectangle& preserve,
++                         const bool mirror)
++{
++    const size_t width = dst.width();
++    const size_t height = dst.height();
++    const Rectangle full { 0, 0, width, height };
++    const Rectangle exclude = full.intersect(preserve);
++    if (!exclude) {
++        return;
++    }
++    const Point org = dst.origin();
++
++    resize(snapshot, exclude.width, exclude.height);
++    glDisable(GL_SCISSOR_TEST);
++    glBindFramebuffer(GL_READ_FRAMEBUFFER, frame_target.fbo);
++    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, snapshot.fbo);
++    const auto sx = static_cast<GLint>(org.x + exclude.x);
++    const auto sy = static_cast<GLint>(org.y + exclude.y);
++    glBlitFramebuffer(sx, sy, sx + static_cast<GLint>(exclude.width),
++                      sy + static_cast<GLint>(exclude.height), 0, 0,
++                      static_cast<GLint>(exclude.width),
++                      static_cast<GLint>(exclude.height), GL_COLOR_BUFFER_BIT,
++                      GL_NEAREST);
++    glBindTexture(GL_TEXTURE_2D, snapshot.tex);
++    glGenerateMipmap(GL_TEXTURE_2D);
++    set_filter(GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR);
++    set_wrap(mirror ? GL_MIRRORED_REPEAT : GL_CLAMP_TO_EDGE);
++
++    const size_t bw = std::max(width / BLUR_DOWNSCALE, 1UL);
++    const size_t bh = std::max(height / BLUR_DOWNSCALE, 1UL);
++    resize(blur_target[0], bw, bh);
++    resize(blur_target[1], bw, bh);
++
++    glDisable(GL_BLEND);
++    glBindFramebuffer(GL_FRAMEBUFFER, blur_target[0].fbo);
++    glViewport(0, 0, static_cast<GLsizei>(bw), static_cast<GLsizei>(bh));
++    use(prog_texture);
++    glUniform2f(uniform("viewport"), width, height);
++    glUniformMatrix3fv(uniform("matrix"), 1, GL_TRUE,
++                       ColorSpace::IDENTITY.data());
++    glUniform1i(uniform("premultiplied"), 1);
++    glUniform1f(uniform("peak"), 1);
++    glUniform1f(uniform("headroom"), 1);
++    glBindTexture(GL_TEXTURE_2D, snapshot.tex);
++
++    const float fw = width;
++    const float fh = height;
++    if (mirror) {
++        const float ew = exclude.width;
++        const float eh = exclude.height;
++        quad(0, 0, fw, fh, -exclude.x / ew, -exclude.y / eh,
++             (fw - exclude.x) / ew, (fh - exclude.y) / eh);
++    } else {
++        const float scale = std::max(fw / preserve.width, fh / preserve.height);
++        const float sw = exclude.width * scale;
++        const float sh = exclude.height * scale;
++        const float x = fw / 2 - sw / 2;
++        const float y = fh / 2 - sh / 2;
++        quad(0, 0, fw, fh, -x / sw, -y / sh, (fw - x) / sw, (fh - y) / sh);
++    }
++
++    use(prog_blur);
++    glUniform2f(uniform("viewport"), width, height);
++    glBindFramebuffer(GL_FRAMEBUFFER, blur_target[1].fbo);
++    glBindTexture(GL_TEXTURE_2D, blur_target[0].tex);
++    glUniform2f(uniform("texel"), 1.0F / bw, 0);
++    quad(0, 0, fw, fh);
++    glBindFramebuffer(GL_FRAMEBUFFER, blur_target[0].fbo);
++    glBindTexture(GL_TEXTURE_2D, blur_target[1].tex);
++    glUniform2f(uniform("texel"), 0, 1.0F / bh);
++    quad(0, 0, fw, fh);
++
++    bind(dst);
++    use(prog_texture);
++    glUniformMatrix3fv(uniform("matrix"), 1, GL_TRUE,
++                       ColorSpace::IDENTITY.data());
++    glUniform1i(uniform("premultiplied"), 1);
++    glUniform1f(uniform("peak"), 1);
++    glUniform1f(uniform("headroom"), 1);
++    glBindTexture(GL_TEXTURE_2D, blur_target[0].tex);
++    const auto [top, bottom, left, right] = full.cutout(exclude);
++    for (const Rectangle& r : { top, bottom, left, right }) {
++        if (r) {
++            quad(org.x + r.x, org.y + r.y, r.width, r.height, r.x / fw,
++                 r.y / fh, (r.x + r.width) / fw, (r.y + r.height) / fh);
++        }
++    }
++}
++
++GpuGles::Texture& GpuGles::upload(const Pixmap& pm)
++{
++    const auto [it, inserted] = textures.try_emplace(pm.id());
++    Texture& texture = it->second;
++    texture.frame = frame;
++    if (!inserted) {
++        return texture;
++    }
++
++    static const ColorSpace srgb;
++    const ColorSpace& cs = pm.color() ? *pm.color() : srgb;
++    const bool gs = pm.format() == Pixmap::GS;
++    const bool f16 = pm.format() == Pixmap::F16;
++    const bool direct =
++        gs || (!f16 && cs.transfer == ColorSpace::Transfer::SRGB);
++
++    texture.peak = cs.peak;
++    texture.matrix = direct ? cs.matrix : ColorSpace::IDENTITY;
++    texture.premultiplied = !direct;
++
++    GLuint table = 0;
++    if (!direct && cs.transfer == ColorSpace::Transfer::Table) {
++        glGenTextures(1, &table);
++        glBindTexture(GL_TEXTURE_2D, table);
++        glTexImage2D(GL_TEXTURE_2D, 0, GL_R16F, ColorSpace::TABLE_SIZE, 3, 0,
++                     GL_RED, GL_FLOAT, cs.table.data());
++        set_filter(GL_LINEAR, GL_LINEAR);
++        set_wrap(GL_CLAMP_TO_EDGE);
++    }
++
++    const size_t bpp = gs ? 1 : (f16 ? 4 * sizeof(uint16_t) : sizeof(argb_t));
++    const auto max = static_cast<size_t>(max_texture);
++
++    for (size_t y = 0; y < pm.height(); y += max) {
++        for (size_t x = 0; x < pm.width(); x += max) {
++            const size_t w = std::min(max, pm.width() - x);
++            const size_t h = std::min(max, pm.height() - y);
++            const Rectangle rect(static_cast<ssize_t>(x),
++                                 static_cast<ssize_t>(y), w, h);
++            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
++            glPixelStorei(GL_UNPACK_ROW_LENGTH,
++                          static_cast<GLint>(pm.stride() / bpp));
++            Tile tile { .tex = 0, .rect = rect };
++            if (!direct) {
++                tile.tex = decode(pm, rect, cs, table);
++                texture.bytes += w * h * 8;
++            } else {
++                glGenTextures(1, &tile.tex);
++                glBindTexture(GL_TEXTURE_2D, tile.tex);
++                if (gs) {
++                    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, w, h, 0, GL_RED,
++                                 GL_UNSIGNED_BYTE, pm.ptr(x, y));
++                    texture.bytes += w * h;
++                } else {
++                    glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, w, h, 0,
++                                 GL_RGBA, GL_UNSIGNED_BYTE, pm.ptr(x, y));
++                    set_bgra_swizzle(pm.format() == Pixmap::RGB);
++                    texture.bytes += w * h * 4;
++                }
++                set_wrap(GL_CLAMP_TO_EDGE);
++            }
++            texture.tiles.push_back(tile);
++        }
++    }
++
++    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
++    if (table) {
++        glDeleteTextures(1, &table);
++    }
++
++    return texture;
++}
++
++GLuint GpuGles::decode(const Pixmap& pm, const Rectangle& rect,
++                       const ColorSpace& cs, const GLuint table)
++{
++    const auto w = static_cast<GLsizei>(rect.width);
++    const auto h = static_cast<GLsizei>(rect.height);
++
++    GLuint src = 0;
++    glGenTextures(1, &src);
++    glBindTexture(GL_TEXTURE_2D, src);
++    if (pm.format() == Pixmap::F16) {
++        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA,
++                     GL_HALF_FLOAT, pm.ptr(rect.x, rect.y));
++    } else {
++        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA,
++                     GL_UNSIGNED_BYTE, pm.ptr(rect.x, rect.y));
++        set_bgra_swizzle(pm.format() == Pixmap::RGB);
++    }
++    set_filter(GL_NEAREST, GL_NEAREST);
++    set_wrap(GL_CLAMP_TO_EDGE);
++
++    GLuint dst = 0;
++    glGenTextures(1, &dst);
++    glBindTexture(GL_TEXTURE_2D, dst);
++    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_HALF_FLOAT,
++                 nullptr);
++    set_filter(GL_LINEAR, GL_LINEAR);
++    set_wrap(GL_CLAMP_TO_EDGE);
++
++    glBindFramebuffer(GL_FRAMEBUFFER, work_fbo);
++    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
++                           dst, 0);
++    glViewport(0, 0, w, h);
++    glDisable(GL_SCISSOR_TEST);
++    glDisable(GL_BLEND);
++
++    use(prog_decode);
++    glUniform2f(uniform("viewport"), rect.width, rect.height);
++    glUniform1i(uniform("transfer"), static_cast<GLint>(cs.transfer));
++    glUniform1f(uniform("gamma"), cs.gamma);
++    glUniformMatrix3fv(uniform("matrix"), 1, GL_TRUE, cs.matrix.data());
++    glUniform3f(uniform("luma"), cs.luma[0], cs.luma[1], cs.luma[2]);
++    if (table) {
++        glActiveTexture(GL_TEXTURE1);
++        glBindTexture(GL_TEXTURE_2D, table);
++        glActiveTexture(GL_TEXTURE0);
++    }
++    glBindTexture(GL_TEXTURE_2D, src);
++    quad(0, 0, rect.width, rect.height);
++
++    glDeleteTextures(1, &src);
++
++    return dst;
++}
++
++void GpuGles::evict()
++{
++    size_t total = 0;
++    std::vector<decltype(textures)::iterator> unused;
++    for (auto it = textures.begin(); it != textures.end(); ++it) {
++        total += it->second.bytes;
++        if (it->second.frame != frame) {
++            unused.push_back(it);
++        }
++    }
++
++    std::ranges::sort(unused, [](const auto& a, const auto& b) {
++        return a->second.frame < b->second.frame;
++    });
++
++    for (const auto& it : unused) {
++        if (total <= TEXTURE_BUDGET) {
++            break;
++        }
++        total -= it->second.bytes;
++        for (const Tile& tile : it->second.tiles) {
++            glDeleteTextures(1, &tile.tex);
++        }
++        textures.erase(it);
++    }
++}
++
++void GpuGles::resize(Target& target, const size_t width, const size_t height)
++{
++    if (target.fbo && target.width == width && target.height == height) {
++        return;
++    }
++    if (!target.fbo) {
++        glGenFramebuffers(1, &target.fbo);
++        glGenTextures(1, &target.tex);
++    }
++
++    glBindTexture(GL_TEXTURE_2D, target.tex);
++    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, static_cast<GLsizei>(width),
++                 static_cast<GLsizei>(height), 0, GL_RGBA, GL_HALF_FLOAT,
++                 nullptr);
++    set_filter(GL_LINEAR, GL_LINEAR);
++    set_wrap(GL_CLAMP_TO_EDGE);
++
++    glBindFramebuffer(GL_FRAMEBUFFER, target.fbo);
++    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
++                           target.tex, 0);
++
++    target.width = width;
++    target.height = height;
++}
++
++void GpuGles::bind(const Pixmap& dst)
++{
++    const Point org = dst.origin();
++    glBindFramebuffer(GL_FRAMEBUFFER, frame_target.fbo);
++    glViewport(0, 0, static_cast<GLsizei>(frame_target.width),
++               static_cast<GLsizei>(frame_target.height));
++    glEnable(GL_SCISSOR_TEST);
++    glScissor(static_cast<GLint>(org.x), static_cast<GLint>(org.y),
++              static_cast<GLsizei>(dst.width()),
++              static_cast<GLsizei>(dst.height()));
++}
++
++void GpuGles::use(const GLuint program)
++{
++    glUseProgram(program);
++    current = program;
++    glUniform2f(uniform("viewport"), frame_target.width, frame_target.height);
++}
++
++void GpuGles::set_color(const char* name, const argb_t& color,
++                        const bool premultiply)
++{
++    const float a = color.a / 255.0F;
++    const float k = premultiply ? a : 1.0F;
++    glUniform4f(uniform(name), srgb_to_linear(color.r) * k,
++                srgb_to_linear(color.g) * k, srgb_to_linear(color.b) * k, a);
++}
++
++void GpuGles::quad(const float x, const float y, const float w, const float h,
++                   const float u0, const float v0, const float u1,
++                   const float v1)
++{
++    glUniform4f(uniform("dst"), x, y, w, h);
++    glUniform4f(uniform("src"), u0, v0, u1, v1);
++    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
++}
++
++GLint GpuGles::uniform(const char* name) const
++{
++    return glGetUniformLocation(current, name);
++}
+diff --git a/src/gpu_gles.hpp b/src/gpu_gles.hpp
+new file mode 100644
+index 0000000..c00d65d
+--- /dev/null
++++ b/src/gpu_gles.hpp
+@@ -0,0 +1,107 @@
++// SPDX-License-Identifier: MIT
++// OpenGL ES renderer for Wayland surfaces.
++
++#pragma once
++
++#include "pixmap.hpp"
++
++#include <EGL/egl.h>
++#include <GLES3/gl3.h>
++#include <wayland-egl.h>
++
++#include <atomic>
++#include <functional>
++#include <unordered_map>
++#include <vector>
++
++class GpuGles : public Gpu {
++public:
++    ~GpuGles() override;
++
++    bool initialize(wl_display* display, wl_surface* surface, bool hdr);
++    void begin(size_t width, size_t height);
++    void end();
++
++    [[nodiscard]] bool hdr_capable() const { return deep_color; }
++    void set_output(bool hdr, float value);
++
++    std::function<void(bool)> on_encoding;
++
++    void fill(const Pixmap& dst, const Rectangle& rect, const argb_t& color,
++              bool blend) override;
++    void grid(const Pixmap& dst, const Rectangle& rect, size_t size,
++              const argb_t& clr0, const argb_t& clr1) override;
++    void mask(const Pixmap& dst, const Pixmap& src, const Point& pos,
++              const argb_t& color) override;
++    void draw(const Pixmap& dst, const Pixmap& src, const Point& pos,
++              double scale, bool antialiasing) override;
++    void background(const Pixmap& dst, const Rectangle& preserve,
++                    bool mirror) override;
++
++private:
++    struct Tile {
++        GLuint tex;
++        Rectangle rect;
++    };
++    struct Texture {
++        std::vector<Tile> tiles;
++        Matrix3 matrix = ColorSpace::IDENTITY;
++        float peak = 1.0F;
++        bool premultiplied = false;
++        bool mipmaps = false;
++        size_t bytes = 0;
++        uint64_t frame = 0;
++    };
++    struct Target {
++        GLuint fbo = 0;
++        GLuint tex = 0;
++        size_t width = 0;
++        size_t height = 0;
++    };
++
++    bool choose_config(bool hdr);
++    bool init_gl();
++    Texture& upload(const Pixmap& pm);
++    GLuint decode(const Pixmap& pm, const Rectangle& rect,
++                  const ColorSpace& cs, GLuint table);
++    void evict();
++    void resize(Target& target, size_t width, size_t height);
++    void bind(const Pixmap& dst);
++    void use(GLuint program);
++    void set_color(const char* name, const argb_t& color, bool premultiply);
++    void quad(float x, float y, float w, float h, float u0 = 0, float v0 = 0,
++              float u1 = 1, float v1 = 1);
++    GLint uniform(const char* name) const;
++
++    EGLDisplay egl_display = EGL_NO_DISPLAY;
++    EGLConfig egl_config = nullptr;
++    EGLContext egl_context = EGL_NO_CONTEXT;
++    EGLSurface egl_surface = EGL_NO_SURFACE;
++    wl_surface* wl_surf = nullptr;
++    wl_egl_window* egl_window = nullptr;
++
++    bool deep_color = false;
++    bool output_pq = false;
++    std::atomic<bool> request_pq = false;
++    std::atomic<float> headroom = 1.0F;
++
++    GLuint prog_texture = 0;
++    GLuint prog_decode = 0;
++    GLuint prog_solid = 0;
++    GLuint prog_mask = 0;
++    GLuint prog_grid = 0;
++    GLuint prog_blur = 0;
++    GLuint prog_present = 0;
++    GLuint current = 0;
++    GLuint vao = 0;
++    GLuint vbo = 0;
++    GLuint work_fbo = 0;
++    GLint max_texture = 0;
++
++    Target frame_target;
++    Target snapshot;
++    Target blur_target[2];
++
++    std::unordered_map<uint64_t, Texture> textures;
++    uint64_t frame = 0;
++};
+diff --git a/src/imageformat.cpp b/src/imageformat.cpp
+index f289450..f2fd872 100644
+--- a/src/imageformat.cpp
++++ b/src/imageformat.cpp
+@@ -44,6 +44,10 @@ Pixmap ImageFormat::preview(const Data& data, const size_t sz,
+ Pixmap ImageFormat::make_thumb(const Pixmap& pm, const size_t sz,
+                                const bool fill)
+ {
++    if (ColorSpace::needs_conversion(pm)) {
++        return make_thumb(ColorSpace::to_srgb(pm), sz, fill);
++    }
++
+     // get target scale
+     const double scale_w = static_cast<double>(sz) / pm.width();
+     const double scale_h = static_cast<double>(sz) / pm.height();
+diff --git a/src/pixmap.cpp b/src/pixmap.cpp
+index bf08df4..d6bde78 100644
+--- a/src/pixmap.cpp
++++ b/src/pixmap.cpp
+@@ -4,6 +4,8 @@
+ 
+ #include "pixmap.hpp"
+ 
++#include <atomic>
++
+ Pixmap::Pixmap(const Format format, const size_t width, const size_t height,
+                void* data) noexcept
+ {
+@@ -25,11 +27,18 @@ void Pixmap::create(const Format format, const size_t width,
+         case Format::GS:
+             pm_bpp = sizeof(uint8_t);
+             break;
++        case Format::F16:
++            pm_bpp = 4 * sizeof(uint16_t);
++            break;
+     }
+ 
+     pm_stride = pm_width * pm_bpp;
+ 
+     pm_ext = nullptr;
++    pm_gpu = nullptr;
++    pm_origin = { 0, 0 };
++    pm_id = 0;
++    pm_color.reset();
+     pm_data.resize(pm_height * pm_stride);
+ }
+ 
+@@ -48,14 +57,36 @@ void Pixmap::attach(const Format format, const size_t width,
+         case Format::GS:
+             pm_bpp = sizeof(uint8_t);
+             break;
++        case Format::F16:
++            pm_bpp = 4 * sizeof(uint16_t);
++            break;
+     }
+ 
+     pm_stride = stride ? stride : pm_width * pm_bpp;
+ 
+     pm_ext = reinterpret_cast<uint8_t*>(data);
++    pm_gpu = nullptr;
++    pm_origin = { 0, 0 };
++    pm_id = 0;
++    pm_color.reset();
+     pm_data.clear();
+ }
+ 
++void Pixmap::attach(Gpu* gpu, const size_t width, const size_t height)
++{
++    attach(Format::ARGB, width, height, nullptr);
++    pm_gpu = gpu;
++}
++
++uint64_t Pixmap::id() const
++{
++    static std::atomic<uint64_t> counter;
++    if (!pm_id) {
++        pm_id = ++counter;
++    }
++    return pm_id;
++}
++
+ void Pixmap::free()
+ {
+     pm_width = 0;
+@@ -63,6 +94,8 @@ void Pixmap::free()
+     pm_bpp = 0;
+     pm_stride = 0;
+     pm_ext = nullptr;
++    pm_gpu = nullptr;
++    pm_id = 0;
+     pm_data.clear();
+ }
+ 
+@@ -73,7 +106,10 @@ Pixmap Pixmap::submap(const Rectangle& rect)
+     const Rectangle full { 0, 0, pm_width, pm_height };
+     const Rectangle visible = full.intersect(rect);
+ 
+-    if (visible) {
++    if (visible && pm_gpu) {
++        sub.attach(pm_gpu, visible.width, visible.height);
++        sub.pm_origin = pm_origin + Point(visible.x, visible.y);
++    } else if (visible) {
+         sub.attach(pm_format, visible.width, visible.height,
+                    ptr(visible.x, visible.y), pm_stride);
+     }
+@@ -83,8 +119,6 @@ Pixmap Pixmap::submap(const Rectangle& rect)
+ 
+ void Pixmap::flip_vertical()
+ {
+-    assert(format() == Format::RGB || format() == Format::ARGB);
+-
+     const size_t line_sz = pm_width * pm_bpp;
+     std::vector<uint8_t> buffer(line_sz);
+ 
+@@ -100,10 +134,8 @@ void Pixmap::flip_vertical()
+ 
+ void Pixmap::flip_horizontal()
+ {
+-    assert(format() == Format::RGB || format() == Format::ARGB);
+-
+     const size_t x_end = pm_width / 2;
+-    uint8_t swap[sizeof(argb_t)];
++    uint8_t swap[4 * sizeof(uint16_t)];
+ 
+     for (size_t y = 0; y < pm_height; ++y) {
+         for (size_t x = 0; x < x_end; ++x) {
+@@ -118,51 +150,46 @@ void Pixmap::flip_horizontal()
+ 
+ void Pixmap::rotate(const size_t angle)
+ {
+-    assert(format() == Format::RGB || format() == Format::ARGB);
+     assert(angle == 90 || angle == 180 || angle == 270);
+ 
+-    if (angle == 180) {
+-        const size_t total_pixels = pm_width * pm_height;
+-        const size_t half_pixels = total_pixels / 2;
+-        argb_t* pixdata = &at(0, 0);
+-        for (size_t i = 0; i < half_pixels; ++i) {
+-            argb_t* color1 = &pixdata[i];
+-            argb_t* color2 = &pixdata[total_pixels - i - 1];
+-            const argb_t swap = *color1;
+-            *color1 = *color2;
+-            *color2 = swap;
+-        }
+-    } else if (angle == 90 || angle == 270) {
+-        // create temporary buffer with origin data
+-        Pixmap origin;
+-        origin.create(pm_format, pm_width, pm_height);
+-        std::memcpy(origin.ptr(0, 0), ptr(0, 0), pm_height * pm_stride);
++    // create temporary buffer with origin data
++    Pixmap origin;
++    origin.create(pm_format, pm_width, pm_height);
++    for (size_t y = 0; y < pm_height; ++y) {
++        std::memcpy(origin.ptr(0, y), ptr(0, y), pm_width * pm_bpp);
++    }
+ 
+-        // change orientation
++    if (angle != 180) {
+         pm_width = origin.pm_height;
+         pm_height = origin.pm_width;
+         pm_stride = pm_width * pm_bpp;
++    }
+ 
+-        // rotate
+-        for (size_t y = 0; y < pm_height; ++y) {
+-            for (size_t x = 0; x < pm_width; ++x) {
+-                size_t origin_x;
+-                size_t origin_y;
+-                if (angle == 90) {
+-                    origin_x = y;
+-                    origin_y = origin.pm_height - 1 - x;
+-                } else {
+-                    origin_x = origin.pm_width - 1 - y;
+-                    origin_y = x;
+-                }
+-                at(x, y) = origin.at(origin_x, origin_y);
++    for (size_t y = 0; y < pm_height; ++y) {
++        for (size_t x = 0; x < pm_width; ++x) {
++            size_t origin_x;
++            size_t origin_y;
++            if (angle == 90) {
++                origin_x = y;
++                origin_y = origin.pm_height - 1 - x;
++            } else if (angle == 270) {
++                origin_x = origin.pm_width - 1 - y;
++                origin_y = x;
++            } else {
++                origin_x = origin.pm_width - 1 - x;
++                origin_y = origin.pm_height - 1 - y;
+             }
++            std::memcpy(ptr(x, y), origin.ptr(origin_x, origin_y), pm_bpp);
+         }
+     }
+ }
+ 
+ void Pixmap::fill(const Rectangle& rect, const argb_t& color)
+ {
++    if (pm_gpu) {
++        pm_gpu->fill(*this, rect, color, false);
++        return;
++    }
+     assert(format() == Format::RGB || format() == Format::ARGB);
+ 
+     const Rectangle visible = rect.intersect({ 0, 0, pm_width, pm_height });
+@@ -186,6 +213,10 @@ void Pixmap::fill(const Rectangle& rect, const argb_t& color)
+ 
+ void Pixmap::fill_blend(const Rectangle& rect, const argb_t& color)
+ {
++    if (pm_gpu) {
++        pm_gpu->fill(*this, rect, color, true);
++        return;
++    }
+     assert(format() == Format::ARGB);
+ 
+     const Rectangle visible = rect.intersect({ 0, 0, pm_width, pm_height });
+@@ -205,6 +236,10 @@ void Pixmap::fill_blend(const Rectangle& rect, const argb_t& color)
+ void Pixmap::grid(const Rectangle& rect, const size_t size, const argb_t& clr0,
+                   const argb_t& clr1)
+ {
++    if (pm_gpu) {
++        pm_gpu->grid(*this, rect, size, clr0, clr1);
++        return;
++    }
+     assert(format() == Format::ARGB);
+ 
+     const Rectangle visible = rect.intersect({ 0, 0, pm_width, pm_height });
+@@ -265,6 +300,10 @@ void Pixmap::rectangle(const Rectangle& rect, const argb_t& color,
+ 
+ void Pixmap::mask(const Pixmap& pm, const Point& pos, const argb_t& color)
+ {
++    if (pm_gpu) {
++        pm_gpu->mask(*this, pm, pos, color);
++        return;
++    }
+     assert(format() == Format::RGB || format() == Format::ARGB);
+     assert(pm.format() == Format::GS);
+ 
+@@ -295,6 +334,10 @@ void Pixmap::mask(const Pixmap& pm, const Point& pos, const argb_t& color)
+ 
+ void Pixmap::copy(const Pixmap& pm, const Point& pos)
+ {
++    if (pm_gpu) {
++        pm_gpu->draw(*this, pm, pos, 1.0, false);
++        return;
++    }
+     assert(format() == Format::RGB || format() == Format::ARGB);
+     assert(pm.format() == Format::RGB || pm.format() == Format::ARGB);
+ 
+@@ -317,6 +360,10 @@ void Pixmap::copy(const Pixmap& pm, const Point& pos)
+ 
+ void Pixmap::blend(const Pixmap& pm, const Point& pos)
+ {
++    if (pm_gpu) {
++        pm_gpu->draw(*this, pm, pos, 1.0, false);
++        return;
++    }
+     assert(format() == Format::RGB || format() == Format::ARGB);
+     assert(pm.format() == Format::RGB || pm.format() == Format::ARGB);
+     assert(format() == Format::ARGB || pm.format() == Format::ARGB);
+diff --git a/src/pixmap.hpp b/src/pixmap.hpp
+index bac81a1..fa9b04a 100644
+--- a/src/pixmap.hpp
++++ b/src/pixmap.hpp
+@@ -5,7 +5,9 @@
+ #pragma once
+ 
+ #include "color.hpp"
++#include "colorspace.hpp"
+ #include "geometry.hpp"
++#include "gpu.hpp"
+ 
+ #include <cassert>
+ #include <cstring>
+@@ -15,7 +17,7 @@
+ class Pixmap {
+ public:
+     /** Pixmap formats. */
+-    enum Format : uint8_t { GS, RGB, ARGB };
++    enum Format : uint8_t { GS, RGB, ARGB, F16 };
+ 
+     /** Default constructor. */
+     Pixmap() = default;
+@@ -46,6 +48,8 @@ public:
+     void attach(const Format format, const size_t width, const size_t height,
+                 void* data, const size_t stride = 0);
+ 
++    void attach(Gpu* gpu, const size_t width, const size_t height);
++
+     /**
+      * Free pixmap.
+      */
+@@ -75,6 +79,15 @@ public:
+      */
+     [[nodiscard]] Format format() const { return pm_format; }
+ 
++    [[nodiscard]] Gpu* gpu() const { return pm_gpu; }
++
++    [[nodiscard]] const ColorSpace::Ptr& color() const { return pm_color; }
++    void set_color(ColorSpace::Ptr color) { pm_color = std::move(color); }
++
++    [[nodiscard]] Point origin() const { return pm_origin; }
++
++    [[nodiscard]] uint64_t id() const;
++
+     /**
+      * Check if there is data in the pixmap.
+      */
+@@ -103,6 +116,7 @@ public:
+         assert(x < pm_width);
+         assert(y < pm_height);
+         assert(pm_ext || !pm_data.empty());
++        pm_id = 0;
+         const size_t offset = y * pm_stride + x * pm_bpp;
+         return pm_ext ? &pm_ext[offset] : &pm_data[offset];
+     }
+@@ -232,4 +246,8 @@ private:
+     size_t pm_stride = 0;         ///< Row size in bytes
+     std::vector<uint8_t> pm_data; ///< Pixel data (owned)
+     uint8_t* pm_ext = nullptr;    ///< Pixel data (attached)
++    Gpu* pm_gpu = nullptr;
++    Point pm_origin { 0, 0 };
++    mutable uint64_t pm_id = 0;
++    ColorSpace::Ptr pm_color;
+ };
+diff --git a/src/render.cpp b/src/render.cpp
+index 2ce14bc..3a88ff9 100644
+--- a/src/render.cpp
++++ b/src/render.cpp
+@@ -815,6 +815,15 @@ Render::Render()
+ void Render::draw(Pixmap& dst, const Pixmap& src, const Point& pos,
+                   const double scale)
+ {
++    if (Gpu* gpu = dst.gpu()) {
++        gpu->draw(dst, src, pos, scale, antialiasing);
++        return;
++    }
++    if (ColorSpace::needs_conversion(src)) {
++        draw(dst, ColorSpace::to_srgb(src), pos, scale);
++        return;
++    }
++
+     if (scale == 1) { // 100% scale, draw 1:1
+         if (dst.format() == Pixmap::ARGB || src.format() == Pixmap::ARGB) {
+             dst.blend(src, pos);
+@@ -837,6 +846,15 @@ void Render::fill_inverse(Pixmap& pm, const Rectangle& rect,
+     const Rectangle full { 0, 0, pm.width(), pm.height() };
+     const auto [top, bottom, left, right] = full.cutout(rect);
+ 
++    if (pm.gpu()) {
++        for (const Rectangle& side : { top, bottom, left, right }) {
++            if (side) {
++                pm.fill(side, color);
++            }
++        }
++        return;
++    }
++
+     std::vector<size_t> tids;
+     tids.reserve(4); // one per each side
+ 
+@@ -866,6 +884,11 @@ void Render::fill_inverse(Pixmap& pm, const Rectangle& rect,
+ 
+ void Render::extend_background(Pixmap& pm, const Rectangle& preserve)
+ {
++    if (Gpu* gpu = pm.gpu()) {
++        gpu->background(pm, preserve, false);
++        return;
++    }
++
+     assert(preserve);
+ 
+     // calculate areas to fill
+@@ -913,6 +936,11 @@ void Render::extend_background(Pixmap& pm, const Rectangle& preserve)
+ 
+ void Render::mirror_background(Pixmap& pm, const Rectangle& preserve)
+ {
++    if (Gpu* gpu = pm.gpu()) {
++        gpu->background(pm, preserve, true);
++        return;
++    }
++
+     assert(preserve);
+ 
+     // calculate areas to fill
+diff --git a/src/ui_wayland.cpp b/src/ui_wayland.cpp
+index 254d839..347fc76 100644
+--- a/src/ui_wayland.cpp
++++ b/src/ui_wayland.cpp
+@@ -654,12 +654,193 @@ public:
+         .ping = on_xdg_ping
+     };
+ 
++#ifdef HAVE_GPU
++    /***************************************************************************
++     * Color management handlers
++     **************************************************************************/
++    static void on_cm_intent(void*, wp_color_manager_v1*, uint32_t) {}
++
++    static void on_cm_feature(void* data, wp_color_manager_v1*,
++                              uint32_t feature)
++    {
++        reinterpret_cast<UiWayland*>(data)->cm.features |= 1U << feature;
++    }
++
++    static void on_cm_tf(void* data, wp_color_manager_v1*, uint32_t tf)
++    {
++        reinterpret_cast<UiWayland*>(data)->cm.tf |= 1U << tf;
++    }
++
++    static void on_cm_primaries(void* data, wp_color_manager_v1*,
++                                uint32_t primaries)
++    {
++        reinterpret_cast<UiWayland*>(data)->cm.primaries |= 1U << primaries;
++    }
++
++    static void on_cm_done(void*, wp_color_manager_v1*) {}
++
++    static constexpr const wp_color_manager_v1_listener cm_listener = {
++        .supported_intent = on_cm_intent,
++        .supported_feature = on_cm_feature,
++        .supported_tf_named = on_cm_tf,
++        .supported_primaries_named = on_cm_primaries,
++        .done = on_cm_done,
++    };
++
++    static void on_desc_failed(void* data, wp_image_description_v1*, uint32_t,
++                               const char* msg)
++    {
++        Log::warning("Failed to create HDR image description: {}", msg);
++        reinterpret_cast<UiWayland*>(data)->cm.ready = -1;
++    }
++
++    static void on_desc_ready(void* data, wp_image_description_v1*, uint32_t)
++    {
++        reinterpret_cast<UiWayland*>(data)->cm.ready = 1;
++    }
++
++    static void on_desc_ready2(void* data, wp_image_description_v1*, uint32_t,
++                               uint32_t)
++    {
++        reinterpret_cast<UiWayland*>(data)->cm.ready = 1;
++    }
++
++    static constexpr const wp_image_description_v1_listener desc_listener = {
++        .failed = on_desc_failed,
++        .ready = on_desc_ready,
++        .ready2 = on_desc_ready2,
++    };
++
++    static void on_preferred_failed(void*, wp_image_description_v1*, uint32_t,
++                                    const char*)
++    {
++    }
++
++    static void on_preferred_ready2(void* data, wp_image_description_v1* desc,
++                                    uint32_t, uint32_t)
++    {
++        UiWayland* ui = reinterpret_cast<UiWayland*>(data);
++        ui->cm.tf_named = 0;
++        ui->cm.max_lum = 0;
++        ui->cm.target_max_lum = 0;
++        ui->cm.reference_lum = 0;
++        wp_image_description_info_v1* info =
++            wp_image_description_v1_get_information(desc);
++        wp_image_description_info_v1_add_listener(info, &info_listener, data);
++    }
++
++    static void on_preferred_ready(void* data, wp_image_description_v1* desc,
++                                   uint32_t)
++    {
++        on_preferred_ready2(data, desc, 0, 0);
++    }
++
++    static constexpr const wp_image_description_v1_listener preferred_listener =
++        {
++            .failed = on_preferred_failed,
++            .ready = on_preferred_ready,
++            .ready2 = on_preferred_ready2,
++        };
++
++    static void on_info_done(void* data, wp_image_description_info_v1* info)
++    {
++        UiWayland* ui = reinterpret_cast<UiWayland*>(data);
++        wp_image_description_info_v1_destroy(info);
++        const uint32_t max =
++            ui->cm.target_max_lum ? ui->cm.target_max_lum : ui->cm.max_lum;
++        const float headroom = ui->cm.reference_lum && max
++            ? static_cast<float>(max) / ui->cm.reference_lum
++            : 1.0F;
++        const bool hdr = headroom > 1.01F ||
++            ui->cm.tf_named ==
++                WP_COLOR_MANAGER_V1_TRANSFER_FUNCTION_ST2084_PQ ||
++            ui->cm.tf_named == WP_COLOR_MANAGER_V1_TRANSFER_FUNCTION_HLG;
++        ui->cm.info = true;
++        if (ui->gpu) {
++            ui->gpu->set_output(hdr, headroom);
++            Application::self().add_event(AppEvent::WindowRedraw {});
++        }
++    }
++
++    static void on_info_icc(void*, wp_image_description_info_v1*, int32_t fd,
++                            uint32_t)
++    {
++        close(fd);
++    }
++
++    static void on_info_primaries(void*, wp_image_description_info_v1*,
++                                  int32_t, int32_t, int32_t, int32_t, int32_t,
++                                  int32_t, int32_t, int32_t)
++    {
++    }
++
++    static void on_info_value(void*, wp_image_description_info_v1*, uint32_t)
++    {
++    }
++
++    static void on_info_tf(void* data, wp_image_description_info_v1*,
++                           uint32_t tf)
++    {
++        reinterpret_cast<UiWayland*>(data)->cm.tf_named = tf;
++    }
++
++    static void on_info_luminances(void* data, wp_image_description_info_v1*,
++                                   uint32_t, uint32_t max, uint32_t reference)
++    {
++        UiWayland* ui = reinterpret_cast<UiWayland*>(data);
++        ui->cm.max_lum = max;
++        ui->cm.reference_lum = reference;
++    }
++
++    static void on_info_target_luminance(void* data,
++                                         wp_image_description_info_v1*,
++                                         uint32_t, uint32_t max)
++    {
++        reinterpret_cast<UiWayland*>(data)->cm.target_max_lum = max;
++    }
++
++    static constexpr const wp_image_description_info_v1_listener info_listener =
++        {
++            .done = on_info_done,
++            .icc_file = on_info_icc,
++            .primaries = on_info_primaries,
++            .primaries_named = on_info_value,
++            .tf_power = on_info_value,
++            .tf_named = on_info_tf,
++            .luminances = on_info_luminances,
++            .target_primaries = on_info_primaries,
++            .target_luminance = on_info_target_luminance,
++            .target_max_cll = on_info_value,
++            .target_max_fall = on_info_value,
++        };
++
++    static void on_preferred_changed(void* data,
++                                     wp_color_management_surface_feedback_v1*,
++                                     uint32_t)
++    {
++        reinterpret_cast<UiWayland*>(data)->request_preferred();
++    }
++
++    static void
++    on_preferred_changed2(void* data, wp_color_management_surface_feedback_v1*,
++                          uint32_t, uint32_t)
++    {
++        reinterpret_cast<UiWayland*>(data)->request_preferred();
++    }
++
++    static constexpr const wp_color_management_surface_feedback_v1_listener
++        feedback_listener = {
++            .preferred_changed = on_preferred_changed,
++            .preferred_changed2 = on_preferred_changed2,
++        };
++#endif // HAVE_GPU
++
+     /***************************************************************************
+      * Registry handlers
+      **************************************************************************/
+     static void on_registry_global(void* data, struct wl_registry* registry,
+                                    uint32_t name, const char* interface,
+-                                   uint32_t /* version */)
++                                   uint32_t version)
+     {
+         UiWayland* ui = reinterpret_cast<UiWayland*>(data);
+ 
+@@ -723,6 +904,16 @@ public:
+             ui->wl.decor_mgr.bind(
+                 registry, name,
+                 ZXDG_DECORATION_MANAGER_V1_GET_TOPLEVEL_DECORATION_SINCE_VERSION);
++#ifdef HAVE_GPU
++        } else if (strcmp(interface, wp_color_manager_v1_interface.name) ==
++                   0) {
++            ui->cm.manager =
++                reinterpret_cast<wp_color_manager_v1*>(wl_registry_bind(
++                    registry, name, &wp_color_manager_v1_interface,
++                    std::min(version, 2U)));
++            wp_color_manager_v1_add_listener(ui->cm.manager, &cm_listener,
++                                             data);
++#endif
+         }
+     }
+ 
+@@ -745,6 +936,13 @@ bool WaylandBuffer::realloc(struct wl_shm* shm, size_t width, size_t height)
+ 
+     const std::scoped_lock lock(mutex);
+ 
++#ifdef HAVE_GPU
++    if (gpu) {
++        pm.attach(gpu, width, height);
++        return true;
++    }
++#endif
++
+     destroy();
+ 
+     const size_t stride = width * sizeof(argb_t);
+@@ -799,6 +997,13 @@ Pixmap* WaylandBuffer::lock()
+     }
+ 
+     mutex.lock();
++#ifdef HAVE_GPU
++    if (gpu && pm) {
++        gpu->begin(pm.width(), pm.height());
++        drawn = false;
++        return &pm;
++    }
++#endif
+     if (!buffer) {
+         mutex.unlock();
+         return nullptr; // not yet created
+@@ -810,6 +1015,13 @@ Pixmap* WaylandBuffer::lock()
+ 
+ void WaylandBuffer::unlock()
+ {
++#ifdef HAVE_GPU
++    if (gpu) {
++        gpu->end();
++        mutex.unlock();
++        return;
++    }
++#endif
+     assert(buffer);
+     mutex.unlock();
+ }
+@@ -860,7 +1072,16 @@ bool UiWayland::initialize(const std::string& app_id)
+     wl_callback_add_listener(wl.callback, &WaylandHandler::frame_listener,
+                              this);
+ 
+-    if (wl.datadev_mgr) {
++#ifdef HAVE_GPU
++    if (init_gpu()) {
++        wnd_buffer.gpu = gpu.get();
++        ColorSpace::native = true;
++    } else {
++        Log::warning("GPU rendering not available, using software renderer");
++    }
++#endif
++
++    if (wl.datadev_mgr && wl.seat) {
+         wl.datadev =
+             wl_data_device_manager_get_data_device(wl.datadev_mgr, wl.seat);
+         wl_data_device_add_listener(wl.datadev,
+@@ -926,6 +1147,83 @@ bool UiWayland::initialize(const std::string& app_id)
+     return true;
+ }
+ 
++#ifdef HAVE_GPU
++bool UiWayland::init_gpu()
++{
++    bool hdr = false;
++    if (cm.manager) {
++        wl_display_roundtrip(wl.display);
++        hdr = (cm.features & (1U << WP_COLOR_MANAGER_V1_FEATURE_PARAMETRIC)) &&
++            (cm.tf & (1U << WP_COLOR_MANAGER_V1_TRANSFER_FUNCTION_ST2084_PQ)) &&
++            (cm.primaries & (1U << WP_COLOR_MANAGER_V1_PRIMARIES_BT2020));
++    }
++
++    gpu = std::make_unique<GpuGles>();
++    if (!gpu->initialize(wl.display, wl.surface, hdr)) {
++        gpu.reset();
++        return false;
++    }
++    if (!gpu->hdr_capable() || !cm.manager) {
++        return true;
++    }
++
++    wp_image_description_creator_params_v1* creator =
++        wp_color_manager_v1_create_parametric_creator(cm.manager);
++    wp_image_description_creator_params_v1_set_tf_named(
++        creator, WP_COLOR_MANAGER_V1_TRANSFER_FUNCTION_ST2084_PQ);
++    wp_image_description_creator_params_v1_set_primaries_named(
++        creator, WP_COLOR_MANAGER_V1_PRIMARIES_BT2020);
++    cm.description = wp_image_description_creator_params_v1_create(creator);
++    wp_image_description_v1_add_listener(
++        cm.description, &WaylandHandler::desc_listener, this);
++    while (!cm.ready && wl_display_roundtrip(wl.display) != -1) { }
++
++    if (cm.ready < 0) {
++        gpu = std::make_unique<GpuGles>();
++        if (!gpu->initialize(wl.display, wl.surface, false)) {
++            gpu.reset();
++            return false;
++        }
++        return true;
++    }
++
++    cm.surface = wp_color_manager_v1_get_surface(cm.manager, wl.surface);
++    gpu->on_encoding = [this](const bool pq) {
++        if (pq) {
++            wp_color_management_surface_v1_set_image_description(
++                cm.surface, cm.description,
++                WP_COLOR_MANAGER_V1_RENDER_INTENT_PERCEPTUAL);
++        } else {
++            wp_color_management_surface_v1_unset_image_description(
++                cm.surface);
++        }
++        Log::verbose("Output encoding: {}", pq ? "PQ BT.2020" : "sRGB");
++    };
++
++    cm.feedback =
++        wp_color_manager_v1_get_surface_feedback(cm.manager, wl.surface);
++    wp_color_management_surface_feedback_v1_add_listener(
++        cm.feedback, &WaylandHandler::feedback_listener, this);
++    request_preferred();
++    for (size_t i = 0; i < 3 && !cm.info; ++i) {
++        wl_display_roundtrip(wl.display);
++    }
++
++    return true;
++}
++
++void UiWayland::request_preferred()
++{
++    if (cm.preferred) {
++        wp_image_description_v1_destroy(cm.preferred);
++    }
++    cm.preferred =
++        wp_color_management_surface_feedback_v1_get_preferred(cm.feedback);
++    wp_image_description_v1_add_listener(
++        cm.preferred, &WaylandHandler::preferred_listener, this);
++}
++#endif // HAVE_GPU
++
+ void UiWayland::run()
+ {
+     thread = std::thread([this] {
+@@ -1118,6 +1416,12 @@ Pixmap* UiWayland::lock_surface()
+ 
+ void UiWayland::commit_surface()
+ {
++#ifdef HAVE_GPU
++    if (!gpu) {
++        flush_event.set();
++    }
++#else
+     flush_event.set();
++#endif
+     wnd_buffer.unlock();
+ }
+diff --git a/src/ui_wayland.hpp b/src/ui_wayland.hpp
+index e7688da..9dab852 100644
+--- a/src/ui_wayland.hpp
++++ b/src/ui_wayland.hpp
+@@ -4,6 +4,7 @@
+ 
+ #pragma once
+ 
++#include "buildconf.hpp"
+ #include "fdevent.hpp"
+ #include "input.hpp"
+ #include "ui.hpp"
+@@ -18,8 +19,15 @@
+ #include <xdg-decoration-unstable-v1-client-protocol.h>
+ #include <xdg-shell-client-protocol.h>
+ 
++#ifdef HAVE_GPU
++#include "gpu_gles.hpp"
++
++#include <color-management-v1-client-protocol.h>
++#endif
++
+ #include <atomic>
+ #include <cassert>
++#include <memory>
+ #include <mutex>
+ #include <thread>
+ 
+@@ -133,6 +141,10 @@ struct WaylandBuffer {
+      */
+     wl_buffer* get() { return buffer; }
+ 
++#ifdef HAVE_GPU
++    GpuGles* gpu = nullptr;
++#endif
++
+ private:
+     /**
+      * Destroy buffers.
+@@ -213,6 +225,30 @@ private:
+         WLOBJ_DECLARE(ext_idle_notification_v1) idle;
+     } wl;
+ 
++#ifdef HAVE_GPU
++    std::unique_ptr<GpuGles> gpu;
++
++    struct ColorManagement {
++        wp_color_manager_v1* manager = nullptr;
++        wp_color_management_surface_v1* surface = nullptr;
++        wp_color_management_surface_feedback_v1* feedback = nullptr;
++        wp_image_description_v1* description = nullptr;
++        wp_image_description_v1* preferred = nullptr;
++        uint32_t features = 0;
++        uint32_t tf = 0;
++        uint32_t primaries = 0;
++        int ready = 0;
++        bool info = false;
++        uint32_t tf_named = 0;
++        uint32_t max_lum = 0;
++        uint32_t target_max_lum = 0;
++        uint32_t reference_lum = 0;
++    } cm;
++
++    bool init_gpu();
++    void request_preferred();
++#endif
++
+     WaylandBuffer wnd_buffer; ///< Window buffer
+ 
+     uint32_t scale = FRACTION_SCALE_DEN; ///< Window scale factor (WL format)
+diff --git a/src/viewer.cpp b/src/viewer.cpp
+index 9300e96..07baa31 100644
+--- a/src/viewer.cpp
++++ b/src/viewer.cpp
+@@ -481,7 +481,7 @@ void Viewer::window_redraw(Pixmap& wnd)
+     const Rectangle imgr = { position, static_cast<Size>(pm) * scale };
+ 
+     // clear image background
+-    if (pm.format() == Pixmap::ARGB) {
++    if (pm.format() == Pixmap::ARGB || pm.format() == Pixmap::F16) {
+         if (tr_chessboard) {
+             wnd.grid(imgr, tr_cbsize, tr_cbcolor[0], tr_cbcolor[1]);
+         } else {
+-- 
+2.55.0
+
