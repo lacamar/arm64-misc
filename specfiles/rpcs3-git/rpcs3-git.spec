@@ -14,7 +14,7 @@ Provides:       rpcs3
 
 License:  GPLv2
 URL:      https://github.com/RPCS3/rpcs3
-Source0:  https://github.com/RPCS3/rpcs3/archive/%{shortcommit}/rpcs3-%{shortcommit}.tar.gz
+Source0:  https://github.com/RPCS3/rpcs3/archive/%{commit}/rpcs3-%{shortcommit}.tar.gz
 
 %{lua:
 local externals = {

@@ -10,7 +10,7 @@ Summary:    Open Source XRay engine for S.T.A.L.K.E.R.
 
 License:    MIT License
 URL:        https://github.com/OpenXRay/xray-16
-Source0:    https://github.com/OpenXRay/xray-16/archive/%{shortcommit}/xray-16-%{shortcommit}.tar.gz
+Source0:    https://github.com/OpenXRay/xray-16/archive/%{commit}/xray-16-%{shortcommit}.tar.gz
 
 %{lua:
 local externals = {

@@ -17,7 +17,7 @@ Summary:     A tool for launching non-steam games with proton
 
 License:        GPLv3
 URL:            https://github.com/Open-Wine-Components/%{_name}
-Source0:        %{url}/archive/%{shortcommit}/%{_name}-%{shortcommit}.tar.gz
+Source0:        %{url}/archive/%{commit}/%{_name}-%{shortcommit}.tar.gz
 Source1:        https://github.com/urllib3/urllib3/releases/download/%{urllib3}/urllib3-%{urllib3}.tar.gz
 Source2:        umu-launcher-%{commit}-vendor.tar.zst
 Source3:        umu-launcher-git-tarballer

@@ -15,7 +15,7 @@ Summary:        A simple and lightweight app for running Windows games using UMU
 
 License:        MIT
 URL:            https://github.com/Faugus/%{_name}
-Source0:        https://github.com/Faugus/%{_name}/archive/%{shortcommit}/%{_name}-%{shortcommit}.tar.gz
+Source0:        https://github.com/Faugus/%{_name}/archive/%{commit}/%{_name}-%{shortcommit}.tar.gz
 
 BuildArch:      noarch
 

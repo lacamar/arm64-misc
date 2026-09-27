@@ -14,7 +14,7 @@ Summary:        Lightweight image viewer for Wayland display servers
 
 License:        MIT
 URL:            https://github.com/artemsen/%{_name}
-Source:         %{url}/archive/%{shortcommit}/%{_name}-%{shortcommit}.tar.gz
+Source:         %{url}/archive/%{commit}/%{_name}-%{shortcommit}.tar.gz
 
 # Patch0:          #{url}/commit/5c2d958.patch#/swayimg-5.0-missing-includes.patch
 # Adds an "exif" imagelist.order sort mode using the EXIF capture time

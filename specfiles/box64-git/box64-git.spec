@@ -24,7 +24,7 @@ systems, like ARM (host system needs to be 64-bit little-endian).}
 
 License:        MIT
 URL:            https://box86.org
-Source0:        https://github.com/ptitSeb/%{_name}/archive/%{shortcommit}/%{_name}-%{shortcommit}.tar.gz
+Source0:        https://github.com/ptitSeb/%{_name}/archive/%{commit}/%{_name}-%{shortcommit}.tar.gz
 
 BuildRequires:  cmake
 BuildRequires:  gcc
