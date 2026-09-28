@@ -1,0 +1,50 @@
+diff --git a/src/mcp_agent_mail/config.py b/src/mcp_agent_mail/config.py
+index 7e14261..8f853bc 100644
+--- a/src/mcp_agent_mail/config.py
++++ b/src/mcp_agent_mail/config.py
+@@ -2,6 +2,7 @@
+ 
+ from __future__ import annotations
+ 
++import os
+ from dataclasses import dataclass
+ from pathlib import Path
+ from typing import Final
+@@ -15,6 +16,10 @@ from decouple import (
+ _DOTENV_PATH: Final[Path] = Path(".env")
+ 
+ 
++def _xdg_dir(var: str, fallback: str) -> str:
++    return str(Path(os.environ.get(var) or Path.home() / fallback) / "mcp_agent_mail")
++
++
+ def _build_decouple_config() -> DecoupleConfig:
+     # Gracefully handle missing .env (e.g., in CI/tests) by falling back to an empty repository.
+     try:
+@@ -359,7 +364,7 @@ def _build_settings() -> Settings:
+     )
+ 
+     database_settings = DatabaseSettings(
+-        url=decouple_config("DATABASE_URL", default="sqlite+aiosqlite:///./storage.sqlite3"),
++        url=decouple_config("DATABASE_URL", default=f"sqlite+aiosqlite:///{_xdg_dir('XDG_DATA_HOME', '.local/share')}/storage.sqlite3"),
+         echo=_bool(decouple_config("DATABASE_ECHO", default="false"), default=False),
+         pool_size=_int_optional(decouple_config("DATABASE_POOL_SIZE", default="50")),
+         max_overflow=_int_optional(decouple_config("DATABASE_MAX_OVERFLOW", default="")),
+@@ -369,7 +374,7 @@ def _build_settings() -> Settings:
+     allow_abs_default = "false"
+     storage_settings = StorageSettings(
+         # Default to a global, user-scoped archive directory outside the source tree
+-        root=decouple_config("STORAGE_ROOT", default="~/.mcp_agent_mail_git_mailbox_repo"),
++        root=decouple_config("STORAGE_ROOT", default=f"{_xdg_dir('XDG_DATA_HOME', '.local/share')}/git_mailbox_repo"),
+         git_author_name=decouple_config("GIT_AUTHOR_NAME", default="mcp-agent"),
+         git_author_email=decouple_config("GIT_AUTHOR_EMAIL", default="mcp-agent@example.com"),
+         inline_image_max_bytes=_int(decouple_config("INLINE_IMAGE_MAX_BYTES", default=str(64 * 1024)), default=64 * 1024),
+@@ -429,7 +434,7 @@ def _build_settings() -> Settings:
+ 
+     notification_settings = NotificationSettings(
+         enabled=_bool(decouple_config("NOTIFICATIONS_ENABLED", default="false"), default=False),
+-        signals_dir=decouple_config("NOTIFICATIONS_SIGNALS_DIR", default="~/.mcp_agent_mail/signals"),
++        signals_dir=decouple_config("NOTIFICATIONS_SIGNALS_DIR", default=f"{_xdg_dir('XDG_STATE_HOME', '.local/state')}/signals"),
+         include_metadata=_bool(decouple_config("NOTIFICATIONS_INCLUDE_METADATA", default="true"), default=True),
+         debounce_ms=_int(decouple_config("NOTIFICATIONS_DEBOUNCE_MS", default="100"), default=100),
+     )
