@@ -1,0 +1,14 @@
+--- a/ubs
++++ b/ubs
+@@ -5308,6 +5308,11 @@
+ }
+ 
+ check_and_update_self(){
++  if [[ "${FORCE_SELF_UPDATE:-0}" -eq 1 ]]; then
++    say_err "ubs is managed by the system package manager; self-update disabled."
++    return 1
++  fi
++  return 0
+   # Auto-update is opt-in (security-first). Enable by setting:
+   #   UBS_ENABLE_AUTO_UPDATE=1
+   # Always skip in CI, or when explicitly disabled via UBS_NO_AUTO_UPDATE / --no-auto-update.

@@ -1,0 +1,10 @@
+--- a/ubs
++++ b/ubs
+@@ -25,6 +25,7 @@
+ fi
+ 
+ set -Eeuo pipefail
++export LC_NUMERIC=C
+ shopt -s lastpipe || true
+ trap '' SIGPIPE 2>/dev/null || true
+ 
