@@ -3,7 +3,7 @@
 
 Name:           caam
 Version:        0.1.18
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Instant auth switching for AI coding CLIs
 
 License:        MIT
@@ -11,6 +11,7 @@ URL:            https://%{goipath}
 Source0:        %{url}/archive/v%{version}/coding_agent_account_manager-%{version}.tar.gz
 
 Patch0:         0001-honor-CLAUDE_CONFIG_DIR.patch
+Patch1:         0002-claude-email-from-state-file.patch
 
 BuildRequires:  golang >= 1.26
 BuildRequires:  git-core
@@ -47,6 +48,9 @@ install -Dpm0644 caam.fish %{buildroot}%{fish_completions_dir}/caam.fish
 %{fish_completions_dir}/caam.fish
 
 %changelog
+* Mon Sep 28 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.18-2
+- Read Claude email from .claude.json
+
 * Mon Sep 28 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.18-1
 - Initial package
 - Honor CLAUDE_CONFIG_DIR for vault switching

@@ -1,0 +1,56 @@
+diff --git a/internal/identity/claude.go b/internal/identity/claude.go
+index d7fe8afd7b18..8341eb9a6257 100644
+--- a/internal/identity/claude.go
++++ b/internal/identity/claude.go
+@@ -5,6 +5,7 @@ import (
+ 	"encoding/json"
+ 	"fmt"
+ 	"os"
++	"path/filepath"
+ 	"time"
+ )
+ 
+@@ -45,10 +46,43 @@ func ExtractFromClaudeCredentials(path string) (*Identity, error) {
+ 	if exp, ok := parseEpoch(raw["expiresAt"]); ok {
+ 		identity.ExpiresAt = exp
+ 	}
++	if identity.Email == "" {
++		identity.Email, identity.AccountID = claudeStateAccount(path, identity.AccountID)
++	}
+ 
+ 	return identity, nil
+ }
+ 
++// claudeStateAccount reads the email from the .claude.json paired with a
++// credentials file: a sibling (vault, CLAUDE_CONFIG_DIR) or ~/.claude.json.
++func claudeStateAccount(credPath, accountID string) (string, string) {
++	dir := filepath.Dir(credPath)
++	candidates := []string{filepath.Join(dir, ".claude.json")}
++	if filepath.Base(dir) == ".claude" {
++		candidates = append(candidates, filepath.Join(filepath.Dir(dir), ".claude.json"))
++	}
++	for _, c := range candidates {
++		data, err := os.ReadFile(c)
++		if err != nil {
++			continue
++		}
++		var state struct {
++			OauthAccount struct {
++				EmailAddress string `json:"emailAddress"`
++				AccountUUID  string `json:"accountUuid"`
++			} `json:"oauthAccount"`
++		}
++		if json.Unmarshal(data, &state) != nil || state.OauthAccount.EmailAddress == "" {
++			continue
++		}
++		if accountID == "" {
++			accountID = state.OauthAccount.AccountUUID
++		}
++		return state.OauthAccount.EmailAddress, accountID
++	}
++	return "", accountID
++}
++
+ func parseEpoch(value interface{}) (time.Time, bool) {
+ 	secs, ok := epochSeconds(value)
+ 	if !ok {
