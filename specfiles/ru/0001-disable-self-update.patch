@@ -1,0 +1,11 @@
+--- a/ru
++++ b/ru
+@@ -9464,6 +9464,8 @@
+ }
+ 
+ cmd_self_update() {
++    log_error "ru is managed by the system package manager; self-update disabled"
++    exit 1
+     local check_only="false"
+ 
+     # Parse --check option
