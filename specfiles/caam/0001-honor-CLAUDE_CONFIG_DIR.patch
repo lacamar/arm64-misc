@@ -1,0 +1,340 @@
+diff --git a/cmd/caam/cmd/detect.go b/cmd/caam/cmd/detect.go
+index fff64b30d668..3b4d4a1ea455 100644
+--- a/cmd/caam/cmd/detect.go
++++ b/cmd/caam/cmd/detect.go
+@@ -13,6 +13,8 @@ import (
+ 	"time"
+ 
+ 	"github.com/spf13/cobra"
++
++	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/claudepath"
+ )
+ 
+ // DetectedAgent represents a single detected AI coding agent CLI.
+@@ -135,16 +137,16 @@ func getAgentSpecs() []AgentSpec {
+ 			VersionRegex: `(?:claude[- ]?code[- ]?|v?)(\d+\.\d+(?:\.\d+)?)`,
+ 			ConfigPaths: func() []PathSpec {
+ 				return []PathSpec{
+-					{filepath.Join(homeDir, ".claude"), "Claude Code home directory"},
++					{claudepath.Dir(homeDir), "Claude Code home directory"},
+ 					{claudeConfigDir, "Claude Code XDG config"},
+ 				}
+ 			},
+ 			AuthPaths: func() []PathSpec {
+ 				return []PathSpec{
+-					{filepath.Join(homeDir, ".claude", ".credentials.json"), "OAuth credentials (primary)"},
+-					{filepath.Join(homeDir, ".claude.json"), "OAuth session state (legacy)"},
++					{filepath.Join(claudepath.Dir(homeDir), ".credentials.json"), "OAuth credentials (primary)"},
++					{claudepath.StatePath(homeDir), "OAuth session state (legacy)"},
+ 					{filepath.Join(claudeConfigDir, "auth.json"), "Auth credentials (XDG)"},
+-					{filepath.Join(homeDir, ".claude", "settings.json"), "Settings (API key mode)"},
++					{filepath.Join(claudepath.Dir(homeDir), "settings.json"), "Settings (API key mode)"},
+ 				}
+ 			},
+ 		},
+diff --git a/internal/authfile/authfile.go b/internal/authfile/authfile.go
+index f1b75c8342dc..6f92bd9226dc 100644
+--- a/internal/authfile/authfile.go
++++ b/internal/authfile/authfile.go
+@@ -22,6 +22,8 @@ import (
+ 	"sort"
+ 	"strings"
+ 	"time"
++
++	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/claudepath"
+ )
+ 
+ // AuthFileSpec defines where a tool stores its auth credentials.
+@@ -95,13 +97,13 @@ func ClaudeAuthFiles() AuthFileSet {
+ 		Files: []AuthFileSpec{
+ 			{
+ 				Tool:        "claude",
+-				Path:        filepath.Join(homeDir, ".claude", ".credentials.json"),
++				Path:        filepath.Join(claudepath.Dir(homeDir), ".credentials.json"),
+ 				Description: "Claude Code OAuth credentials (Claude Max subscription)",
+ 				Required:    true,
+ 			},
+ 			{
+ 				Tool:        "claude",
+-				Path:        filepath.Join(homeDir, ".claude.json"),
++				Path:        claudepath.StatePath(homeDir),
+ 				Description: "Claude Code settings and session state",
+ 				Required:    false, // This is a settings file, not strictly required for auth
+ 			},
+@@ -113,7 +115,7 @@ func ClaudeAuthFiles() AuthFileSet {
+ 			},
+ 			{
+ 				Tool:        "claude",
+-				Path:        filepath.Join(homeDir, ".claude", "settings.json"),
++				Path:        filepath.Join(claudepath.Dir(homeDir), "settings.json"),
+ 				Description: "Claude Code user settings (apiKeyHelper / API key mode)",
+ 				Required:    false,
+ 			},
+@@ -850,6 +852,19 @@ func (v *Vault) Restore(fileSet AuthFileSet, profile string) error {
+ 			continue
+ 		}
+ 
++		if fileSet.Tool == "claude" && filename == claudeSettingsFile {
++			if err := restoreClaudeState(srcPath, spec.Path); err != nil {
++				return fmt.Errorf("restore %s: %w", spec.Path, err)
++			}
++			restored++
++			if spec.Required {
++				requiredFound = true
++			} else {
++				optionalFound = true
++			}
++			continue
++		}
++
+ 		// Claude twin of the Codex freshness guard below (issue #73). Claude
+ 		// Code rotates both tokens in place while a profile is active; if the
+ 		// LIVE credentials belong to the SAME account as this snapshot and are
+@@ -1236,9 +1251,11 @@ var claudeUserSettingsSharedKeys = []string{"enabledPlugins"}
+ // settings file (~/.claude/settings.json), which needs key-scoped merge
+ // handling on restore rather than a whole-file copy.
+ func isClaudeUserSettings(tool, path string) bool {
++	homeDir, _ := os.UserHomeDir()
+ 	return tool == "claude" &&
+ 		filepath.Base(path) == "settings.json" &&
+-		filepath.Base(filepath.Dir(path)) == ".claude"
++		(filepath.Base(filepath.Dir(path)) == ".claude" ||
++			filepath.Clean(filepath.Dir(path)) == filepath.Clean(claudepath.Dir(homeDir)))
+ }
+ 
+ // restoreClaudeUserSettings writes the vault snapshot to livePath while
+@@ -1278,6 +1295,60 @@ func restoreClaudeUserSettings(vaultPath, livePath string) error {
+ 	return writeJSONFileAtomic(livePath, vaultObj, 0600)
+ }
+ 
++var claudeStateAccountKeys = map[string]bool{
++	"oauthAccount":             true,
++	"userID":                   true,
++	"hasAvailableSubscription": true,
++	"subscriptionNoticeCount":  true,
++	"claudeCodeFirstTokenDate": true,
++	"penguinModeOrgEnabled":    true,
++	"bridgeOauthDeadExpiresAt": true,
++	"bridgeOauthDeadFailCount": true,
++	"passesLastSeenRemaining":  true,
++}
++
++func isClaudeStateAccountKey(key string) bool {
++	return claudeStateAccountKeys[key] ||
++		strings.HasPrefix(key, "cached") ||
++		strings.HasSuffix(key, "Cache") ||
++		strings.HasSuffix(key, "CacheSlots")
++}
++
++// restoreClaudeState swaps only account-bound keys of .claude.json into the
++// live file, so config (mcpServers, projects, prefs) survives a switch.
++func restoreClaudeState(vaultPath, livePath string) error {
++	vaultRaw, err := os.ReadFile(vaultPath)
++	if err != nil {
++		return fmt.Errorf("read snapshot %s: %w", vaultPath, err)
++	}
++	var vaultObj map[string]interface{}
++	if err := json.Unmarshal(vaultRaw, &vaultObj); err != nil || vaultObj == nil {
++		return copyFile(vaultPath, livePath)
++	}
++	liveRaw, err := os.ReadFile(livePath)
++	if err != nil {
++		if os.IsNotExist(err) {
++			return copyFile(vaultPath, livePath)
++		}
++		return fmt.Errorf("read live %s: %w", livePath, err)
++	}
++	var liveObj map[string]interface{}
++	if err := json.Unmarshal(liveRaw, &liveObj); err != nil || liveObj == nil {
++		return copyFile(vaultPath, livePath)
++	}
++	for key := range liveObj {
++		if _, ok := vaultObj[key]; !ok && isClaudeStateAccountKey(key) {
++			delete(liveObj, key)
++		}
++	}
++	for key, v := range vaultObj {
++		if isClaudeStateAccountKey(key) {
++			liveObj[key] = v
++		}
++	}
++	return writeJSONFileAtomic(livePath, liveObj, 0600)
++}
++
+ // isClaudeDesktopConfig reports whether spec.Path is the macOS Claude Desktop
+ // config.json, which needs field-scoped handling rather than whole-file copy.
+ func isClaudeDesktopConfig(tool, path string) bool {
+diff --git a/internal/authfile/claude_rotation_test.go b/internal/authfile/claude_rotation_test.go
+index 3aadccba6dd6..2acf01ebf962 100644
+--- a/internal/authfile/claude_rotation_test.go
++++ b/internal/authfile/claude_rotation_test.go
+@@ -316,9 +316,8 @@ func TestRestoreKeepsFresherLiveClaudeCredentials(t *testing.T) {
+ 	if got := readFixtureFile(t, f.liveCreds); got != aliceGen2 {
+ 		t.Fatalf("live credentials were clobbered with the stale snapshot:\n got %s\nwant %s", got, aliceGen2)
+ 	}
+-	// The settings snapshot itself is still restored (it holds no tokens).
+-	if got := readJSONMap(t, f.liveSettings)["numStartups"]; got != float64(1) {
+-		t.Fatalf("live .claude.json numStartups = %v, want the snapshot's 1", got)
++	if got := readJSONMap(t, f.liveSettings)["numStartups"]; got != float64(9) {
++		t.Fatalf("live .claude.json numStartups = %v, want the live 9", got)
+ 	}
+ }
+ 
+diff --git a/internal/claudepath/claudepath.go b/internal/claudepath/claudepath.go
+new file mode 100644
+index 000000000000..81129ede88c8
+--- /dev/null
++++ b/internal/claudepath/claudepath.go
+@@ -0,0 +1,23 @@
++// Package claudepath resolves Claude Code's live user paths, honoring
++// CLAUDE_CONFIG_DIR, under which Claude Code keeps .credentials.json,
++// settings.json and .claude.json instead of ~/.claude and ~/.claude.json.
++package claudepath
++
++import (
++	"os"
++	"path/filepath"
++)
++
++func Dir(homeDir string) string {
++	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
++		return dir
++	}
++	return filepath.Join(homeDir, ".claude")
++}
++
++func StatePath(homeDir string) string {
++	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
++		return filepath.Join(dir, ".claude.json")
++	}
++	return filepath.Join(homeDir, ".claude.json")
++}
+diff --git a/internal/discovery/watcher.go b/internal/discovery/watcher.go
+index 55d3f5b3b7f1..4d61aef02d73 100644
+--- a/internal/discovery/watcher.go
++++ b/internal/discovery/watcher.go
+@@ -13,6 +13,7 @@ import (
+ 	"time"
+ 
+ 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/authfile"
++	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/claudepath"
+ 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/identity"
+ 	"github.com/fsnotify/fsnotify"
+ )
+@@ -468,7 +469,7 @@ func (w *Watcher) extractIdentity(provider, path string) (*identity.Identity, er
+ 		if err != nil {
+ 			return nil, fmt.Errorf("get home dir: %w", err)
+ 		}
+-		credPath := filepath.Join(homeDir, ".claude", ".credentials.json")
++		credPath := filepath.Join(claudepath.Dir(homeDir), ".credentials.json")
+ 		if _, err := os.Stat(credPath); err == nil {
+ 			return identity.ExtractFromClaudeCredentials(credPath)
+ 		}
+@@ -572,7 +573,7 @@ func WatchOnce(vault *authfile.Vault, providers []string, logger *slog.Logger) (
+ 					"error", homeErr)
+ 				continue
+ 			}
+-			credPath := filepath.Join(homeDir, ".claude", ".credentials.json")
++			credPath := filepath.Join(claudepath.Dir(homeDir), ".credentials.json")
+ 			ident, err = identity.ExtractFromClaudeCredentials(credPath)
+ 		case "codex":
+ 			codexHome := os.Getenv("CODEX_HOME")
+diff --git a/internal/health/expiry.go b/internal/health/expiry.go
+index 6a2353e872e8..d354c3482430 100644
+--- a/internal/health/expiry.go
++++ b/internal/health/expiry.go
+@@ -14,6 +14,8 @@ import (
+ 	"strconv"
+ 	"strings"
+ 	"time"
++
++	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/claudepath"
+ )
+ 
+ // ErrNoExpiry indicates that expiry information could not be determined.
+@@ -80,7 +82,7 @@ func ParseClaudeExpiry(authDir string) (*ExpiryInfo, error) {
+ 		}
+ 
+ 		// System state probing - check the actual credentials file location
+-		credentialsPath := filepath.Join(homeDir, ".claude", ".credentials.json")
++		credentialsPath := filepath.Join(claudepath.Dir(homeDir), ".credentials.json")
+ 		info, err = parseClaudeCredentialsFile(credentialsPath)
+ 		if err == nil {
+ 			info.Source = credentialsPath
+@@ -88,7 +90,7 @@ func ParseClaudeExpiry(authDir string) (*ExpiryInfo, error) {
+ 		}
+ 
+ 		// Fallback to legacy locations for backwards compatibility
+-		claudeJsonPath := filepath.Join(homeDir, ".claude.json")
++		claudeJsonPath := claudepath.StatePath(homeDir)
+ 		info, err = parseOAuthFile(claudeJsonPath)
+ 		if err == nil {
+ 			info.Source = claudeJsonPath
+diff --git a/internal/provider/claude/claude.go b/internal/provider/claude/claude.go
+index a38162105d2c..23e842073fcd 100644
+--- a/internal/provider/claude/claude.go
++++ b/internal/provider/claude/claude.go
+@@ -41,6 +41,7 @@ import (
+ 	"time"
+ 
+ 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/browser"
++	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/claudepath"
+ 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/passthrough"
+ 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/profile"
+ 	"github.com/Dicklesworthstone/coding_agent_account_manager/internal/provider"
+@@ -121,12 +122,12 @@ func (p *Provider) AuthFiles() []provider.AuthFileSpec {
+ 
+ 	return []provider.AuthFileSpec{
+ 		{
+-			Path:        filepath.Join(homeDir, ".claude", ".credentials.json"),
++			Path:        filepath.Join(claudepath.Dir(homeDir), ".credentials.json"),
+ 			Description: "Claude Code OAuth credentials (Claude Max subscription)",
+ 			Required:    true,
+ 		},
+ 		{
+-			Path:        filepath.Join(homeDir, ".claude.json"),
++			Path:        claudepath.StatePath(homeDir),
+ 			Description: "Claude Code OAuth session state (legacy location)",
+ 			Required:    false,
+ 		},
+@@ -136,7 +137,7 @@ func (p *Provider) AuthFiles() []provider.AuthFileSpec {
+ 			Required:    false, // May not exist in all setups
+ 		},
+ 		{
+-			Path:        filepath.Join(homeDir, ".claude", "settings.json"),
++			Path:        filepath.Join(claudepath.Dir(homeDir), "settings.json"),
+ 			Description: "Claude Code settings (apiKeyHelper / API key mode)",
+ 			Required:    false,
+ 		},
+@@ -216,7 +217,7 @@ var sharedClaudeAssetEntries = []string{"skills", "plugins", "commands", "agents
+ // exists in the profile as a real file/dir is left untouched; existing
+ // symlinks are refreshed.
+ func shareClaudeUserAssets(realHome, profileClaudeDir string) error {
+-	realClaude := filepath.Join(realHome, ".claude")
++	realClaude := claudepath.Dir(realHome)
+ 	for _, name := range sharedClaudeAssetEntries {
+ 		realPath := filepath.Join(realClaude, name)
+ 		if _, err := os.Stat(realPath); err != nil {
+@@ -503,11 +504,11 @@ func (p *Provider) DetectExistingAuth() (*provider.AuthDetection, error) {
+ 		description string
+ 	}{
+ 		{
+-			path:        filepath.Join(homeDir, ".claude", ".credentials.json"),
++			path:        filepath.Join(claudepath.Dir(homeDir), ".credentials.json"),
+ 			description: "Claude Code OAuth credentials (primary location)",
+ 		},
+ 		{
+-			path:        filepath.Join(homeDir, ".claude.json"),
++			path:        claudepath.StatePath(homeDir),
+ 			description: "Claude Code OAuth session state (legacy location)",
+ 		},
+ 		{
+@@ -515,7 +516,7 @@ func (p *Provider) DetectExistingAuth() (*provider.AuthDetection, error) {
+ 			description: "Claude Code auth credentials (CLAUDE_CONFIG_DIR or XDG_CONFIG_HOME)",
+ 		},
+ 		{
+-			path:        filepath.Join(homeDir, ".claude", "settings.json"),
++			path:        filepath.Join(claudepath.Dir(homeDir), "settings.json"),
+ 			description: "Claude Code settings (apiKeyHelper / API key mode)",
+ 		},
+ 	}
