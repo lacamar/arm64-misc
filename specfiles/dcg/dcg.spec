@@ -4,7 +4,7 @@
 %global rustflags_codegen_units 16
 
 Name:           dcg
-Version:        0.14.4
+Version:        0.15.1
 Release:        1%{?dist}
 Summary:        Block destructive commands run by AI coding agents
 
@@ -49,5 +49,8 @@ install -Dpm0644 %{name}.fish %{buildroot}%{fish_completions_dir}/%{name}.fish
 %{fish_completions_dir}/%{name}.fish
 
 %changelog
+* Tue Sep 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.15.1-1
+ - Update to 0.15.1
+
 * Mon Sep 28 2026 Lachlan Marie <lchlnm@pm.me> - 0.14.4-1
 - Initial package
