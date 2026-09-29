@@ -3,12 +3,13 @@
 %global __provides_exclude_from ^%{_prefix}/lib/%{name}/node_modules/.*$
 
 %global tag 0.1.2
+%global bumpver 0
 %global commit 4de1d80837c5cbd4ca30e6225b6b99608b969030
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           zen-control
-Version:        %{tag}^git.%{shortcommit}
-Release:        2%{?dist}
+Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
+Release:        1%{?dist}
 Summary:        MCP bridge and WebExtension to drive the Zen browser from Claude Code
 
 License:        LicenseRef-Not-specified
@@ -72,6 +73,9 @@ chmod 0755 %{buildroot}%{_bindir}/%{name}
 %config(noreplace) %{_sysconfdir}/zen/policies/policies.json
 
 %changelog
+* Wed Sep 30 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-1
+- Use bumpver counter so commit updates sort correctly
+
 * Wed Sep 30 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^git.4de1d80-2
 - Install extension via enterprise policy
 - Drop system-scope sideload
