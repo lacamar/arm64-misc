@@ -3,14 +3,12 @@
 %global __provides_exclude_from ^%{_prefix}/lib/%{name}/node_modules/.*$
 
 %global tag 0.1.2
-%global firefox_app_id \{ec8030f7-c20a-464f-9b0e-13a3a9e97384\}
-%global zen_dir /opt/zen
 %global commit 4de1d80837c5cbd4ca30e6225b6b99608b969030
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           zen-control
 Version:        %{tag}^git.%{shortcommit}
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        MCP bridge and WebExtension to drive the Zen browser from Claude Code
 
 License:        LicenseRef-Not-specified
@@ -27,7 +25,7 @@ Requires:       zen-browser
 %description
 Lets Claude Code drive the Zen browser (Firefox-based) through a local MCP
 server and a WebExtension connected over ws://127.0.0.1:17373. The unsigned
-extension is sideloaded system-wide and needs xpinstall.signatures.required
+extension is installed through an enterprise policy and needs xpinstall.signatures.required
 set to false.
 
 %prep
@@ -41,10 +39,22 @@ node build-xpi.mjs
 %install
 install -dm0755 %{buildroot}%{_prefix}/lib/%{name}
 cp -a package.json server node_modules %{buildroot}%{_prefix}/lib/%{name}/
-install -Dpm0644 zen-control.xpi %{buildroot}%{_datadir}/mozilla/extensions/%{firefox_app_id}/zen-control@local.xpi
-# Rescan system add-ons each startup so package upgrades are picked up
-install -dm0755 %{buildroot}%{zen_dir}/defaults/pref
-echo 'pref("extensions.startupScanScopes", 8);' > %{buildroot}%{zen_dir}/defaults/pref/zen-control.js
+install -Dpm0644 zen-control.xpi %{buildroot}%{_datadir}/%{name}/zen-control.xpi
+# Zen is built without sideloading; this file replaces /opt/zen/distribution/policies.json
+install -dm0755 %{buildroot}%{_sysconfdir}/zen/policies
+cat > %{buildroot}%{_sysconfdir}/zen/policies/policies.json <<'EOS'
+{
+  "policies": {
+    "DisableAppUpdate": true,
+    "ExtensionSettings": {
+      "zen-control@local": {
+        "installation_mode": "normal_installed",
+        "install_url": "file://%{_datadir}/%{name}/zen-control.xpi"
+      }
+    }
+  }
+}
+EOS
 install -dm0755 %{buildroot}%{_bindir}
 cat > %{buildroot}%{_bindir}/%{name} <<'EOS'
 #!/bin/sh
@@ -56,9 +66,15 @@ chmod 0755 %{buildroot}%{_bindir}/%{name}
 %doc README.md
 %{_bindir}/%{name}
 %{_prefix}/lib/%{name}
-%{_datadir}/mozilla/extensions/%{firefox_app_id}/zen-control@local.xpi
-%{zen_dir}/defaults/pref/zen-control.js
+%{_datadir}/%{name}
+%dir %{_sysconfdir}/zen
+%dir %{_sysconfdir}/zen/policies
+%config(noreplace) %{_sysconfdir}/zen/policies/policies.json
 
 %changelog
+* Wed Sep 30 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^git.4de1d80-2
+- Install extension via enterprise policy
+- Drop system-scope sideload
+
 * Wed Sep 30 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^git.4de1d80-1
 - Initial package
