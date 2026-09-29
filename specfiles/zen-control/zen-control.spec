@@ -9,12 +9,14 @@
 
 Name:           zen-control
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        MCP bridge and WebExtension to drive the Zen browser from Claude Code
 
 License:        LicenseRef-Not-specified
 URL:            https://github.com/zjones2142/zen-control
 Source0:        %{url}/archive/%{commit}/%{name}-%{shortcommit}.tar.gz
+
+Patch0:         0001-chrome-parity-tools.patch
 
 BuildArch:      noarch
 
@@ -30,7 +32,7 @@ extension is installed through an enterprise policy and needs xpinstall.signatur
 set to false.
 
 %prep
-%autosetup -n %{name}-%{commit}
+%autosetup -p1 -n %{name}-%{commit}
 
 %build
 export npm_config_cache=$PWD/.npm-cache
@@ -73,6 +75,15 @@ chmod 0755 %{buildroot}%{_bindir}/%{name}
 %config(noreplace) %{_sysconfdir}/zen/policies/policies.json
 
 %changelog
+* Wed Sep 30 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-2
+- Add file and image upload
+- Add network request log
+- Add GIF recording
+- Add window resize
+- Add batch actions and shortcuts
+- Add multi-browser selection
+- Add per-site permissions
+
 * Wed Sep 30 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-1
 - Use bumpver counter so commit updates sort correctly
 
