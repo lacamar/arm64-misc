@@ -9,7 +9,7 @@
 
 Name:           zen-control
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        MCP bridge and WebExtension to drive the Zen browser from Claude Code
 
 License:        LicenseRef-Not-specified
@@ -17,6 +17,7 @@ URL:            https://github.com/zjones2142/zen-control
 Source0:        %{url}/archive/%{commit}/%{name}-%{shortcommit}.tar.gz
 
 Patch0:         0001-chrome-parity-tools.patch
+Patch1:         0002-controlled-tab-marker.patch
 
 BuildArch:      noarch
 
@@ -75,6 +76,10 @@ chmod 0755 %{buildroot}%{_bindir}/%{name}
 %config(noreplace) %{_sysconfdir}/zen/policies/policies.json
 
 %changelog
+* Wed Sep 30 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-3
+- Mark controlled tabs with title prefix and glow
+- Add per-tab stop button
+
 * Wed Sep 30 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-2
 - Add file and image upload
 - Add network request log

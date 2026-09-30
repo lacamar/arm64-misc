@@ -1,0 +1,251 @@
+diff --git a/README.md b/README.md
+index 84805d0..34f8c86 100644
+--- a/README.md
++++ b/README.md
+@@ -52,7 +52,8 @@ Tools: `tabs_list`, `tab_new`, `tab_select`, `tab_close`, `navigate`, `go_back`,
+ 
+ Sites must be allowed before Claude can act on them: a prompt window asks
+ (allow once / always / deny), and the toolbar popup manages allowed sites or
+-allows all. Shortcuts are stored in `$XDG_CONFIG_HOME/zen-control/shortcuts.json`.
++allows all. Tabs Claude acts on get a 🤖 title prefix, an orange glow and a
++Stop button that blocks Claude on that tab until resumed from the popup. Shortcuts are stored in `$XDG_CONFIG_HOME/zen-control/shortcuts.json`.
+ 
+ Typical flow: `navigate` → `read_page` (get refs like `e12`) → `click`/`type`
+ with a ref → `screenshot` to verify.
+diff --git a/extension/background.js b/extension/background.js
+index 90be9c6..2022e59 100644
+--- a/extension/background.js
++++ b/extension/background.js
+@@ -10,7 +10,9 @@ let ws = null;
+ let backoff = 1000;
+ let currentTabId = null;
+ let browserId = null;
+-let settings = { allSites: false, allowedSites: [], label: "" };
++let settings = { allSites: false, allowedSites: [], label: "", markTitle: true, markBorder: true };
++const controlled = new Set();
++const stopped = new Set();
+ const sessionAllowed = new Set();
+ const prompts = new Map(); // host -> {promise, resolve, windowId}
+ const MAX_REQUESTS = 1000;
+@@ -51,13 +53,14 @@ function connect() {
+     try {
+       const result = await handle(msg.cmd, msg.args || {});
+       reply = { type: "result", id: msg.id, ok: true, result };
++      if (!UNGATED.has(msg.cmd) && currentTabId != null) mark(currentTabId);
+       if (gif.recording && FRAME_CMDS.has(msg.cmd) && currentTabId === gif.tabId) await gifFrame().catch(() => {});
+     } catch (e) {
+       reply = { type: "result", id: msg.id, ok: false, error: String(e && e.message || e) };
+     }
+     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(reply));
+   };
+-  ws.onclose = () => { setBadge(false); scheduleReconnect(); };
++  ws.onclose = () => { setBadge(false); unmarkAll(); scheduleReconnect(); };
+   ws.onerror = () => { /* onclose follows */ };
+ }
+ 
+@@ -183,6 +186,25 @@ async function screenshot(tab) {
+   return { dataUrl: out, width: outW, height: outH, viewportWidth: w, viewportHeight: h, scale, raw: { width: bmp.width, height: bmp.height } };
+ }
+ 
++/* ---------- controlled-tab markers ---------- */
++
++function markerState(tabId) {
++  return { on: controlled.has(tabId), stopped: stopped.has(tabId), title: settings.markTitle, border: settings.markBorder };
++}
++function pushMarker(tabId) {
++  browser.tabs.sendMessage(tabId, { cmd: "marker", args: markerState(tabId) }).catch(() => {});
++}
++function mark(tabId) {
++  if (controlled.has(tabId)) return;
++  controlled.add(tabId);
++  pushMarker(tabId);
++}
++function unmarkAll() {
++  const tabs = [...controlled];
++  controlled.clear();
++  for (const id of tabs) pushMarker(id);
++}
++
+ /* ---------- site permissions ---------- */
+ 
+ function hostOf(url) {
+@@ -214,11 +236,24 @@ async function saveSettings(patch) {
+   await browser.storage.local.set({ settings });
+ }
+ 
+-browser.runtime.onMessage.addListener((msg) => {
+-  if (msg && msg.type === "site_decision") { const p = prompts.get(msg.host); if (p) p.resolve(msg.decision); }
++browser.runtime.onMessage.addListener((msg, sender) => {
++  if (!msg) return;
++  if (msg.type === "site_decision") { const p = prompts.get(msg.host); if (p) p.resolve(msg.decision); }
++  else if (msg.type === "marker_query") { const id = msg.tabId ?? sender.tab?.id; if (id != null) return Promise.resolve(markerState(id)); }
++  else if (msg.type === "stop_tab" || msg.type === "resume_tab") {
++    const id = msg.tabId ?? sender.tab?.id;
++    if (id == null) return;
++    if (msg.type === "stop_tab") stopped.add(id); else stopped.delete(id);
++    pushMarker(id);
++    return Promise.resolve(markerState(id));
++  }
+ });
+ browser.windows.onRemoved.addListener((id) => { for (const p of prompts.values()) if (p.windowId === id) p.resolve("deny"); });
+-browser.storage.onChanged.addListener((changes) => { if (changes.settings) settings = { ...settings, ...changes.settings.newValue }; });
++browser.storage.onChanged.addListener((changes) => {
++  if (!changes.settings) return;
++  settings = { ...settings, ...changes.settings.newValue };
++  for (const id of controlled) pushMarker(id);
++});
+ 
+ /* ---------- network capture ---------- */
+ 
+@@ -284,6 +319,10 @@ async function handle(cmd, args) {
+     if (cmd === "navigate" || cmd === "tab_new") { if (args.url) await ensureAllowed(args.url); }
+     else await ensureAllowed((await resolveTab(args.tabId)).url);
+   }
++  if (!["ping", "tabs_list", "tab_new", "gif_stop", "gif_clear", "gif_export"].includes(cmd)) {
++    const t = cmd === "tab_select" ? { id: args.tabId } : await resolveTab(args.tabId);
++    if (stopped.has(t.id)) throw new Error(`The user stopped Claude on tab ${t.id}. Ask them before continuing; they can resume it from the Zen Control toolbar button.`);
++  }
+   switch (cmd) {
+     case "ping":
+       return { pong: true, currentTabId, browserId };
+@@ -374,7 +413,7 @@ async function handle(cmd, args) {
+   }
+ }
+ 
+-browser.tabs.onRemoved.addListener((id) => { if (id === currentTabId) currentTabId = null; });
++browser.tabs.onRemoved.addListener((id) => { if (id === currentTabId) currentTabId = null; controlled.delete(id); stopped.delete(id); });
+ setBadge(false);
+ browser.storage.local.get(["settings", "browserId"]).then(async (st) => {
+   settings = { ...settings, ...st.settings };
+diff --git a/extension/content.js b/extension/content.js
+index ec15df0..4c35d23 100644
+--- a/extension/content.js
++++ b/extension/content.js
+@@ -424,7 +424,55 @@
+     return { count: out.length, logs: out.slice(-(args.limit || 100)) };
+   }
+ 
+-  const handlers = { ping: () => ({ pong: true, url: location.href }), read_page: readPage, find, click, hover, type, press_key: pressKey, scroll, select_option: selectOption, get_text: getText, wait_for: waitFor, evaluate, console_logs: consoleLogs, upload };
++  /* ---------- controlled-tab marker ---------- */
++  const TITLE_MARK = "🤖 ";
++  let marker = { on: false };
++  let host = null;
++  let titleObserver = null;
++  function applyTitle() {
++    const want = marker.on && marker.title;
++    const t = document.title;
++    if (want && !t.startsWith(TITLE_MARK)) document.title = TITLE_MARK + t;
++    else if (!want && t.startsWith(TITLE_MARK)) document.title = t.slice(TITLE_MARK.length);
++  }
++  function buildHost() {
++    host = document.createElement("zen-control-marker");
++    const root = host.attachShadow({ mode: "closed" });
++    root.innerHTML = `<style>
++      :host { all: initial; }
++      .glow { position: fixed; inset: 0; pointer-events: none; z-index: 2147483646; box-shadow: inset 0 0 0 3px #d97757, inset 0 0 28px rgba(217,119,87,.55); }
++      .pill { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 2147483647; display: flex; gap: 10px; align-items: center;
++        font: 13px system-ui, sans-serif; color: #fff; background: #d97757; padding: 6px 8px 6px 12px; border-radius: 999px; box-shadow: 0 2px 10px rgba(0,0,0,.25); }
++      .pill.stopped { background: #6b7280; }
++      button { all: unset; cursor: pointer; background: rgba(255,255,255,.22); padding: 2px 10px; border-radius: 999px; }
++      button:hover { background: rgba(255,255,255,.35); }
++    </style><div class="glow"></div><div class="pill"><span></span><button></button></div>`;
++    const pill = root.querySelector(".pill");
++    root.querySelector("button").addEventListener("click", () => browser.runtime.sendMessage({ type: marker.stopped ? "resume_tab" : "stop_tab" }));
++    host.render = () => {
++      root.querySelector(".glow").hidden = !marker.border || marker.stopped;
++      pill.classList.toggle("stopped", !!marker.stopped);
++      pill.querySelector("span").textContent = marker.stopped ? "Claude is stopped on this tab" : "Claude is controlling this tab";
++      pill.querySelector("button").textContent = marker.stopped ? "Resume" : "Stop";
++    };
++  }
++  function applyMarker(state) {
++    marker = state || { on: false };
++    const show = marker.on && (marker.border || marker.stopped || marker.title);
++    if (show) {
++      if (!host) buildHost();
++      if (!host.isConnected) document.documentElement.append(host);
++      host.render();
++    } else if (host) host.remove();
++    applyTitle();
++    if (marker.on && !titleObserver) {
++      titleObserver = new MutationObserver(applyTitle);
++      titleObserver.observe(document.documentElement, { subtree: true, childList: true, characterData: true });
++    } else if (!marker.on && titleObserver) { titleObserver.disconnect(); titleObserver = null; }
++  }
++  browser.runtime.sendMessage({ type: "marker_query" }).then(applyMarker, () => {});
++
++  const handlers = { ping: () => ({ pong: true, url: location.href }), read_page: readPage, find, click, hover, type, press_key: pressKey, scroll, select_option: selectOption, get_text: getText, wait_for: waitFor, evaluate, console_logs: consoleLogs, upload, marker: applyMarker };
+ 
+   browser.runtime.onMessage.addListener((msg) => {
+     const h = handlers[msg && msg.cmd];
+diff --git a/extension/manifest.json b/extension/manifest.json
+index e10e5c6..410c4bc 100644
+--- a/extension/manifest.json
++++ b/extension/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "manifest_version": 2,
+   "name": "Zen Control",
+-  "version": "0.1.2.1",
++  "version": "0.1.2.2",
+   "description": "Lets Claude Code drive this browser through a local MCP bridge (ws://127.0.0.1:17373).",
+   "browser_specific_settings": {
+     "gecko": {
+diff --git a/extension/popup.html b/extension/popup.html
+index 7aaa9b0..056f2d9 100644
+--- a/extension/popup.html
++++ b/extension/popup.html
+@@ -4,7 +4,10 @@
+ <body>
+   <h1>Zen Control</h1>
+   <div class="row"><span id="current"></span><button id="toggle" hidden></button></div>
++  <div class="row" id="stoppedRow" hidden><span>Claude is stopped on this tab</span><button id="resume" class="primary">Resume</button></div>
+   <div class="row"><label><input type="checkbox" id="all"> Allow on all sites without asking</label></div>
++  <div class="row"><label><input type="checkbox" id="markTitle"> Mark controlled tabs with 🤖 in the title</label></div>
++  <div class="row"><label><input type="checkbox" id="markBorder"> Glow around controlled pages</label></div>
+   <p class="muted">Always-allowed sites</p>
+   <ul id="sites"></ul>
+   <div class="row"><input type="text" id="label" placeholder="Browser label (optional)"></div>
+diff --git a/extension/popup.js b/extension/popup.js
+index dc22c31..e2dc8c9 100644
+--- a/extension/popup.js
++++ b/extension/popup.js
+@@ -1,5 +1,6 @@
+ let settings;
+ let host = null;
++let tab = null;
+ 
+ async function save(patch) {
+   settings = { ...settings, ...patch };
+@@ -9,6 +10,8 @@ async function save(patch) {
+ 
+ function render() {
+   document.getElementById("all").checked = settings.allSites;
++  document.getElementById("markTitle").checked = settings.markTitle;
++  document.getElementById("markBorder").checked = settings.markBorder;
+   const toggle = document.getElementById("toggle");
+   const allowed = host && settings.allowedSites.includes(host);
+   document.getElementById("current").textContent = host ? host : "This page can't be controlled";
+@@ -31,12 +34,20 @@ function render() {
+ }
+ 
+ (async () => {
+-  settings = { allSites: false, allowedSites: [], label: "", ...(await browser.storage.local.get("settings")).settings };
+-  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
++  settings = { allSites: false, allowedSites: [], label: "", markTitle: true, markBorder: true, ...(await browser.storage.local.get("settings")).settings };
++  [tab] = await browser.tabs.query({ active: true, currentWindow: true });
++  const state = await browser.runtime.sendMessage({ type: "marker_query", tabId: tab.id });
++  document.getElementById("stoppedRow").hidden = !state?.stopped;
++  document.getElementById("resume").addEventListener("click", async () => {
++    await browser.runtime.sendMessage({ type: "resume_tab", tabId: tab.id });
++    document.getElementById("stoppedRow").hidden = true;
++  });
+   try { const u = new URL(tab.url); if (/^(https?|file):$/.test(u.protocol)) host = u.host || "file"; } catch {}
+   document.getElementById("label").value = settings.label || "";
+   document.getElementById("toggle").addEventListener("click", () => save({ allowedSites: settings.allowedSites.includes(host) ? settings.allowedSites.filter((x) => x !== host) : [...settings.allowedSites, host] }));
+   document.getElementById("all").addEventListener("change", (e) => save({ allSites: e.target.checked }));
++  document.getElementById("markTitle").addEventListener("change", (e) => save({ markTitle: e.target.checked }));
++  document.getElementById("markBorder").addEventListener("change", (e) => save({ markBorder: e.target.checked }));
+   document.getElementById("label").addEventListener("change", (e) => save({ label: e.target.value.trim() }));
+   render();
+ })();
