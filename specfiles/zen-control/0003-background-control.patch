@@ -1,0 +1,259 @@
+diff --git a/extension/background.js b/extension/background.js
+index 2022e59..891e0c1 100644
+--- a/extension/background.js
++++ b/extension/background.js
+@@ -26,6 +26,7 @@ const UNGATED = new Set(["ping", "tabs_list", "tab_select", "tab_close", "resize
+ /* ---------- connection ---------- */
+ 
+ function setBadge(connected) {
++  if (prompts.size) return updatePromptBadge();
+   browser.browserAction.setBadgeText({ text: connected ? "on" : "" });
+   browser.browserAction.setBadgeBackgroundColor({ color: connected ? "#16a34a" : "#6b7280" });
+   browser.browserAction.setTitle({ title: `Zen Control: ${connected ? "connected" : "disconnected"}` });
+@@ -150,22 +151,32 @@ async function sendToContent(tab, cmd, args) {
+   return r;
+ }
+ 
+-async function screenshot(tab) {
+-  if (!tab.active) {
+-    await browser.tabs.update(tab.id, { active: true });
++async function captureVisible(tab, opts) {
++  if (tab.active) return withTimeout(browser.tabs.captureVisibleTab(tab.windowId, opts), 10000, "captureVisibleTab");
++  const [prev] = await browser.tabs.query({ active: true, windowId: tab.windowId });
++  await browser.tabs.update(tab.id, { active: true });
++  try {
+     await sleep(300);
++    return await withTimeout(browser.tabs.captureVisibleTab(tab.windowId, opts), 10000, "captureVisibleTab");
++  } finally {
++    if (prev) await browser.tabs.update(prev.id, { active: true }).catch(() => {});
+   }
+-  let dataUrl;
++}
++
++async function capture(tab, opts) {
+   try {
+-    // Firefox-specific: captures a specific tab, works even when it isn't focused.
+-    dataUrl = await withTimeout(browser.tabs.captureTab(tab.id, { format: "png" }), 10000, "captureTab");
++    return await withTimeout(browser.tabs.captureTab(tab.id, opts), 10000, "captureTab");
+   } catch (e) {
+     try {
+-      dataUrl = await withTimeout(browser.tabs.captureVisibleTab(tab.windowId, { format: "png" }), 10000, "captureVisibleTab");
++      return await captureVisible(tab, opts);
+     } catch (e2) {
+       throw new Error(`Screenshot failed: captureTab: ${e.message}; captureVisibleTab: ${e2.message}`);
+     }
+   }
++}
++
++async function screenshot(tab) {
++  const dataUrl = await capture(tab, { format: "png" });
+   // Scale the capture to CSS pixels so coordinates match what click(x, y) expects.
+   let dpr = 1, cssW = null, cssH = null;
+   try {
+@@ -219,18 +230,27 @@ async function ensureAllowed(url) {
+     let resolve;
+     p = { promise: new Promise((r) => { resolve = r; }), resolve };
+     prompts.set(host, p);
+-    const w = await browser.windows.create({ type: "popup", width: 460, height: 260, url: browser.runtime.getURL("permission.html?host=" + encodeURIComponent(host)) });
+-    p.windowId = w.id;
++    updatePromptBadge();
++    browser.notifications.create("site:" + host, { type: "basic", iconUrl: "icon.svg", title: "Zen Control", message: `Claude wants access to ${host}. Open the Zen Control toolbar button to allow or deny.` }).catch(() => {});
+     setTimeout(() => p.resolve("deny"), 120000);
+   }
+   const decision = await p.promise;
+-  prompts.delete(host);
+-  if (p.windowId != null) browser.windows.remove(p.windowId).catch(() => {});
++  if (prompts.get(host) === p) {
++    prompts.delete(host);
++    updatePromptBadge();
++    browser.notifications.clear("site:" + host).catch(() => {});
++  }
+   if (decision === "always") await saveSettings({ allowedSites: [...new Set([...settings.allowedSites, host])] });
+   else if (decision === "once") sessionAllowed.add(host);
+   else throw new Error(`The user did not allow Zen Control on ${host}. They can allow it from the Zen Control toolbar button.`);
+ }
+ 
++function updatePromptBadge() {
++  if (!prompts.size) return setBadge(ws && ws.readyState === WebSocket.OPEN);
++  browser.browserAction.setBadgeText({ text: "?" });
++  browser.browserAction.setBadgeBackgroundColor({ color: "#d97706" });
++}
++
+ async function saveSettings(patch) {
+   settings = { ...settings, ...patch };
+   await browser.storage.local.set({ settings });
+@@ -239,6 +259,7 @@ async function saveSettings(patch) {
+ browser.runtime.onMessage.addListener((msg, sender) => {
+   if (!msg) return;
+   if (msg.type === "site_decision") { const p = prompts.get(msg.host); if (p) p.resolve(msg.decision); }
++  else if (msg.type === "prompts_query") return Promise.resolve([...prompts.keys()]);
+   else if (msg.type === "marker_query") { const id = msg.tabId ?? sender.tab?.id; if (id != null) return Promise.resolve(markerState(id)); }
+   else if (msg.type === "stop_tab" || msg.type === "resume_tab") {
+     const id = msg.tabId ?? sender.tab?.id;
+@@ -248,7 +269,6 @@ browser.runtime.onMessage.addListener((msg, sender) => {
+     return Promise.resolve(markerState(id));
+   }
+ });
+-browser.windows.onRemoved.addListener((id) => { for (const p of prompts.values()) if (p.windowId === id) p.resolve("deny"); });
+ browser.storage.onChanged.addListener((changes) => {
+   if (!changes.settings) return;
+   settings = { ...settings, ...changes.settings.newValue };
+@@ -284,7 +304,7 @@ browser.webRequest.onErrorOccurred.addListener((d) => {
+ 
+ async function gifFrame() {
+   await sleep(250);
+-  const dataUrl = await withTimeout(browser.tabs.captureTab(gif.tabId, { format: "jpeg", quality: 85 }), 10000, "captureTab");
++  const dataUrl = await capture(await browser.tabs.get(gif.tabId), { format: "jpeg", quality: 85 });
+   gif.frames.push(dataUrl);
+   if (gif.frames.length > MAX_GIF_FRAMES) gif.frames.shift();
+ }
+@@ -332,7 +352,7 @@ async function handle(cmd, args) {
+       return { currentTabId, tabs: tabs.map(tabInfo) };
+     }
+     case "tab_new": {
+-      const t = await browser.tabs.create({ url: args.url || "about:blank", active: args.active !== false });
++      const t = await browser.tabs.create({ url: args.url || "about:blank", active: !!args.active });
+       currentTabId = t.id;
+       if (args.url) await withLoad(t.id, async () => {}, args.timeout);
+       return tabInfo(await browser.tabs.get(t.id));
+@@ -340,8 +360,7 @@ async function handle(cmd, args) {
+     case "tab_select": {
+       const t = await browser.tabs.get(args.tabId);
+       currentTabId = t.id;
+-      await browser.tabs.update(t.id, { active: true });
+-      await browser.windows.update(t.windowId, { focused: true }).catch(() => {});
++      if (args.activate) await browser.tabs.update(t.id, { active: true });
+       return tabInfo(await browser.tabs.get(t.id));
+     }
+     case "tab_close": {
+diff --git a/extension/manifest.json b/extension/manifest.json
+index 410c4bc..3bdc406 100644
+--- a/extension/manifest.json
++++ b/extension/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "manifest_version": 2,
+   "name": "Zen Control",
+-  "version": "0.1.2.2",
++  "version": "0.1.2.3",
+   "description": "Lets Claude Code drive this browser through a local MCP bridge (ws://127.0.0.1:17373).",
+   "browser_specific_settings": {
+     "gecko": {
+@@ -15,7 +15,8 @@
+     "webNavigation",
+     "storage",
+     "<all_urls>",
+-    "webRequest"
++    "webRequest",
++    "notifications"
+   ],
+   "background": {
+     "scripts": [
+diff --git a/extension/permission.html b/extension/permission.html
+deleted file mode 100644
+index fe181a4..0000000
+--- a/extension/permission.html
++++ /dev/null
+@@ -1,16 +0,0 @@
+-<!doctype html>
+-<html>
+-<head><meta charset="utf-8"><title>Zen Control</title><link rel="stylesheet" href="ui.css"></head>
+-<body>
+-  <h1>Allow Claude on <span id="host"></span>?</h1>
+-  <p>Claude wants to read and act on this site through Zen Control, including pages where you are logged in.</p>
+-  <div class="row">
+-    <button id="deny">Deny</button>
+-    <span>
+-      <button id="once">Allow once</button>
+-      <button id="always" class="primary">Always allow</button>
+-    </span>
+-  </div>
+-  <script src="permission.js"></script>
+-</body>
+-</html>
+diff --git a/extension/permission.js b/extension/permission.js
+deleted file mode 100644
+index 4f9a746..0000000
+--- a/extension/permission.js
++++ /dev/null
+@@ -1,5 +0,0 @@
+-const host = new URLSearchParams(location.search).get("host");
+-document.getElementById("host").textContent = host;
+-for (const decision of ["deny", "once", "always"]) {
+-  document.getElementById(decision).addEventListener("click", () => browser.runtime.sendMessage({ type: "site_decision", host, decision }));
+-}
+diff --git a/extension/popup.html b/extension/popup.html
+index 056f2d9..c8b29f3 100644
+--- a/extension/popup.html
++++ b/extension/popup.html
+@@ -3,6 +3,7 @@
+ <head><meta charset="utf-8"><link rel="stylesheet" href="ui.css"></head>
+ <body>
+   <h1>Zen Control</h1>
++  <div id="prompts"></div>
+   <div class="row"><span id="current"></span><button id="toggle" hidden></button></div>
+   <div class="row" id="stoppedRow" hidden><span>Claude is stopped on this tab</span><button id="resume" class="primary">Resume</button></div>
+   <div class="row"><label><input type="checkbox" id="all"> Allow on all sites without asking</label></div>
+diff --git a/extension/popup.js b/extension/popup.js
+index e2dc8c9..5b996ca 100644
+--- a/extension/popup.js
++++ b/extension/popup.js
+@@ -33,7 +33,34 @@ function render() {
+   if (!settings.allowedSites.length) ul.innerHTML = '<li class="muted">None</li>';
+ }
+ 
++async function renderPrompts() {
++  const hosts = await browser.runtime.sendMessage({ type: "prompts_query" });
++  document.getElementById("prompts").replaceChildren(...hosts.map((h) => {
++    const div = document.createElement("div");
++    div.className = "prompt";
++    const q = document.createElement("p");
++    q.textContent = `Allow Claude to read and act on ${h}, including pages where you are logged in?`;
++    const row = document.createElement("div");
++    row.className = "row";
++    for (const [decision, label] of [["deny", "Deny"], ["once", "Allow once"], ["always", "Always allow"]]) {
++      const b = document.createElement("button");
++      b.textContent = label;
++      if (decision === "always") b.className = "primary";
++      b.addEventListener("click", async () => {
++        await browser.runtime.sendMessage({ type: "site_decision", host: h, decision });
++        if (decision === "always") settings = { ...settings, allowedSites: [...new Set([...settings.allowedSites, h])] };
++        div.remove();
++        render();
++      });
++      row.append(b);
++    }
++    div.append(q, row);
++    return div;
++  }));
++}
++
+ (async () => {
++  renderPrompts();
+   settings = { allSites: false, allowedSites: [], label: "", markTitle: true, markBorder: true, ...(await browser.storage.local.get("settings")).settings };
+   [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+   const state = await browser.runtime.sendMessage({ type: "marker_query", tabId: tab.id });
+diff --git a/extension/ui.css b/extension/ui.css
+index e3f0499..ccd88b2 100644
+--- a/extension/ui.css
++++ b/extension/ui.css
+@@ -8,3 +8,4 @@ button.primary { background: #16a34a; border-color: #16a34a; color: #fff; }
+ .muted { opacity: .7; font-size: 12px; }
+ ul { list-style: none; padding: 0; margin: 0 0 12px; max-height: 200px; overflow: auto; }
+ input[type=text] { font: inherit; flex: 1; padding: 4px 6px; }
++.prompt { border: 1px solid #d97706; border-radius: 6px; padding: 8px; margin: 0 0 12px; }
+diff --git a/server/index.js b/server/index.js
+index a8c80ce..edeb456 100644
+--- a/server/index.js
++++ b/server/index.js
+@@ -210,8 +210,8 @@ async function runActions(actions, stopOnError = true) {
+ }
+ 
+ tool("tabs_list", "List open Zen browser tabs (id, url, title) and which tab is current.", {}, async () => text(await sendCommand("tabs_list", {})));
+-tool("tab_new", "Open a new tab, optionally at a URL, and make it the current tab.", { url: z.string().url().optional(), active: z.boolean().optional().describe("Focus the tab (default true)") }, async (a) => text(await sendCommand("tab_new", a)));
+-tool("tab_select", "Make a tab current and bring it to the front.", { tabId: z.number().int() }, async (a) => text(await sendCommand("tab_select", a)));
++tool("tab_new", "Open a new background tab, optionally at a URL, and make it the current tab. All tools work on background tabs.", { url: z.string().url().optional(), active: z.boolean().optional().describe("Show the tab in its window (default false)") }, async (a) => text(await sendCommand("tab_new", a)));
++tool("tab_select", "Make a tab the current target without showing it; all tools work on background tabs.", { tabId: z.number().int(), activate: z.boolean().optional().describe("Also show the tab in its window (default false)") }, async (a) => text(await sendCommand("tab_select", a)));
+ tool("tab_close", "Close a tab (default: the current one).", { tabId }, async (a) => text(await sendCommand("tab_close", a)));
+ tool("navigate", "Navigate the current tab to a URL and wait for the page to load.", { url: z.string().describe("Absolute URL"), tabId }, async (a) => text(await sendCommand("navigate", a)));
+ tool("go_back", "Go back in history and wait for load.", { tabId }, async (a) => text(await sendCommand("back", a)));
