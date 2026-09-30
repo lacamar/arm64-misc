@@ -1,0 +1,367 @@
+diff --git a/README.md b/README.md
+index 8c7a9ae..3dc34fd 100644
+--- a/README.md
++++ b/README.md
+@@ -129,3 +129,10 @@ I welcome and encourage contributions to the Steamless project. However, I do ha
+ 
+ Discussions can be opened within the Issue tracker here:
+   * https://github.com/atom0s/Steamless/issues
++
++# Linux (CLI)
++
++```
++dotnet build linux/Steamless.Linux.sln
++linux/steamless [options] <file>
++```
+diff --git a/Steamless.API/PE32/NativeApi32.cs b/Steamless.API/PE32/NativeApi32.cs
+index 64d13c6..77ce4a5 100644
+--- a/Steamless.API/PE32/NativeApi32.cs
++++ b/Steamless.API/PE32/NativeApi32.cs
+@@ -613,7 +613,41 @@ namespace Steamless.API.PE32
+         /// <param name="HeaderSum"></param>
+         /// <param name="CheckSum"></param>
+         /// <returns></returns>
+-        [DllImport("imagehlp.dll", CharSet = CharSet.Auto)]
+-        public static extern int MapFileAndCheckSum(string Filename, out uint HeaderSum, out uint CheckSum);
++        public static int MapFileAndCheckSum(string Filename, out uint HeaderSum, out uint CheckSum)
++        {
++            HeaderSum = CheckSum = 0;
++
++            byte[] data;
++            try
++            {
++                data = System.IO.File.ReadAllBytes(Filename);
++            }
++            catch
++            {
++                return 1;
++            }
++
++            if (data.Length < 0x40)
++                return 1;
++
++            var csumOffset = BitConverter.ToInt32(data, 0x3C) + 0x58;
++            if (csumOffset < 0 || csumOffset + 4 > data.Length)
++                return 1;
++
++            HeaderSum = BitConverter.ToUInt32(data, csumOffset);
++
++            ulong sum = 0;
++            for (var x = 0; x < data.Length; x += 2)
++            {
++                if (x == csumOffset || x == csumOffset + 2)
++                    continue;
++
++                sum += x + 1 < data.Length ? BitConverter.ToUInt16(data, x) : data[x];
++                sum = (sum & 0xFFFF) + (sum >> 16);
++            }
++
++            CheckSum = (uint)((sum & 0xFFFF) + (sum >> 16) & 0xFFFF) + (uint)data.Length;
++            return 0;
++        }
+     }
+ }
+\ No newline at end of file
+diff --git a/Steamless.API/PE64/NativeApi64.cs b/Steamless.API/PE64/NativeApi64.cs
+index ecb2a40..04bbd05 100644
+--- a/Steamless.API/PE64/NativeApi64.cs
++++ b/Steamless.API/PE64/NativeApi64.cs
+@@ -609,7 +609,41 @@ namespace Steamless.API.PE64
+         /// <param name="HeaderSum"></param>
+         /// <param name="CheckSum"></param>
+         /// <returns></returns>
+-        [DllImport("imagehlp.dll", CharSet = CharSet.Auto)]
+-        public static extern int MapFileAndCheckSum(string Filename, out uint HeaderSum, out uint CheckSum);
++        public static int MapFileAndCheckSum(string Filename, out uint HeaderSum, out uint CheckSum)
++        {
++            HeaderSum = CheckSum = 0;
++
++            byte[] data;
++            try
++            {
++                data = System.IO.File.ReadAllBytes(Filename);
++            }
++            catch
++            {
++                return 1;
++            }
++
++            if (data.Length < 0x40)
++                return 1;
++
++            var csumOffset = BitConverter.ToInt32(data, 0x3C) + 0x58;
++            if (csumOffset < 0 || csumOffset + 4 > data.Length)
++                return 1;
++
++            HeaderSum = BitConverter.ToUInt32(data, csumOffset);
++
++            ulong sum = 0;
++            for (var x = 0; x < data.Length; x += 2)
++            {
++                if (x == csumOffset || x == csumOffset + 2)
++                    continue;
++
++                sum += x + 1 < data.Length ? BitConverter.ToUInt16(data, x) : data[x];
++                sum = (sum & 0xFFFF) + (sum >> 16);
++            }
++
++            CheckSum = (uint)((sum & 0xFFFF) + (sum >> 16) & 0xFFFF) + (uint)data.Length;
++            return 0;
++        }
+     }
+ }
+\ No newline at end of file
+diff --git a/linux/.gitignore b/linux/.gitignore
+new file mode 100644
+index 0000000..cd42ee3
+--- /dev/null
++++ b/linux/.gitignore
+@@ -0,0 +1,2 @@
++bin/
++obj/
+diff --git a/linux/Directory.Build.props b/linux/Directory.Build.props
+new file mode 100644
+index 0000000..e74d609
+--- /dev/null
++++ b/linux/Directory.Build.props
+@@ -0,0 +1,17 @@
++<Project>
++  <PropertyGroup>
++    <TargetFramework>net9.0</TargetFramework>
++    <LangVersion>latest</LangVersion>
++    <Nullable>disable</Nullable>
++    <ImplicitUsings>disable</ImplicitUsings>
++    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
++    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
++    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
++    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
++    <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
++    <SteamlessRoot>$(MSBuildThisFileDirectory)..\</SteamlessRoot>
++    <SteamlessOut>$(MSBuildThisFileDirectory)bin\</SteamlessOut>
++    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
++    <NoWarn>$(NoWarn);CS0162;CS0168;CS0219;CS0414;CS0649;CS1998;SYSLIB0011;MSB3270</NoWarn>
++  </PropertyGroup>
++</Project>
+diff --git a/linux/Steamless.API/Steamless.API.csproj b/linux/Steamless.API/Steamless.API.csproj
+new file mode 100644
+index 0000000..271af91
+--- /dev/null
++++ b/linux/Steamless.API/Steamless.API.csproj
+@@ -0,0 +1,10 @@
++<Project Sdk="Microsoft.NET.Sdk">
++  <PropertyGroup>
++    <OutputType>Library</OutputType>
++    <AssemblyName>Steamless.API</AssemblyName>
++    <OutputPath>$(SteamlessOut)</OutputPath>
++  </PropertyGroup>
++  <ItemGroup>
++    <Compile Include="$(SteamlessRoot)Steamless.API\**\*.cs" Exclude="$(SteamlessRoot)Steamless.API\Model\ViewModelBase.cs;$(SteamlessRoot)Steamless.API\Model\NavigatedEventArgs.cs;$(SteamlessRoot)Steamless.API\obj\**;$(SteamlessRoot)Steamless.API\bin\**" />
++  </ItemGroup>
++</Project>
+diff --git a/linux/Steamless.CLI/Steamless.CLI.csproj b/linux/Steamless.CLI/Steamless.CLI.csproj
+new file mode 100644
+index 0000000..b00244d
+--- /dev/null
++++ b/linux/Steamless.CLI/Steamless.CLI.csproj
+@@ -0,0 +1,12 @@
++<Project Sdk="Microsoft.NET.Sdk">
++  <PropertyGroup>
++    <OutputType>Exe</OutputType>
++    <AssemblyName>Steamless.CLI</AssemblyName>
++    <OutputPath>$(SteamlessOut)</OutputPath>
++    <RollForward>Major</RollForward>
++  </PropertyGroup>
++  <ItemGroup>
++    <Compile Include="$(SteamlessRoot)Steamless.CLI\**\*.cs" Exclude="$(SteamlessRoot)Steamless.CLI\obj\**;$(SteamlessRoot)Steamless.CLI\bin\**" />
++    <ProjectReference Include="..\Steamless.API\Steamless.API.csproj" />
++  </ItemGroup>
++</Project>
+diff --git a/linux/Steamless.Linux.sln b/linux/Steamless.Linux.sln
+new file mode 100644
+index 0000000..ad88fa1
+--- /dev/null
++++ b/linux/Steamless.Linux.sln
+@@ -0,0 +1,70 @@
++﻿
++Microsoft Visual Studio Solution File, Format Version 12.00
++# Visual Studio Version 17
++VisualStudioVersion = 17.0.31903.59
++MinimumVisualStudioVersion = 10.0.40219.1
++Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Steamless.API", "Steamless.API\Steamless.API.csproj", "{91753248-7FCC-4C02-ACDA-FB9FCE2D947B}"
++EndProject
++Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Steamless.CLI", "Steamless.CLI\Steamless.CLI.csproj", "{0798DA57-B5B8-445C-AB85-6EFE2E163D53}"
++EndProject
++Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Steamless.Unpacker.Variant10.x86", "Steamless.Unpacker.Variant10.x86\Steamless.Unpacker.Variant10.x86.csproj", "{183E0D6E-DEE6-4963-BA26-1E9415F00DB5}"
++EndProject
++Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Steamless.Unpacker.Variant20.x86", "Steamless.Unpacker.Variant20.x86\Steamless.Unpacker.Variant20.x86.csproj", "{38D07255-1432-4BFC-A150-20E7650ACEF4}"
++EndProject
++Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Steamless.Unpacker.Variant21.x86", "Steamless.Unpacker.Variant21.x86\Steamless.Unpacker.Variant21.x86.csproj", "{8D28ACAE-E4B5-4825-BF8A-62452889927B}"
++EndProject
++Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Steamless.Unpacker.Variant30.x64", "Steamless.Unpacker.Variant30.x64\Steamless.Unpacker.Variant30.x64.csproj", "{9CE875B5-D3C7-46D0-AF99-48AC3A3E2E35}"
++EndProject
++Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Steamless.Unpacker.Variant30.x86", "Steamless.Unpacker.Variant30.x86\Steamless.Unpacker.Variant30.x86.csproj", "{6492AAA3-972E-4781-B8FC-65AF23C93CCE}"
++EndProject
++Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Steamless.Unpacker.Variant31.x64", "Steamless.Unpacker.Variant31.x64\Steamless.Unpacker.Variant31.x64.csproj", "{C81C25A8-160F-4DA4-8B96-5B4E31B527A1}"
++EndProject
++Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Steamless.Unpacker.Variant31.x86", "Steamless.Unpacker.Variant31.x86\Steamless.Unpacker.Variant31.x86.csproj", "{C49A44A4-0E06-42B8-B949-66D83F7D3FC6}"
++EndProject
++Global
++	GlobalSection(SolutionConfigurationPlatforms) = preSolution
++		Debug|Any CPU = Debug|Any CPU
++		Release|Any CPU = Release|Any CPU
++	EndGlobalSection
++	GlobalSection(SolutionProperties) = preSolution
++		HideSolutionNode = FALSE
++	EndGlobalSection
++	GlobalSection(ProjectConfigurationPlatforms) = postSolution
++		{91753248-7FCC-4C02-ACDA-FB9FCE2D947B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
++		{91753248-7FCC-4C02-ACDA-FB9FCE2D947B}.Debug|Any CPU.Build.0 = Debug|Any CPU
++		{91753248-7FCC-4C02-ACDA-FB9FCE2D947B}.Release|Any CPU.ActiveCfg = Release|Any CPU
++		{91753248-7FCC-4C02-ACDA-FB9FCE2D947B}.Release|Any CPU.Build.0 = Release|Any CPU
++		{0798DA57-B5B8-445C-AB85-6EFE2E163D53}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
++		{0798DA57-B5B8-445C-AB85-6EFE2E163D53}.Debug|Any CPU.Build.0 = Debug|Any CPU
++		{0798DA57-B5B8-445C-AB85-6EFE2E163D53}.Release|Any CPU.ActiveCfg = Release|Any CPU
++		{0798DA57-B5B8-445C-AB85-6EFE2E163D53}.Release|Any CPU.Build.0 = Release|Any CPU
++		{183E0D6E-DEE6-4963-BA26-1E9415F00DB5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
++		{183E0D6E-DEE6-4963-BA26-1E9415F00DB5}.Debug|Any CPU.Build.0 = Debug|Any CPU
++		{183E0D6E-DEE6-4963-BA26-1E9415F00DB5}.Release|Any CPU.ActiveCfg = Release|Any CPU
++		{183E0D6E-DEE6-4963-BA26-1E9415F00DB5}.Release|Any CPU.Build.0 = Release|Any CPU
++		{38D07255-1432-4BFC-A150-20E7650ACEF4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
++		{38D07255-1432-4BFC-A150-20E7650ACEF4}.Debug|Any CPU.Build.0 = Debug|Any CPU
++		{38D07255-1432-4BFC-A150-20E7650ACEF4}.Release|Any CPU.ActiveCfg = Release|Any CPU
++		{38D07255-1432-4BFC-A150-20E7650ACEF4}.Release|Any CPU.Build.0 = Release|Any CPU
++		{8D28ACAE-E4B5-4825-BF8A-62452889927B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
++		{8D28ACAE-E4B5-4825-BF8A-62452889927B}.Debug|Any CPU.Build.0 = Debug|Any CPU
++		{8D28ACAE-E4B5-4825-BF8A-62452889927B}.Release|Any CPU.ActiveCfg = Release|Any CPU
++		{8D28ACAE-E4B5-4825-BF8A-62452889927B}.Release|Any CPU.Build.0 = Release|Any CPU
++		{9CE875B5-D3C7-46D0-AF99-48AC3A3E2E35}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
++		{9CE875B5-D3C7-46D0-AF99-48AC3A3E2E35}.Debug|Any CPU.Build.0 = Debug|Any CPU
++		{9CE875B5-D3C7-46D0-AF99-48AC3A3E2E35}.Release|Any CPU.ActiveCfg = Release|Any CPU
++		{9CE875B5-D3C7-46D0-AF99-48AC3A3E2E35}.Release|Any CPU.Build.0 = Release|Any CPU
++		{6492AAA3-972E-4781-B8FC-65AF23C93CCE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
++		{6492AAA3-972E-4781-B8FC-65AF23C93CCE}.Debug|Any CPU.Build.0 = Debug|Any CPU
++		{6492AAA3-972E-4781-B8FC-65AF23C93CCE}.Release|Any CPU.ActiveCfg = Release|Any CPU
++		{6492AAA3-972E-4781-B8FC-65AF23C93CCE}.Release|Any CPU.Build.0 = Release|Any CPU
++		{C81C25A8-160F-4DA4-8B96-5B4E31B527A1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
++		{C81C25A8-160F-4DA4-8B96-5B4E31B527A1}.Debug|Any CPU.Build.0 = Debug|Any CPU
++		{C81C25A8-160F-4DA4-8B96-5B4E31B527A1}.Release|Any CPU.ActiveCfg = Release|Any CPU
++		{C81C25A8-160F-4DA4-8B96-5B4E31B527A1}.Release|Any CPU.Build.0 = Release|Any CPU
++		{C49A44A4-0E06-42B8-B949-66D83F7D3FC6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
++		{C49A44A4-0E06-42B8-B949-66D83F7D3FC6}.Debug|Any CPU.Build.0 = Debug|Any CPU
++		{C49A44A4-0E06-42B8-B949-66D83F7D3FC6}.Release|Any CPU.ActiveCfg = Release|Any CPU
++		{C49A44A4-0E06-42B8-B949-66D83F7D3FC6}.Release|Any CPU.Build.0 = Release|Any CPU
++	EndGlobalSection
++EndGlobal
+diff --git a/linux/Steamless.Unpacker.Variant10.x86/Steamless.Unpacker.Variant10.x86.csproj b/linux/Steamless.Unpacker.Variant10.x86/Steamless.Unpacker.Variant10.x86.csproj
+new file mode 100644
+index 0000000..c910ecb
+--- /dev/null
++++ b/linux/Steamless.Unpacker.Variant10.x86/Steamless.Unpacker.Variant10.x86.csproj
+@@ -0,0 +1,6 @@
++<Project Sdk="Microsoft.NET.Sdk">
++  <PropertyGroup>
++    <Variant>Variant10.x86</Variant>
++  </PropertyGroup>
++  <Import Project="..\Unpacker.targets" />
++</Project>
+diff --git a/linux/Steamless.Unpacker.Variant20.x86/Steamless.Unpacker.Variant20.x86.csproj b/linux/Steamless.Unpacker.Variant20.x86/Steamless.Unpacker.Variant20.x86.csproj
+new file mode 100644
+index 0000000..8f1c9b9
+--- /dev/null
++++ b/linux/Steamless.Unpacker.Variant20.x86/Steamless.Unpacker.Variant20.x86.csproj
+@@ -0,0 +1,6 @@
++<Project Sdk="Microsoft.NET.Sdk">
++  <PropertyGroup>
++    <Variant>Variant20.x86</Variant>
++  </PropertyGroup>
++  <Import Project="..\Unpacker.targets" />
++</Project>
+diff --git a/linux/Steamless.Unpacker.Variant21.x86/Steamless.Unpacker.Variant21.x86.csproj b/linux/Steamless.Unpacker.Variant21.x86/Steamless.Unpacker.Variant21.x86.csproj
+new file mode 100644
+index 0000000..e184d00
+--- /dev/null
++++ b/linux/Steamless.Unpacker.Variant21.x86/Steamless.Unpacker.Variant21.x86.csproj
+@@ -0,0 +1,6 @@
++<Project Sdk="Microsoft.NET.Sdk">
++  <PropertyGroup>
++    <Variant>Variant21.x86</Variant>
++  </PropertyGroup>
++  <Import Project="..\Unpacker.targets" />
++</Project>
+diff --git a/linux/Steamless.Unpacker.Variant30.x64/Steamless.Unpacker.Variant30.x64.csproj b/linux/Steamless.Unpacker.Variant30.x64/Steamless.Unpacker.Variant30.x64.csproj
+new file mode 100644
+index 0000000..ce11a6e
+--- /dev/null
++++ b/linux/Steamless.Unpacker.Variant30.x64/Steamless.Unpacker.Variant30.x64.csproj
+@@ -0,0 +1,6 @@
++<Project Sdk="Microsoft.NET.Sdk">
++  <PropertyGroup>
++    <Variant>Variant30.x64</Variant>
++  </PropertyGroup>
++  <Import Project="..\Unpacker.targets" />
++</Project>
+diff --git a/linux/Steamless.Unpacker.Variant30.x86/Steamless.Unpacker.Variant30.x86.csproj b/linux/Steamless.Unpacker.Variant30.x86/Steamless.Unpacker.Variant30.x86.csproj
+new file mode 100644
+index 0000000..2dbc3c3
+--- /dev/null
++++ b/linux/Steamless.Unpacker.Variant30.x86/Steamless.Unpacker.Variant30.x86.csproj
+@@ -0,0 +1,6 @@
++<Project Sdk="Microsoft.NET.Sdk">
++  <PropertyGroup>
++    <Variant>Variant30.x86</Variant>
++  </PropertyGroup>
++  <Import Project="..\Unpacker.targets" />
++</Project>
+diff --git a/linux/Steamless.Unpacker.Variant31.x64/Steamless.Unpacker.Variant31.x64.csproj b/linux/Steamless.Unpacker.Variant31.x64/Steamless.Unpacker.Variant31.x64.csproj
+new file mode 100644
+index 0000000..974d073
+--- /dev/null
++++ b/linux/Steamless.Unpacker.Variant31.x64/Steamless.Unpacker.Variant31.x64.csproj
+@@ -0,0 +1,6 @@
++<Project Sdk="Microsoft.NET.Sdk">
++  <PropertyGroup>
++    <Variant>Variant31.x64</Variant>
++  </PropertyGroup>
++  <Import Project="..\Unpacker.targets" />
++</Project>
+diff --git a/linux/Steamless.Unpacker.Variant31.x86/Steamless.Unpacker.Variant31.x86.csproj b/linux/Steamless.Unpacker.Variant31.x86/Steamless.Unpacker.Variant31.x86.csproj
+new file mode 100644
+index 0000000..4fc06dd
+--- /dev/null
++++ b/linux/Steamless.Unpacker.Variant31.x86/Steamless.Unpacker.Variant31.x86.csproj
+@@ -0,0 +1,6 @@
++<Project Sdk="Microsoft.NET.Sdk">
++  <PropertyGroup>
++    <Variant>Variant31.x86</Variant>
++  </PropertyGroup>
++  <Import Project="..\Unpacker.targets" />
++</Project>
+diff --git a/linux/Unpacker.targets b/linux/Unpacker.targets
+new file mode 100644
+index 0000000..496c809
+--- /dev/null
++++ b/linux/Unpacker.targets
+@@ -0,0 +1,15 @@
++<Project>
++  <PropertyGroup>
++    <OutputType>Library</OutputType>
++    <AssemblyName>Steamless.Unpacker.$(Variant)</AssemblyName>
++    <RootNamespace>$(AssemblyName)</RootNamespace>
++    <OutputPath>$(SteamlessOut)Plugins\</OutputPath>
++  </PropertyGroup>
++  <ItemGroup>
++    <Compile Include="$(SteamlessRoot)$(AssemblyName)\**\*.cs" Exclude="$(SteamlessRoot)$(AssemblyName)\obj\**;$(SteamlessRoot)$(AssemblyName)\bin\**" />
++    <ProjectReference Include="$(MSBuildThisFileDirectory)Steamless.API\Steamless.API.csproj" Private="false" />
++  </ItemGroup>
++  <ItemGroup Condition="Exists('$(SteamlessRoot)$(AssemblyName)\SharpDisasm.dll')">
++    <Reference Include="SharpDisasm" HintPath="$(SteamlessRoot)$(AssemblyName)\SharpDisasm.dll" Private="true" />
++  </ItemGroup>
++</Project>
+diff --git a/linux/steamless b/linux/steamless
+new file mode 100755
+index 0000000..608d261
+--- /dev/null
++++ b/linux/steamless
+@@ -0,0 +1,2 @@
++#!/bin/sh
++exec dotnet "$(dirname "$(readlink -f "$0")")/bin/Steamless.CLI.dll" "$@"
