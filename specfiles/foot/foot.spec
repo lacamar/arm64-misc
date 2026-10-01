@@ -1,11 +1,9 @@
 %global foot_terminfo foot-extra
-%global default_terminfo foot
 %global fcft_minver 3.3.1
-%global tag 1.28.0
 
 Name:           foot
-Version:        %{tag}
-Release:        7%{?dist}
+Version:        1.28.0
+Release:        8%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -17,24 +15,13 @@ Source1:        %{url}/releases/download/%{version}/%{name}-%{version}.tar.gz.si
 # Daniel Eklöf (Git signing) <daniel@ekloef.se>
 Source2:        gpgkey-5BBD4992C116573F.asc
 
-# https://codeberg.org/dnkl/foot/pulls/2240
-# Patch0:         0001-Fix-discarded-const-qualifiers-from-string-functions.patch
-
-# Adds automatic terminal-session save/restore to the server (foot
-# --server) mode: open windows (cwd, size, launch command, and a text
-# snapshot of their screen + scrollback) are periodically
-# checkpointed and saved on clean shutdown, then silently reopened
-# the next time the server starts. Programs that were running in a
-# window (lf, an editor, claude, ...) are re-launched or resumed
-# according to user rules. See the new [session] and
-# [session-restore] sections in foot.ini(5). Not an upstream patch.
+# Session save/restore for --server (downstream)
 Patch0:         foot-session-restore.patch
 
 BuildRequires:  gcc
 BuildRequires:  gnupg2
 BuildRequires:  meson >= 0.59.0
 BuildRequires:  desktop-file-utils
-BuildRequires:  libappstream-glib
 BuildRequires:  python3
 BuildRequires:  systemd-rpm-macros
 
@@ -97,28 +84,25 @@ Requires:       ncurses-base
 
 
 %prep
-# %{gpgverify} --keyring='%{SOURCE2}' --signature='%{SOURCE1}' --data='%{SOURCE0}'
+%{gpgverify} --keyring='%{SOURCE2}' --signature='%{SOURCE1}' --data='%{SOURCE0}'
 %autosetup -p1
 
 
 %build
 %meson \
     -Dterminfo-base-name=%{foot_terminfo} \
-    -Ddefault-terminfo=%{default_terminfo}
+    -Ddefault-terminfo=foot
 %meson_build
 
 
 %install
 %meson_install
-# install -D -pv -m0644 -t %{buildroot}%{_metainfodir} \
-#     org.codeberg.dnkl.foot.metainfo.xml
 # Will be installed to correct location with rpm macros
 rm %{buildroot}%{_docdir}/%{name}/LICENSE
 
 
 %check
 %meson_test
-# appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/*.metainfo.xml
 desktop-file-validate \
     %{buildroot}/%{_datadir}/applications/%{name}*.desktop
 
@@ -139,7 +123,6 @@ desktop-file-validate \
 %{_datadir}/applications/%{name}*.desktop
 %{_datadir}/icons/hicolor/48x48/apps/%{name}.png
 %{_datadir}/icons/hicolor/scalable/apps/%{name}.svg
-#{_metainfodir}/org.codeberg.dnkl.foot.metainfo.xml
 %{bash_completions_dir}/foot*
 %{fish_completions_dir}/foot*
 %{zsh_completions_dir}/_foot*
@@ -161,6 +144,12 @@ desktop-file-validate \
 
 
 %changelog
+* Fri Oct 02 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-8
+- Drop relaunch-command option
+- Write rule results on next save
+- Pass shell to sh unparsed
+- Verify source signature
+
 * Thu Oct 01 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-7
 - Fixed-width restored-session banner
 - Fixes banner wrapping on resize
@@ -176,39 +165,23 @@ desktop-file-validate \
 - Fixes logout overwriting saved state
 
 * Thu Sep 17 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-5
- - session-restore patch: restore interactive programs gracefully.
-   Windows now save the command line they were launched with (so a
-   'footclient lf' window comes back as lf, not a bare shell), and
-   foot follows the chain of interactive programs on the pty (stdin
-   and stdout on the terminal) instead of only the foreground
-   process group, which misses programs started from lf. Programs
-   are only re-launched when they have a rule in the new
-   [session-restore] section; the rule is expanded by sh while the
-   program is still running ($0, "$@", $FOOT_PID, $FOOT_CWD) so it
-   can resume rather than restart, e.g. 'claude --resume <id>'.
-   Unlisted programs are never re-run. The snapshot is always the
-   primary screen, so a full-screen program's stale frame no longer
-   lands in scrollback. Session state file format is now v2; v1
-   files are still read.
+- Save launch command per window
+- Follow interactive process chain on pty
+- Add [session-restore] rules
+- Snapshot primary screen only
+- State format v2
 
 * Tue Sep 15 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-4
- - session-restore patch: on restore, re-launch a window's foreground
-   program (e.g. lf, an editor) instead of leaving a plain shell
-   prompt. Detected via the pty's foreground process group (real
-   job control, not just $0), so it only fires for actual foreground
-   jobs and not the shell itself. New foot.ini [session] option:
-   relaunch-command (default yes). This is a fresh instance of the
-   program, not a resumed one - its internal state isn't restored.
+- Relaunch foreground program on restore
+- Add relaunch-command option
 
 * Tue Sep 15 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-3
- - session-restore patch: fix cwd not being preserved (was relying on
-   OSC 7, which needs shell integration most shells don't ship; now
-   reads /proc/<pid>/cwd instead), preserve text color/attributes in
-   the restored scrollback, and use a nicer divider line for the
-   "restored session" banner
+- Read cwd from /proc
+- Keep colors in restored scrollback
+- Nicer restored-session banner
 
 * Tue Sep 15 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-2
- - Add downstream patch for terminal session save/restore in server mode
+- Add session save/restore patch
 
 * Wed Sep 02 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-1
  - Update to 1.28.0
