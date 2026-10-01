@@ -5,7 +5,7 @@
 
 Name:           foot
 Version:        %{tag}
-Release:        6%{?dist}
+Release:        7%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -161,6 +161,16 @@ desktop-file-validate \
 
 
 %changelog
+* Thu Oct 01 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-7
+- Fixed-width restored-session banner
+- Fixes banner wrapping on resize
+- Re-evaluate restore rules each save
+- Async rule evaluation
+- Fix $SHELL in restored windows
+- Reflow-friendly snapshot
+- Keep closed windows briefly at logout
+- Preserve nested restore order
+
 * Fri Sep 18 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-6
 - Skip session save within 5s of a window closing
 - Fixes logout overwriting saved state

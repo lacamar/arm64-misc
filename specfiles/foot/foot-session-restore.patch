@@ -1,6 +1,6 @@
 diff -Nru '--exclude=build' -x '*.o' pristine/config.c foot-src/config.c
 --- pristine/config.c	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/config.c	2026-09-18 12:21:33.893418422 +0200
++++ foot-src/config.c	2026-10-01 15:56:24.992311422 +0200
 @@ -1300,6 +1300,55 @@
  }
  
@@ -121,7 +121,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/config.c foot-src/config.c
  }
 diff -Nru '--exclude=build' -x '*.o' pristine/config.h foot-src/config.h
 --- pristine/config.h	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/config.h	2026-09-18 12:21:33.893673174 +0200
++++ foot-src/config.h	2026-10-01 15:56:24.992479173 +0200
 @@ -227,6 +227,11 @@
      UNDERLINE_DASHED,
  };
@@ -151,8 +151,8 @@ diff -Nru '--exclude=build' -x '*.o' pristine/config.h foot-src/config.h
          enum {
 diff -Nru '--exclude=build' -x '*.o' pristine/doc/foot.ini.5.scd foot-src/doc/foot.ini.5.scd
 --- pristine/doc/foot.ini.5.scd	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/doc/foot.ini.5.scd	2026-09-18 12:21:33.893824175 +0200
-@@ -861,6 +861,81 @@
++++ foot-src/doc/foot.ini.5.scd	2026-10-01 16:09:38.943929181 +0200
+@@ -861,6 +861,83 @@
  	string. This option is ignored if
  	*indicator-position=none*. Default: _empty string_.
  
@@ -164,7 +164,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/doc/foot.ini.5.scd foot-src/doc/fo
 +next time the server starts - for example after a reboot.
 +
 +Each restored window is re-created with its original working
-+directory and size, and shows the last on-screen content (if any
++directory, and shows the last on-screen content (if any
 +was saved) followed by a banner. It then re-runs the programs that
 +were running in it, as configured in the *session-restore* section,
 +and finally executes the command line the window was originally
@@ -211,11 +211,13 @@ diff -Nru '--exclude=build' -x '*.o' pristine/doc/foot.ini.5.scd foot-src/doc/fo
 +- _$FOOT_PID_ set to the program's PID
 +- _$FOOT_CWD_ set to the program's current working directory
 +
-+This is what lets a rule pick up state that only exists while the
-+program is alive, and turn a plain re-launch into a resume. A rule
-+that expands to nothing (or fails) means the program is not
-+re-launched. Rules are evaluated once per program instance and
-+cached.
++in the program's own environment. This is what lets a rule pick up
++state that only exists while the program is alive, and turn a plain
++re-launch into a resume. Rules are re-evaluated, in the background,
++at every periodic save (see *save-interval*); with
++*save-interval=0* they are never evaluated. A rule that expands to
++nothing means the program is not re-launched. A rule that fails, or
++produces an empty word, keeps its previous result.
 +
 +Example:
 +
@@ -236,7 +238,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/doc/foot.ini.5.scd foot-src/doc/fo
  Note that you can also add custom regular expressions, see the 'regex'
 diff -Nru '--exclude=build' -x '*.o' pristine/meson.build foot-src/meson.build
 --- pristine/meson.build	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/meson.build	2026-09-18 12:21:33.893932676 +0200
++++ foot-src/meson.build	2026-10-01 15:56:24.992662757 +0200
 @@ -334,6 +334,7 @@
    'render.c', 'render.h',
    'search.c', 'search.h',
@@ -247,118 +249,163 @@ diff -Nru '--exclude=build' -x '*.o' pristine/meson.build foot-src/meson.build
    'spawn.c', 'spawn.h',
 diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
 --- pristine/server.c	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/server.c	2026-09-18 12:21:49.380069559 +0200
-@@ -1,5 +1,7 @@
- #include "server.h"
- 
-+#include <stdio.h>
-+#include <stdlib.h>
- #include <string.h>
- #include <fcntl.h>
- #include <unistd.h>
-@@ -9,6 +11,12 @@
- #include <sys/types.h>
- #include <sys/socket.h>
- #include <sys/epoll.h>
-+#include <sys/timerfd.h>
-+#include <sys/wait.h>
-+#include <dirent.h>
-+#include <limits.h>
-+#include <poll.h>
-+#include <signal.h>
- 
- #include <sys/un.h>
- 
-@@ -19,7 +27,11 @@
++++ foot-src/server.c	2026-10-01 16:05:59.000697893 +0200
+@@ -19,6 +19,7 @@
  #include "log.h"
  
  #include "client-protocol.h"
-+#include "reaper.h"
 +#include "session.h"
-+#include "spawn.h"
  #include "terminal.h"
-+#include "tokenize.h"
  #include "util.h"
  #include "wayland.h"
- #include "xmalloc.h"
-@@ -40,6 +52,9 @@
+@@ -40,6 +41,8 @@
  
      tll(struct client *) clients;
      tll(struct terminal_instance *) terminals;
 +
-+    int session_timer_fd;
-+    struct timespec last_close;
++    struct session *session;
  };
  
  struct client {
-@@ -56,12 +71,27 @@
- };
- static void client_destroy(struct client *client);
- 
-+struct relaunch_cache_entry {
-+    pid_t pid;
-+    unsigned long long starttime;
-+    size_t argc;
-+    char **argv;
-+};
-+
- struct terminal_instance {
-     struct terminal *terminal;
+@@ -61,6 +64,7 @@
      struct server *server;
      struct client *client;
      struct config *conf;
-+
-+    /* For session save/restore: the command line this window was
-+     * launched with (empty: the shell), and per-process
-+     * [session-restore] results */
-+    size_t launch_argc;
-+    char **launch_argv;
-+    tll(struct relaunch_cache_entry) relaunch_cache;
++    struct session_tracked *session;
  };
-+static void relaunch_cache_free(struct terminal_instance *instance);
  static void instance_destroy(struct terminal_instance *instance, int exit_code);
  
- static void
-@@ -105,6 +135,8 @@
+@@ -105,6 +109,8 @@
  static void
  instance_destroy(struct terminal_instance *instance, int exit_code)
  {
-+    clock_gettime(CLOCK_MONOTONIC, &instance->server->last_close);
++    session_untrack(instance->session);
 +
      if (instance->terminal != NULL)
          term_destroy(instance->terminal);
  
-@@ -127,6 +159,9 @@
-         config_free(instance->conf);
-         free(instance->conf);
+@@ -401,6 +407,10 @@
+         goto shutdown;
      }
+ 
++    instance->session = session_track(
++        server->session, instance->terminal, conf != NULL ? conf : server->conf,
++        cdata.argc, argv);
 +
-+    session_argv_free(instance->launch_argc, instance->launch_argv);
-+    relaunch_cache_free(instance);
-     free(instance);
- 
- }
-@@ -386,6 +421,9 @@
-         .client = NULL,
-         .server = server,
-         .conf = conf,
-+        .launch_argc = cdata.argc,
-+        .launch_argv = session_argv_dup(cdata.argc, argv),
-+        .relaunch_cache = tll_init(),
-     };
- 
-     instance->terminal = term_init(
-@@ -555,6 +593,875 @@
+     if (cdata.no_wait) {
+         // the server owns the instance
+         tll_push_back(server->terminals, instance);
+@@ -555,6 +565,31 @@
      return true;
  }
  
-+/*
-+ * ---------------------------------------------------------------
-+ * Session save/restore
-+ * ---------------------------------------------------------------
-+ */
++static bool
++restore_window(void *data, struct session *session,
++               const struct session_window *w, const char *cwd,
++               char *const *argv)
++{
++    struct server *server = data;
++    struct terminal_instance *instance = xmalloc(sizeof(*instance));
++    *instance = (struct terminal_instance){.server = server};
 +
-+struct proc_info {
++    instance->terminal = term_init(
++        server->conf, server->fdm, server->reaper, server->wayl, "footclient",
++        cwd, NULL, NULL, 4, argv, NULL, &term_shutdown_handler, instance);
++
++    if (instance->terminal == NULL) {
++        LOG_ERR("failed to restore window");
++        free(instance);
++        return false;
++    }
++
++    instance->session = session_track_restored(
++        session, instance->terminal, server->conf, w);
++    tll_push_back(server->terminals, instance);
++    return true;
++}
++
+ struct server *
+ server_init(struct config *conf, struct fdm *fdm, struct reaper *reaper,
+             struct wayland *wayl)
+@@ -631,6 +666,8 @@
+     if (!fdm_add(fdm, fd, EPOLLIN, &fdm_server, server))
+         goto err;
+ 
++    server->session = session_init(conf, fdm, reaper, &restore_window, server);
++
+     LOG_INFO("accepting connections on %s", sock_path != NULL ? sock_path : "socket provided through socket activation");
+ 
+     return server;
+@@ -648,6 +685,9 @@
+     if (server == NULL)
+         return;
+ 
++    session_destroy(server->session);
++    server->session = NULL;
++
+     LOG_DBG("server destroy, %zu clients still alive",
+             tll_length(server->clients));
+ 
+diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
+--- pristine/session.c	1970-01-01 01:00:00.000000000 +0100
++++ foot-src/session.c	2026-10-01 16:09:11.602865836 +0200
+@@ -0,0 +1,1500 @@
++#include "session.h"
++
++#include <dirent.h>
++#include <errno.h>
++#include <fcntl.h>
++#include <limits.h>
++#include <pwd.h>
++#include <signal.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <time.h>
++#include <unistd.h>
++#include <sys/epoll.h>
++#include <sys/stat.h>
++#include <sys/timerfd.h>
++#include <sys/wait.h>
++
++#include <tllist.h>
++
++#define LOG_MODULE "session"
++#define LOG_ENABLE_DBG 0
++#include "log.h"
++#include "terminal.h"
++#include "tokenize.h"
++#include "util.h"
++#include "xmalloc.h"
++
++#define STATE_MAGIC "FOOT-SESSION"
++#define STATE_VERSION 3
++#define MAX_CHAIN_DEPTH 16
++#define RULE_TIMEOUT_SECS 5
++#define RULE_OUTPUT_MAX (64 * 1024)
++#define CLOSE_GRACE_SECS 5
++
++extern char **environ;
++
++struct session_command {
++    char *cwd;
++    size_t argc;
++    char **argv;
++};
++
++typedef tll(struct session_command) command_list_t;
++
++struct session_window {
++    char *cwd;
++    char *snapshot;
++    size_t launch_argc;
++    char **launch_argv;
++    command_list_t commands;  /* innermost first */
++};
++
++typedef tll(struct session_window *) window_list_t;
++
++struct proc {
 +    pid_t pid;
 +    pid_t ppid;
 +    pid_t pgid;
@@ -366,1064 +413,90 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
 +    unsigned long long starttime;
 +};
 +
-+typedef tll(struct proc_info) proc_list_t;
++typedef tll(struct proc) proc_list_t;
 +
-+static bool
-+read_proc_info(pid_t pid, struct proc_info *out)
-+{
-+    char path[64];
-+    snprintf(path, sizeof(path), "/proc/%d/stat", (int)pid);
++enum eval_mode { EVAL_NONE, EVAL_NEW, EVAL_ALL };
 +
-+    FILE *f = fopen(path, "re");
-+    if (f == NULL)
-+        return false;
-+
-+    char line[1024];
-+    bool ok = fgets(line, sizeof(line), f) != NULL;
-+    fclose(f);
-+    if (!ok)
-+        return false;
-+
-+    /* comm is parenthesized and may itself contain spaces and parens */
-+    const char *p = strrchr(line, ')');
-+    if (p == NULL)
-+        return false;
-+
-+    int ppid, pgid, sid;
++struct relaunch {
++    pid_t pid;
 +    unsigned long long starttime;
-+    if (sscanf(p + 1,
-+               " %*c %d %d %d %*d %*d %*u %*u %*u %*u %*u %*u %*u"
-+               " %*d %*d %*d %*d %*d %*d %llu",
-+               &ppid, &pgid, &sid, &starttime) != 4)
-+    {
-+        return false;
-+    }
++    char *program;
++    bool seen;
++    bool tried;
++    bool evaluating;
++    bool resolved;
++    bool warned;
++    size_t argc;  /* 0: declined */
++    char **argv;
++};
 +
-+    *out = (struct proc_info){
-+        .pid = pid,
-+        .ppid = ppid,
-+        .pgid = pgid,
-+        .sid = sid,
-+        .starttime = starttime,
-+    };
-+    return true;
-+}
-+
-+static void
-+scan_processes(proc_list_t *out)
-+{
-+    DIR *d = opendir("/proc");
-+    if (d == NULL) {
-+        LOG_ERRNO("failed to open /proc");
-+        return;
-+    }
-+
-+    struct dirent *e;
-+    while ((e = readdir(d)) != NULL) {
-+        if (e->d_name[0] < '1' || e->d_name[0] > '9')
-+            continue;
-+
-+        char *end;
-+        long pid = strtol(e->d_name, &end, 10);
-+        if (*end != '\0' || pid <= 0)
-+            continue;
-+
-+        struct proc_info info;
-+        if (read_proc_info((pid_t)pid, &info))
-+            tll_push_back(*out, info);
-+    }
-+
-+    closedir(d);
-+}
-+
-+static bool
-+fd_is_tty(pid_t pid, int fd, const char *pts_path)
-+{
-+    char link[64];
-+    snprintf(link, sizeof(link), "/proc/%d/fd/%d", (int)pid, fd);
-+
-+    char target[PATH_MAX];
-+    ssize_t n = readlink(link, target, sizeof(target) - 1);
-+    if (n < 0)
-+        return false;
-+
-+    target[n] = '\0';
-+    return streq(target, pts_path);
-+}
-+
-+/*
-+ * Follows the chain of interactive programs on the window's pty,
-+ * starting at foot's own child: at each level, the child whose
-+ * stdin *and* stdout are the pty. That excludes helpers a program
-+ * spawns with pipes (a build tool's compilers, an AI agent's tool
-+ * subprocesses), while still descending through e.g. a file
-+ * manager into the program it launched.
-+ *
-+ * The foreground process group is deliberately not the primary
-+ * signal: many programs (lf, for one) run their sub-commands in
-+ * their own process group, so it only ever points at the outermost
-+ * program. It is used as a tie-breaker, then the most recently
-+ * started child wins.
-+ */
-+static void
-+build_process_chain(const struct terminal *term, const proc_list_t *procs,
-+                    proc_list_t *chain)
-+{
-+    char pts_path[PATH_MAX];
-+    if (ptsname_r(term->ptmx, pts_path, sizeof(pts_path)) != 0) {
-+        LOG_ERRNO("ptsname_r() failed");
-+        return;
-+    }
-+
-+    const pid_t root = term->slave;
-+    const pid_t fg_pgid = tcgetpgrp(term->ptmx);
-+
-+    struct proc_info cur;
-+    bool found = false;
-+    tll_foreach(*procs, it) {
-+        if (it->item.pid == root) {
-+            cur = it->item;
-+            found = true;
-+            break;
-+        }
-+    }
-+    if (!found)
-+        return;
-+
-+    tll_push_back(*chain, cur);
-+
-+    for (int depth = 0; depth < 16; depth++) {
-+        const struct proc_info *best = NULL;
-+
-+        tll_foreach(*procs, it) {
-+            const struct proc_info *p = &it->item;
-+
-+            /* The slave did setsid(); everything on this pty shares its session */
-+            if (p->ppid != cur.pid || p->sid != root)
-+                continue;
-+
-+            if (!fd_is_tty(p->pid, STDIN_FILENO, pts_path) ||
-+                !fd_is_tty(p->pid, STDOUT_FILENO, pts_path))
-+            {
-+                continue;
-+            }
-+
-+            if (best == NULL) {
-+                best = p;
-+                continue;
-+            }
-+
-+            bool p_fg = p->pgid == fg_pgid;
-+            bool best_fg = best->pgid == fg_pgid;
-+            if (p_fg != best_fg ? p_fg : p->starttime > best->starttime)
-+                best = p;
-+        }
-+
-+        if (best == NULL)
-+            break;
-+
-+        cur = *best;
-+        tll_push_back(*chain, cur);
-+    }
-+}
-+
-+/*
-+ * term->cwd is only ever updated via OSC 7, which requires the
-+ * shell to explicitly opt in with prompt-integration hooks most
-+ * shells don't ship by default. Absent that, term->cwd just sits at
-+ * whatever directory the window happened to be spawned in and never
-+ * tracks where the user actually navigated to.
-+ *
-+ * /proc/<pid>/cwd is authoritative and needs no cooperation from
-+ * the program, so prefer it; fall back to term->cwd, then $HOME.
-+ */
-+static char *
-+resolve_cwd_for_pid(pid_t pid, const struct terminal *term)
-+{
-+    if (pid > 0) {
-+        char proc_path[32];
-+        snprintf(proc_path, sizeof(proc_path), "/proc/%d/cwd", (int)pid);
-+
-+        char buf[PATH_MAX];
-+        ssize_t n = readlink(proc_path, buf, sizeof(buf) - 1);
-+        if (n > 0) {
-+            buf[n] = '\0';
-+            return xstrdup(buf);
-+        }
-+    }
-+
-+    if (term->cwd != NULL)
-+        return xstrdup(term->cwd);
-+
-+    const char *home = getenv("HOME");
-+    return xstrdup(home != NULL ? home : "/");
-+}
-+
-+static const char *
-+path_basename(const char *path)
-+{
-+    const char *slash = strrchr(path, '/');
-+    return slash != NULL ? slash + 1 : path;
-+}
-+
-+/* Reads /proc/<pid>/cmdline (NUL-separated argv) into a heap-allocated
-+ * argv array. Returns NULL (with *out_argc == 0) if unreadable/empty. */
-+static char **
-+read_proc_cmdline(pid_t pid, size_t *out_argc)
-+{
-+    *out_argc = 0;
-+
-+    char proc_path[32];
-+    snprintf(proc_path, sizeof(proc_path), "/proc/%d/cmdline", (int)pid);
-+
-+    FILE *f = fopen(proc_path, "re");
-+    if (f == NULL)
-+        return NULL;
-+
-+    char *buf = NULL;
-+    size_t cap = 0, len = 0;
-+    char chunk[4096];
-+    size_t n;
-+
-+    while ((n = fread(chunk, 1, sizeof(chunk), f)) > 0) {
-+        if (len + n > cap) {
-+            cap = (len + n) * 2;
-+            buf = xrealloc(buf, cap);
-+        }
-+        memcpy(buf + len, chunk, n);
-+        len += n;
-+    }
-+    fclose(f);
-+
-+    if (len == 0) {
-+        free(buf);
-+        return NULL;
-+    }
-+
-+    size_t argc = 0;
-+    for (size_t i = 0; i < len; i++) {
-+        if (buf[i] == '\0')
-+            argc++;
-+    }
-+    if (buf[len - 1] != '\0')
-+        argc++;  /* truncated/unterminated last field */
-+
-+    char **argv = xcalloc(argc, sizeof(argv[0]));
-+    size_t idx = 0, start = 0;
-+    for (size_t i = 0; i < len; i++) {
-+        if (buf[i] == '\0') {
-+            argv[idx++] = xstrndup(buf + start, i - start);
-+            start = i + 1;
-+        }
-+    }
-+    if (start < len)
-+        argv[idx++] = xstrndup(buf + start, len - start);
-+
-+    free(buf);
-+    *out_argc = idx;
-+    return argv;
-+}
-+
-+static void
-+write_shell_quoted(FILE *f, const char *s)
-+{
-+    fputc('\'', f);
-+    for (const char *p = s; *p != '\0'; p++) {
-+        if (*p == '\'')
-+            fputs("'\\''", f);
-+        else
-+            fputc((unsigned char)*p, f);
-+    }
-+    fputc('\'', f);
-+}
-+
-+static void
-+write_shell_quoted_argv(FILE *f, size_t argc, char *const *argv)
-+{
-+    for (size_t i = 0; i < argc; i++) {
-+        if (i > 0)
-+            fputc(' ', f);
-+        write_shell_quoted(f, argv[i]);
-+    }
-+}
-+
-+static const struct session_restore_rule *
-+find_restore_rule(const struct config *conf, const char *argv0)
-+{
-+    const char *base = path_basename(argv0);
-+    tll_foreach(conf->session.restore_rules, it) {
-+        if (streq(it->item.program, base))
-+            return &it->item;
-+    }
-+    return NULL;
-+}
-+
-+/*
-+ * Expands a [session-restore] rule for a running program by letting
-+ * /bin/sh word-split it exactly like a command line, with $0 and
-+ * "$@" set to the program's own argv, and FOOT_PID/FOOT_CWD in the
-+ * environment. Doing this while the program is still alive is what
-+ * lets a rule pick up state that only exists then, such as a
-+ * session ID keyed by PID.
-+ *
-+ * Runs synchronously (with a timeout) on the server's main loop;
-+ * results are cached per process, so a rule runs once per program
-+ * instance, not once per checkpoint.
-+ *
-+ * Returns the expanded argv; NULL/0 means "don't relaunch".
-+ */
-+static char **
-+expand_restore_rule(struct server *server,
-+                    const struct session_restore_rule *rule,
-+                    pid_t pid, const char *cwd,
-+                    size_t argc, char *const *argv, size_t *out_argc)
-+{
-+    *out_argc = 0;
-+
-+    char *script = NULL;
-+    size_t script_len = 0;
-+    FILE *f = open_memstream(&script, &script_len);
-+    if (f == NULL)
-+        return NULL;
-+
-+    fprintf(f, "FOOT_PID=%d\nFOOT_CWD=", (int)pid);
-+    write_shell_quoted(f, cwd);
-+    fputs("\nexport FOOT_PID FOOT_CWD\nprintf '%s\\0' ", f);
-+    fputs(rule->command, f);
-+    fputc('\n', f);
-+    fclose(f);
-+
-+    char **sh_argv = xcalloc(3 + argc + 1, sizeof(sh_argv[0]));
-+    sh_argv[0] = "/bin/sh";
-+    sh_argv[1] = "-c";
-+    sh_argv[2] = script;
-+    for (size_t i = 0; i < argc; i++)
-+        sh_argv[3 + i] = argv[i];
-+
-+    int pipe_fds[2];
-+    if (pipe2(pipe_fds, O_CLOEXEC) < 0) {
-+        LOG_ERRNO("failed to create pipe");
-+        free(sh_argv);
-+        free(script);
-+        return NULL;
-+    }
-+
-+    pid_t child = spawn(server->reaper, cwd, sh_argv,
-+                        -1, pipe_fds[1], -1, NULL, NULL, NULL);
-+    close(pipe_fds[1]);
-+    free(sh_argv);
-+    free(script);
-+
-+    if (child < 0) {
-+        close(pipe_fds[0]);
-+        return NULL;
-+    }
-+
-+    /* spawn() hands the child to the reaper; we wait for it ourselves */
-+    reaper_del(server->reaper, child);
-+
-+    char *out = NULL;
-+    size_t out_len = 0, out_cap = 0;
-+    bool timed_out = false;
-+
-+    while (true) {
-+        struct pollfd pfd = {.fd = pipe_fds[0], .events = POLLIN};
-+        int r = poll(&pfd, 1, 5000);
-+        if (r == 0) {
-+            timed_out = true;
-+            break;
-+        }
-+        if (r < 0) {
-+            if (errno == EINTR)
-+                continue;
-+            LOG_ERRNO("poll() failed");
-+            break;
-+        }
-+
-+        if (out_len + 4096 > out_cap) {
-+            out_cap = out_cap == 0 ? 4096 : out_cap * 2;
-+            out = xrealloc(out, out_cap);
-+        }
-+
-+        ssize_t n = read(pipe_fds[0], out + out_len, out_cap - out_len);
-+        if (n < 0 && errno == EINTR)
-+            continue;
-+        if (n <= 0)
-+            break;
-+        out_len += n;
-+    }
-+    close(pipe_fds[0]);
-+
-+    if (timed_out) {
-+        LOG_WARN("[session-restore] %s: rule timed out, killing it",
-+                 rule->program);
-+        kill(child, SIGKILL);
-+    }
-+
++struct rule_eval {
++    struct session *session;
++    pid_t pid;
++    unsigned long long starttime;
++    char *program;
++    pid_t child;
++    int fd;
++    time_t started;
++    char *out;
++    size_t len;
++    bool failed;
++    bool exited;
 +    int status;
-+    while (waitpid(child, &status, 0) < 0 && errno == EINTR)
-+        ;
++};
 +
-+    if (timed_out || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-+        LOG_WARN("[session-restore] %s: rule failed, not relaunching",
-+                 rule->program);
-+        free(out);
-+        return NULL;
-+    }
++struct session_tracked {
++    struct session *session;
++    struct terminal *term;
++    const struct config *conf;
++    size_t launch_argc;
++    char **launch_argv;
++    command_list_t restore_commands;
++    struct session_window *saved;
++};
 +
-+    size_t words = 0;
-+    for (size_t i = 0; i < out_len; i++) {
-+        if (out[i] == '\0')
-+            words++;
-+    }
++struct closed_window {
++    struct session_window *w;
++    time_t at;
++};
 +
-+    /* An empty rule expands to a single empty word */
-+    if (words == 0 || out[0] == '\0') {
-+        free(out);
-+        return NULL;
-+    }
++struct session {
++    const struct config *conf;
++    struct fdm *fdm;
++    struct reaper *reaper;
++    char *path;
++    int timer_fd;
 +
-+    char **result = xcalloc(words, sizeof(result[0]));
-+    size_t idx = 0, start = 0;
-+    for (size_t i = 0; i < out_len; i++) {
-+        if (out[i] == '\0') {
-+            result[idx++] = xstrdup(out + start);
-+            start = i + 1;
-+        }
-+    }
++    tll(struct session_tracked *) windows;
++    tll(struct closed_window) closed;
++    tll(struct relaunch) relaunch;
++    tll(struct rule_eval *) evals;
++    bool rules_changed;
 +
-+    free(out);
-+    *out_argc = words;
-+    return result;
-+}
++    char *written;
++    size_t written_len;
++};
 +
-+/*
-+ * Looks up, or computes and caches, the relaunch command for one
-+ * process in a window's chain. argc == 0 in the cache means "no
-+ * rule matched (or it declined)", so the lookup is skipped too.
-+ */
-+static bool
-+resolve_relaunch(struct terminal_instance *instance,
-+                 const struct proc_info *proc,
-+                 size_t *out_argc, char ***out_argv)
++static void checkpoint(struct session *s, enum eval_mode mode);
++
++static time_t
++now_secs(void)
 +{
-+    struct server *server = instance->server;
-+    const struct config *conf =
-+        instance->conf != NULL ? instance->conf : server->conf;
-+
-+    tll_foreach(instance->relaunch_cache, it) {
-+        const struct relaunch_cache_entry *e = &it->item;
-+        if (e->pid == proc->pid && e->starttime == proc->starttime) {
-+            *out_argc = e->argc;
-+            *out_argv = session_argv_dup(e->argc, e->argv);
-+            return e->argc > 0;
-+        }
-+    }
-+
-+    struct relaunch_cache_entry entry = {
-+        .pid = proc->pid,
-+        .starttime = proc->starttime,
-+    };
-+
-+    size_t argc;
-+    char **argv = read_proc_cmdline(proc->pid, &argc);
-+    if (argv != NULL) {
-+        const struct session_restore_rule *rule =
-+            find_restore_rule(conf, argv[0]);
-+
-+        if (rule != NULL) {
-+            char *cwd = resolve_cwd_for_pid(proc->pid, instance->terminal);
-+            entry.argv = expand_restore_rule(
-+                server, rule, proc->pid, cwd, argc, argv, &entry.argc);
-+            free(cwd);
-+
-+            LOG_DBG("[session-restore] %s (pid=%d): %zu word(s)",
-+                    rule->program, (int)proc->pid, entry.argc);
-+        }
-+
-+        session_argv_free(argc, argv);
-+    }
-+
-+    *out_argc = entry.argc;
-+    *out_argv = session_argv_dup(entry.argc, entry.argv);
-+    tll_push_back(instance->relaunch_cache, entry);
-+    return entry.argc > 0;
++    struct timespec ts;
++    clock_gettime(CLOCK_MONOTONIC, &ts);
++    return ts.tv_sec;
 +}
 +
 +static void
-+prune_relaunch_cache(struct terminal_instance *instance,
-+                     const proc_list_t *chain)
-+{
-+    tll_foreach(instance->relaunch_cache, it) {
-+        bool live = false;
-+        tll_foreach(*chain, cit) {
-+            if (cit->item.pid == it->item.pid &&
-+                cit->item.starttime == it->item.starttime)
-+            {
-+                live = true;
-+                break;
-+            }
-+        }
-+
-+        if (!live) {
-+            session_argv_free(it->item.argc, it->item.argv);
-+            tll_remove(instance->relaunch_cache, it);
-+        }
-+    }
-+}
-+
-+static void
-+relaunch_cache_free(struct terminal_instance *instance)
-+{
-+    tll_foreach(instance->relaunch_cache, it) {
-+        session_argv_free(it->item.argc, it->item.argv);
-+        tll_remove(instance->relaunch_cache, it);
-+    }
-+}
-+
-+static void
-+save_terminal_window(struct terminal_instance *instance,
-+                     const proc_list_t *procs,
-+                     session_window_list_t *windows)
-+{
-+    struct terminal *term = instance->terminal;
-+    const struct config *conf =
-+        instance->conf != NULL ? instance->conf : instance->server->conf;
-+
-+    proc_list_t chain = tll_init();
-+    build_process_chain(term, procs, &chain);
-+    prune_relaunch_cache(instance, &chain);
-+
-+    struct session_window w = {
-+        .cols = term->cols,
-+        .rows = term->rows,
-+        .snapshot = term_snapshot_text(term, conf->session.scrollback_lines),
-+        .launch_argc = instance->launch_argc,
-+        .launch_argv = session_argv_dup(
-+            instance->launch_argc, instance->launch_argv),
-+        .commands = tll_init(),
-+    };
-+
-+    /* The window's directory is that of foot's own child: the shell,
-+     * or whatever footclient was told to run (which, for a file
-+     * manager, is wherever the user navigated to) */
-+    pid_t root_pid = tll_length(chain) > 0 ? tll_front(chain).pid : term->slave;
-+    w.cwd = resolve_cwd_for_pid(root_pid, term);
-+
-+    if (conf->session.relaunch_command) {
-+        bool is_root = true;
-+        tll_foreach(chain, it) {
-+            size_t argc;
-+            char **argv;
-+            bool matched = resolve_relaunch(instance, &it->item, &argc, &argv);
-+
-+            if (is_root) {
-+                is_root = false;
-+
-+                /* A rule for foot's own child replaces the launch
-+                 * command (e.g. 'footclient claude' -> resume) */
-+                if (matched) {
-+                    session_argv_free(w.launch_argc, w.launch_argv);
-+                    w.launch_argc = argc;
-+                    w.launch_argv = argv;
-+                }
-+                continue;
-+            }
-+
-+            if (!matched)
-+                continue;
-+
-+            /* Innermost first */
-+            tll_push_front(w.commands, ((struct session_command){
-+                .cwd = resolve_cwd_for_pid(it->item.pid, term),
-+                .argc = argc,
-+                .argv = argv,
-+            }));
-+        }
-+    }
-+
-+    tll_free(chain);
-+    tll_push_back(*windows, w);
-+}
-+
-+static void
-+session_do_save(struct server *server)
-+{
-+    if (!server->conf->session.enabled)
-+        return;
-+
-+    /* At logout windows die one by one; don't let that shrink the state */
-+    struct timespec now;
-+    clock_gettime(CLOCK_MONOTONIC, &now);
-+    if ((server->last_close.tv_sec != 0 || server->last_close.tv_nsec != 0) &&
-+        now.tv_sec - server->last_close.tv_sec < 5)
-+        return;
-+
-+    char *path = session_state_path();
-+    if (path == NULL)
-+        return;
-+
-+    proc_list_t procs = tll_init();
-+    scan_processes(&procs);
-+
-+    session_window_list_t windows = tll_init();
-+
-+    tll_foreach(server->clients, it) {
-+        struct terminal_instance *instance = it->item->instance;
-+        if (instance == NULL || instance->terminal == NULL)
-+            continue;
-+        save_terminal_window(instance, &procs, &windows);
-+    }
-+
-+    tll_foreach(server->terminals, it) {
-+        if (it->item->terminal == NULL)
-+            continue;
-+        save_terminal_window(it->item, &procs, &windows);
-+    }
-+
-+    tll_free(procs);
-+
-+    if (tll_length(windows) == 0) {
-+        /* Nothing to save - drop any stale state from a previous run */
-+        unlink(path);
-+    } else if (!session_write(path, &windows)) {
-+        LOG_WARN("failed to save session state to %s", path);
-+    } else {
-+        LOG_DBG("saved %zu window(s) to %s", tll_length(windows), path);
-+    }
-+
-+    session_window_list_free(&windows);
-+    free(path);
-+}
-+
-+/*
-+ * Writes a horizontal divider, made up of box-drawing characters and
-+ * a centered label, exactly 'cols' columns wide (falling back to a
-+ * sane minimum width if 'cols' is too narrow for the label).
-+ */
-+static void
-+write_restore_banner(FILE *f, int cols)
-+{
-+    static const char label[] = " restored session ";
-+    int label_cols = (int)sizeof(label) - 1;  /* ASCII-only: 1 byte == 1 column */
-+
-+    if (cols < label_cols + 4)
-+        cols = label_cols + 4;
-+
-+    int dashes = cols - label_cols;
-+    int left = dashes / 2;
-+    int right = dashes - left;
-+
-+    fputs("\x1b[38;2;110;150;200m", f);
-+    for (int i = 0; i < left; i++)
-+        fputs("\xe2\x94\x80", f);  /* U+2500 BOX DRAWINGS LIGHT HORIZONTAL */
-+    fputs("\x1b[1m", f);
-+    fputs(label, f);
-+    fputs("\x1b[22m", f);
-+    for (int i = 0; i < right; i++)
-+        fputs("\xe2\x94\x80", f);
-+    fputs("\x1b[0m\n", f);
-+}
-+
-+/*
-+ * Writes 'snapshot' (may be NULL/empty) followed by a "restored"
-+ * banner to a private temp file under XDG_RUNTIME_DIR, for a
-+ * restored window's wrapper shell to cat(1) out on startup.
-+ *
-+ * We cannot feed this text directly into the new terminal via
-+ * vt_from_slave() right after term_init(): the grid isn't allocated
-+ * until the compositor's first surface configure arrives, which
-+ * happens later, asynchronously, on the Wayland event loop. Piping
-+ * it through the child's own stdout instead reuses the exact same,
-+ * already-safe path normal program output takes.
-+ */
-+static char *
-+write_restore_snapshot_file(const char *snapshot, int cols)
-+{
-+    const char *runtime_dir = getenv("XDG_RUNTIME_DIR");
-+    if (runtime_dir == NULL || runtime_dir[0] == '\0')
-+        runtime_dir = "/tmp";
-+
-+    size_t len = strlen(runtime_dir) + strlen("/foot-session-restore-XXXXXX") + 1;
-+    char *path = xmalloc(len);
-+    snprintf(path, len, "%s/foot-session-restore-XXXXXX", runtime_dir);
-+
-+    int fd = mkstemp(path);
-+    if (fd < 0) {
-+        LOG_ERRNO("failed to create session restore temp file");
-+        free(path);
-+        return NULL;
-+    }
-+
-+    FILE *f = fdopen(fd, "w");
-+    if (f == NULL) {
-+        LOG_ERRNO("fdopen() failed");
-+        close(fd);
-+        unlink(path);
-+        free(path);
-+        return NULL;
-+    }
-+
-+    if (snapshot != NULL && snapshot[0] != '\0')
-+        fprintf(f, "%s\n", snapshot);
-+    write_restore_banner(f, cols);
-+
-+    fclose(f);
-+    return path;
-+}
-+
-+/*
-+ * Builds the POSIX sh -c script a restored window's wrapper shell
-+ * runs: replay the saved snapshot (if any), re-run each saved
-+ * program in turn (innermost first, each in its own directory - a
-+ * fresh instance unless its rule resumes it), then finally exec
-+ * into the window's original launch command, or the shell.
-+ */
-+static char *
-+build_restore_script(const char *snapshot_path,
-+                     const struct session_window *w,
-+                     size_t shell_argc, char *const *shell_argv)
-+{
-+    char *buf = NULL;
-+    size_t size = 0;
-+    FILE *f = open_memstream(&buf, &size);
-+    if (f == NULL)
-+        return NULL;
-+
-+    if (snapshot_path != NULL) {
-+        fputs("cat ", f);
-+        write_shell_quoted(f, snapshot_path);
-+        fputs(" 2>/dev/null; rm -f ", f);
-+        write_shell_quoted(f, snapshot_path);
-+        fputc('\n', f);
-+    }
-+
-+    tll_foreach(w->commands, it) {
-+        fputs("cd ", f);
-+        write_shell_quoted(f, it->item.cwd);
-+        fputs(" && ", f);
-+        write_shell_quoted_argv(f, it->item.argc, it->item.argv);
-+        fputc('\n', f);
-+    }
-+
-+    if (tll_length(w->commands) > 0) {
-+        fputs("cd ", f);
-+        write_shell_quoted(f, w->cwd);
-+        fputc('\n', f);
-+    }
-+
-+    fputs("exec ", f);
-+    if (w->launch_argc > 0)
-+        write_shell_quoted_argv(f, w->launch_argc, w->launch_argv);
-+    else
-+        write_shell_quoted_argv(f, shell_argc, shell_argv);
-+    fputc('\n', f);
-+
-+    fclose(f);
-+    return buf;
-+}
-+
-+static void
-+session_do_restore(struct server *server)
-+{
-+    if (!server->conf->session.enabled)
-+        return;
-+
-+    char *path = session_state_path();
-+    if (path == NULL)
-+        return;
-+
-+    session_window_list_t windows = tll_init();
-+    bool ok = session_read(path, &windows);
-+    free(path);
-+
-+    if (!ok) {
-+        session_window_list_free(&windows);
-+        return;
-+    }
-+
-+    char **shell_argv = NULL;
-+    if (!tokenize_cmdline(server->conf->shell, &shell_argv)) {
-+        LOG_ERR("failed to tokenize shell command line: %s",
-+                server->conf->shell);
-+        session_window_list_free(&windows);
-+        return;
-+    }
-+
-+    size_t shell_argc = 0;
-+    while (shell_argv[shell_argc] != NULL)
-+        shell_argc++;
-+
-+    tll_foreach(windows, it) {
-+        struct session_window *w = &it->item;
-+
-+        char *snapshot_path = write_restore_snapshot_file(w->snapshot, w->cols);
-+        char *script = build_restore_script(
-+            snapshot_path, w, shell_argc, shell_argv);
-+
-+        if (script == NULL) {
-+            LOG_ERR("failed to build restore script for window (cwd=%s)", w->cwd);
-+            if (snapshot_path != NULL)
-+                unlink(snapshot_path);
-+            free(snapshot_path);
-+            continue;
-+        }
-+
-+        char *argv[] = {"/bin/sh", "-c", script, "foot", NULL};
-+
-+        struct terminal_instance *instance = xmalloc(sizeof(*instance));
-+        *instance = (struct terminal_instance){
-+            .client = NULL,
-+            .server = server,
-+            .conf = NULL,
-+            .launch_argc = w->launch_argc,
-+            .launch_argv = session_argv_dup(w->launch_argc, w->launch_argv),
-+            .relaunch_cache = tll_init(),
-+        };
-+
-+        instance->terminal = term_init(
-+            server->conf, server->fdm, server->reaper, server->wayl,
-+            "foot", w->cwd, NULL, NULL, 4, argv, NULL,
-+            &term_shutdown_handler, instance);
-+
-+        if (instance->terminal == NULL) {
-+            LOG_WARN("failed to restore window (cwd=%s)", w->cwd);
-+            session_argv_free(instance->launch_argc, instance->launch_argv);
-+            free(instance);
-+            if (snapshot_path != NULL)
-+                unlink(snapshot_path);
-+        } else {
-+            tll_push_back(server->terminals, instance);
-+        }
-+
-+        free(snapshot_path);
-+        free(script);
-+    }
-+
-+    for (size_t i = 0; i < shell_argc; i++)
-+        free(shell_argv[i]);
-+    free(shell_argv);
-+
-+    session_window_list_free(&windows);
-+}
-+
-+static bool
-+fdm_session_timer(struct fdm *fdm, int fd, int events, void *data)
-+{
-+    struct server *server = data;
-+
-+    uint64_t expirations;
-+    ssize_t amount = read(fd, &expirations, sizeof(expirations));
-+    if (amount < 0 && errno != EAGAIN)
-+        LOG_ERRNO("failed to read session timer");
-+
-+    session_do_save(server);
-+    return true;
-+}
-+
- struct server *
- server_init(struct config *conf, struct fdm *fdm, struct reaper *reaper,
-             struct wayland *wayl)
-@@ -626,11 +1533,35 @@
- 
-         .clients = tll_init(),
-         .terminals = tll_init(),
-+
-+        .session_timer_fd = -1,
-     };
- 
-     if (!fdm_add(fdm, fd, EPOLLIN, &fdm_server, server))
-         goto err;
- 
-+    session_do_restore(server);
-+
-+    if (conf->session.enabled && conf->session.save_interval_secs > 0) {
-+        int timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
-+        if (timer_fd < 0)
-+            LOG_ERRNO("failed to create session save timer");
-+        else {
-+            struct itimerspec its = {
-+                .it_value = {.tv_sec = conf->session.save_interval_secs},
-+                .it_interval = {.tv_sec = conf->session.save_interval_secs},
-+            };
-+
-+            if (timerfd_settime(timer_fd, 0, &its, NULL) < 0) {
-+                LOG_ERRNO("failed to arm session save timer");
-+                close(timer_fd);
-+            } else if (!fdm_add(fdm, timer_fd, EPOLLIN, &fdm_session_timer, server))
-+                close(timer_fd);
-+            else
-+                server->session_timer_fd = timer_fd;
-+        }
-+    }
-+
-     LOG_INFO("accepting connections on %s", sock_path != NULL ? sock_path : "socket provided through socket activation");
- 
-     return server;
-@@ -648,6 +1579,13 @@
-     if (server == NULL)
-         return;
- 
-+    session_do_save(server);
-+
-+    if (server->session_timer_fd >= 0) {
-+        fdm_del(server->fdm, server->session_timer_fd);
-+        server->session_timer_fd = -1;
-+    }
-+
-     LOG_DBG("server destroy, %zu clients still alive",
-             tll_length(server->clients));
- 
-diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
---- pristine/session.c	1970-01-01 01:00:00.000000000 +0100
-+++ foot-src/session.c	2026-09-18 12:21:33.894199053 +0200
-@@ -0,0 +1,374 @@
-+#include "session.h"
-+
-+#include <stdlib.h>
-+#include <stdio.h>
-+#include <string.h>
-+#include <errno.h>
-+#include <unistd.h>
-+#include <sys/stat.h>
-+#include <sys/types.h>
-+#include <pwd.h>
-+
-+#define LOG_MODULE "session"
-+#define LOG_ENABLE_DBG 0
-+#include "log.h"
-+#include "util.h"
-+#include "xmalloc.h"
-+
-+#define SESSION_MAGIC "FOOT-SESSION"
-+#define SESSION_VERSION 2
-+
-+static char *
-+xdg_state_home(void)
-+{
-+    const char *xdg = getenv("XDG_STATE_HOME");
-+    if (xdg != NULL && xdg[0] != '\0')
-+        return xstrdup(xdg);
-+
-+    const char *home = getenv("HOME");
-+    if (home == NULL || home[0] == '\0') {
-+        struct passwd *pw = getpwuid(getuid());
-+        home = pw != NULL ? pw->pw_dir : NULL;
-+    }
-+
-+    if (home == NULL)
-+        return NULL;
-+
-+    size_t len = strlen(home) + strlen("/.local/state") + 1;
-+    char *path = xmalloc(len);
-+    snprintf(path, len, "%s/.local/state", home);
-+    return path;
-+}
-+
-+char *
-+session_state_path(void)
-+{
-+    char *state_home = xdg_state_home();
-+    if (state_home == NULL)
-+        return NULL;
-+
-+    size_t len = strlen(state_home) + strlen("/foot/session.state") + 1;
-+    char *path = xmalloc(len);
-+    snprintf(path, len, "%s/foot/session.state", state_home);
-+    free(state_home);
-+    return path;
-+}
-+
-+static bool
-+mkdir_parent(const char *path)
-+{
-+    char *copy = xstrdup(path);
-+    char *slash = strrchr(copy, '/');
-+    if (slash == NULL) {
-+        free(copy);
-+        return true;
-+    }
-+    *slash = '\0';
-+
-+    /* Create each path component; ignore EEXIST */
-+    for (char *p = copy + 1; *p != '\0'; p++) {
-+        if (*p == '/') {
-+            *p = '\0';
-+            if (mkdir(copy, 0700) < 0 && errno != EEXIST) {
-+                LOG_ERRNO("failed to create directory: %s", copy);
-+                free(copy);
-+                return false;
-+            }
-+            *p = '/';
-+        }
-+    }
-+
-+    if (mkdir(copy, 0700) < 0 && errno != EEXIST) {
-+        LOG_ERRNO("failed to create directory: %s", copy);
-+        free(copy);
-+        return false;
-+    }
-+
-+    free(copy);
-+    return true;
-+}
-+
-+static bool
-+write_blob(FILE *f, const char *data)
-+{
-+    size_t len = data != NULL ? strlen(data) : 0;
-+    if (fprintf(f, "%zu\n", len) < 0)
-+        return false;
-+    if (len > 0 && fwrite(data, 1, len, f) != len)
-+        return false;
-+    if (fputc('\n', f) == EOF)
-+        return false;
-+    return true;
-+}
-+
-+static char *
-+read_blob(FILE *f)
-+{
-+    char len_line[32];
-+    if (fgets(len_line, sizeof(len_line), f) == NULL)
-+        return NULL;
-+
-+    errno = 0;
-+    char *end;
-+    unsigned long len = strtoul(len_line, &end, 10);
-+    if (errno != 0 || end == len_line || (*end != '\n' && *end != '\0'))
-+        return NULL;
-+
-+    /* Sanity cap: refuse absurdly large blobs (corrupt/hostile file) */
-+    if (len > 64 * 1024 * 1024)
-+        return NULL;
-+
-+    char *buf = xmalloc(len + 1);
-+    if (len > 0 && fread(buf, 1, len, f) != len) {
-+        free(buf);
-+        return NULL;
-+    }
-+    buf[len] = '\0';
-+
-+    int c = fgetc(f);
-+    if (c != '\n' && c != EOF) {
-+        free(buf);
-+        return NULL;
-+    }
-+
-+    return buf;
-+}
-+
-+void
-+session_argv_free(size_t argc, char **argv)
++argv_free(size_t argc, char **argv)
 +{
 +    for (size_t i = 0; i < argc; i++)
 +        free(argv[i]);
 +    free(argv);
 +}
 +
-+char **
-+session_argv_dup(size_t argc, char *const *argv)
++static char **
++argv_dup(size_t argc, char *const *argv)
 +{
 +    if (argc == 0)
 +        return NULL;
@@ -1434,281 +507,1386 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +}
 +
 +static bool
-+write_argv(FILE *f, size_t argc, char *const *argv)
++argv_eq(size_t a_argc, char *const *a, size_t b_argc, char *const *b)
 +{
-+    if (fprintf(f, "%zu\n", argc) < 0)
++    if (a_argc != b_argc)
 +        return false;
-+    for (size_t i = 0; i < argc; i++) {
-+        if (!write_blob(f, argv[i]))
++    for (size_t i = 0; i < a_argc; i++) {
++        if (!streq(a[i], b[i]))
 +            return false;
 +    }
 +    return true;
 +}
 +
-+/* Returns false on a malformed file; an empty argv is not an error */
++static void
++command_list_free(command_list_t *list)
++{
++    tll_foreach(*list, it) {
++        free(it->item.cwd);
++        argv_free(it->item.argc, it->item.argv);
++        tll_remove(*list, it);
++    }
++}
++
++static void
++command_push(command_list_t *list, bool front, const char *cwd,
++             size_t argc, char *const *argv)
++{
++    struct session_command cmd = {
++        .cwd = xstrdup(cwd),
++        .argc = argc,
++        .argv = argv_dup(argc, argv),
++    };
++    if (front)
++        tll_push_front(*list, cmd);
++    else
++        tll_push_back(*list, cmd);
++}
++
++static void
++window_free(struct session_window *w)
++{
++    if (w == NULL)
++        return;
++    free(w->cwd);
++    free(w->snapshot);
++    argv_free(w->launch_argc, w->launch_argv);
++    command_list_free(&w->commands);
++    free(w);
++}
++
++static struct session_window *
++window_dup(const struct session_window *w)
++{
++    struct session_window *copy = xmalloc(sizeof(*copy));
++    *copy = (struct session_window){
++        .cwd = xstrdup(w->cwd),
++        .snapshot = w->snapshot != NULL ? xstrdup(w->snapshot) : NULL,
++        .launch_argc = w->launch_argc,
++        .launch_argv = argv_dup(w->launch_argc, w->launch_argv),
++        .commands = tll_init(),
++    };
++    tll_foreach(w->commands, it)
++        command_push(&copy->commands, false, it->item.cwd, it->item.argc, it->item.argv);
++    return copy;
++}
++
++/* Paths and file I/O */
++
++static char *
++state_path(void)
++{
++    const char *xdg = getenv("XDG_STATE_HOME");
++    if (xdg != NULL && xdg[0] == '/')
++        return xasprintf("%s/foot/session.state", xdg);
++
++    const char *home = getenv("HOME");
++    if (home == NULL || home[0] == '\0') {
++        const struct passwd *pw = getpwuid(getuid());
++        home = pw != NULL ? pw->pw_dir : NULL;
++    }
++    return home != NULL ? xasprintf("%s/.local/state/foot/session.state", home) : NULL;
++}
++
 +static bool
-+read_argv(FILE *f, size_t *out_argc, char ***out_argv)
++mkdir_parent(const char *path)
 +{
-+    *out_argc = 0;
-+    *out_argv = NULL;
++    char *copy = xstrdup(path);
++    bool ok = true;
 +
-+    size_t argc = 0;
-+    if (fscanf(f, "%zu\n", &argc) != 1)
-+        return false;
-+
-+    /* Sanity cap: refuse absurd argument counts (corrupt file) */
-+    if (argc > 1024)
-+        return false;
-+
-+    if (argc == 0)
-+        return true;
-+
-+    char **argv = xcalloc(argc, sizeof(argv[0]));
-+    for (size_t i = 0; i < argc; i++) {
-+        argv[i] = read_blob(f);
-+        if (argv[i] == NULL) {
-+            session_argv_free(argc, argv);
-+            return false;
++    for (char *p = copy + 1; ok && (p = strchr(p, '/')) != NULL; p++) {
++        *p = '\0';
++        if (mkdir(copy, 0700) < 0 && errno != EEXIST) {
++            LOG_ERRNO("%s: failed to create directory", copy);
++            ok = false;
 +        }
++        *p = '/';
 +    }
 +
-+    *out_argc = argc;
-+    *out_argv = argv;
-+    return true;
++    free(copy);
++    return ok;
 +}
 +
-+bool
-+session_write(const char *path, const session_window_list_t *windows)
++static bool
++write_file_atomic(const char *path, const char *data, size_t len)
 +{
 +    if (!mkdir_parent(path))
 +        return false;
 +
-+    size_t tmp_len = strlen(path) + strlen(".tmp") + 1;
-+    char *tmp_path = xmalloc(tmp_len);
-+    snprintf(tmp_path, tmp_len, "%s.tmp", path);
-+
-+    FILE *f = fopen(tmp_path, "we");
-+    if (f == NULL) {
-+        LOG_ERRNO("failed to open %s for writing", tmp_path);
-+        free(tmp_path);
++    char *tmp = xstrjoin(path, ".tmp");
++    int fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
++    if (fd < 0) {
++        LOG_ERRNO("%s: failed to open", tmp);
++        free(tmp);
 +        return false;
 +    }
 +
-+    bool ok = fprintf(f, "%s %d\n", SESSION_MAGIC, SESSION_VERSION) >= 0 &&
-+              fprintf(f, "%zu\n", tll_length(*windows)) >= 0;
++    bool ok = true;
++    for (size_t done = 0; ok && done < len;) {
++        ssize_t n = write(fd, data + done, len - done);
++        if (n < 0 && errno == EINTR)
++            continue;
++        if (n < 0) {
++            LOG_ERRNO("%s: failed to write", tmp);
++            ok = false;
++        } else
++            done += n;
++    }
 +
-+    tll_foreach(*windows, it) {
-+        if (!ok)
++    ok = ok && fsync(fd) == 0;
++    ok = close(fd) == 0 && ok;
++
++    if (ok && rename(tmp, path) < 0) {
++        LOG_ERRNO("%s: failed to rename to %s", tmp, path);
++        ok = false;
++    }
++    if (!ok)
++        unlink(tmp);
++
++    free(tmp);
++    return ok;
++}
++
++static char *
++read_file(const char *path, size_t *len)
++{
++    int fd = open(path, O_RDONLY | O_CLOEXEC);
++    if (fd < 0)
++        return NULL;
++
++    char *buf = NULL;
++    size_t size = 0, cap = 0;
++
++    while (true) {
++        if (size + 4096 > cap) {
++            cap = cap == 0 ? 4096 : cap * 2;
++            buf = xrealloc(buf, cap + 1);
++        }
++
++        ssize_t n = read(fd, buf + size, cap - size);
++        if (n < 0 && errno == EINTR)
++            continue;
++        if (n < 0) {
++            free(buf);
++            close(fd);
++            return NULL;
++        }
++        if (n == 0)
 +            break;
-+        const struct session_window *w = &it->item;
-+        ok = write_blob(f, w->cwd) &&
-+             fprintf(f, "%d %d\n", w->cols, w->rows) >= 0 &&
-+             write_blob(f, w->snapshot) &&
-+             write_argv(f, w->launch_argc, w->launch_argv) &&
-+             fprintf(f, "%zu\n", tll_length(w->commands)) >= 0;
++        size += n;
++    }
 +
-+        tll_foreach(w->commands, cit) {
-+            if (!ok)
-+                break;
-+            ok = write_blob(f, cit->item.cwd) &&
-+                 write_argv(f, cit->item.argc, cit->item.argv);
++    close(fd);
++    buf[size] = '\0';
++    *len = size;
++    return buf;
++}
++
++static char **
++split_nul(const char *buf, size_t len, size_t *argc)
++{
++    size_t count = 0;
++    for (size_t i = 0; i < len; i++) {
++        if (buf[i] == '\0' || i == len - 1)
++            count++;
++    }
++
++    *argc = count;
++    if (count == 0)
++        return NULL;
++
++    char **argv = xcalloc(count, sizeof(argv[0]));
++    size_t idx = 0;
++    for (size_t start = 0; start < len; idx++) {
++        size_t n = strnlen(buf + start, len - start);
++        argv[idx] = xstrndup(buf + start, n);
++        start += n + 1;
++    }
++    return argv;
++}
++
++/* State file */
++
++static void
++write_blob(FILE *f, const char *data)
++{
++    size_t len = data != NULL ? strlen(data) : 0;
++    fprintf(f, "%zu\n", len);
++    fwrite(data != NULL ? data : "", 1, len, f);
++    fputc('\n', f);
++}
++
++static void
++write_argv(FILE *f, size_t argc, char *const *argv)
++{
++    fprintf(f, "%zu\n", argc);
++    for (size_t i = 0; i < argc; i++)
++        write_blob(f, argv[i]);
++}
++
++static void
++write_window(FILE *f, const struct session_window *w)
++{
++    write_blob(f, w->cwd);
++    write_blob(f, w->snapshot);
++    write_argv(f, w->launch_argc, w->launch_argv);
++    fprintf(f, "%zu\n", tll_length(w->commands));
++    tll_foreach(w->commands, it) {
++        write_blob(f, it->item.cwd);
++        write_argv(f, it->item.argc, it->item.argv);
++    }
++}
++
++static char *
++read_blob(FILE *f)
++{
++    size_t len;
++    if (fscanf(f, "%zu", &len) != 1 || fgetc(f) != '\n' || len > 64 * 1024 * 1024)
++        return NULL;
++
++    char *buf = xmalloc(len + 1);
++    if (fread(buf, 1, len, f) != len || fgetc(f) != '\n') {
++        free(buf);
++        return NULL;
++    }
++    buf[len] = '\0';
++    return buf;
++}
++
++static bool
++read_argv(FILE *f, size_t *argc, char ***argv)
++{
++    *argc = 0;
++    *argv = NULL;
++
++    size_t count;
++    if (fscanf(f, "%zu", &count) != 1 || fgetc(f) != '\n' || count > 1024)
++        return false;
++
++    char **v = count > 0 ? xcalloc(count, sizeof(v[0])) : NULL;
++    for (size_t i = 0; i < count; i++) {
++        if ((v[i] = read_blob(f)) == NULL) {
++            argv_free(i, v);
++            return false;
 +        }
 +    }
 +
-+    ok = ok && fflush(f) == 0;
-+    if (fclose(f) != 0)
-+        ok = false;
-+
-+    if (!ok) {
-+        unlink(tmp_path);
-+        free(tmp_path);
-+        return false;
-+    }
-+
-+    if (rename(tmp_path, path) < 0) {
-+        LOG_ERRNO("failed to rename %s -> %s", tmp_path, path);
-+        unlink(tmp_path);
-+        free(tmp_path);
-+        return false;
-+    }
-+
-+    free(tmp_path);
++    *argc = count;
++    *argv = v;
 +    return true;
 +}
 +
-+bool
-+session_read(const char *path, session_window_list_t *out)
++static struct session_window *
++read_window(FILE *f, int version)
 +{
-+    FILE *f = fopen(path, "re");
-+    if (f == NULL) {
-+        /* No saved session is not an error */
-+        return true;
++    struct session_window *w = xcalloc(1, sizeof(*w));
++    size_t count;
++    int cols, rows;
++
++    bool ok = (w->cwd = read_blob(f)) != NULL &&
++        (version > 2 || fscanf(f, "%d %d\n", &cols, &rows) == 2) &&
++        (w->snapshot = read_blob(f)) != NULL &&
++        read_argv(f, &w->launch_argc, &w->launch_argv) &&
++        fscanf(f, "%zu", &count) == 1 && fgetc(f) == '\n' && count <= 64;
++
++    for (size_t i = 0; ok && i < count; i++) {
++        struct session_command cmd = {.cwd = read_blob(f)};
++        ok = cmd.cwd != NULL && read_argv(f, &cmd.argc, &cmd.argv);
++        if (ok)
++            tll_push_back(w->commands, cmd);
++        else
++            free(cmd.cwd);
 +    }
 +
-+    char magic[32] = {0};
-+    int version = -1;
++    if (!ok) {
++        window_free(w);
++        return NULL;
++    }
++    return w;
++}
++
++static void
++read_state(const char *path, window_list_t *out)
++{
++    FILE *f = fopen(path, "re");
++    if (f == NULL)
++        return;
++
++    char magic[32];
++    int version;
++    size_t count;
 +    bool ok = fscanf(f, "%31s %d\n", magic, &version) == 2 &&
-+              streq(magic, SESSION_MAGIC) &&
-+              (version == 1 || version == SESSION_VERSION);
++        streq(magic, STATE_MAGIC) &&
++        (version == 2 || version == STATE_VERSION) &&
++        fscanf(f, "%zu", &count) == 1 && fgetc(f) == '\n';
 +
-+    size_t count = 0;
-+    ok = ok && fscanf(f, "%zu\n", &count) == 1;
-+
-+    size_t loaded = 0;
 +    for (size_t i = 0; ok && i < count; i++) {
-+        struct session_window w = {.commands = tll_init()};
-+
-+        w.cwd = read_blob(f);
-+        bool line_ok = w.cwd != NULL &&
-+            fscanf(f, "%d %d\n", &w.cols, &w.rows) == 2 &&
-+            w.cols > 0 && w.rows > 0;
-+
-+        if (line_ok) {
-+            w.snapshot = read_blob(f);
-+            line_ok = w.snapshot != NULL;
-+        }
-+
-+        size_t command_count = 0;
-+        if (version == 1) {
-+            /* v1 carried a single "re-run verbatim" foreground
-+             * command; those were unfiltered, so drop it */
-+            size_t argc;
-+            char **argv;
-+            line_ok = line_ok && read_argv(f, &argc, &argv);
-+            if (line_ok)
-+                session_argv_free(argc, argv);
-+        } else {
-+            line_ok = line_ok &&
-+                read_argv(f, &w.launch_argc, &w.launch_argv) &&
-+                fscanf(f, "%zu\n", &command_count) == 1 &&
-+                command_count <= 64;
-+        }
-+
-+        for (size_t c = 0; line_ok && c < command_count; c++) {
-+            struct session_command cmd = {0};
-+            cmd.cwd = read_blob(f);
-+            line_ok = cmd.cwd != NULL && read_argv(f, &cmd.argc, &cmd.argv);
-+            if (!line_ok) {
-+                free(cmd.cwd);
-+                break;
-+            }
-+            tll_push_back(w.commands, cmd);
-+        }
-+
-+        if (!line_ok) {
-+            free(w.cwd);
-+            free(w.snapshot);
-+            session_argv_free(w.launch_argc, w.launch_argv);
-+            session_command_list_free(&w.commands);
++        struct session_window *w = read_window(f, version);
++        if (w != NULL)
++            tll_push_back(*out, w);
++        else
 +            ok = false;
-+            break;
-+        }
-+
-+        tll_push_back(*out, w);
-+        loaded++;
 +    }
 +
 +    fclose(f);
 +
 +    if (!ok) {
-+        LOG_ERR("%s: malformed session state file, ignoring", path);
-+        session_window_list_free(out);
-+        /*
-+         * Rename it aside instead of deleting - it might be useful
-+         * for debugging, and this guarantees we do not loop trying
-+         * (and failing) to restore it again next time.
-+         */
-+    } else {
-+        LOG_INFO("loaded %zu window(s) from previous session", loaded);
++        LOG_ERR("%s: malformed session state, ignoring", path);
++        tll_foreach(*out, it) {
++            window_free(it->item);
++            tll_remove(*out, it);
++        }
 +    }
 +
-+    size_t backup_len = strlen(path) + strlen(".restored") + 1;
-+    char *backup_path = xmalloc(backup_len);
-+    snprintf(backup_path, backup_len, "%s.restored", path);
-+    rename(path, backup_path);
-+    free(backup_path);
++    /* Never restore the same state twice, e.g. if restoring crashes */
++    char *backup = xstrjoin(path, ".restored");
++    rename(path, backup);
++    free(backup);
++}
 +
++static void
++write_state(struct session *s)
++{
++    const time_t now = now_secs();
++    tll_foreach(s->closed, it) {
++        if (now - it->item.at >= CLOSE_GRACE_SECS) {
++            window_free(it->item.w);
++            tll_remove(s->closed, it);
++        }
++    }
++
++    size_t count = tll_length(s->closed);
++    tll_foreach(s->windows, it)
++        count += it->item->saved != NULL;
++
++    char *buf = NULL;
++    size_t len = 0;
++    FILE *f = open_memstream(&buf, &len);
++    if (f == NULL)
++        return;
++
++    fprintf(f, "%s %d\n%zu\n", STATE_MAGIC, STATE_VERSION, count);
++    tll_foreach(s->windows, it) {
++        if (it->item->saved != NULL)
++            write_window(f, it->item->saved);
++    }
++    tll_foreach(s->closed, it)
++        write_window(f, it->item.w);
++
++    if (fclose(f) != 0) {
++        free(buf);
++        return;
++    }
++
++    if (s->written != NULL && s->written_len == len &&
++        memcmp(s->written, buf, len) == 0)
++    {
++        free(buf);
++        return;
++    }
++
++    bool ok = count > 0
++        ? write_file_atomic(s->path, buf, len)
++        : unlink(s->path) == 0 || errno == ENOENT;
++
++    if (ok) {
++        free(s->written);
++        s->written = buf;
++        s->written_len = len;
++    } else
++        free(buf);
++}
++
++/* Process inspection */
++
++static bool
++read_proc(pid_t pid, struct proc *out)
++{
++    char path[64];
++    snprintf(path, sizeof(path), "/proc/%d/stat", (int)pid);
++
++    size_t len;
++    char *stat = read_file(path, &len);
++    if (stat == NULL)
++        return false;
++
++    const char *p = strrchr(stat, ')');
++    char state;
++    int ppid, pgid, sid;
++    unsigned long long starttime;
++
++    bool ok = p != NULL && sscanf(
++        p + 1,
++        " %c %d %d %d %*d %*d %*u %*u %*u %*u %*u %*u %*u"
++        " %*d %*d %*d %*d %*d %*d %llu",
++        &state, &ppid, &pgid, &sid, &starttime) == 5 &&
++        state != 'Z' && state != 'X';
++
++    free(stat);
++    if (ok) {
++        *out = (struct proc){
++            .pid = pid, .ppid = ppid, .pgid = pgid, .sid = sid,
++            .starttime = starttime,
++        };
++    }
 +    return ok;
 +}
 +
-+void
-+session_command_list_free(session_command_list_t *list)
++static void
++scan_procs(proc_list_t *out)
 +{
-+    tll_foreach(*list, it) {
-+        free(it->item.cwd);
-+        session_argv_free(it->item.argc, it->item.argv);
-+        tll_remove(*list, it);
++    DIR *d = opendir("/proc");
++    if (d == NULL) {
++        LOG_ERRNO("failed to open /proc");
++        return;
++    }
++
++    const struct dirent *e;
++    while ((e = readdir(d)) != NULL) {
++        char *end;
++        long pid = strtol(e->d_name, &end, 10);
++        struct proc p;
++        if (*end == '\0' && pid > 0 && read_proc(pid, &p))
++            tll_push_back(*out, p);
++    }
++
++    closedir(d);
++}
++
++static bool
++fd_is(pid_t pid, int fd, const char *target)
++{
++    char path[64];
++    snprintf(path, sizeof(path), "/proc/%d/fd/%d", (int)pid, fd);
++
++    char buf[PATH_MAX];
++    ssize_t n = readlink(path, buf, sizeof(buf) - 1);
++    if (n < 0)
++        return false;
++    buf[n] = '\0';
++    return streq(buf, target);
++}
++
++/*
++ * At each level, the child with stdin *and* stdout on the pty: skips
++ * helpers spawned with pipes. The foreground pgrp can't be the main
++ * signal, since e.g. lf runs its commands in their own pgrp.
++ */
++static size_t
++proc_chain(const struct terminal *term, const proc_list_t *procs,
++           struct proc chain[static MAX_CHAIN_DEPTH])
++{
++    char pts[PATH_MAX];
++    if (term->ptmx < 0 || ptsname_r(term->ptmx, pts, sizeof(pts)) != 0)
++        return 0;
++
++    const pid_t root = term->slave;
++    const pid_t fg = tcgetpgrp(term->ptmx);
++    size_t n = 0;
++
++    tll_foreach(*procs, it) {
++        if (it->item.pid == root) {
++            chain[n++] = it->item;
++            break;
++        }
++    }
++
++    while (n > 0 && n < MAX_CHAIN_DEPTH) {
++        const struct proc *best = NULL;
++
++        tll_foreach(*procs, it) {
++            const struct proc *p = &it->item;
++            if (p->ppid != chain[n - 1].pid || p->sid != root ||
++                !fd_is(p->pid, STDIN_FILENO, pts) ||
++                !fd_is(p->pid, STDOUT_FILENO, pts))
++            {
++                continue;
++            }
++
++            if (best == NULL ||
++                ((p->pgid == fg) != (best->pgid == fg)
++                 ? p->pgid == fg
++                 : p->starttime > best->starttime))
++            {
++                best = p;
++            }
++        }
++
++        if (best == NULL)
++            break;
++        chain[n++] = *best;
++    }
++
++    return n;
++}
++
++static char *
++proc_cwd(pid_t pid)
++{
++    char path[64];
++    snprintf(path, sizeof(path), "/proc/%d/cwd", (int)pid);
++
++    char buf[PATH_MAX];
++    ssize_t n = readlink(path, buf, sizeof(buf) - 1);
++    if (n <= 0)
++        return NULL;
++    buf[n] = '\0';
++    return xstrdup(buf);
++}
++
++static char **
++proc_file_argv(pid_t pid, const char *file, size_t *argc)
++{
++    char path[64];
++    snprintf(path, sizeof(path), "/proc/%d/%s", (int)pid, file);
++
++    size_t len;
++    char *buf = read_file(path, &len);
++    *argc = 0;
++    if (buf == NULL)
++        return NULL;
++
++    char **argv = split_nul(buf, len, argc);
++    free(buf);
++    return argv;
++}
++
++static int
++proc_restore_step(pid_t pid)
++{
++    size_t envc;
++    char **env = proc_file_argv(pid, "environ", &envc);
++    int step = -1;
++
++    for (size_t i = 0; i < envc; i++) {
++        if (strncmp(env[i], "FOOT_RESTORE_STEP=", 18) == 0) {
++            char *end;
++            long v = strtol(env[i] + 18, &end, 10);
++            if (*end == '\0' && v >= 0 && v < INT_MAX)
++                step = v;
++        }
++    }
++
++    argv_free(envc, env);
++    return step;
++}
++
++/* [session-restore] rule evaluation */
++
++static struct relaunch *
++relaunch_find(struct session *s, pid_t pid, unsigned long long starttime)
++{
++    tll_foreach(s->relaunch, it) {
++        if (it->item.pid == pid && it->item.starttime == starttime)
++            return &it->item;
++    }
++    return NULL;
++}
++
++static void
++relaunch_reset(struct relaunch *r, const char *program)
++{
++    free(r->program);
++    argv_free(r->argc, r->argv);
++    *r = (struct relaunch){
++        .pid = r->pid,
++        .starttime = r->starttime,
++        .program = xstrdup(program),
++        .evaluating = r->evaluating,
++    };
++}
++
++/* Success with "\0" alone: the rule declined. Empty words: failure */
++static bool
++parse_words(const char *out, size_t len, size_t *argc, char ***argv)
++{
++    *argc = 0;
++    *argv = NULL;
++
++    if (len == 0 || out[len - 1] != '\0')
++        return false;
++    if (len == 1)
++        return true;
++
++    for (size_t i = 0; i < len; i++) {
++        if (out[i] == '\0' && (i == 0 || out[i - 1] == '\0'))
++            return false;
++    }
++
++    *argv = split_nul(out, len, argc);
++    return true;
++}
++
++static void
++eval_finish(struct rule_eval *ev, bool notify)
++{
++    struct session *s = ev->session;
++
++    tll_foreach(s->evals, it) {
++        if (it->item == ev)
++            tll_remove(s->evals, it);
++    }
++
++    struct relaunch *r = relaunch_find(s, ev->pid, ev->starttime);
++    if (r != NULL && streq(r->program, ev->program)) {
++        r->evaluating = false;
++
++        size_t argc;
++        char **argv;
++        bool ok = !ev->failed && WIFEXITED(ev->status) &&
++            WEXITSTATUS(ev->status) == 0 &&
++            parse_words(ev->out, ev->len, &argc, &argv);
++
++        if (!ok) {
++            if (!r->warned) {
++                LOG_WARN("[session-restore] %s (pid=%d): rule failed%s",
++                         r->program, (int)ev->pid,
++                         r->resolved ? ", keeping previous result" : "");
++                r->warned = true;
++            }
++        } else if (r->resolved && argv_eq(r->argc, r->argv, argc, argv))
++            argv_free(argc, argv);
++        else {
++            argv_free(r->argc, r->argv);
++            r->argc = argc;
++            r->argv = argv;
++            r->resolved = true;
++            r->warned = false;
++            s->rules_changed = true;
++        }
++    } else if (r != NULL)
++        r->evaluating = false;
++
++    free(ev->program);
++    free(ev->out);
++    free(ev);
++
++    if (notify && tll_length(s->evals) == 0 && s->rules_changed)
++        checkpoint(s, EVAL_NEW);
++}
++
++static void
++eval_maybe_finish(struct rule_eval *ev)
++{
++    if (ev->fd < 0 && ev->exited)
++        eval_finish(ev, true);
++}
++
++static void
++eval_abort(struct rule_eval *ev)
++{
++    ev->failed = true;
++    if (!ev->exited)
++        kill(ev->child, SIGKILL);
++    if (ev->fd >= 0) {
++        fdm_del(ev->session->fdm, ev->fd);
++        ev->fd = -1;
 +    }
 +}
 +
-+void
-+session_window_list_free(session_window_list_t *list)
++static bool
++fdm_eval_output(struct fdm *fdm, int fd, int events, void *data)
 +{
-+    tll_foreach(*list, it) {
-+        free(it->item.cwd);
-+        free(it->item.snapshot);
-+        session_argv_free(it->item.launch_argc, it->item.launch_argv);
-+        session_command_list_free(&it->item.commands);
-+        tll_remove(*list, it);
++    struct rule_eval *ev = data;
++
++    char buf[4096];
++    ssize_t n = read(fd, buf, sizeof(buf));
++    if (n < 0 && (errno == EINTR || errno == EAGAIN))
++        return true;
++
++    if (n > 0 && ev->len + n <= RULE_OUTPUT_MAX) {
++        ev->out = xrealloc(ev->out, ev->len + n);
++        memcpy(ev->out + ev->len, buf, n);
++        ev->len += n;
++        return true;
 +    }
++
++    if (n != 0)
++        eval_abort(ev);
++    else {
++        fdm_del(fdm, fd);
++        ev->fd = -1;
++    }
++
++    eval_maybe_finish(ev);
++    return true;
++}
++
++static void
++eval_reaped(struct reaper *reaper, pid_t pid, int status, void *data)
++{
++    struct rule_eval *ev = data;
++    ev->exited = true;
++    ev->status = status;
++    eval_maybe_finish(ev);
++}
++
++static char **
++eval_envp(pid_t pid, const char *cwd)
++{
++    size_t envc;
++    char **env = proc_file_argv(pid, "environ", &envc);
++    char *const *src = env;
++
++    if (env == NULL) {
++        src = environ;
++        for (envc = 0; environ[envc] != NULL; envc++)
++            ;
++    }
++
++    char **envp = xcalloc(envc + 3, sizeof(envp[0]));
++    size_t n = 0;
++    for (size_t i = 0; i < envc; i++) {
++        if (strncmp(src[i], "FOOT_PID=", 9) != 0 &&
++            strncmp(src[i], "FOOT_CWD=", 9) != 0)
++        {
++            envp[n++] = xstrdup(src[i]);
++        }
++    }
++    envp[n++] = xasprintf("FOOT_PID=%d", (int)pid);
++    envp[n++] = xasprintf("FOOT_CWD=%s", cwd);
++
++    argv_free(env != NULL ? envc : 0, env);
++    return envp;
++}
++
++static void
++eval_start(struct session *s, struct relaunch *r, const char *command,
++           const char *cwd, size_t argc, char *const *argv)
++{
++    int fds[2];
++    if (pipe2(fds, O_CLOEXEC) < 0) {
++        LOG_ERRNO("failed to create pipe");
++        return;
++    }
++    fcntl(fds[0], F_SETFL, O_NONBLOCK);
++
++    char *script = xasprintf("printf '%%s\\0' %s", command);
++    char **sh_argv = xcalloc(argc + 4, sizeof(sh_argv[0]));
++    sh_argv[0] = "/bin/sh";
++    sh_argv[1] = "-c";
++    sh_argv[2] = script;
++    for (size_t i = 0; i < argc; i++)
++        sh_argv[3 + i] = argv[i];
++
++    char **envp = eval_envp(r->pid, cwd);
++
++    sigset_t mask;
++    sigemptyset(&mask);
++    const struct sigaction dfl = {.sa_handler = SIG_DFL};
++
++    pid_t child = fork();
++    if (child == 0) {
++        int null = open("/dev/null", O_RDWR);
++        if (null < 0 || dup2(null, STDIN_FILENO) < 0 ||
++            dup2(fds[1], STDOUT_FILENO) < 0 ||
++            dup2(null, STDERR_FILENO) < 0 ||
++            sigprocmask(SIG_SETMASK, &mask, NULL) < 0 ||
++            sigaction(SIGPIPE, &dfl, NULL) < 0 ||
++            sigaction(SIGHUP, &dfl, NULL) < 0)
++        {
++            _exit(127);
++        }
++        (void)!chdir(cwd);
++        execve(sh_argv[0], sh_argv, envp);
++        _exit(127);
++    }
++
++    close(fds[1]);
++    free(script);
++    free(sh_argv);
++    for (char **e = envp; *e != NULL; e++)
++        free(*e);
++    free(envp);
++
++    if (child < 0) {
++        LOG_ERRNO("failed to fork");
++        close(fds[0]);
++        return;
++    }
++
++    struct rule_eval *ev = xmalloc(sizeof(*ev));
++    *ev = (struct rule_eval){
++        .session = s,
++        .pid = r->pid,
++        .starttime = r->starttime,
++        .program = xstrdup(r->program),
++        .child = child,
++        .fd = fds[0],
++        .started = now_secs(),
++    };
++
++    reaper_add(s->reaper, child, &eval_reaped, ev);
++    if (!fdm_add(s->fdm, fds[0], EPOLLIN, &fdm_eval_output, ev)) {
++        close(fds[0]);
++        ev->fd = -1;
++        ev->failed = true;
++    }
++
++    tll_push_back(s->evals, ev);
++    r->tried = true;
++    r->evaluating = true;
++}
++
++static void
++evals_expire(struct session *s)
++{
++    const time_t now = now_secs();
++    tll_foreach(s->evals, it) {
++        struct rule_eval *ev = it->item;
++        if (ev->failed || now - ev->started < RULE_TIMEOUT_SECS)
++            continue;
++
++        LOG_WARN("[session-restore] %s (pid=%d): rule timed out",
++                 ev->program, (int)ev->pid);
++        eval_abort(ev);
++        if (ev->exited)
++            eval_finish(ev, false);
++    }
++}
++
++enum resolution { NO_RULE, PENDING, DECLINED, RESOLVED };
++
++static enum resolution
++resolve(struct session *s, const struct config *conf, const struct proc *p,
++        const char *fallback_cwd, enum eval_mode mode,
++        const struct relaunch **out)
++{
++    size_t argc;
++    char **argv = proc_file_argv(p->pid, "cmdline", &argc);
++    if (argc == 0)
++        return NO_RULE;
++
++    const char *slash = strrchr(argv[0], '/');
++    const char *base = slash != NULL ? slash + 1 : argv[0];
++
++    const struct session_restore_rule *rule = NULL;
++    tll_foreach(conf->session.restore_rules, it) {
++        if (streq(it->item.program, base)) {
++            rule = &it->item;
++            break;
++        }
++    }
++
++    if (rule == NULL) {
++        argv_free(argc, argv);
++        return NO_RULE;
++    }
++
++    struct relaunch *r = relaunch_find(s, p->pid, p->starttime);
++    if (r == NULL) {
++        tll_push_back(s->relaunch, ((struct relaunch){
++            .pid = p->pid, .starttime = p->starttime}));
++        r = &tll_back(s->relaunch);
++    }
++    if (r->program == NULL || !streq(r->program, rule->program))
++        relaunch_reset(r, rule->program);
++    r->seen = true;
++
++    if (!r->evaluating &&
++        (mode == EVAL_ALL || (mode == EVAL_NEW && !r->tried)))
++    {
++        char *cwd = proc_cwd(p->pid);
++        eval_start(s, r, rule->command, cwd != NULL ? cwd : fallback_cwd,
++                   argc, argv);
++        free(cwd);
++    }
++
++    argv_free(argc, argv);
++    *out = r;
++    return !r->resolved ? PENDING : r->argc == 0 ? DECLINED : RESOLVED;
++}
++
++/* Checkpoints */
++
++static struct session_window *
++build_window(struct session *s, const struct session_tracked *t,
++             const proc_list_t *procs, enum eval_mode mode)
++{
++    struct proc chain[MAX_CHAIN_DEPTH];
++    size_t depth = proc_chain(t->term, procs, chain);
++    if (depth == 0)
++        return NULL;
++
++    struct session_window *w = xmalloc(sizeof(*w));
++    *w = (struct session_window){
++        .cwd = proc_cwd(chain[0].pid),
++        .snapshot = term_snapshot_text(t->term, t->conf->session.scrollback_lines),
++        .launch_argc = t->launch_argc,
++        .launch_argv = argv_dup(t->launch_argc, t->launch_argv),
++        .commands = tll_init(),
++    };
++
++    if (w->cwd == NULL) {
++        const char *home = getenv("HOME");
++        w->cwd = xstrdup(t->term->cwd != NULL ? t->term->cwd
++                         : home != NULL ? home : "/");
++    }
++
++    if (!t->conf->session.relaunch_command)
++        return w;
++
++    const int step = depth > 1 ? proc_restore_step(chain[1].pid) : -1;
++    const struct session_command *step_cmd = NULL;
++    if (step >= 0) {
++        int i = 0;
++        tll_foreach(t->restore_commands, it) {
++            if (i++ == step)
++                step_cmd = &it->item;
++        }
++    }
++
++    for (size_t i = 0; i < depth; i++) {
++        const struct relaunch *r = NULL;
++        enum resolution res = resolve(s, t->conf, &chain[i], w->cwd, mode, &r);
++
++        if (i == 0) {
++            if (res == RESOLVED) {
++                argv_free(w->launch_argc, w->launch_argv);
++                w->launch_argc = r->argc;
++                w->launch_argv = argv_dup(r->argc, r->argv);
++            }
++            continue;
++        }
++
++        char *cwd = proc_cwd(chain[i].pid);
++        const char *dir = cwd != NULL ? cwd : w->cwd;
++
++        if (res == RESOLVED)
++            command_push(&w->commands, true, dir, r->argc, r->argv);
++        else if (res == PENDING && i == 1 && step_cmd != NULL)
++            command_push(&w->commands, true, dir, step_cmd->argc, step_cmd->argv);
++
++        free(cwd);
++    }
++
++    if (step_cmd != NULL) {
++        int i = 0;
++        tll_foreach(t->restore_commands, it) {
++            if (i++ > step) {
++                command_push(&w->commands, false, it->item.cwd,
++                             it->item.argc, it->item.argv);
++            }
++        }
++    }
++
++    return w;
++}
++
++static void
++checkpoint(struct session *s, enum eval_mode mode)
++{
++    proc_list_t procs = tll_init();
++    scan_procs(&procs);
++
++    tll_foreach(s->relaunch, it)
++        it->item.seen = false;
++    s->rules_changed = false;
++
++    tll_foreach(s->windows, it) {
++        struct session_tracked *t = it->item;
++        struct session_window *w = build_window(s, t, &procs, mode);
++        if (w == NULL)
++            continue;
++
++        /* At logout programs die concurrently with the final save */
++        if (mode == EVAL_NONE && t->saved != NULL &&
++            tll_length(w->commands) < tll_length(t->saved->commands))
++        {
++            window_free(w);
++            continue;
++        }
++
++        window_free(t->saved);
++        t->saved = w;
++    }
++
++    tll_foreach(s->relaunch, it) {
++        if (!it->item.seen && !it->item.evaluating) {
++            free(it->item.program);
++            argv_free(it->item.argc, it->item.argv);
++            tll_remove(s->relaunch, it);
++        }
++    }
++
++    tll_free(procs);
++    write_state(s);
++}
++
++static bool
++fdm_timer(struct fdm *fdm, int fd, int events, void *data)
++{
++    struct session *s = data;
++
++    uint64_t expirations;
++    if (read(fd, &expirations, sizeof(expirations)) < 0 && errno != EAGAIN)
++        LOG_ERRNO("failed to read session timer");
++
++    evals_expire(s);
++    checkpoint(s, EVAL_ALL);
++    return true;
++}
++
++/* Restore */
++
++static void
++write_quoted(FILE *f, const char *s)
++{
++    fputc('\'', f);
++    for (; *s != '\0'; s++) {
++        if (*s == '\'')
++            fputs("'\\''", f);
++        else
++            fputc(*s, f);
++    }
++    fputc('\'', f);
++}
++
++static void
++write_quoted_argv(FILE *f, size_t argc, char *const *argv)
++{
++    for (size_t i = 0; i < argc; i++) {
++        if (i > 0)
++            fputc(' ', f);
++        write_quoted(f, argv[i]);
++    }
++}
++
++/* Replayed through the child's stdout: the grid doesn't exist yet */
++static char *
++write_snapshot_file(const char *snapshot)
++{
++    const char *dir = getenv("XDG_RUNTIME_DIR");
++    char *path = xasprintf(
++        "%s/foot-session-restore-XXXXXX",
++        dir != NULL && dir[0] == '/' ? dir : "/tmp");
++
++    int fd = mkostemp(path, O_CLOEXEC);
++    if (fd < 0) {
++        LOG_ERRNO("failed to create session restore file");
++        free(path);
++        return NULL;
++    }
++
++    FILE *f = fdopen(fd, "w");
++    if (f == NULL) {
++        close(fd);
++        unlink(path);
++        free(path);
++        return NULL;
++    }
++
++    if (snapshot != NULL)
++        fputs(snapshot, f);
++
++    /* Fixed width: a full-width rule wraps after a resize */
++    fputs("\x1b[38;2;110;150;200m"
++          "\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80"
++          "\x1b[1m restored session \x1b[22m"
++          "\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80"
++          "\x1b[0m\n", f);
++
++    if (fclose(f) != 0) {
++        unlink(path);
++        free(path);
++        return NULL;
++    }
++    return path;
++}
++
++static char *
++restore_script(const char *snapshot_path, const struct session_window *w,
++               char *const *shell_argv)
++{
++    char *buf = NULL;
++    size_t len = 0;
++    FILE *f = open_memstream(&buf, &len);
++    if (f == NULL)
++        return NULL;
++
++    fputs("trap : INT QUIT\n", f);
++
++    /* foot sets $SHELL to our /bin/sh wrapper */
++    const char *shell = getenv("SHELL");
++    if (shell != NULL) {
++        fputs("export SHELL=", f);
++        write_quoted(f, shell);
++        fputc('\n', f);
++    }
++
++    if (snapshot_path != NULL) {
++        fputs("cat ", f);
++        write_quoted(f, snapshot_path);
++        fputs(" 2>/dev/null; rm -f ", f);
++        write_quoted(f, snapshot_path);
++        fputc('\n', f);
++    }
++
++    size_t step = 0;
++    tll_foreach(w->commands, it) {
++        fputs("(cd ", f);
++        write_quoted(f, it->item.cwd);
++        fprintf(f, " 2>/dev/null; export FOOT_RESTORE_STEP=%zu; exec ", step++);
++        write_quoted_argv(f, it->item.argc, it->item.argv);
++        fputs(")\n", f);
++    }
++
++    fputs("exec ", f);
++    if (w->launch_argc > 0)
++        write_quoted_argv(f, w->launch_argc, w->launch_argv);
++    else {
++        for (size_t i = 0; shell_argv[i] != NULL; i++) {
++            if (i > 0)
++                fputc(' ', f);
++            write_quoted(f, shell_argv[i]);
++        }
++    }
++    fputc('\n', f);
++
++    if (fclose(f) != 0) {
++        free(buf);
++        return NULL;
++    }
++    return buf;
++}
++
++static void
++restore(struct session *s, session_restore_cb cb, void *data)
++{
++    window_list_t windows = tll_init();
++    read_state(s->path, &windows);
++    if (tll_length(windows) == 0)
++        return;
++
++    char **shell_argv = NULL;
++    if (!tokenize_cmdline(s->conf->shell, &shell_argv)) {
++        LOG_ERR("failed to tokenize shell: %s", s->conf->shell);
++        shell_argv = NULL;
++    }
++
++    tll_foreach(windows, it) {
++        struct session_window *w = it->item;
++
++        if (shell_argv != NULL) {
++            char *snapshot_path = write_snapshot_file(w->snapshot);
++            char *script = restore_script(snapshot_path, w, shell_argv);
++            char *argv[] = {"/bin/sh", "-c", script, "foot", NULL};
++
++            if ((script == NULL || !cb(data, s, w, w->cwd, argv)) &&
++                snapshot_path != NULL)
++            {
++                unlink(snapshot_path);
++            }
++
++            free(snapshot_path);
++            free(script);
++        }
++
++        window_free(w);
++        tll_remove(windows, it);
++    }
++
++    if (shell_argv != NULL) {
++        for (char **a = shell_argv; *a != NULL; a++)
++            free(*a);
++        free(shell_argv);
++    }
++}
++
++/* Public API */
++
++struct session *
++session_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
++             session_restore_cb restore_cb, void *restore_data)
++{
++    if (!conf->session.enabled)
++        return NULL;
++
++    char *path = state_path();
++    if (path == NULL)
++        return NULL;
++
++    struct session *s = xmalloc(sizeof(*s));
++    *s = (struct session){
++        .conf = conf,
++        .fdm = fdm,
++        .reaper = reaper,
++        .path = path,
++        .timer_fd = -1,
++        .windows = tll_init(),
++        .closed = tll_init(),
++        .relaunch = tll_init(),
++        .evals = tll_init(),
++    };
++
++    restore(s, restore_cb, restore_data);
++
++    if (conf->session.save_interval_secs == 0)
++        return s;
++
++    int fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
++    const struct itimerspec its = {
++        .it_value = {.tv_sec = conf->session.save_interval_secs},
++        .it_interval = {.tv_sec = conf->session.save_interval_secs},
++    };
++
++    if (fd < 0 || timerfd_settime(fd, 0, &its, NULL) < 0) {
++        LOG_ERRNO("failed to create session save timer");
++        if (fd >= 0)
++            close(fd);
++    } else if (!fdm_add(fdm, fd, EPOLLIN, &fdm_timer, s))
++        close(fd);
++    else
++        s->timer_fd = fd;
++
++    return s;
++}
++
++void
++session_destroy(struct session *s)
++{
++    if (s == NULL)
++        return;
++
++    checkpoint(s, EVAL_NONE);
++
++    if (s->timer_fd >= 0)
++        fdm_del(s->fdm, s->timer_fd);
++
++    tll_foreach(s->evals, it) {
++        struct rule_eval *ev = it->item;
++        reaper_del(s->reaper, ev->child);
++        if (!ev->exited)
++            kill(ev->child, SIGKILL);
++        if (ev->fd >= 0)
++            fdm_del(s->fdm, ev->fd);
++        free(ev->program);
++        free(ev->out);
++        free(ev);
++        tll_remove(s->evals, it);
++    }
++
++    tll_foreach(s->relaunch, it) {
++        free(it->item.program);
++        argv_free(it->item.argc, it->item.argv);
++        tll_remove(s->relaunch, it);
++    }
++
++    tll_foreach(s->closed, it) {
++        window_free(it->item.w);
++        tll_remove(s->closed, it);
++    }
++
++    tll_foreach(s->windows, it) {
++        it->item->session = NULL;
++        tll_remove(s->windows, it);
++    }
++
++    free(s->written);
++    free(s->path);
++    free(s);
++}
++
++struct session_tracked *
++session_track(struct session *s, struct terminal *term,
++              const struct config *conf,
++              size_t launch_argc, char *const *launch_argv)
++{
++    if (s == NULL)
++        return NULL;
++
++    struct session_tracked *t = xmalloc(sizeof(*t));
++    *t = (struct session_tracked){
++        .session = s,
++        .term = term,
++        .conf = conf,
++        .launch_argc = launch_argc,
++        .launch_argv = argv_dup(launch_argc, launch_argv),
++        .restore_commands = tll_init(),
++    };
++    tll_push_back(s->windows, t);
++    return t;
++}
++
++struct session_tracked *
++session_track_restored(struct session *s, struct terminal *term,
++                       const struct config *conf,
++                       const struct session_window *w)
++{
++    struct session_tracked *t = session_track(
++        s, term, conf, w->launch_argc, w->launch_argv);
++    if (t == NULL)
++        return NULL;
++
++    tll_foreach(w->commands, it) {
++        command_push(&t->restore_commands, false, it->item.cwd,
++                     it->item.argc, it->item.argv);
++    }
++    t->saved = window_dup(w);
++    return t;
++}
++
++void
++session_untrack(struct session_tracked *t)
++{
++    if (t == NULL)
++        return;
++
++    struct session *s = t->session;
++    if (s != NULL) {
++        tll_foreach(s->windows, it) {
++            if (it->item == t)
++                tll_remove(s->windows, it);
++        }
++
++        if (t->saved != NULL) {
++            tll_push_back(s->closed, ((struct closed_window){t->saved, now_secs()}));
++            t->saved = NULL;
++        }
++    }
++
++    window_free(t->saved);
++    argv_free(t->launch_argc, t->launch_argv);
++    command_list_free(&t->restore_commands);
++    free(t);
 +}
 diff -Nru '--exclude=build' -x '*.o' pristine/session.h foot-src/session.h
 --- pristine/session.h	1970-01-01 01:00:00.000000000 +0100
-+++ foot-src/session.h	2026-09-18 12:21:33.894236178 +0200
-@@ -0,0 +1,50 @@
++++ foot-src/session.h	2026-10-01 16:02:24.099000849 +0200
+@@ -0,0 +1,30 @@
 +#pragma once
 +
 +#include <stdbool.h>
 +#include <stddef.h>
-+#include <tllist.h>
 +
-+/* A program to re-run in a restored window, in a specific directory */
-+struct session_command {
-+    char *cwd;
-+    size_t argc;
-+    char **argv;
-+};
++#include "config.h"
++#include "fdm.h"
++#include "reaper.h"
 +
-+typedef tll(struct session_command) session_command_list_t;
++struct session;
++struct session_tracked;
++struct session_window;
++struct terminal;
 +
-+struct session_window {
-+    char *cwd;
-+    int cols;
-+    int rows;
-+    char *snapshot;  /* UTF-8 text, NULL if none */
++typedef bool (*session_restore_cb)(
++    void *data, struct session *session, const struct session_window *w,
++    const char *cwd, char *const *argv);
 +
-+    /*
-+     * The command line the window was originally launched with
-+     * (e.g. footclient's arguments); empty means "the configured
-+     * shell". This is exec'ed last, after all of 'commands'.
-+     */
-+    size_t launch_argc;
-+    char **launch_argv;
++struct session *session_init(
++    const struct config *conf, struct fdm *fdm, struct reaper *reaper,
++    session_restore_cb restore_cb, void *restore_data);
++void session_destroy(struct session *session);
 +
-+    /*
-+     * Programs that were running in the window at save time,
-+     * innermost (deepest in the process tree) first, as resolved
-+     * through the [session-restore] rules. They are re-run, in
-+     * order, before finally exec'ing the launch command - so that
-+     * quitting a restored program lands you where it did before.
-+     */
-+    session_command_list_t commands;
-+};
-+
-+typedef tll(struct session_window) session_window_list_t;
-+
-+char *session_state_path(void);
-+
-+bool session_write(const char *path, const session_window_list_t *windows);
-+bool session_read(const char *path, session_window_list_t *out);
-+
-+void session_argv_free(size_t argc, char **argv);
-+char **session_argv_dup(size_t argc, char *const *argv);
-+void session_command_list_free(session_command_list_t *list);
-+void session_window_list_free(session_window_list_t *list);
++struct session_tracked *session_track(
++    struct session *session, struct terminal *term, const struct config *conf,
++    size_t launch_argc, char *const *launch_argv);
++struct session_tracked *session_track_restored(
++    struct session *session, struct terminal *term, const struct config *conf,
++    const struct session_window *w);
++void session_untrack(struct session_tracked *tracked);
 diff -Nru '--exclude=build' -x '*.o' pristine/terminal.c foot-src/terminal.c
 --- pristine/terminal.c	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/terminal.c	2026-09-18 12:21:33.894464138 +0200
++++ foot-src/terminal.c	2026-10-01 16:05:37.862435388 +0200
 @@ -24,6 +24,7 @@
  #include "log.h"
  
@@ -1717,236 +1895,140 @@ diff -Nru '--exclude=build' -x '*.o' pristine/terminal.c foot-src/terminal.c
  #include "commands.h"
  #include "config.h"
  #include "debug.h"
-@@ -1810,6 +1811,235 @@
+@@ -1810,6 +1811,139 @@
      alarm_raised = 1;
  }
  
-+struct snapshot_buf {
++struct snapshot {
 +    char32_t *buf;
 +    size_t len;
 +    size_t cap;
 +};
 +
 +static void
-+snapshot_buf_ensure(struct snapshot_buf *b, size_t additional)
++snapshot_append(struct snapshot *s, char32_t c)
 +{
-+    if (b->len + additional <= b->cap)
-+        return;
-+
-+    size_t new_cap = b->cap == 0 ? 512 : b->cap * 2;
-+    while (new_cap < b->len + additional)
-+        new_cap *= 2;
-+
-+    b->buf = xrealloc(b->buf, new_cap * sizeof(b->buf[0]));
-+    b->cap = new_cap;
-+}
-+
-+static void
-+snapshot_buf_append_char(struct snapshot_buf *b, char32_t c)
-+{
-+    snapshot_buf_ensure(b, 1);
-+    b->buf[b->len++] = c;
-+}
-+
-+static void
-+snapshot_buf_append_ascii(struct snapshot_buf *b, const char *s)
-+{
-+    size_t len = strlen(s);
-+    snapshot_buf_ensure(b, len);
-+    for (size_t i = 0; i < len; i++)
-+        b->buf[b->len++] = (char32_t)(unsigned char)s[i];
-+}
-+
-+struct snapshot_cell_style {
-+    bool bold, dim, italic, underline, strikethrough, blink, reverse, conceal;
-+    bool fg_default, bg_default;
-+    uint32_t fg, bg;
-+};
-+
-+static void
-+snapshot_resolve_cell_style(const struct terminal *term, const struct cell *cell,
-+                             struct snapshot_cell_style *out)
-+{
-+    *out = (struct snapshot_cell_style){
-+        .bold = cell->attrs.bold,
-+        .dim = cell->attrs.dim,
-+        .italic = cell->attrs.italic,
-+        .underline = cell->attrs.underline,
-+        .strikethrough = cell->attrs.strikethrough,
-+        .blink = cell->attrs.blink,
-+        .reverse = cell->attrs.reverse,
-+        .conceal = cell->attrs.conceal,
-+        .fg_default = true,
-+        .bg_default = true,
-+    };
-+
-+    switch (cell->attrs.fg_src) {
-+    case COLOR_RGB:
-+        out->fg = cell->attrs.fg;
-+        out->fg_default = false;
-+        break;
-+
-+    case COLOR_BASE16:
-+    case COLOR_BASE256:
-+        out->fg = term->colors.table[cell->attrs.fg];
-+        out->fg_default = false;
-+        break;
-+
-+    case COLOR_DEFAULT:
-+        break;
++    if (s->len == s->cap) {
++        s->cap = max(s->cap * 2, 1024);
++        s->buf = xreallocarray(s->buf, s->cap, sizeof(s->buf[0]));
 +    }
++    s->buf[s->len++] = c;
++}
 +
-+    switch (cell->attrs.bg_src) {
-+    case COLOR_RGB:
-+        out->bg = cell->attrs.bg;
-+        out->bg_default = false;
-+        break;
-+
-+    case COLOR_BASE16:
-+    case COLOR_BASE256:
-+        out->bg = term->colors.table[cell->attrs.bg];
-+        out->bg_default = false;
-+        break;
-+
-+    case COLOR_DEFAULT:
-+        break;
-+    }
++static void
++snapshot_append_ascii(struct snapshot *s, const char *str)
++{
++    for (; *str != '\0'; str++)
++        snapshot_append(s, (unsigned char)*str);
 +}
 +
 +static bool
-+snapshot_cell_style_eq(const struct snapshot_cell_style *a,
-+                        const struct snapshot_cell_style *b)
++snapshot_attrs_eq(const struct attributes *a, const struct attributes *b)
 +{
 +    return a->bold == b->bold && a->dim == b->dim && a->italic == b->italic &&
 +        a->underline == b->underline && a->strikethrough == b->strikethrough &&
-+        a->blink == b->blink && a->reverse == b->reverse &&
-+        a->conceal == b->conceal &&
-+        a->fg_default == b->fg_default && a->bg_default == b->bg_default &&
-+        (a->fg_default || a->fg == b->fg) &&
-+        (a->bg_default || a->bg == b->bg);
++        a->blink == b->blink && a->conceal == b->conceal &&
++        a->reverse == b->reverse &&
++        a->fg_src == b->fg_src && (a->fg_src == COLOR_DEFAULT || a->fg == b->fg) &&
++        a->bg_src == b->bg_src && (a->bg_src == COLOR_DEFAULT || a->bg == b->bg);
++}
++
++static size_t
++snapshot_sgr_color(char *buf, size_t size, enum color_source src,
++                   uint32_t color, bool bg)
++{
++    switch (src) {
++    case COLOR_DEFAULT:
++        return 0;
++    case COLOR_BASE16:
++        return xsnprintf(buf, size, ";%u",
++                         (color < 8 ? (bg ? 40 : 30) : (bg ? 100 : 90)) + color % 8);
++    case COLOR_BASE256:
++        return xsnprintf(buf, size, ";%u;5;%u", bg ? 48 : 38, color);
++    case COLOR_RGB:
++        return xsnprintf(buf, size, ";%u;2;%u;%u;%u", bg ? 48 : 38,
++                         (color >> 16) & 0xff, (color >> 8) & 0xff, color & 0xff);
++    }
++    return 0;
 +}
 +
 +static void
-+snapshot_emit_style(struct snapshot_buf *b, const struct snapshot_cell_style *s)
++snapshot_sgr(struct snapshot *s, const struct attributes *a)
 +{
-+    char sgr[96];
-+    size_t n = 0;
-+
-+    n += xsnprintf(sgr + n, sizeof(sgr) - n, "\x1b[0");
-+    if (s->bold) n += xsnprintf(sgr + n, sizeof(sgr) - n, ";1");
-+    if (s->dim) n += xsnprintf(sgr + n, sizeof(sgr) - n, ";2");
-+    if (s->italic) n += xsnprintf(sgr + n, sizeof(sgr) - n, ";3");
-+    if (s->underline) n += xsnprintf(sgr + n, sizeof(sgr) - n, ";4");
-+    if (s->blink) n += xsnprintf(sgr + n, sizeof(sgr) - n, ";5");
-+    if (s->reverse) n += xsnprintf(sgr + n, sizeof(sgr) - n, ";7");
-+    if (s->conceal) n += xsnprintf(sgr + n, sizeof(sgr) - n, ";8");
-+    if (s->strikethrough) n += xsnprintf(sgr + n, sizeof(sgr) - n, ";9");
-+    if (!s->fg_default) {
-+        n += xsnprintf(sgr + n, sizeof(sgr) - n, ";38;2;%u;%u;%u",
-+                       (s->fg >> 16) & 0xff, (s->fg >> 8) & 0xff, s->fg & 0xff);
-+    }
-+    if (!s->bg_default) {
-+        n += xsnprintf(sgr + n, sizeof(sgr) - n, ";48;2;%u;%u;%u",
-+                       (s->bg >> 16) & 0xff, (s->bg >> 8) & 0xff, s->bg & 0xff);
-+    }
++    char sgr[64];
++    size_t n = xsnprintf(sgr, sizeof(sgr), "\x1b[0%s%s%s%s%s%s%s%s",
++                         a->bold ? ";1" : "", a->dim ? ";2" : "",
++                         a->italic ? ";3" : "", a->underline ? ";4" : "",
++                         a->blink ? ";5" : "", a->reverse ? ";7" : "",
++                         a->conceal ? ";8" : "", a->strikethrough ? ";9" : "");
++    n += snapshot_sgr_color(sgr + n, sizeof(sgr) - n, a->fg_src, a->fg, false);
++    n += snapshot_sgr_color(sgr + n, sizeof(sgr) - n, a->bg_src, a->bg, true);
 +    xsnprintf(sgr + n, sizeof(sgr) - n, "m");
-+
-+    snapshot_buf_append_ascii(b, sgr);
++    snapshot_append_ascii(s, sgr);
 +}
 +
 +char *
-+term_snapshot_text(const struct terminal *term, int extra_scrollback_lines)
++term_snapshot_text(const struct terminal *term, int scrollback_lines)
 +{
-+    /* Always the primary screen: a full-screen program's alternate
-+     * screen is redrawn by the program itself when it is relaunched,
-+     * and is a stale frame in scrollback otherwise. */
++    /* Full-screen programs redraw themselves when relaunched */
 +    const struct grid *grid = &term->normal;
 +
-+    if (extra_scrollback_lines < 0)
-+        extra_scrollback_lines = 0;
++    int start = -min(max(scrollback_lines, 0), grid->num_rows - term->rows);
++    while (start < 0 && grid->rows[grid_row_absolute(grid, start)] == NULL)
++        start++;
 +
-+    int max_extra = grid->num_rows - term->rows;
-+    if (extra_scrollback_lines > max_extra)
-+        extra_scrollback_lines = max_extra;
++    struct snapshot s = {0};
++    size_t keep = 0;
++    const struct attributes none = {0};
 +
-+    /* Skip past any not-yet-written-to rows at the top of scrollback */
-+    int start_row_no = -extra_scrollback_lines;
-+    while (start_row_no < 0 &&
-+           grid->rows[grid_row_absolute(grid, start_row_no)] == NULL)
-+    {
-+        start_row_no++;
-+    }
++    for (int r = start; r < term->rows; r++) {
++        const struct row *row = grid->rows[grid_row_absolute(grid, r)];
 +
-+    struct snapshot_buf b = {0};
-+    size_t last_content_len = 0;
-+    bool first_row = true;
++        /* Soft-wrapped rows are emitted unbroken, to re-wrap on reflow */
++        const bool wrapped = row != NULL && !row->linebreak && r < term->rows - 1;
 +
-+    for (int r = start_row_no; r < term->rows; r++) {
-+        struct row *row = grid->rows[grid_row_absolute(grid, r)];
++        int end = row != NULL ? term->cols : 0;
++        while (!wrapped && end > 0 && row->cells[end - 1].wc == 0)
++            end--;
 +
-+        int last_content_col = -1;
-+        if (row != NULL) {
-+            for (int c = 0; c < term->cols; c++) {
-+                if (row->cells[c].wc != 0)
-+                    last_content_col = c;
-+            }
-+        }
++        struct attributes cur = none;
++        for (int c = 0; c < end; c++) {
++            const struct cell *cell = &row->cells[c];
++            if (cell->wc >= CELL_SPACER)
++                continue;
 +
-+        if (!first_row)
-+            snapshot_buf_append_char(&b, U'\n');
-+        first_row = false;
-+
-+        if (row != NULL && last_content_col >= 0) {
-+            struct snapshot_cell_style cur_style = {0};
-+            bool style_active = false;
-+
-+            for (int c = 0; c <= last_content_col; c++) {
-+                const struct cell *cell = &row->cells[c];
-+
-+                if (cell->wc == CELL_SPACER)
-+                    continue;
-+
-+                struct snapshot_cell_style style;
-+                snapshot_resolve_cell_style(term, cell, &style);
-+
-+                if (!style_active || !snapshot_cell_style_eq(&cur_style, &style)) {
-+                    snapshot_emit_style(&b, &style);
-+                    cur_style = style;
-+                    style_active = true;
-+                }
-+
-+                if (cell->wc == 0) {
-+                    snapshot_buf_append_char(&b, U' ');
-+                } else if (cell->wc >= CELL_COMB_CHARS_LO &&
-+                           cell->wc <= CELL_COMB_CHARS_HI) {
-+                    const struct composed *comp = composed_lookup(
-+                        term->composed, cell->wc - CELL_COMB_CHARS_LO);
-+                    if (comp != NULL) {
-+                        for (uint8_t i = 0; i < comp->count; i++)
-+                            snapshot_buf_append_char(&b, comp->chars[i]);
-+                    } else
-+                        snapshot_buf_append_char(&b, U' ');
-+                } else
-+                    snapshot_buf_append_char(&b, cell->wc);
++            if (!snapshot_attrs_eq(&cur, &cell->attrs)) {
++                snapshot_sgr(&s, &cell->attrs);
++                cur = cell->attrs;
 +            }
 +
-+            if (style_active)
-+                snapshot_buf_append_ascii(&b, "\x1b[0m");
-+
-+            last_content_len = b.len;
++            if (cell->wc >= CELL_COMB_CHARS_LO && cell->wc <= CELL_COMB_CHARS_HI) {
++                const struct composed *comp = composed_lookup(
++                    term->composed, cell->wc - CELL_COMB_CHARS_LO);
++                for (size_t i = 0; comp != NULL && i < comp->count; i++)
++                    snapshot_append(&s, comp->chars[i]);
++            } else if (cell->wc == 0 || cell->wc == U'\t')
++                snapshot_append(&s, U' ');
++            else
++                snapshot_append(&s, cell->wc);
 +        }
++
++        if (!snapshot_attrs_eq(&cur, &none))
++            snapshot_append_ascii(&s, "\x1b[0m");
++        if (!wrapped)
++            snapshot_append(&s, U'\n');
++        if (end > 0)
++            keep = s.len;
 +    }
 +
-+    snapshot_buf_append_char(&b, 0);
++    s.len = keep;
++    if (keep > 0 && s.buf[keep - 1] != U'\n')
++        snapshot_append(&s, U'\n');
++    snapshot_append(&s, U'\0');
 +
-+    if (last_content_len == 0) {
-+        free(b.buf);
-+        return xstrdup("");
-+    }
++    char *text = ac32tombs(s.buf);
 +
-+    b.buf[last_content_len] = 0;
-+    char *text = ac32tombs(b.buf);
-+    free(b.buf);
++    free(s.buf);
 +    return text;
 +}
 +
@@ -1955,20 +2037,12 @@ diff -Nru '--exclude=build' -x '*.o' pristine/terminal.c foot-src/terminal.c
  {
 diff -Nru '--exclude=build' -x '*.o' pristine/terminal.h foot-src/terminal.h
 --- pristine/terminal.h	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/terminal.h	2026-09-18 12:21:33.894653848 +0200
-@@ -849,6 +849,16 @@
++++ foot-src/terminal.h	2026-10-01 16:05:28.887082746 +0200
+@@ -849,6 +849,8 @@
  bool term_shutdown(struct terminal *term);
  int term_destroy(struct terminal *term);
  
-+/*
-+ * Renders the current screen, plus up to 'extra_scrollback_lines' of
-+ * scrollback, as plain UTF-8 text (one line per terminal row,
-+ * trailing blank cells stripped). Used to snapshot a terminal's
-+ * visible content for session save/restore. Returns a
-+ * heap-allocated, NUL-terminated string the caller must free(), or
-+ * NULL on error.
-+ */
-+char *term_snapshot_text(const struct terminal *term, int extra_scrollback_lines);
++char *term_snapshot_text(const struct terminal *term, int scrollback_lines);
 +
  void term_update_ascii_printer(struct terminal *term);
  void term_single_shift(struct terminal *term, enum charset_designator idx);
