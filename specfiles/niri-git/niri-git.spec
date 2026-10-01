@@ -24,14 +24,14 @@
 # Convince rust-srpm-macros to use Cargo.lock with the Smithay commit.
 %global __cargo_common_opts %{?_smp_mflags} -Z avoid-dev-deps --locked
 
-%global bumpver 6
+%global bumpver 7
 %global tag 26.04
-%global commit 1f03391ea644c2a43597de7f637269e26d1e1b49
+%global commit c7616326a60d00cafba8c5e0c92bc7a02c8c10f2
 %global shortcommit %{sub %{commit} 1 8}
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        2%{?dist}
+Release:        1%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -64,7 +64,6 @@ License:        ((MIT OR Apache-2.0) AND BSD-3-Clause) AND ((MIT OR Apache-2.0) 
 URL:            https://github.com/niri-wm/niri
 VCS:            git+%{url}#%{commit}:
 Source:         %{url}/archive/%{commit}/niri-%{shortcommit}.tar.gz
-Patch:          niri-ctm-night-light.patch
 Patch:          niri-argb2101010.patch
 
 BuildRequires:  cargo-rpm-macros >= 26
@@ -174,6 +173,10 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Thu Oct 01 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^7.git.c7616326-1
+ - Update to commit c7616326a60d00cafba8c5e0c92bc7a02c8c10f2
+ - Drop CTM night light patch (upstreamed)
+
 * Sat Sep 26 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^6.git.1f03391e-2
  - Update to commit 1f03391ea644c2a43597de7f637269e26d1e1b49
 
