@@ -1,0 +1,127 @@
+--- a/src/overlay_params.h
++++ b/src/overlay_params.h
+@@ -208,6 +208,7 @@
+    OVERLAY_PARAM_CUSTOM(blacklist)                   \
+    OVERLAY_PARAM_CUSTOM(autostart_log)               \
+    OVERLAY_PARAM_CUSTOM(round_corners)               \
++   OVERLAY_PARAM_CUSTOM(hud_scale_height)            \
+    OVERLAY_PARAM_CUSTOM(fsr_steam_sharpness)         \
+    OVERLAY_PARAM_CUSTOM(fcat_screen_edge)            \
+    OVERLAY_PARAM_CUSTOM(fcat_overlay_width)          \
+@@ -298,6 +299,7 @@
+    unsigned height;
+    int offset_x, offset_y;
+    float round_corners;
++   float hud_scale_height, hud_scale;
+    unsigned vsync;
+    int gl_vsync;
+    int gl_bind_framebuffer {0};
+@@ -403,5 +405,6 @@
+ extern std::condition_variable config_cv;
+ extern bool config_ready;
+ std::shared_ptr<overlay_params> get_params();
++void apply_hud_scale(overlay_params& params, float display_height);
+ 
+ #endif /* MANGOHUD_OVERLAY_PARAMS_H */
+--- a/src/overlay_params.cpp
++++ b/src/overlay_params.cpp
+@@ -558,6 +558,7 @@
+ #define parse_gl_bind_framebuffer(s) parse_unsigned(s)
+ #define parse_gl_dont_flip(s) parse_unsigned(s) != 0
+ #define parse_round_corners(s) parse_unsigned(s)
++#define parse_hud_scale_height(s) parse_float(s)
+ #define parse_fcat_overlay_width(s) parse_unsigned(s)
+ #define parse_fcat_screen_edge(s) parse_unsigned(s)
+ #define parse_picmip(s) parse_signed(s)
+@@ -874,6 +875,8 @@
+    params->fps_color = { 0xb22222, 0xfdfd09, 0x39f900 };
+    params->fps_value = { 30, 60 };
+    params->round_corners = 0;
++   params->hud_scale_height = 0;
++   params->hud_scale = 1;
+    params->battery_color =0xff9078;
+    params->fsr_steam_sharpness = -1;
+    params->picmip = -17;
+@@ -1346,3 +1349,31 @@
+ 
+    }
+ }
++
++void apply_hud_scale(overlay_params& params, float display_height)
++{
++   if (!params.hud_scale_height || !display_height)
++      return;
++   float s = display_height / params.hud_scale_height;
++   if (s == params.hud_scale)
++      return;
++   auto scale = [s](overlay_params& p) {
++      float f = s / p.hud_scale;
++      p.font_size *= f;
++      p.font_size_text *= f;
++      p.font_size_secondary *= f;
++      p.width = lroundf(p.width * f);
++      p.height = lroundf(p.height * f);
++      p.offset_x = lroundf(p.offset_x * f);
++      p.offset_y = lroundf(p.offset_y * f);
++      p.round_corners *= f;
++      p.hud_scale = s;
++   };
++   scale(params);
++   params.font_params_hash = get_hash(params.font_params_hash, s);
++   auto snapshot = std::make_shared<overlay_params>(*get_params());
++   scale(*snapshot);
++   std::atomic_store_explicit(&g_params, std::move(snapshot), std::memory_order_release);
++   real_font_size = ImVec2(params.font_size * params.font_scale, params.font_size * params.font_scale / 2);
++   HUDElements.colors.update = true;
++}
+--- a/src/overlay.cpp
++++ b/src/overlay.cpp
+@@ -333,7 +333,7 @@
+ void overlay_new_frame(const struct overlay_params& params)
+ {
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+-   ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8,-3));
++   ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8 * params.hud_scale, -3 * params.hud_scale));
+    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, params.alpha);
+    if (params.enabled[OVERLAY_PARAM_ENABLED_align_right]){
+       // keep text clear of the rounded corners
+@@ -681,7 +681,6 @@
+ 
+    HUDElements.is_vulkan = is_vulkan;
+    ImGui::GetIO().FontGlobalScale = real_params->font_scale;
+-   static float ralign_width = 0, old_scale = 0;
+    auto io = ImGui::GetIO();
+    if (real_params->enabled[OVERLAY_PARAM_ENABLED_fps_only]){
+       window_size = ImVec2((to_string(int(HUDElements.sw_stats->fps)).length() * ImGui::CalcTextSize("A").x) + 15.f, get_params()->height);
+@@ -693,10 +692,7 @@
+    unsigned height = io.DisplaySize.y;
+    auto now = Clock::now();
+ 
+-   if (old_scale != real_params->font_scale) {
+-      HUDElements.ralign_width = ralign_width = ImGui::CalcTextSize("A").x * 4 /* characters */;
+-      old_scale = real_params->font_scale;
+-   }
++   HUDElements.ralign_width = ImGui::CalcTextSize("A").x * 4 /* characters */;
+    ImGuiTableFlags table_flags = ImGuiTableFlags_NoClip;
+    if(real_params->enabled[OVERLAY_PARAM_ENABLED_horizontal])
+       table_flags = ImGuiTableFlags_NoClip | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX;
+--- a/src/vulkan.cpp
++++ b/src/vulkan.cpp
+@@ -491,6 +491,7 @@
+    auto saved_imgui_context = get_current_imgui_contexts();
+    make_imgui_contexts_current(data->imgui_contexts);
+ 
++   apply_hud_scale(instance_data->params, data->height);
+    if (HUDElements.colors.update)
+       HUDElements.convert_colors(instance_data->params);
+ 
+--- a/src/gl/gl_hud.cpp
++++ b/src/gl/gl_hud.cpp
+@@ -220,6 +220,7 @@
+     make_imgui_contexts_current(imgui_contexts);
+ 
+     ImGui::GetIO().DisplaySize = ImVec2(width, height);
++    apply_hud_scale(params, height);
+     if (HUDElements.colors.update)
+         HUDElements.convert_colors(params);
+ 

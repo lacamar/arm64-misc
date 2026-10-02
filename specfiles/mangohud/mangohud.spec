@@ -16,7 +16,7 @@
 Name:           mangohud
 Version:        0.8.3~rc1
 %forgemeta
-Release:        4%{?dist}
+Release:        5%{?dist}
 Summary:        Vulkan and OpenGL overlay for monitoring FPS, temperatures, CPU/GPU load
 
 License:        MIT
@@ -34,6 +34,7 @@ Source6:        https://wrapdb.mesonbuild.com/v%{implot_wrap_ver}/implot_%{implo
 Source20:       README.Fedora.md
 
 Patch100:       mangohud-align-right.patch
+Patch101:       mangohud-hud-scale.patch
 
 # MangoHud switched to bundled vulkan-headers since 0.6.9 version. This rebased
 # upstream patch which reverts this change.
@@ -177,6 +178,9 @@ rm %{buildroot}%{_libdir}/libimgui.a
 
 
 %changelog
+* Fri Oct 02 2026 Lachlan Marie <lchlnm@pm.me> - 0.8.3~rc1-5
+- Add hud_scale_height option
+
 * Fri Oct 02 2026 Lachlan Marie <lchlnm@pm.me> - 0.8.3~rc1-4
 - Move to arm64-misc
 
