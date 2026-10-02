@@ -1,0 +1,84 @@
+diff --git a/src/handlers/compositor.rs b/src/handlers/compositor.rs
+index aba1509e27..53f2912f6f 100644
+--- a/src/handlers/compositor.rs
++++ b/src/handlers/compositor.rs
+@@ -61,6 +61,8 @@ impl CompositorHandler for State {
+         on_commit_buffer_handler::<Self>(surface);
+         self.backend.early_import(surface);
+ 
++        self.niri.surface_committed = true;
++
+         let mut root_surface = surface.clone();
+         while let Some(parent) = get_parent(&root_surface) {
+             root_surface = parent;
+diff --git a/src/layout/floating.rs b/src/layout/floating.rs
+index 5fe1d29a21..c1935394fa 100644
+--- a/src/layout/floating.rs
++++ b/src/layout/floating.rs
+@@ -1218,8 +1218,6 @@ impl<W: LayoutElement> FloatingSpace<W> {
+             ) {
+                 win.send_pending_configure();
+             }
+-
+-            win.refresh();
+         }
+     }
+ 
+diff --git a/src/layout/mod.rs b/src/layout/mod.rs
+index 5df3959a78..0744659400 100644
+--- a/src/layout/mod.rs
++++ b/src/layout/mod.rs
+@@ -4875,7 +4875,6 @@ impl<W: LayoutElement> Layout<W> {
+             win.set_bounds(output_size(&move_.output).to_i32_round());
+ 
+             win.send_pending_configure();
+-            win.refresh();
+ 
+             ongoing_scrolling_dnd.get_or_insert(!move_.is_floating);
+         } else if let Some(InteractiveMoveState::Starting { window_id, .. }) =
+diff --git a/src/layout/scrolling.rs b/src/layout/scrolling.rs
+index c7d94c548d..da261fca63 100644
+--- a/src/layout/scrolling.rs
++++ b/src/layout/scrolling.rs
+@@ -3749,8 +3749,6 @@ impl<W: LayoutElement> ScrollingSpace<W> {
+                 ) {
+                     win.send_pending_configure();
+                 }
+-
+-                win.refresh();
+             }
+         }
+     }
+diff --git a/src/niri.rs b/src/niri.rs
+index fa44b5cbf4..3dbead5437 100644
+--- a/src/niri.rs
++++ b/src/niri.rs
+@@ -253,6 +253,9 @@ pub struct Niri {
+     // Dmabuf readiness pre-commit hook for a surface.
+     pub dmabuf_pre_commit_hook: HashMap<WlSurface, HookId>,
+ 
++    // Set on any surface commit, taken in refresh_layout() to gate the per-window output_update.
++    pub surface_committed: bool,
++
+     /// Clients to notify about their blockers being cleared.
+     pub blocker_cleared_tx: Sender<Client>,
+     pub blocker_cleared_rx: Receiver<Client>,
+@@ -2538,6 +2541,7 @@ impl Niri {
+             mapped_layer_surfaces: HashMap::new(),
+             root_surface: HashMap::new(),
+             dmabuf_pre_commit_hook: HashMap::new(),
++            surface_committed: false,
+             blocker_cleared_tx,
+             blocker_cleared_rx,
+             monitors_active: true,
+@@ -4022,6 +4026,10 @@ impl Niri {
+         };
+ 
+         self.layout.refresh(layout_is_active);
++
++        if mem::take(&mut self.surface_committed) {
++            self.layout.with_windows_mut(|mapped, _| mapped.refresh());
++        }
+     }
+ 
+     pub fn refresh_idle_inhibit(&mut self) {

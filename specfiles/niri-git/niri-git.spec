@@ -14,7 +14,7 @@
   -Copt-level=%rustflags_opt_level
   -Ccodegen-units=%rustflags_codegen_units
   -Cstrip=none
-  %{expr:0%{?_include_frame_pointers} && ("%{_arch}" != "ppc64le" && "%{_arch}" != "s390x" && "%{_arch}" != "i386") ? "-Cforce-frame-pointers=yes" : ""}
+  %{expr:0%{?_include_frame_pointers} ? "-Cforce-frame-pointers=yes" : ""}
   -Clink-arg=-Wl,-z,relro
   -Clink-arg=-Wl,-z,now
   %[0%{?_package_note_status} ? "-Clink-arg=%_package_note_flags" : ""]
@@ -24,9 +24,9 @@
 # Convince rust-srpm-macros to use Cargo.lock with the Smithay commit.
 %global __cargo_common_opts %{?_smp_mflags} -Z avoid-dev-deps --locked
 
-%global bumpver 7
+%global bumpver 8
 %global tag 26.04
-%global commit c7616326a60d00cafba8c5e0c92bc7a02c8c10f2
+%global commit ed22699d99462f61ab171472d3ea67e844ea580d
 %global shortcommit %{sub %{commit} 1 8}
 
 Name:           niri
@@ -36,28 +36,6 @@ Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
 
-# (MIT OR Apache-2.0) AND BSD-3-Clause
-# (MIT OR Apache-2.0) AND Unicode-3.0
-# 0BSD OR MIT OR Apache-2.0
-# Apache-2.0
-# Apache-2.0 AND MIT
-# Apache-2.0 OR MIT
-# Apache-2.0 OR MIT OR Unlicense
-# Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT
-# BSD-2-Clause
-# BSD-2-Clause OR Apache-2.0 OR MIT
-# BSD-3-Clause OR MIT OR Apache-2.0
-# GPL-3.0-or-later
-# ISC
-# MIT
-# MIT OR Apache-2.0
-# MIT OR Apache-2.0 OR LGPL-2.1-or-later
-# MIT OR Apache-2.0 OR Zlib
-# MIT OR Zlib OR Apache-2.0
-# MPL-2.0
-# Unlicense OR MIT
-# Zlib
-# Zlib OR Apache-2.0 OR MIT
 License:        ((MIT OR Apache-2.0) AND BSD-3-Clause) AND ((MIT OR Apache-2.0) AND Unicode-3.0) AND (0BSD OR MIT OR Apache-2.0) AND Apache-2.0 AND (Apache-2.0 AND MIT) AND (Apache-2.0 OR MIT) AND (Apache-2.0 OR MIT OR Unlicense) AND (Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT) AND BSD-2-Clause AND (BSD-2-Clause OR Apache-2.0 OR MIT) AND (BSD-3-Clause OR MIT OR Apache-2.0) AND GPL-3.0-or-later AND ISC AND MIT AND (MIT OR Apache-2.0) AND (MIT OR Apache-2.0 OR LGPL-2.1-or-later) AND (MIT OR Apache-2.0 OR Zlib) AND (MIT OR Zlib OR Apache-2.0) AND MPL-2.0 AND (Unlicense OR MIT) AND Zlib AND (Zlib OR Apache-2.0 OR MIT)
 # LICENSE.dependencies contains a full license breakdown
 
@@ -65,6 +43,19 @@ URL:            https://github.com/niri-wm/niri
 VCS:            git+%{url}#%{commit}:
 Source:         %{url}/archive/%{commit}/niri-%{shortcommit}.tar.gz
 Patch:          niri-argb2101010.patch
+Patch:          niri-ctm-gamma.patch
+# https://github.com/niri-wm/niri/pull/4485
+Patch:          niri-pr4485.patch
+# https://github.com/niri-wm/niri/pull/4365
+Patch:          niri-pr4365.patch
+# https://github.com/niri-wm/niri/pull/4295
+Patch:          niri-pr4295.patch
+# https://github.com/niri-wm/niri/pull/4574
+Patch:          niri-pr4574.patch
+# https://github.com/niri-wm/niri/pull/4330
+Patch:          niri-pr4330.patch
+# https://github.com/niri-wm/niri/pull/4392
+Patch:          niri-pr4392.patch
 
 BuildRequires:  cargo-rpm-macros >= 26
 BuildRequires:  pkgconfig(udev)
@@ -90,10 +81,8 @@ Requires:       mesa-libEGL
 # Loaded through dlopen
 Requires:       libwayland-server
 
-# Integrated Xwayland support. Not packaged on EPEL
-%if 0%{?fedora}
+# Integrated Xwayland support
 Requires:       xwayland-satellite >= 0.7
-%endif
 
 # Portal implementations used by niri
 Recommends:     xdg-desktop-portal-gtk
@@ -117,8 +106,7 @@ Windows are arranged in columns on an infinite strip going to the right.
 Opening a new window never causes existing windows to resize.
 
 %prep
-%setup -T -b 0 -q -n niri-%{commit}
-%autopatch -p1
+%autosetup -p1 -n niri-%{commit}
 
 %cargo_prep -N
 
@@ -173,6 +161,16 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Fri Oct 02 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^8.git.ed22699d-1
+ - Update to commit ed22699d99462f61ab171472d3ea67e844ea580d
+ - Add NIRI_CTM_GAMMA knob
+ - Add PR 4485: layer surface cleanup on output removal
+ - Add PR 4365: precise solid color rounding
+ - Add PR 4295: snap working area to output edges
+ - Add PR 4574: ext-image-copy cursor session fix
+ - Add PR 4330: refresh windows only after commit
+ - Add PR 4392: force-render window rule
+
 * Thu Oct 01 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^7.git.c7616326-1
  - Update to commit c7616326a60d00cafba8c5e0c92bc7a02c8c10f2
  - Drop CTM night light patch (upstreamed)

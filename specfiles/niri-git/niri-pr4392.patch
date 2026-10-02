@@ -1,0 +1,307 @@
+diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
+index 22e0d3db81..4a13386e1c 100644
+--- a/niri-config/src/lib.rs
++++ b/niri-config/src/lib.rs
+@@ -1916,6 +1916,7 @@ mod tests {
+                         ),
+                     ),
+                     tiled_state: None,
++                    force_render: None,
+                     background_effect: BackgroundEffectRule {
+                         xray: None,
+                         blur: None,
+diff --git a/niri-config/src/window_rule.rs b/niri-config/src/window_rule.rs
+index acc9e2e53c..e8e0c2f6ca 100644
+--- a/niri-config/src/window_rule.rs
++++ b/niri-config/src/window_rule.rs
+@@ -79,6 +79,8 @@ pub struct WindowRule {
+     pub pinch_sensitivity: Option<FloatOrInt<0, 100>>,
+     #[knuffel(child, unwrap(argument))]
+     pub tiled_state: Option<bool>,
++    #[knuffel(child, unwrap(argument))]
++    pub force_render: Option<u16>,
+     #[knuffel(child, default)]
+     pub background_effect: BackgroundEffectRule,
+     #[knuffel(child, default)]
+diff --git a/src/layout/mod.rs b/src/layout/mod.rs
+index 97f917a946..3b71d3ac05 100644
+--- a/src/layout/mod.rs
++++ b/src/layout/mod.rs
+@@ -1462,6 +1462,84 @@ impl<W: LayoutElement> Layout<W> {
+         None
+     }
+ 
++    pub fn find_window_and_output_by(
++        &self,
++        mut f: impl FnMut(&W, Option<&Output>) -> bool,
++    ) -> Option<(&W, Option<&Output>)> {
++        if let Some(InteractiveMoveState::Moving(move_)) = &self.interactive_move {
++            let win = move_.tile.window();
++            let out = Some(&move_.output);
++            if f(win, out) {
++                return Some((win, out));
++            }
++        }
++
++        match &self.monitor_set {
++            MonitorSet::Normal { monitors, .. } => {
++                for mon in monitors {
++                    let out = Some(&mon.output);
++                    for ws in &mon.workspaces {
++                        for win in ws.windows() {
++                            if f(win, out) {
++                                return Some((win, out));
++                            }
++                        }
++                    }
++                }
++            }
++            MonitorSet::NoOutputs { workspaces } => {
++                for ws in workspaces {
++                    for win in ws.windows() {
++                        if f(win, None) {
++                            return Some((win, None));
++                        }
++                    }
++                }
++            }
++        }
++
++        None
++    }
++
++    pub fn find_window_and_output_mut_by(
++        &mut self,
++        mut f: impl FnMut(&W, Option<&Output>) -> bool,
++    ) -> Option<(&mut W, Option<&Output>)> {
++        if let Some(InteractiveMoveState::Moving(move_)) = &mut self.interactive_move {
++            let win = move_.tile.window_mut();
++            let out = Some(&move_.output);
++            if f(win, out) {
++                return Some((win, out));
++            }
++        }
++
++        match &mut self.monitor_set {
++            MonitorSet::Normal { monitors, .. } => {
++                for mon in monitors {
++                    let out = Some(&mon.output);
++                    for ws in &mut mon.workspaces {
++                        for win in ws.windows_mut() {
++                            if f(win, out) {
++                                return Some((win, out));
++                            }
++                        }
++                    }
++                }
++            }
++            MonitorSet::NoOutputs { workspaces } => {
++                for ws in workspaces {
++                    for win in ws.windows_mut() {
++                        if f(win, None) {
++                            return Some((win, None));
++                        }
++                    }
++                }
++            }
++        }
++
++        None
++    }
++
+     /// Computes the window-geometry-relative target rect for popup unconstraining.
+     ///
+     /// We will try to fit popups inside this rect.
+diff --git a/src/niri.rs b/src/niri.rs
+index 6d4b957c56..5bc341523e 100644
+--- a/src/niri.rs
++++ b/src/niri.rs
+@@ -186,9 +186,9 @@ use crate::utils::vblank_throttle::VBlankThrottle;
+ use crate::utils::watcher::Watcher;
+ use crate::utils::xwayland::satellite::Satellite;
+ use crate::utils::{
+-    center, center_f64, expand_home, get_monotonic_time, ipc_transform_to_smithay, is_mapped,
+-    logical_output, make_screenshot_path, output_matches_name, output_size, panel_orientation,
+-    send_scale_transform, winit_scale, write_png_rgba8, xwayland,
++    center, center_f64, expand_home, frequency_to_period, get_monotonic_time,
++    ipc_transform_to_smithay, is_mapped, logical_output, make_screenshot_path, output_matches_name,
++    output_size, panel_orientation, send_scale_transform, winit_scale, write_png_rgba8, xwayland,
+ };
+ use crate::window::mapped::MappedId;
+ use crate::window::{InitialConfigureState, Mapped, ResolvedWindowRules, Unmapped, WindowRef};
+@@ -590,6 +590,11 @@ struct SurfaceFrameThrottlingState {
+     last_sent_at: RefCell<Option<(Output, u32)>>,
+ }
+ 
++struct SurfaceForceRenderState {
++    /// Whether a forced render is scheduled in the event loop.
++    scheduled: Cell<bool>,
++}
++
+ pub enum CenterCoords {
+     Separately,
+     Both,
+@@ -681,6 +686,89 @@ impl Default for SurfaceFrameThrottlingState {
+         }
+     }
+ }
++impl Default for SurfaceForceRenderState {
++    fn default() -> Self {
++        Self {
++            scheduled: Cell::new(false),
++        }
++    }
++}
++
++pub fn setup_force_render(event_loop: &mut LoopHandle<'static, State>, mapped: &Mapped) -> bool {
++    if mapped.force_render().is_none() {
++        return false;
++    }
++
++    let already_scheduled = with_states(mapped.toplevel().wl_surface(), |states| {
++        let force_render_state = states
++            .data_map
++            .get_or_insert(SurfaceForceRenderState::default);
++        force_render_state.scheduled.replace(true)
++    });
++    if already_scheduled {
++        return false;
++    }
++
++    let mapped_id = mapped.id();
++    let res = event_loop.insert_source(Timer::immediate(), move |_, _, state| {
++        force_render_callback(state, mapped_id)
++    });
++    match res {
++        Ok(_) => true,
++        Err(e) => {
++            warn!("error scheduling forced render: {e}");
++            false
++        }
++    }
++}
++
++fn force_render_callback(state: &mut State, mapped_id: MappedId) -> TimeoutAction {
++    let Some((mapped, output)) = state
++        .niri
++        .layout
++        .find_window_and_output_mut_by(|m, _| m.id() == mapped_id)
++    else {
++        return TimeoutAction::Drop;
++    };
++    let output_rate = output
++        .and_then(|out| out.current_mode())
++        .map(|mode| mode.refresh)
++        .unwrap_or(0);
++
++    let Some(period) = with_states(mapped.toplevel().wl_surface(), |states| {
++        let Some(rate) = mapped.force_render() else {
++            let force_render_state = states
++                .data_map
++                .get_or_insert(SurfaceForceRenderState::default);
++            force_render_state.scheduled.set(false);
++            return None;
++        };
++
++        let period = std::cmp::max(
++            frequency_to_period(rate),
++            frequency_to_period(output_rate as u32),
++        );
++        Some(period)
++    }) else {
++        return TimeoutAction::Drop;
++    };
++
++    let output = &Output::new(
++        String::new(),
++        PhysicalProperties {
++            size: Size::from((0, 0)),
++            subpixel: Subpixel::Unknown,
++            make: String::new(),
++            model: String::new(),
++            serial_number: String::new(),
++        },
++    );
++    let frame_callback_time = get_monotonic_time();
++
++    mapped.send_frame(output, frame_callback_time, Some(period), |_, _| None);
++
++    TimeoutAction::ToDuration(period)
++}
+ 
+ impl KeyboardFocus {
+     pub fn surface(&self) -> Option<&WlSurface> {
+@@ -5211,6 +5299,7 @@ impl Niri {
+         let frame_callback_time = get_monotonic_time();
+ 
+         for mapped in self.layout.windows_for_output_mut(output) {
++            setup_force_render(&mut self.event_loop, mapped);
+             mapped.send_frame(
+                 output,
+                 frame_callback_time,
+diff --git a/src/utils/mod.rs b/src/utils/mod.rs
+index 6d513eb653..6f3684cd4c 100644
+--- a/src/utils/mod.rs
++++ b/src/utils/mod.rs
+@@ -165,6 +165,16 @@ pub fn get_monotonic_time() -> Duration {
+     Duration::new(ts.tv_sec as u64, ts.tv_nsec as u32)
+ }
+ 
++/// Converts a frequency in millihertz to the corresponding period, clamping to
++/// `Duration::ZERO` for nonpositive rates and `Duration::MAX` on overflow.
++pub fn frequency_to_period(rate: u32) -> Duration {
++    if rate > 0 {
++        Duration::try_from_secs_f64(1000.0 / rate as f64).unwrap_or(Duration::MAX)
++    } else {
++        Duration::ZERO
++    }
++}
++
+ pub fn center(rect: Rectangle<i32, Logical>) -> Point<i32, Logical> {
+     rect.loc + rect.size.downscale(2).to_point()
+ }
+diff --git a/src/window/mapped.rs b/src/window/mapped.rs
+index 3db1f66cad..da2d114cd0 100644
+--- a/src/window/mapped.rs
++++ b/src/window/mapped.rs
+@@ -611,6 +611,16 @@ impl Mapped {
+     pub fn is_urgent(&self) -> bool {
+         self.is_urgent
+     }
++
++    /// The forced rendering frame rate in millihertz if enabled (either due to
++    /// the window rule or due to being a cast target), or `None` if disabled.
++    pub fn force_render(&self) -> Option<u32> {
++        if self.is_window_cast_target {
++            Some(0) // use last output's refresh rate
++        } else {
++            self.rules.force_render.map(|fps| fps as u32 * 1000)
++        }
++    }
+ }
+ 
+ impl Drop for Mapped {
+diff --git a/src/window/mod.rs b/src/window/mod.rs
+index 771f0d9596..7fc4826081 100644
+--- a/src/window/mod.rs
++++ b/src/window/mod.rs
+@@ -126,6 +126,9 @@ pub struct ResolvedWindowRules {
+     /// Override whether to set the Tiled xdg-toplevel state on the window.
+     pub tiled_state: Option<bool>,
+ 
++    /// What FPS to force renders for this window.
++    pub force_render: Option<u16>,
++
+     /// Background effect configuration.
+     pub background_effect: BackgroundEffect,
+ 
+@@ -315,6 +318,9 @@ impl ResolvedWindowRules {
+                 if let Some(x) = rule.tiled_state {
+                     resolved.tiled_state = Some(x);
+                 }
++                if let Some(x) = rule.force_render {
++                    resolved.force_render = Some(x);
++                }
+ 
+                 resolved
+                     .background_effect

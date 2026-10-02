@@ -1,0 +1,17 @@
+--- a/src/backend/tty.rs
++++ b/src/backend/tty.rs
+@@ -2766,7 +2766,13 @@
+             } else {
+                 /// Transforms a u16 gamma value into a S31.32 value for the CTM matrix.
+                 fn from_u16_to_s31_32(value: u16) -> u64 {
+-                    let normalized = value as f64 / u16::MAX as f64;
++                    // Ramp gains are in encoded space; DCP may apply the CTM in linear light.
++                    let gamma = std::env::var("NIRI_CTM_GAMMA")
++                        .ok()
++                        .and_then(|v| v.parse::<f64>().ok())
++                        .filter(|g| *g > 0.)
++                        .unwrap_or(1.);
++                    let normalized = (value as f64 / u16::MAX as f64).powf(gamma);
+                     (normalized * (1u64 << 32) as f64) as u64
+                 }
+ 
