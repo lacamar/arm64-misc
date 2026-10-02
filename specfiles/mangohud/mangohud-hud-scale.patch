@@ -42,7 +42,7 @@
     params->battery_color =0xff9078;
     params->fsr_steam_sharpness = -1;
     params->picmip = -17;
-@@ -1346,3 +1349,31 @@
+@@ -1346,3 +1349,34 @@
  
     }
  }
@@ -52,9 +52,12 @@
 +   if (!params.hud_scale_height || !display_height)
 +      return;
 +   float s = display_height / params.hud_scale_height;
-+   if (s == params.hud_scale)
++   // another swapchain's config parse can reset the shared snapshot
++   if (s == params.hud_scale && s == get_params()->hud_scale)
 +      return;
 +   auto scale = [s](overlay_params& p) {
++      if (s == p.hud_scale)
++         return;
 +      float f = s / p.hud_scale;
 +      p.font_size *= f;
 +      p.font_size_text *= f;

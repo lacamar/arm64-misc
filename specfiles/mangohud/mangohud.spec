@@ -16,7 +16,7 @@
 Name:           mangohud
 Version:        0.8.3~rc1
 %forgemeta
-Release:        5%{?dist}
+Release:        6%{?dist}
 Summary:        Vulkan and OpenGL overlay for monitoring FPS, temperatures, CPU/GPU load
 
 License:        MIT
@@ -178,6 +178,9 @@ rm %{buildroot}%{_libdir}/libimgui.a
 
 
 %changelog
+* Fri Oct 02 2026 Lachlan Marie <lchlnm@pm.me> - 0.8.3~rc1-6
+- Fix hud_scale_height reset by second swapchain
+
 * Fri Oct 02 2026 Lachlan Marie <lchlnm@pm.me> - 0.8.3~rc1-5
 - Add hud_scale_height option
 
