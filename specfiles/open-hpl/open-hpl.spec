@@ -1,5 +1,5 @@
 Name:           open-hpl
-Version:        1.3.30
+Version:        1.3.32
 Release:        1%{?dist}
 Summary:        Native aarch64 port of Frictional Games' HPL engine
 
@@ -65,6 +65,7 @@ install -Dpm0644 $newton/libnewton.a HPL2/dependencies/lib/linux/lib/libNewton.a
 cd amnesia/src
 %cmake \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+    -DOPENHPL_VERSION=%{version} \
     -DUSE_GAMEPAD=ON \
     -DAMNESIA_WITH_SERIAL=OFF
 %cmake_build --target Amnesia --target Launcher --target Soma --target Rebirth --target Bunker
@@ -164,6 +165,18 @@ launcher bunker 1944430 "Amnesia The Bunker" \
 %{_datadir}/icons/hicolor/128x128/apps/open-hpl-*.png
 
 %changelog
+* Sat Oct 03 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.32-1
+- SOMA: bloom, film grain
+- SOMA: marine snow particles
+
+* Sat Oct 03 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.31-1
+- Dev HUD: version, device, OS, GPU, FPS
+- SOMA: HUD option, gamma slider, secret codes
+- SOMA: HPL3 fog, directional light, script post effects
+- SOMA: translucency, detail maps, soft particles
+- SOMA: lights, particles, sounds, billboards in saves
+- SOMA: animated meshes, NPC animations, drawers
+
 * Fri Oct 02 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.30-1
 - SOMA: spot shadows, box lights, light probes
 - SOMA: HDR tone mapping, colour grading, SSAO, depth of field
