@@ -1,0 +1,15 @@
+--- a/src/overlay.h
++++ b/src/overlay.h
+@@ -129,10 +129,8 @@
+          if (sw_stats.applicationVersion == 1)
+             return "DX9";
+ 
+-         if (sw_stats.applicationVersion == 2)
+-            return "DX11";
+-
+-         return "DX?";
++         // DXVK 3 dropped ClientApiIsD3D11
++         return "DX11";
+       }
+    }
+ 

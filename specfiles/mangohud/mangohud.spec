@@ -16,7 +16,7 @@
 Name:           mangohud
 Version:        0.8.3~rc1
 %forgemeta
-Release:        6%{?dist}
+Release:        7%{?dist}
 Summary:        Vulkan and OpenGL overlay for monitoring FPS, temperatures, CPU/GPU load
 
 License:        MIT
@@ -35,6 +35,7 @@ Source20:       README.Fedora.md
 
 Patch100:       mangohud-align-right.patch
 Patch101:       mangohud-hud-scale.patch
+Patch102:       mangohud-dxvk3-dx11.patch
 
 # MangoHud switched to bundled vulkan-headers since 0.6.9 version. This rebased
 # upstream patch which reverts this change.
@@ -178,6 +179,9 @@ rm %{buildroot}%{_libdir}/libimgui.a
 
 
 %changelog
+* Sat Oct 03 2026 Lachlan Marie <lchlnm@pm.me> - 0.8.3~rc1-7
+- Show DX11 for DXVK 3 D3D11 games
+
 * Fri Oct 02 2026 Lachlan Marie <lchlnm@pm.me> - 0.8.3~rc1-6
 - Fix hud_scale_height reset by second swapchain
 
