@@ -1,0 +1,202 @@
+diff --git a/extension/background.js b/extension/background.js
+index 55ffb6e..e55f342 100644
+--- a/extension/background.js
++++ b/extension/background.js
+@@ -123,7 +123,14 @@ async function withLoad(tabId, trigger, timeout = PAGE_LOAD_TIMEOUT_MS) {
+   }
+ }
+ 
++async function wake(t) {
++  if (!t.discarded) return t;
++  await withLoad(t.id, () => browser.tabs.reload(t.id));
++  return browser.tabs.get(t.id);
++}
++
+ async function sendToContent(tab, cmd, args) {
++  tab = await wake(tab);
+   const msg = { cmd, args };
+   let r;
+   try {
+@@ -143,7 +150,13 @@ async function sendToContent(tab, cmd, args) {
+   return r;
+ }
+ 
+-async function screenshot(tab) {
++async function screenshot(tab, args = {}) {
++  tab = await wake(tab);
++  if (args.ref || args.selector) {
++    const rect = await sendToContent(tab, "rect", args);
++    const zoom = Math.min(4, MAX_SHOT_SIDE / Math.max(rect.width, rect.height));
++    return { dataUrl: await withTimeout(browser.tabs.captureTab(tab.id, { format: "png", rect, scale: zoom }), 10000, "captureTab"), rect, zoom };
++  }
+   const dataUrl = await withTimeout(browser.tabs.captureTab(tab.id, { format: "png" }), 10000, "captureTab");
+   // Scale the capture to CSS pixels so coordinates match what click(x, y) expects.
+   let dpr = 1, cssW = null, cssH = null;
+@@ -307,7 +320,7 @@ async function handle(cmd, args) {
+     }
+     case "screenshot": {
+       const t = await resolveTab(args.tabId);
+-      return await screenshot(t);
++      return await screenshot(t, args);
+     }
+     case "resize_window": {
+       const t = await resolveTab(args.tabId);
+diff --git a/extension/content.js b/extension/content.js
+index 5fcc2ff..597005c 100644
+--- a/extension/content.js
++++ b/extension/content.js
+@@ -34,6 +34,22 @@
+       }, window);
+     }
+   } catch { /* fine — fall back to error events only */ }
++  const dialogs = [];
++  let dialogAnswer = null;
++  try {
++    for (const kind of ["alert", "confirm", "prompt"]) {
++      const orig = window.wrappedJSObject[kind];
++      window.wrappedJSObject[kind] = exportFunction(function (...args) {
++        if (!marker.on || marker.stopped) return Reflect.apply(orig, window.wrappedJSObject, args);
++        const a = dialogAnswer;
++        dialogAnswer = null;
++        const accepted = kind === "alert" || !!a?.accept;
++        dialogs.push({ kind, message: clean(String(args[0] ?? ""), 500), accepted });
++        if (kind === "confirm") return accepted;
++        if (kind === "prompt") return accepted ? String(a.text ?? args[1] ?? "") : null;
++      }, window);
++    }
++  } catch {}
+   window.addEventListener("error", (e) => pushLog("error", [`${e.message} (${e.filename}:${e.lineno})`]), true);
+   window.addEventListener("unhandledrejection", (e) => pushLog("error", ["Unhandled rejection: " + (e.reason && e.reason.message || e.reason)]), true);
+ 
+@@ -53,7 +69,7 @@
+       if (!el) throw new Error(`Unknown ref "${args.ref}". Call read_page or find to get fresh refs.`);
+       if (!el.isConnected) throw new Error(`Element ${args.ref} is no longer in the document. Call read_page again.`);
+     } else if (args.selector) {
+-      el = document.querySelector(args.selector);
++      el = query(args.selector);
+       if (!el) throw new Error(`No element matches selector "${args.selector}"`);
+     } else if (typeof args.x === "number" && typeof args.y === "number") {
+       el = document.elementFromPoint(args.x, args.y);
+@@ -62,6 +78,16 @@
+     return el;
+   }
+ 
++  function deepAll(sel, root = document, out = []) {
++    out.push(...root.querySelectorAll(sel));
++    for (const el of root.querySelectorAll("*")) {
++      const sr = el !== host && el.openOrClosedShadowRoot;
++      if (sr) deepAll(sel, sr, out);
++    }
++    return out;
++  }
++  const query = (sel) => document.querySelector(sel) || deepAll(sel)[0];
++
+   /* ---------- page reading ---------- */
+   const INTERACTIVE = "a[href],button,input,select,textarea,summary,[role=button],[role=link],[role=checkbox],[role=radio],[role=tab],[role=menuitem],[role=option],[role=switch],[role=combobox],[role=textbox],[role=slider],[contenteditable=''],[contenteditable=true],[onclick],[tabindex]:not([tabindex=\"-1\"])";
+ 
+@@ -170,7 +196,7 @@
+       }
+       let childDepth = depth + (role ? 1 : 0);
+       for (const c of node.children) walk(c, childDepth);
+-      if (node.shadowRoot) for (const c of node.shadowRoot.children) walk(c, childDepth);
++      if (node.openOrClosedShadowRoot) for (const c of node.openOrClosedShadowRoot.children) walk(c, childDepth);
+     }
+     walk(document.body || document.documentElement, 0);
+     let out = lines.join("\n");
+@@ -183,7 +209,7 @@
+     const q = (args.query || "").toLowerCase();
+     if (!q) throw new Error("query is required");
+     const scored = [];
+-    for (const el of document.querySelectorAll(INTERACTIVE + ",h1,h2,h3,h4,h5,h6,img,label")) {
++    for (const el of deepAll(INTERACTIVE + ",h1,h2,h3,h4,h5,h6,img,label")) {
+       if (!isVisible(el)) continue;
+       const role = roleOf(el);
+       if (!role) continue;
+@@ -358,7 +384,7 @@
+     return { selected: opt.textContent.trim(), value: opt.value };
+   }
+   function getText(args) {
+-    const root = args.selector ? document.querySelector(args.selector) : document.body;
++    const root = args.selector ? query(args.selector) : document.body;
+     if (!root) throw new Error(`No element matches "${args.selector}"`);
+     const max = args.maxChars || 30000;
+     let t = (root.innerText || "").replace(/\n{3,}/g, "\n\n").trim();
+@@ -370,7 +396,7 @@
+     const timeout = args.timeout || 10000;
+     const start = Date.now();
+     while (Date.now() - start < timeout) {
+-      if (args.selector && document.querySelector(args.selector)) return { found: "selector", elapsed: Date.now() - start };
++      if (args.selector && query(args.selector)) return { found: "selector", elapsed: Date.now() - start };
+       if (args.text && (document.body?.innerText || "").includes(args.text)) return { found: "text", elapsed: Date.now() - start };
+       if (!args.selector && !args.text) { await new Promise((r) => setTimeout(r, timeout)); return { waited: timeout }; }
+       await new Promise((r) => setTimeout(r, 100));
+@@ -389,7 +415,7 @@
+   }
+   function fileInputFor(el) {
+     if (!el) {
+-      const all = document.querySelectorAll("input[type=file]");
++      const all = deepAll("input[type=file]");
+       if (all.length !== 1) throw new Error(all.length ? `${all.length} file inputs on the page; pass ref, selector, or x/y` : "No file input on the page; pass ref/selector of a drop zone or x/y");
+       return all[0];
+     }
+@@ -417,6 +443,11 @@
+     for (const t of ["dragenter", "dragover", "drop"]) target.dispatchEvent(new DragEvent(t, { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, dataTransfer: dt }));
+     return { uploaded: names, droppedOn: describe(target) || target.tagName.toLowerCase() };
+   }
++  function rect(args) {
++    const r = resolveTarget(args).getBoundingClientRect();
++    if (!r.width || !r.height) throw new Error("Element has no size (hidden?)");
++    return { x: r.left + window.scrollX, y: r.top + window.scrollY, width: r.width, height: r.height };
++  }
+   function consoleLogs(args) {
+     let out = logs.slice();
+     if (args.level) out = out.filter((l) => l.level === args.level);
+@@ -470,11 +501,11 @@
+   }
+   browser.runtime.sendMessage({ type: "marker_query" }).then(applyMarker, () => {});
+ 
+-  const handlers = { ping: () => ({ pong: true, url: location.href }), read_page: readPage, find, click, hover, type, press_key: pressKey, scroll, select_option: selectOption, get_text: getText, wait_for: waitFor, evaluate, console_logs: consoleLogs, upload, marker: applyMarker };
++  const handlers = { ping: () => ({ pong: true, url: location.href }), read_page: readPage, find, click, hover, type, press_key: pressKey, scroll, select_option: selectOption, get_text: getText, wait_for: waitFor, evaluate, console_logs: consoleLogs, upload, rect, marker: applyMarker, dialog: (a) => { dialogAnswer = a; return { armed: true }; } };
+ 
+   browser.runtime.onMessage.addListener((msg) => {
+     const h = handlers[msg && msg.cmd];
+     if (!h) return Promise.resolve({ __error: "Unknown command: " + (msg && msg.cmd) });
+-    return Promise.resolve().then(() => h(msg.args || {})).catch((e) => ({ __error: String(e && e.message || e) }));
++    return Promise.resolve().then(() => h(msg.args || {})).then((r) => (dialogs.length && r ? { ...r, dialogs: dialogs.splice(0) } : r)).catch((e) => ({ __error: String(e && e.message || e) }));
+   });
+ })();
+diff --git a/extension/manifest.json b/extension/manifest.json
+index 4772678..6ea49d8 100644
+--- a/extension/manifest.json
++++ b/extension/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "manifest_version": 2,
+   "name": "Zen Control",
+-  "version": "0.1.2.3",
++  "version": "0.1.2.4",
+   "description": "Lets Claude Code drive this browser through a local MCP bridge (ws://127.0.0.1:17373).",
+   "browser_specific_settings": {
+     "gecko": {
+diff --git a/server/index.js b/server/index.js
+index 2ae22fc..5d15cbc 100644
+--- a/server/index.js
++++ b/server/index.js
+@@ -202,13 +202,16 @@ tool("file_upload", "Upload local files, or a fresh screenshot of a tab (screens
+     if (screenshot) files.push({ name: "screenshot.png", mime: "image/png", b64: (await sendCommand("screenshot", { tabId: screenshotTabId ?? a.tabId })).dataUrl.split(",")[1] });
+     return text(await sendCommand("upload", { ...a, files }, 60000));
+   });
+-tool("screenshot", "Capture the visible viewport of the current tab as a PNG (scaled to CSS pixels so click x/y match).", { tabId }, async (a) => {
++tool("screenshot", "Capture the visible viewport of the current tab as a PNG (scaled to CSS pixels so click x/y match), or only one element (ref/selector), enlarged, even if scrolled off-screen.", targetShape, async (a) => {
+   const r = await sendCommand("screenshot", a);
+   const b64 = r.dataUrl.replace(/^data:image\/png;base64,/, "");
++  if (r.rect) return { content: [{ type: "text", text: `Element ${Math.round(r.rect.width)}x${Math.round(r.rect.height)} CSS px at page (${Math.round(r.rect.x)}, ${Math.round(r.rect.y)}); image zoom ${r.zoom.toFixed(2)}x` }, { type: "image", data: b64, mimeType: "image/png" }] };
+   return { content: [{ type: "text", text: `Viewport ${r.viewportWidth}x${r.viewportHeight} CSS px; image ${r.width}x${r.height}${r.scale < 1 ? ` (scaled ${r.scale.toFixed(2)}; divide image coords by scale for click)` : ""}` }, { type: "image", data: b64, mimeType: "image/png" }] };
+ });
+ tool("evaluate", "Run JavaScript in the page (async function body; use `return` for a result, which is JSON-serialized). Runs in the extension's content-script sandbox with full DOM access; the page's own JS globals are reachable via window.wrappedJSObject.",
+   { code: z.string(), tabId }, async (a) => text((await sendCommand("evaluate", a)).result));
++tool("handle_dialog", "Answer the next alert/confirm/prompt on the tab. Without this, dialogs in Claude-controlled tabs are auto-dismissed (confirm=false, prompt=null); either way they're reported in the next result's `dialogs` field.",
++  { accept: z.boolean(), text: z.string().optional().describe("prompt() answer (default: its default value)"), tabId }, async (a) => text(await sendCommand("dialog", a)));
+ tool("console_logs", "Read console output and uncaught errors captured on the current page since it loaded.",
+   { level: z.enum(["log", "info", "warn", "error", "debug"]).optional(), limit: z.number().int().optional(), clear: z.boolean().optional(), tabId },
+   async (a) => { const r = await sendCommand("console_logs", a); return text(r.count ? r.logs.map((l) => `[${new Date(l.t).toISOString().slice(11, 19)}] ${l.level}: ${l.text}`).join("\n") : "No console output captured."); });
