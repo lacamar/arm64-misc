@@ -1,0 +1,45 @@
+diff --git a/src/asahi/vulkan/hk_cmd_draw.c b/src/asahi/vulkan/hk_cmd_draw.c
+index b29bcbc..00d2e63 100644
+--- a/src/asahi/vulkan/hk_cmd_draw.c
++++ b/src/asahi/vulkan/hk_cmd_draw.c
+@@ -39,6 +39,7 @@
+ #include "util/format/u_formats.h"
+ #include "util/macros.h"
+ #include "util/ralloc.h"
++#include "util/u_debug.h"
+ #include "util/u_prim.h"
+ #include "vulkan/vulkan_core.h"
+ #include "layout.h"
+@@ -1012,7 +1013,8 @@ hk_init_heap(const void *data)
+ 
+    perf_debug(cmd, "Allocating heap");
+ 
+-   size_t size = 128 * 1024 * 1024;
++   size_t size =
++      CLAMP(debug_get_num_option("HK_HEAP_MB", 512), 16, 2048) * 1024 * 1024;
+    dev->heap = agx_bo_create(&dev->dev, size, 0, 0, "Geometry heap");
+ 
+    /* The geometry state buffer is initialized here and then is treated by
+diff --git a/src/poly/geometry.h b/src/poly/geometry.h
+index 42ae4a4..e1f5f29 100644
+--- a/src/poly/geometry.h
++++ b/src/poly/geometry.h
+@@ -124,13 +124,12 @@ poly_heap_alloc_offs(global struct poly_heap *heap, uint size_B)
+    uint offs =
+       atomic_fetch_add((volatile atomic_uint *)(&heap->bottom), size_B);
+ 
+-   /* Use printf+abort because assert is stripped from release builds. */
+-   if (heap->bottom >= heap->size) {
+-      printf(
+-         "FATAL: GPU heap overflow, allocating size %u, at offset %u, heap size %u!",
+-         size_B, offs, heap->size);
++   /* Wrap rather than abort: the command stream continues, so stay in-bounds. */
++   if (offs > heap->size || size_B > heap->size - offs) {
++      printf("GPU heap overflow, allocating size %u, at offset %u, heap size %u",
++             size_B, offs, heap->size);
+ 
+-      abort();
++      offs = 0;
+    }
+ 
+    return offs;
