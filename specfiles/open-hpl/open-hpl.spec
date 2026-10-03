@@ -1,5 +1,5 @@
 Name:           open-hpl
-Version:        1.3.32
+Version:        1.3.33
 Release:        1%{?dist}
 Summary:        Native aarch64 port of Frictional Games' HPL engine
 
@@ -101,19 +101,6 @@ oh_gamedir() {
     gamedir="$steam/steamapps/common/$2"
     [ -d "$gamedir" ] || { echo "Open HPL: install $2 via Steam first" >&2; exit 1; }
 }
-
-# The engine resolves data relative to its own binary.
-oh_deploy() {
-    cmp -s "$PKGDIR/$1" "$gamedir/$2" || cp -f "$PKGDIR/$1" "$gamedir/$2"
-}
-
-# HPL3 depots ship only the .msh cache of these core meshes.
-oh_deploy_compat() {
-    mkdir -p "$gamedir/core/models"
-    for f in "$PKGDIR"/compat/*.dae; do
-        [ -e "$gamedir/core/models/${f##*/}" ] || cp -f "$f" "$gamedir/core/models/"
-    done
-}
 EOF
 
 launcher() {
@@ -121,14 +108,13 @@ launcher() {
 #!/bin/sh
 . %{_libexecdir}/%{name}/steam-common.sh
 oh_gamedir $2 "$3" open-hpl-$1
-$4
-cd "\$gamedir" && exec ./$5 "\$@"
+exec \$PKGDIR/$4 "\$gamedir" "\$@"
 EOF
     install -Dpm0644 /dev/stdin %{buildroot}%{_datadir}/applications/open-hpl-$1.desktop <<EOF
 [Desktop Entry]
 Type=Application
-Name=$7
-Comment=$6
+Name=$6
+Comment=$5
 Keywords=Open HPL;HPL;Frictional Games;
 Exec=open-hpl-$1
 Icon=open-hpl-$1
@@ -140,20 +126,15 @@ EOF
 }
 
 launcher amnesia 57300 "Amnesia The Dark Descent" \
-    'oh_deploy Amnesia.bin.aarch64 Amnesia.bin.aarch64; oh_deploy Launcher.bin.aarch64 Launcher.bin.aarch64' \
     Launcher.bin.aarch64 "Open HPL native aarch64 build" "Amnesia: The Dark Descent"
 launcher machine-for-pigs 239200 "Machine for Pigs" \
-    'oh_deploy Amnesia.bin.aarch64 AmnesiaOnAmfp.bin.aarch64' \
-    AmnesiaOnAmfp.bin.aarch64 "Open HPL experimental: Dark Descent's game code on AMFP's data" "Amnesia: A Machine for Pigs"
+    Amnesia.bin.aarch64 "Open HPL experimental: Dark Descent's game code on AMFP's data" "Amnesia: A Machine for Pigs"
 launcher soma 282140 "SOMA" \
-    'oh_deploy Soma.bin.aarch64 OpenHplSoma.bin.aarch64; oh_deploy_compat' \
-    OpenHplSoma.bin.aarch64 "Open HPL experimental native aarch64 port" "SOMA"
+    Soma.bin.aarch64 "Open HPL experimental native aarch64 port" "SOMA"
 launcher rebirth 999220 "Amnesia Rebirth" \
-    'oh_deploy Rebirth.bin.aarch64 OpenHplRebirth.bin.aarch64; oh_deploy_compat' \
-    OpenHplRebirth.bin.aarch64 "Open HPL tech preview: free camera on one map" "Amnesia: Rebirth"
+    Rebirth.bin.aarch64 "Open HPL tech preview: free camera on one map" "Amnesia: Rebirth"
 launcher bunker 1944430 "Amnesia The Bunker" \
-    'oh_deploy Bunker.bin.aarch64 OpenHplBunker.bin.aarch64; oh_deploy_compat' \
-    OpenHplBunker.bin.aarch64 "Open HPL tech preview: free camera on one map" "Amnesia: The Bunker"
+    Bunker.bin.aarch64 "Open HPL tech preview: free camera on one map" "Amnesia: The Bunker"
 
 %files
 %license LICENSE THIRD_PARTY_LICENSES.md
@@ -165,6 +146,11 @@ launcher bunker 1944430 "Amnesia The Bunker" \
 %{_datadir}/icons/hicolor/128x128/apps/open-hpl-*.png
 
 %changelog
+* Sat Oct 03 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.33-1
+- Never write to game dirs
+- Caches in XDG cache dir
+- Launchers run from package dir
+
 * Sat Oct 03 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.32-1
 - SOMA: bloom, film grain
 - SOMA: marine snow particles
