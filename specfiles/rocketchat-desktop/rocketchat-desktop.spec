@@ -1,6 +1,6 @@
 Name:       rocketchat-desktop
 Version:    4.13.0
-Release:    2%{?dist}
+Release:    3%{?dist}
 Summary:    Desktop Client for Rocket.Chat
 
 %global electron_version 40.0.0
@@ -21,7 +21,6 @@ BuildRequires:  vips-devel
 BuildRequires:  nodejs-devel
 BuildRequires:  python3-devel
 BuildRequires:  python3dist(setuptools)
-BuildRequires:  electron
 
 Requires:       electron
 
@@ -32,13 +31,12 @@ Desktop client for Rocket.Chat.
 %prep
 %autosetup -n Rocket.Chat.Electron-%{version} -N -a 1
 sed -i '/downloadSupportedVersions()/d' rollup.config.mjs
-rm -rf node_modules/electron
-mkdir -p node_modules/electron
-unzip -q %{SOURCE2} -d node_modules/electron/
+mkdir electron-dist
+unzip -q %{SOURCE2} -d electron-dist
 
 %build
 export NODE_ENV=production
-export ELECTRON_OVERRIDE_DIST_PATH=%{_bindir}/electron
+export ELECTRON_OVERRIDE_DIST_PATH=$PWD/electron-dist
 export ELECTRON_SKIP_BINARY_DOWNLOAD=1
 export PUPPETEER_SKIP_DOWNLOAD=1
 export SHARP_SKIP_DOWNLOAD=1
@@ -48,12 +46,12 @@ export npm_config_build_from_source=true
 YARN_ENABLE_INLINE_BUILDS=1 yarn install --immutable --immutable-cache --inline-builds
 yarn postinstall
 yarn build
-yarn electron-builder --linux dir
+yarn electron-builder --linux dir -c.electronDist=electron-dist
 
 %install
 install -d -m 0755 %{buildroot}%{_bindir}
 
-cat << EOF > %{buildroot}%{_bindir}/%{name}
+cat << 'EOF' > %{buildroot}%{_bindir}/%{name}
 #!/usr/bin/env sh
 export NODE_ENV=production
 
