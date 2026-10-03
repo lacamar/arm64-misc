@@ -9,7 +9,7 @@
 
 Name:           zen-control
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        5%{?dist}
+Release:        6%{?dist}
 Summary:        MCP bridge and WebExtension to drive the Zen browser from Claude Code
 
 License:        LicenseRef-Not-specified
@@ -20,6 +20,7 @@ Patch0:         0001-chrome-parity-tools.patch
 Patch1:         0002-controlled-tab-marker.patch
 Patch2:         0003-background-control.patch
 Patch3:         0004-page-robustness.patch
+Patch4:         0005-trusted-input.patch
 
 BuildArch:      noarch
 
@@ -31,7 +32,8 @@ Requires:       zen-browser
 Lets Claude Code drive the Zen browser (Firefox-based) through a local MCP
 server and a WebExtension connected over ws://127.0.0.1:17373. The unsigned
 extension is installed through an enterprise policy and needs xpinstall.signatures.required
-set to false.
+set to false. The policy also enables extensions.experiments.enabled for
+trusted input.
 
 %prep
 %autosetup -p1 -n %{name}-%{commit}
@@ -51,6 +53,9 @@ cat > %{buildroot}%{_sysconfdir}/zen/policies/policies.json <<'EOS'
 {
   "policies": {
     "DisableAppUpdate": true,
+    "Preferences": {
+      "extensions.experiments.enabled": { "Value": true, "Status": "default" }
+    },
     "ExtensionSettings": {
       "zen-control@local": {
         "installation_mode": "normal_installed",
@@ -77,6 +82,15 @@ chmod 0755 %{buildroot}%{_bindir}/%{name}
 %config(noreplace) %{_sysconfdir}/zen/policies/policies.json
 
 %changelog
+* Sat Oct 03 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-6
+- Trusted input via experiment API
+- Add drag, incl. HTML5 drag and drop
+- Multi-click, modifiers, key sequences
+- Page-world evaluate
+- Replace select_option with form_input
+- Region screenshots
+- Redact secrets in read_page
+
 * Sat Oct 03 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-5
 - Drop GIF recording, shortcuts, multi-browser
 - Fold upload_image into file_upload

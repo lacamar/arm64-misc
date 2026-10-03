@@ -1,0 +1,646 @@
+diff --git a/README.md b/README.md
+index 3cf4795..62110db 100644
+--- a/README.md
++++ b/README.md
+@@ -44,14 +44,15 @@ claude mcp add --scope user zen-browser -- node /home/zjones/zen-control/server/
+ 
+ Tools: `tabs_list`, `tab_new`, `tab_select`, `tab_close`, `navigate`, `go_back`,
+ `go_forward`, `reload`, `read_page`, `find`, `get_text`, `click`, `hover`,
+-`type`, `press_key`, `select_option`, `scroll`, `wait_for`, `screenshot`,
++`drag`, `type`, `press_key`, `form_input`, `scroll`, `wait_for`, `screenshot`,
+ `evaluate`, `console_logs`, `browser_status`.
+ 
+ Typical flow: `navigate` → `read_page` (get refs like `e12`) → `click`/`type`
+ with a ref → `screenshot` to verify.
+ 
+-`type` works on React-controlled inputs (it goes through the native value
+-setter and fires `input`/`change`). Its result includes a `validation` field
++Mouse, keyboard, wheel and `evaluate` go through a privileged experiment API
++(`extensions.experiments.enabled`), so events are trusted and CSP doesn't
++apply. Without it, a degraded content-script path is used. `type`'s result includes a `validation` field
+ when the field is rejected (native constraint message, `aria-invalid`, or
+ nearby error text) — check it before assuming a form will submit.
+ 
+@@ -62,5 +63,7 @@ nearby error text) — check it before assuming a form will submit.
+ - The extension has `<all_urls>` access; Claude can read and act on any page in
+   the profile it's installed in, including logged-in sessions. Use a separate
+   Zen profile if you want isolation.
++- `extensions.experiments.enabled` lets any unsigned experiment add-on run
++  with full browser privileges.
+ - `ZEN_CONTROL_PORT` overrides the port (set it for both the server env and in
+   `background.js`).
+diff --git a/extension/background.js b/extension/background.js
+index e55f342..4d0bc7b 100644
+--- a/extension/background.js
++++ b/extension/background.js
+@@ -18,6 +18,7 @@ const MAX_REQUESTS = 1000;
+ const net = new Map();     // tabId -> [request]
+ const inflight = new Map(); // requestId -> request
+ const UNGATED = new Set(["ping", "tabs_list", "tab_select", "tab_close", "resize_window"]);
++const priv = browser.zenControl;
+ 
+ /* ---------- connection ---------- */
+ 
+@@ -150,9 +151,59 @@ async function sendToContent(tab, cmd, args) {
+   return r;
+ }
+ 
++async function trusted(tab, name, data) {
++  const r = await priv.send(tab.id, name, data);
++  if (r.error) throw new Error(r.error);
++  return r.result;
++}
++
++const TRUSTED = {
++  async click(t, a) {
++    const p = await sendToContent(t, "point", a);
++    await trusted(t, "click", { x: p.x, y: p.y, button: a.button, count: a.count, modifiers: a.modifiers });
++    return { clicked: p.target, mayNavigate: true };
++  },
++  async hover(t, a) {
++    const p = await sendToContent(t, "point", a);
++    await trusted(t, "hover", p);
++    return { hovered: p.target };
++  },
++  async drag(t, a) {
++    const p = await sendToContent(t, "point", a);
++    const q = await sendToContent(t, "point", { ref: a.toRef, selector: a.toSelector, x: a.toX, y: a.toY, noScroll: true });
++    await trusted(t, "drag", { x: p.x, y: p.y, toX: q.x, toY: q.y, modifiers: a.modifiers });
++    return { dragged: p.target, to: q.target };
++  },
++  async type(t, a) {
++    const f = await sendToContent(t, "focus", { ...a, edit: true });
++    if (f.done) return f.done;
++    const text = String(a.text ?? "");
++    if (text) await trusted(t, "type", { text });
++    else if (a.clear !== false) await trusted(t, "keys", { keys: "Delete" });
++    if (a.submit) await trusted(t, "keys", { keys: "Enter" });
++    const out = { typed: text.length, into: f.into, submitted: !!a.submit, mayNavigate: !!a.submit };
++    return a.submit ? out : { ...out, ...await sendToContent(t, "validation", {}) };
++  },
++  async press_key(t, a) {
++    if (a.ref || a.selector) await sendToContent(t, "focus", a);
++    await trusted(t, "keys", { keys: a.key, repeat: a.repeat });
++    return { pressed: a.key, mayNavigate: /\b(enter|return)\b/i.test(a.key) };
++  },
++  async scroll(t, a) {
++    if (a.ref || a.selector || a.direction === "top" || a.direction === "bottom") return sendToContent(t, "scroll", a);
++    return trusted(t, "wheel", a);
++  },
++};
++
+ async function screenshot(tab, args = {}) {
+   tab = await wake(tab);
+-  if (args.ref || args.selector) {
++  await sendToContent(tab, "hide_marker", { hide: true }).catch(() => {});
++  try { return await capture(tab, args); }
++  finally { browser.tabs.sendMessage(tab.id, { cmd: "hide_marker", args: { hide: false } }).catch(() => {}); }
++}
++
++async function capture(tab, args) {
++  if (args.ref || args.selector || args.region) {
+     const rect = await sendToContent(tab, "rect", args);
+     const zoom = Math.min(4, MAX_SHOT_SIDE / Math.max(rect.width, rect.height));
+     return { dataUrl: await withTimeout(browser.tabs.captureTab(tab.id, { format: "png", rect, scale: zoom }), 10000, "captureTab"), rect, zoom };
+@@ -272,6 +323,7 @@ browser.webRequest.onErrorOccurred.addListener((d) => {
+ /* ---------- command dispatch ---------- */
+ 
+ async function handle(cmd, args) {
++  if (args.url && !/^[a-z][\w+.-]*:(?!\d)/i.test(args.url)) args.url = "https://" + args.url;
+   if (!UNGATED.has(cmd)) {
+     if (cmd === "navigate" || cmd === "tab_new") { if (args.url) await ensureAllowed(args.url); }
+     else await ensureAllowed((await resolveTab(args.tabId)).url);
+@@ -337,15 +389,15 @@ async function handle(cmd, args) {
+       return { count: out.length, total, requests: out };
+     }
+     case "evaluate": {
+-      // Runs in the content-script sandbox (full DOM access, page-world variables via window.wrappedJSObject).
+       const t = await resolveTab(args.tabId);
+-      return await sendToContent(t, "evaluate", args);
++      return priv ? { result: await trusted(await wake(t), "eval", args) } : await sendToContent(t, "evaluate", args);
+     }
+     default: {
+       // Everything else is a DOM command handled by content.js; wait for the
+       // page after actions that commonly navigate.
+       const t = await resolveTab(args.tabId);
+-      const r = await sendToContent(t, cmd, args);
++      if (!priv && cmd === "drag") throw new Error("drag needs extensions.experiments.enabled=true (set by the zen-control policy)");
++      const r = priv && TRUSTED[cmd] ? await TRUSTED[cmd](await wake(t), args) : await sendToContent(t, cmd, args);
+       if (["click", "press_key", "type"].includes(cmd) && r && r.mayNavigate) {
+         await withLoad(t.id, async () => {}, 8000);
+         r.tab = tabInfo(await browser.tabs.get(t.id));
+diff --git a/extension/content.js b/extension/content.js
+index 597005c..5da98cd 100644
+--- a/extension/content.js
++++ b/extension/content.js
+@@ -59,7 +59,8 @@
+   const elToRef = new WeakMap();
+   function refFor(el) {
+     let r = elToRef.get(el);
+-    if (!r) { r = "e" + (++refSeq); elToRef.set(el, r); refs.set(r, el); }
++    if (!r) { r = "e" + (++refSeq); elToRef.set(el, r); }
++    refs.set(r, el);
+     return r;
+   }
+   function resolveTarget(args) {
+@@ -157,7 +158,7 @@
+     if (role === "link") { const h = el.getAttribute("href"); if (h && !h.startsWith("javascript:")) parts.push("href=" + clean(h, 100)); }
+     if (role === "textbox" || role === "combobox") {
+       const v = el.value != null ? el.value : el.innerText;
+-      if (v) parts.push("value=" + JSON.stringify(clean(v, 60)));
++      if (v) parts.push("value=" + (el.type === "password" || /\b(cc-|one-time-code|(current|new)-password)/.test(el.getAttribute("autocomplete")) ? '"[redacted]"' : JSON.stringify(clean(v, 60))));
+       if (el.type && el.tagName === "INPUT" && el.type !== "text") parts.push("type=" + el.type);
+     }
+     if (role === "combobox" && el.tagName === "SELECT") {
+@@ -174,13 +175,15 @@
+   }
+ 
+   function readPage(args) {
+-    refs = new Map();
++    const root = resolveTarget(args);
++    if (!root) refs = new Map();
+     const interactiveOnly = args.filter === "interactive";
+-    const maxChars = args.maxChars || 20000;
++    const maxChars = args.maxChars || 50000;
++    const maxLevel = args.depth ?? Infinity;
+     const lines = [];
+     const SKIP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "HEAD", "META", "LINK"]);
+-    function walk(node, depth) {
+-      if (node.nodeType !== 1 || SKIP.has(node.tagName)) return;
++    function walk(node, depth, level = 0) {
++      if (node.nodeType !== 1 || SKIP.has(node.tagName) || level > maxLevel) return;
+       if (!isVisible(node)) return;
+       const indent = "  ".repeat(Math.min(depth, 8));
+       const role = roleOf(node);
+@@ -195,10 +198,10 @@
+         if (t) lines.push(indent + "text " + JSON.stringify(t));
+       }
+       let childDepth = depth + (role ? 1 : 0);
+-      for (const c of node.children) walk(c, childDepth);
+-      if (node.openOrClosedShadowRoot) for (const c of node.openOrClosedShadowRoot.children) walk(c, childDepth);
++      for (const c of node.children) walk(c, childDepth, level + 1);
++      if (node.openOrClosedShadowRoot) for (const c of node.openOrClosedShadowRoot.children) walk(c, childDepth, level + 1);
+     }
+-    walk(document.body || document.documentElement, 0);
++    walk(root || document.body || document.documentElement, 0);
+     let out = lines.join("\n");
+     let truncated = false;
+     if (out.length > maxChars) { out = out.slice(0, maxChars) + "\n…[truncated]"; truncated = true; }
+@@ -251,9 +254,9 @@
+     mouseSeq(target, x, y, ["pointerover", "mouseover", "pointermove", "mousemove", "pointerdown", "mousedown"]);
+     if (target.focus) target.focus({ preventScroll: true });
+     mouseSeq(target, x, y, ["pointerup", "mouseup"]);
+-    const detail = args.double ? 2 : 1;
++    const detail = args.count > 1 ? 2 : 1;
+     mouseSeq(target, x, y, ["click"], { detail });
+-    if (args.double) mouseSeq(target, x, y, ["dblclick"], { detail: 2 });
++    if (detail > 1) mouseSeq(target, x, y, ["dblclick"], { detail: 2 });
+     return { clicked: describe(el) || el.tagName.toLowerCase(), mayNavigate: true };
+   }
+   function hover(args) {
+@@ -283,7 +286,7 @@
+     const isField = el.tagName === "INPUT" || el.tagName === "TEXTAREA";
+     if (isField) {
+       if (args.clear !== false) setNativeValue(el, "");
+-      if (el.tagName === "INPUT" && ["email", "number", "date", "time", "color", "range"].includes(el.type)) {
++      if (el.tagName === "INPUT" && ["email", ...NATIVE_TYPES].includes(el.type)) {
+         setNativeValue(el, text);
+       } else {
+         for (const ch of text) {
+@@ -314,6 +317,25 @@
+     if (validation) out.validation = validation;
+     return out;
+   }
++  const NATIVE_TYPES = ["number", "date", "time", "datetime-local", "month", "week", "color", "range"];
++  function point(args) {
++    const el = resolveTarget(args);
++    if (!el) throw new Error("Pass ref, selector, or x/y");
++    if (typeof args.x === "number") return { x: args.x, y: args.y, target: describe(el) || el.localName };
++    if (!args.noScroll) el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
++    return { ...center(el), target: describe(el) || el.localName };
++  }
++  function focusEl(args) {
++    const el = args.ref || args.selector ? resolveTarget(args) : document.activeElement;
++    if (!el || el === document.body) throw new Error("No focused element; pass ref or selector");
++    const field = el.tagName === "INPUT" || el.tagName === "TEXTAREA";
++    if (args.edit && !field && !el.isContentEditable) throw new Error(`Element ${describe(el) || el.tagName} is not editable`);
++    if (args.edit && el.tagName === "INPUT" && NATIVE_TYPES.includes(el.type)) return { done: type(args) };
++    el.scrollIntoView({ block: "center", behavior: "instant" });
++    el.focus();
++    if (args.edit && args.clear !== false) field ? el.select() : getSelection().selectAllChildren(el);
++    return { into: describe(el) || el.localName };
++  }
+   /* Collects native constraint errors, aria-invalid, and nearby error text for a field. */
+   function validationFor(el) {
+     const problems = [];
+@@ -372,19 +394,39 @@
+     }
+     return { scrollX: window.scrollX, scrollY: window.scrollY, pageHeight: document.documentElement.scrollHeight, viewportHeight: window.innerHeight };
+   }
+-  function selectOption(args) {
++  function formInput(args) {
+     const el = resolveTarget(args);
+-    if (el.tagName !== "SELECT") throw new Error("select_option target must be a <select>");
+-    const want = String(args.value ?? "");
+-    const opt = [...el.options].find((o) => o.value === want) || [...el.options].find((o) => o.textContent.trim().toLowerCase() === want.toLowerCase());
+-    if (!opt) throw new Error(`No option "${want}". Options: ${[...el.options].map((o) => o.textContent.trim()).join(", ")}`);
+-    el.value = opt.value;
+-    el.dispatchEvent(new Event("input", { bubbles: true }));
+-    el.dispatchEvent(new Event("change", { bubbles: true }));
+-    return { selected: opt.textContent.trim(), value: opt.value };
++    if (!el) throw new Error("Pass ref or selector");
++    const want = args.value;
++    if (el.tagName === "SELECT") {
++      const s = String(want);
++      const opt = [...el.options].find((o) => o.value === s) || [...el.options].find((o) => o.textContent.trim().toLowerCase() === s.toLowerCase());
++      if (!opt) throw new Error(`No option "${s}". Options: ${[...el.options].map((o) => o.textContent.trim()).join(", ")}`);
++      el.value = opt.value;
++      el.dispatchEvent(new Event("input", { bubbles: true }));
++      el.dispatchEvent(new Event("change", { bubbles: true }));
++      return { selected: opt.textContent.trim(), value: opt.value };
++    }
++    if (el.type === "checkbox" || el.type === "radio") {
++      if (el.checked !== (want === true || want === "true")) el.click();
++      return { set: describe(el) };
++    }
++    if (el.isContentEditable) {
++      el.focus();
++      getSelection().selectAllChildren(el);
++      document.execCommand("insertText", false, String(want));
++    } else if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
++      setNativeValue(el, String(want));
++      el.dispatchEvent(new Event("change", { bubbles: true }));
++    } else throw new Error(`${describe(el) || el.localName} is not a form field`);
++    const out = { set: describe(el) || el.localName };
++    const validation = validationFor(el);
++    if (validation) out.validation = validation;
++    return out;
+   }
+   function getText(args) {
+-    const root = args.selector ? query(args.selector) : document.body;
++    const articles = document.querySelectorAll("article");
++    const root = args.selector ? query(args.selector) : document.querySelector("main, [role=main]") || (articles.length === 1 ? articles[0] : document.body);
+     if (!root) throw new Error(`No element matches "${args.selector}"`);
+     const max = args.maxChars || 30000;
+     let t = (root.innerText || "").replace(/\n{3,}/g, "\n\n").trim();
+@@ -444,6 +486,7 @@
+     return { uploaded: names, droppedOn: describe(target) || target.tagName.toLowerCase() };
+   }
+   function rect(args) {
++    if (args.region) { const [x0, y0, x1, y1] = args.region; return { x: x0 + scrollX, y: y0 + scrollY, width: x1 - x0, height: y1 - y0 }; }
+     const r = resolveTarget(args).getBoundingClientRect();
+     if (!r.width || !r.height) throw new Error("Element has no size (hidden?)");
+     return { x: r.left + window.scrollX, y: r.top + window.scrollY, width: r.width, height: r.height };
+@@ -451,6 +494,7 @@
+   function consoleLogs(args) {
+     let out = logs.slice();
+     if (args.level) out = out.filter((l) => l.level === args.level);
++    if (args.pattern) { const re = new RegExp(args.pattern, "i"); out = out.filter((l) => re.test(l.text)); }
+     if (args.clear) logs.length = 0;
+     return { count: out.length, logs: out.slice(-(args.limit || 100)) };
+   }
+@@ -501,7 +545,7 @@
+   }
+   browser.runtime.sendMessage({ type: "marker_query" }).then(applyMarker, () => {});
+ 
+-  const handlers = { ping: () => ({ pong: true, url: location.href }), read_page: readPage, find, click, hover, type, press_key: pressKey, scroll, select_option: selectOption, get_text: getText, wait_for: waitFor, evaluate, console_logs: consoleLogs, upload, rect, marker: applyMarker, dialog: (a) => { dialogAnswer = a; return { armed: true }; } };
++  const handlers = { ping: () => ({ pong: true, url: location.href }), read_page: readPage, find, click, hover, type, press_key: pressKey, scroll, form_input: formInput, point, focus: focusEl, validation: () => { const v = validationFor(document.activeElement); return v ? { validation: v } : {}; }, hide_marker: (a) => { if (host) host.style.display = a.hide ? "none" : ""; return {}; }, get_text: getText, wait_for: waitFor, evaluate, console_logs: consoleLogs, upload, rect, marker: applyMarker, dialog: (a) => { dialogAnswer = a; return { armed: true }; } };
+ 
+   browser.runtime.onMessage.addListener((msg) => {
+     const h = handlers[msg && msg.cmd];
+diff --git a/extension/manifest.json b/extension/manifest.json
+index 6ea49d8..7ff08ce 100644
+--- a/extension/manifest.json
++++ b/extension/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "manifest_version": 2,
+   "name": "Zen Control",
+-  "version": "0.1.2.4",
++  "version": "0.1.2.5",
+   "description": "Lets Claude Code drive this browser through a local MCP bridge (ws://127.0.0.1:17373).",
+   "browser_specific_settings": {
+     "gecko": {
+@@ -44,5 +44,24 @@
+   "icons": {
+     "48": "icon.svg",
+     "96": "icon.svg"
++  },
++  "experiment_apis": {
++    "zenControl": {
++      "schema": "privileged/schema.json",
++      "parent": {
++        "scopes": [
++          "addon_parent"
++        ],
++        "script": "privileged/api.js",
++        "paths": [
++          [
++            "zenControl"
++          ]
++        ],
++        "events": [
++          "startup"
++        ]
++      }
++    }
+   }
+ }
+diff --git a/extension/privileged/actor.sys.mjs b/extension/privileged/actor.sys.mjs
+new file mode 100644
+index 0000000..dccc2bc
+--- /dev/null
++++ b/extension/privileged/actor.sys.mjs
+@@ -0,0 +1,167 @@
++const { Reflect } = ChromeUtils.importESModule("moz-src:///toolkit/components/reflect/reflect.sys.mjs");
++
++export class ZenControlParent extends JSWindowActorParent {}
++
++const KEYS = { return: "Enter", enter: "Enter", esc: "Escape", escape: "Escape", space: " ", spacebar: " ", tab: "Tab", backspace: "Backspace", delete: "Delete", del: "Delete", insert: "Insert", home: "Home", end: "End", pageup: "PageUp", pagedown: "PageDown", up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight", arrowup: "ArrowUp", arrowdown: "ArrowDown", arrowleft: "ArrowLeft", arrowright: "ArrowRight", contextmenu: "ContextMenu", menu: "ContextMenu" };
++const MODS = { ctrl: "ctrlKey", control: "ctrlKey", shift: "shiftKey", alt: "altKey", option: "altKey", meta: "metaKey", cmd: "metaKey", command: "metaKey", super: "metaKey", win: "metaKey" };
++
++function modsOf(parts) {
++  const mods = {};
++  for (const p of parts) {
++    const m = MODS[p.toLowerCase()];
++    if (!m) throw new Error(`Unknown modifier "${p}"`);
++    mods[m] = true;
++  }
++  return mods;
++}
++
++function chord(combo) {
++  const parts = combo.split("+");
++  let key = parts.pop();
++  if (!key && parts.length) { parts.pop(); key = "+"; }
++  const mods = modsOf(parts);
++  key = KEYS[key.toLowerCase()] || (/^f\d{1,2}$/i.test(key) ? key.toUpperCase() : key);
++  return { key: key.length > 1 ? "KEY_" + key : key, mods };
++}
++
++function asyncWrap(code) {
++  const head = "(async () => {\n", src = `${head}${code}\n})()`;
++  const body = Reflect.parse(src, { loc: true }).body[0].expression.callee.body.body;
++  const last = body.at(-1);
++  if (last?.type !== "ExpressionStatement") return src;
++  const lines = src.split("\n");
++  const off = ({ line, column }) => lines.slice(0, line - 1).reduce((n, l) => n + l.length + 1, 0) + column - 1;
++  const a = body.length > 1 ? off(body.at(-2).loc.end) : head.length, b = off(last.loc.end);
++  return `${src.slice(0, a)}\nreturn (\n${src.slice(a, b).replace(/^\s*;|;\s*$/g, "")}\n);${src.slice(b)}`;
++}
++
++const SERIALIZE = `(v) => {
++  if (typeof v === "string") return v;
++  const seen = new WeakSet();
++  const s = JSON.stringify(v, (k, x) => {
++    if (typeof x === "bigint") return x + "n";
++    if (typeof x === "function") return "[Function " + (x.name || "anonymous") + "]";
++    if (x instanceof Node) return x.nodeType === 1 ? "<" + x.localName + (x.id ? "#" + x.id : "") + ">" : x.nodeName;
++    if (x && typeof x === "object") { if (seen.has(x)) return "[Circular]"; seen.add(x); }
++    return x;
++  }, 2);
++  return s === undefined ? String(v) : s;
++}`;
++
++export class ZenControlChild extends JSWindowActorChild {
++  get eu() {
++    const win = this.contentWindow;
++    if (this._eu?.window !== win) {
++      this._eu = { window: win, parent: win, WheelEvent: win.WheelEvent, _EU_Ci: Ci, _EU_Cc: Cc };
++      Services.scriptloader.loadSubScript("chrome://remote/content/external/EventUtils.js", this._eu);
++    }
++    return this._eu;
++  }
++
++  mouse(x, y, ev) {
++    this.eu.synthesizeMouseAtPoint(x, y, ev, this.contentWindow);
++  }
++
++  withoutMarker(fn) {
++    const m = this.document.querySelector("zen-control-marker");
++    m?.style.setProperty("display", "none", "important");
++    try { return fn(); } finally { m?.style.removeProperty("display"); }
++  }
++
++  click({ x, y, button = 0, count = 1, modifiers = "" }) {
++    modifiers = modsOf(modifiers.split("+").filter(Boolean));
++    this.withoutMarker(() => {
++      this.mouse(x, y, { type: "mousemove", ...modifiers });
++      for (let i = 1; i <= count; i++) {
++        this.mouse(x, y, { type: "mousedown", button, clickCount: i, ...modifiers });
++        this.mouse(x, y, { type: "mouseup", button, clickCount: i, ...modifiers });
++      }
++    });
++  }
++
++  hover({ x, y }) {
++    this.withoutMarker(() => this.mouse(x, y, { type: "mousemove" }));
++  }
++
++  async drag({ x, y, toX, toY, modifiers = "" }) {
++    modifiers = modsOf(modifiers.split("+").filter(Boolean));
++    const win = this.contentWindow, eu = this.eu, tick = () => new Promise((r) => win.setTimeout(r, 0));
++    const m = this.document.querySelector("zen-control-marker");
++    m?.style.setProperty("display", "none", "important");
++    try {
++      this.mouse(x, y, { type: "mousemove", ...modifiers });
++      this.mouse(x, y, { type: "mousedown", ...modifiers });
++      for (let i = 1; i <= 10; i++) {
++        await tick();
++        this.mouse(x + ((toX - x) * i) / 10, y + ((toY - y) * i) / 10, { type: "mousemove", buttons: 1, allowToHandleDragDrop: true, ...modifiers });
++      }
++      await tick();
++      const ds = win.windowUtils.dragSession;
++      if (!ds) return this.mouse(toX, toY, { type: "mouseup", ...modifiers });
++      const target = win.document.elementFromPoint(toX, toY);
++      const send = (type) => eu.sendDragEvent(eu.createDragEventObject(type, target, win, ds.dataTransfer, { clientX: toX, clientY: toY, ...modifiers }), target, win);
++      if (target && !send("dragover")) send("drop");
++      this.mouse(toX, toY, { type: "mouseup", ...modifiers });
++      ds.endDragSession(true, 0);
++    } finally {
++      m?.style.removeProperty("display");
++    }
++  }
++
++  wheel({ x, y, direction = "down", amount }) {
++    const win = this.contentWindow, doc = this.document;
++    x ??= win.innerWidth / 2;
++    y ??= win.innerHeight / 2;
++    const horiz = direction === "left" || direction === "right";
++    amount = (direction === "up" || direction === "left" ? -1 : 1) * (amount ?? Math.round((horiz ? win.innerWidth : win.innerHeight) * 0.8));
++    const deltaX = horiz ? amount : 0, deltaY = horiz ? 0 : amount;
++    const can = (e, d, axis) => d && /auto|scroll/.test(win.getComputedStyle(e)[`overflow${axis}`]) && (axis === "Y" ? (d > 0 ? e.scrollTop + e.clientHeight < e.scrollHeight : e.scrollTop > 0) : d > 0 ? e.scrollLeft + e.clientWidth < e.scrollWidth : e.scrollLeft > 0);
++    let el = doc.elementFromPoint(x, y);
++    while (el && el !== doc.body && el !== doc.documentElement && !can(el, deltaY, "Y") && !can(el, deltaX, "X")) el = el.parentElement || el.getRootNode().host;
++    const target = el && el !== doc.body && el !== doc.documentElement ? el : win;
++    let prevented = true;
++    // the browser's own wheel scroll is smooth and stalls in background tabs
++    const onWheel = (e) => {
++      if (e.defaultPrevented) return;
++      prevented = false;
++      e.preventDefault();
++      target.scrollBy({ left: deltaX, top: deltaY, behavior: "instant" });
++    };
++    win.addEventListener("wheel", onWheel, { mozSystemGroup: true, passive: false });
++    try { this.withoutMarker(() => this.eu.synthesizeWheelAtPoint(x, y, { deltaX, deltaY, deltaMode: 0 }, win)); } finally { win.removeEventListener("wheel", onWheel, { mozSystemGroup: true }); }
++    return target === win ? { prevented, scrollX: win.scrollX, scrollY: win.scrollY } : { prevented, element: target.localName + (target.id ? "#" + target.id : ""), scrollLeft: target.scrollLeft, scrollTop: target.scrollTop };
++  }
++
++  keys({ keys, repeat = 1 }) {
++    const seq = String(keys).trim().split(/\s+/).map(chord);
++    for (let i = 0; i < repeat; i++) for (const { key, mods } of seq) this.eu.synthesizeKey(key, mods, this.contentWindow);
++  }
++
++  type({ text }) {
++    const win = this.contentWindow;
++    String(text).split("\n").forEach((line, i) => {
++      if (i) this.eu.synthesizeKey("KEY_Enter", {}, win);
++      this.eu.sendString(line, win);
++    });
++  }
++
++  async eval({ code }) {
++    const sb = Cu.Sandbox(this.contentWindow, { sandboxPrototype: this.contentWindow, wantXrays: false, sandboxName: "zen-control evaluate" });
++    const run = (src) => Cu.evalInSandbox(src, sb, null, "zen-control-eval", 1);
++    let v;
++    try { v = run(code); } catch (e) {
++      if (e?.name !== "SyntaxError") throw e;
++      v = run(asyncWrap(code));
++    }
++    return run(SERIALIZE)(await v);
++  }
++
++  async receiveMessage({ name, data }) {
++    try {
++      if (!["click", "hover", "drag", "wheel", "keys", "type", "eval"].includes(name)) throw new Error("Unknown command " + name);
++      return { result: await this[name](data || {}) };
++    } catch (e) {
++      return { error: String(e?.message ?? e) };
++    }
++  }
++}
+diff --git a/extension/privileged/api.js b/extension/privileged/api.js
+new file mode 100644
+index 0000000..a1da981
+--- /dev/null
++++ b/extension/privileged/api.js
+@@ -0,0 +1,29 @@
++"use strict";
++const resProto = Services.io.getProtocolHandler("resource").QueryInterface(Ci.nsIResProtocolHandler);
++
++this.zenControl = class extends ExtensionAPI {
++  onStartup() {
++    resProto.setSubstitution("zencontrol", Services.io.newURI("privileged/", null, this.extension.rootURI));
++    const esModuleURI = "resource://zencontrol/actor.sys.mjs";
++    ChromeUtils.registerWindowActor("ZenControl", { parent: { esModuleURI }, child: { esModuleURI }, allFrames: true, safeForUntrustedWebProcess: true, matches: ["http://*/*", "https://*/*", "file:///*"] });
++  }
++  onShutdown(isAppShutdown) {
++    if (isAppShutdown) return;
++    ChromeUtils.unregisterWindowActor("ZenControl");
++    resProto.setSubstitution("zencontrol", null);
++  }
++  getAPI(context) {
++    return {
++      zenControl: {
++        async send(tabId, name, data) {
++          try {
++            const wg = context.extension.tabManager.get(tabId).nativeTab.linkedBrowser.browsingContext.currentWindowGlobal;
++            return await wg.getActor("ZenControl").sendQuery(name, data);
++          } catch (e) {
++            throw new ExtensionUtils.ExtensionError(String(e?.message || e));
++          }
++        },
++      },
++    };
++  }
++};
+diff --git a/extension/privileged/schema.json b/extension/privileged/schema.json
+new file mode 100644
+index 0000000..18ef5c4
+--- /dev/null
++++ b/extension/privileged/schema.json
+@@ -0,0 +1 @@
++[{ "namespace": "zenControl", "functions": [{ "name": "send", "type": "function", "async": true, "parameters": [{ "name": "tabId", "type": "integer" }, { "name": "name", "type": "string" }, { "name": "data", "type": "any", "optional": true }] }] }]
+diff --git a/server/index.js b/server/index.js
+index 5d15cbc..6bdee7e 100644
+--- a/server/index.js
++++ b/server/index.js
+@@ -163,34 +163,40 @@ async function runActions(actions, stopOnError) {
+ }
+ 
+ tool("tabs_list", "List open Zen browser tabs (id, url, title) and which tab is current.", {}, async () => text(await sendCommand("tabs_list", {})));
+-tool("tab_new", "Open a new background tab, optionally at a URL, and make it the current tab. All tools work on background tabs.", { url: z.string().url().optional(), active: z.boolean().optional().describe("Show the tab in its window (default false)") }, async (a) => text(await sendCommand("tab_new", a)));
++tool("tab_new", "Open a new background tab, optionally at a URL, and make it the current tab. All tools work on background tabs.", { url: z.string().optional(), active: z.boolean().optional().describe("Show the tab in its window (default false)") }, async (a) => text(await sendCommand("tab_new", a)));
+ tool("tab_select", "Make a tab the current target without showing it; all tools work on background tabs.", { tabId: z.number().int(), activate: z.boolean().optional().describe("Also show the tab in its window (default false)") }, async (a) => text(await sendCommand("tab_select", a)));
+ tool("tab_close", "Close a tab (default: the current one).", { tabId }, async (a) => text(await sendCommand("tab_close", a)));
+-tool("navigate", "Navigate the current tab to a URL and wait for the page to load.", { url: z.string().describe("Absolute URL"), tabId }, async (a) => text(await sendCommand("navigate", a)));
++tool("navigate", "Navigate the current tab to a URL and wait for the page to load.", { url: z.string().describe("URL; https:// is assumed without a scheme"), tabId }, async (a) => text(await sendCommand("navigate", a)));
+ tool("go_back", "Go back in history and wait for load.", { tabId }, async (a) => text(await sendCommand("back", a)));
+ tool("go_forward", "Go forward in history and wait for load.", { tabId }, async (a) => text(await sendCommand("forward", a)));
+ tool("reload", "Reload the page and wait for load.", { tabId, bypassCache: z.boolean().optional() }, async (a) => text(await sendCommand("reload", a)));
+ tool("resize_window", "Resize the browser window containing the tab (CSS px). Tiling window managers may ignore or override the size; the result reports the actual size.",
+   { width: z.number().int().positive(), height: z.number().int().positive(), tabId }, async (a) => text(await sendCommand("resize_window", a)));
+ 
+-tool("read_page", "Get a compact outline of the visible page: headings, text, and every interactive element with a ref (e.g. [e7] button \"Sign in\") that click/type/hover accept. Call this before interacting; refs go stale after navigation.",
+-  { filter: z.enum(["all", "interactive"]).optional().describe("'interactive' omits plain text (default 'all')"), maxChars: z.number().int().optional().describe("Truncate output (default 20000)"), tabId },
++tool("read_page", "Get a compact outline of the visible page: headings, text, and every interactive element with a ref (e.g. [e7] button \"Sign in\") that click/type/hover accept. Call this before interacting; ref/selector limits it to a subtree; refs go stale after navigation. Password and payment field values are redacted.",
++  { filter: z.enum(["all", "interactive"]).optional().describe("'interactive' omits plain text (default 'all')"), ...targetShape, depth: z.number().int().optional().describe("Max DOM depth below the root"), maxChars: z.number().int().optional().describe("Truncate output (default 50000)") },
+   async (a) => { const r = await sendCommand("read_page", a); return text(`${r.title}\n${r.url}\n${r.elements} elements${r.truncated ? " (truncated)" : ""}\n\n${r.content}`); });
+ tool("find", "Search visible interactive elements/headings/images whose name, href, placeholder, id, or label contains the query (case-insensitive). Returns refs.",
+   { query: z.string(), limit: z.number().int().optional(), tabId }, async (a) => { const r = await sendCommand("find", a); return text(r.count ? r.content : `No elements matched "${a.query}"`); });
+-tool("get_text", "Get the page's visible text (innerText), optionally scoped to a CSS selector.", { selector: z.string().optional(), maxChars: z.number().int().optional().describe("default 30000"), tabId },
++tool("get_text", "Get the page's visible text (innerText) of the main content (main, [role=main], or a sole article; else body), or of a CSS selector (selector='body' for everything).", { selector: z.string().optional(), maxChars: z.number().int().optional().describe("default 30000"), tabId },
+   async (a) => { const r = await sendCommand("get_text", a); return text(`${r.title}\n${r.url}\n\n${r.text}`); });
+ 
+-tool("click", "Click an element by ref, selector, or viewport coordinates (CSS px, matching screenshot coordinates). Waits for navigation if one starts.",
+-  { ...targetShape, x: z.number().optional(), y: z.number().optional(), double: z.boolean().optional() }, async (a) => text(await sendCommand("click", a)));
+-tool("hover", "Hover over an element (fires mouseover/mouseenter) to reveal menus or tooltips.", targetShape, async (a) => text(await sendCommand("hover", a)));
+-tool("type", "Type text into an input, textarea, or contenteditable (by ref/selector, or the focused element). Clears existing content unless clear=false. submit=true presses Enter afterwards.",
++const modifiers = z.string().optional().describe("Held modifiers, e.g. \"ctrl\" or \"ctrl+shift\"");
++tool("click", "Click an element by ref, selector, or viewport coordinates (CSS px, matching screenshot coordinates) with real (trusted) mouse events. Waits for navigation if one starts.",
++  { ...targetShape, x: z.number().optional(), y: z.number().optional(), button: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional().describe("0 left (default), 1 middle, 2 right"), count: z.number().int().min(1).max(3).optional().describe("2 double-click, 3 triple-click"), modifiers },
++  async (a) => text(await sendCommand("click", a)));
++tool("hover", "Move the mouse over an element or x/y to reveal menus or tooltips.", { ...targetShape, x: z.number().optional(), y: z.number().optional() }, async (a) => text(await sendCommand("hover", a)));
++tool("drag", "Drag with the left mouse button from an element or x/y to another element or toX/toY (both must be in the viewport). Works for mouse-driven drags and HTML5 drag and drop.",
++  { ...targetShape, x: z.number().optional(), y: z.number().optional(), toRef: z.string().optional(), toSelector: z.string().optional(), toX: z.number().optional(), toY: z.number().optional(), modifiers },
++  async (a) => text(await sendCommand("drag", a)));
++tool("type", "Type text with real keystrokes into an input, textarea, or contenteditable (by ref/selector, or the focused element). Replaces existing content unless clear=false. submit=true presses Enter afterwards.",
+   { text: z.string(), ...targetShape, clear: z.boolean().optional(), submit: z.boolean().optional() }, async (a) => text(await sendCommand("type", a)));
+-tool("press_key", "Press a key on the focused element (or ref/selector). Examples: Enter, Escape, Tab, ArrowDown, Backspace, ctrl+a, shift+Tab.",
+-  { key: z.string(), ...targetShape }, async (a) => text(await sendCommand("press_key", a)));
+-tool("select_option", "Choose an option in a <select> by value or visible label.", { value: z.string(), ...targetShape }, async (a) => text(await sendCommand("select_option", a)));
+-tool("scroll", "Scroll the page by direction (up/down/left/right/top/bottom, default down ~80% of viewport) or scroll an element (ref/selector) into view.",
+-  { direction: z.enum(["up", "down", "left", "right", "top", "bottom"]).optional(), amount: z.number().optional().describe("pixels"), ...targetShape }, async (a) => text(await sendCommand("scroll", a)));
++tool("press_key", "Press keys on the focused element (or focus ref/selector first). Space-separated sequence of keys or chords, e.g. \"Enter\", \"ctrl+a Backspace\", \"shift+Tab\", \"ArrowDown ArrowDown Enter\".",
++  { key: z.string(), repeat: z.number().int().min(1).max(100).optional().describe("Repeat the whole sequence"), ...targetShape }, async (a) => text(await sendCommand("press_key", a)));
++tool("form_input", "Set a form field by ref/selector without typing: <select> option (value or label), checkbox/radio (true/false), date/range/color/number, text fields.",
++  { value: z.union([z.string(), z.number(), z.boolean()]), ...targetShape }, async (a) => text(await sendCommand("form_input", a)));
++tool("scroll", "Scroll with the mouse wheel at x/y (default viewport center; scrolls whatever is under that point) by direction (default down ~80% of viewport), jump to top/bottom, or scroll an element (ref/selector) into view.",
++  { direction: z.enum(["up", "down", "left", "right", "top", "bottom"]).optional(), amount: z.number().optional().describe("pixels"), x: z.number().optional(), y: z.number().optional(), ...targetShape }, async (a) => text(await sendCommand("scroll", a)));
+ tool("wait_for", "Wait until a CSS selector exists or text appears on the page (or just sleep if neither given). timeout in ms (default 10000).",
+   { selector: z.string().optional(), text: z.string().optional(), timeout: z.number().int().optional(), tabId }, async (a) => text(await sendCommand("wait_for", a, (a.timeout || 10000) + 2000)));
+ 
+@@ -202,18 +208,19 @@ tool("file_upload", "Upload local files, or a fresh screenshot of a tab (screens
+     if (screenshot) files.push({ name: "screenshot.png", mime: "image/png", b64: (await sendCommand("screenshot", { tabId: screenshotTabId ?? a.tabId })).dataUrl.split(",")[1] });
+     return text(await sendCommand("upload", { ...a, files }, 60000));
+   });
+-tool("screenshot", "Capture the visible viewport of the current tab as a PNG (scaled to CSS pixels so click x/y match), or only one element (ref/selector), enlarged, even if scrolled off-screen.", targetShape, async (a) => {
++tool("screenshot", "Capture the visible viewport of the current tab as a PNG (scaled to CSS pixels so click x/y match), or zoom into one element (ref/selector, even if scrolled off-screen) or a viewport region.",
++  { ...targetShape, region: z.array(z.number()).length(4).optional().describe("[x0, y0, x1, y1] viewport CSS px to zoom into") }, async (a) => {
+   const r = await sendCommand("screenshot", a);
+   const b64 = r.dataUrl.replace(/^data:image\/png;base64,/, "");
+-  if (r.rect) return { content: [{ type: "text", text: `Element ${Math.round(r.rect.width)}x${Math.round(r.rect.height)} CSS px at page (${Math.round(r.rect.x)}, ${Math.round(r.rect.y)}); image zoom ${r.zoom.toFixed(2)}x` }, { type: "image", data: b64, mimeType: "image/png" }] };
++  if (r.rect) return { content: [{ type: "text", text: `Area ${Math.round(r.rect.width)}x${Math.round(r.rect.height)} CSS px at page (${Math.round(r.rect.x)}, ${Math.round(r.rect.y)}); image zoom ${r.zoom.toFixed(2)}x` }, { type: "image", data: b64, mimeType: "image/png" }] };
+   return { content: [{ type: "text", text: `Viewport ${r.viewportWidth}x${r.viewportHeight} CSS px; image ${r.width}x${r.height}${r.scale < 1 ? ` (scaled ${r.scale.toFixed(2)}; divide image coords by scale for click)` : ""}` }, { type: "image", data: b64, mimeType: "image/png" }] };
+ });
+-tool("evaluate", "Run JavaScript in the page (async function body; use `return` for a result, which is JSON-serialized). Runs in the extension's content-script sandbox with full DOM access; the page's own JS globals are reachable via window.wrappedJSObject.",
++tool("evaluate", "Run JavaScript in the page's own context (page globals, bypasses CSP). The value of the last expression is returned (JSON for objects); top-level await and `return` work.",
+   { code: z.string(), tabId }, async (a) => text((await sendCommand("evaluate", a)).result));
+ tool("handle_dialog", "Answer the next alert/confirm/prompt on the tab. Without this, dialogs in Claude-controlled tabs are auto-dismissed (confirm=false, prompt=null); either way they're reported in the next result's `dialogs` field.",
+   { accept: z.boolean(), text: z.string().optional().describe("prompt() answer (default: its default value)"), tabId }, async (a) => text(await sendCommand("dialog", a)));
+ tool("console_logs", "Read console output and uncaught errors captured on the current page since it loaded.",
+-  { level: z.enum(["log", "info", "warn", "error", "debug"]).optional(), limit: z.number().int().optional(), clear: z.boolean().optional(), tabId },
++  { level: z.enum(["log", "info", "warn", "error", "debug"]).optional(), pattern: z.string().optional().describe("Case-insensitive regex on the message"), limit: z.number().int().optional(), clear: z.boolean().optional(), tabId },
+   async (a) => { const r = await sendCommand("console_logs", a); return text(r.count ? r.logs.map((l) => `[${new Date(l.t).toISOString().slice(11, 19)}] ${l.level}: ${l.text}`).join("\n") : "No console output captured."); });
+ tool("network_requests", "List HTTP requests made by a tab since its last top-level navigation (method, status, type, duration, URL), oldest first.",
+   { urlPattern: z.string().optional().describe("Only URLs containing this substring"), limit: z.number().int().optional().describe("default 100, most recent"), clear: z.boolean().optional(), tabId },
