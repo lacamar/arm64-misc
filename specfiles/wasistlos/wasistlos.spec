@@ -42,9 +42,10 @@ An unofficial WhatsApp desktop application for Linux.
 
 %install
 %cmake_install
+%find_lang %{name}
 
 
-%files
+%files -f %{name}.lang
 %license LICENSE
 %doc    README.md
 
@@ -56,22 +57,6 @@ An unofficial WhatsApp desktop application for Linux.
 %{_datadir}/icons/hicolor/*/apps/com.github.xeco23.WasIstLos.png
 %{_datadir}/icons/hicolor/*/status/com.github.xeco23.WasIstLos-tray*.png
 
-%lang(bn)       %{_datadir}/locale/bn/LC_MESSAGES/wasistlos.mo
-%lang(cs)       %{_datadir}/locale/cs/LC_MESSAGES/wasistlos.mo
-%lang(de)       %{_datadir}/locale/de/LC_MESSAGES/wasistlos.mo
-%lang(es)       %{_datadir}/locale/es/LC_MESSAGES/wasistlos.mo
-%lang(fr)       %{_datadir}/locale/fr/LC_MESSAGES/wasistlos.mo
-%lang(hu)       %{_datadir}/locale/hu/LC_MESSAGES/wasistlos.mo
-%lang(it)       %{_datadir}/locale/it/LC_MESSAGES/wasistlos.mo
-%lang(ka)       %{_datadir}/locale/ka/LC_MESSAGES/wasistlos.mo
-%lang(nl)       %{_datadir}/locale/nl/LC_MESSAGES/wasistlos.mo
-%lang(pl)       %{_datadir}/locale/pl/LC_MESSAGES/wasistlos.mo
-%lang(pt_BR)    %{_datadir}/locale/pt_BR/LC_MESSAGES/wasistlos.mo
-%lang(ru)       %{_datadir}/locale/ru/LC_MESSAGES/wasistlos.mo
-%lang(si)       %{_datadir}/locale/si/LC_MESSAGES/wasistlos.mo
-%lang(tr)       %{_datadir}/locale/tr/LC_MESSAGES/wasistlos.mo
-%lang(uk)       %{_datadir}/locale/uk/LC_MESSAGES/wasistlos.mo
-%lang(zh_Hans)  %{_datadir}/locale/zh_Hans/LC_MESSAGES/wasistlos.mo
 
 
 %changelog

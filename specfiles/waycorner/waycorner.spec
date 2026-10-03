@@ -8,10 +8,6 @@ URL:            https://github.com/AndreasBackx/waycorner
 Source0:        https://github.com/AndreasBackx/waycorner/archive/refs/tags/%{version}.tar.gz
 Source1:        %{name}-%{version}-vendor.tar.zst
 
-BuildArch:      %{_target_cpu}
-BuildRequires:  rust
-BuildRequires:  cargo
-BuildRequires:  pkgconfig
 BuildRequires:  wayland-devel
 BuildRequires:  rust-packaging
 
@@ -21,12 +17,7 @@ Hot corners for Wayland. Create anchors in the corners of your monitors and exec
 %prep
 %autosetup -n %{name}-%{version} -p1 -a1
 mv %{name}-%{version}-vendor/vendor vendor
-mv %{name}-%{version}-vendor/vendor-config.toml vendor-config.toml
-rm -rf wldash-1156b35-vendor
 %cargo_prep -v vendor
-
-
-%generate_buildrequires
 
 %build
 %cargo_vendor_manifest

@@ -23,20 +23,14 @@ local externals = {
 }
 
 for i, s in ipairs(externals) do
-  si = 100 + i
-  print(string.format("Source%d: https://github.com/%s/%s/archive/%s/%s-%s.tar.gz", si, s.owner, s.name, s.ref, s.name, s.ref).."\n")
-  if s.bcond and not rpm.isdefined(string.format("with_%s", s.bcond)) then goto continue1 end
-  print(string.format("Provides: bundled(%s) = %s", (s.package or s.name), (s.version or "0")).."\n")
-  ::continue1::
+  print(string.format("Source%d: https://github.com/%s/%s/archive/%s/%s-%s.tar.gz", 100 + i, s.owner, s.name, s.ref, s.name, s.ref).."\n")
+  print(string.format("Provides: bundled(%s) = %s", s.name, (s.version or "0")).."\n")
 end
 
 function print_setup_externals()
   for i, s in ipairs(externals) do
-    si = 100 + i
-    if s.bcond and not rpm.isdefined(string.format("with_%s", s.bcond)) then goto continue2 end
-    print(string.format("mkdir -p monero/%s", (s.path or s.name)).."\n")
-    print(string.format("tar -xzf %s --strip-components=1 -C monero/%s", rpm.expand("%{SOURCE"..si.."}"), (s.path or s.name)).."\n")
-    ::continue2::
+    print(string.format("mkdir -p monero/%s", s.path).."\n")
+    print(string.format("tar -xzf %s --strip-components=1 -C monero/%s", rpm.expand("%{SOURCE"..(100 + i).."}"), s.path).."\n")
   end
 end
 }
@@ -66,13 +60,9 @@ BuildRequires:  libXv-devel
 BuildRequires:  qt5-qtbase-devel
 BuildRequires:  qt5-qtsvg-devel
 BuildRequires:  qt5-qttools-devel
-BuildRequires:  qt5-qtbase-devel
 BuildRequires:  qt5-qtdeclarative-devel
-BuildRequires:  ccache
 BuildRequires:  readline-devel
 BuildRequires:  protobuf-devel
-BuildRequires:  qt5-qtdeclarative-devel
-BuildRequires:  qt5-qttools-devel
 BuildRequires:  qt5-linguist
 
 Requires:   systemd
@@ -92,31 +82,21 @@ Monero is a private, secure, untraceable, decentralised digital currency. You ar
 
 
 %build
-mkdir -p build
-cd build
-cmake \
+cmake -B %{__cmake_builddir} \
   -DCMAKE_INSTALL_PREFIX=%{_prefix} \
   -DCMAKE_INSTALL_LIBDIR=%{_libdir} \
   -D CMAKE_BUILD_TYPE=Release \
-  -D CMAKE_INSTALL_PREFIX=%{_prefix} \
-  -DUSE_CCACHE=ON \
   -Wno-dev \
   -D CMAKE_POLICY_DEFAULT_CMP0077=NEW \
   -D CMAKE_POLICY_DEFAULT_CMP0148=OLD \
-  -D CMAKE_POLICY_DEFAULT_CMP0167=NEW \
-  ..
-make %{?_smp_mflags}
+  -D CMAKE_POLICY_DEFAULT_CMP0167=NEW
+%cmake_build
 
 
 %install
-cd build
-make install DESTDIR=%{buildroot} PREFIX=%{_prefix}
-mkdir -p %{buildroot}%{_datadir}/applications
-
-cd ..
-mv %{buildroot}/usr/lib %{buildroot}/usr/lib64
-install -Dm0644 share/org.getmonero.Monero.desktop \
-        %{buildroot}%{_datadir}/applications/
+%cmake_install
+mv %{buildroot}%{_prefix}/lib %{buildroot}%{_libdir}
+install -Dpm0644 -t %{buildroot}%{_datadir}/applications share/org.getmonero.Monero.desktop
 
 
 %files

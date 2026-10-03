@@ -11,7 +11,6 @@ Patch0:         0001-disable-self-update.patch
 
 BuildArch:      noarch
 
-Requires:       bash
 Requires:       curl
 Requires:       gh
 Requires:       git-core
@@ -25,8 +24,6 @@ repositories, with optional AI-driven review and commit sweeps.
 
 %prep
 %autosetup -p1 -n repo_updater-%{version}
-
-%build
 
 %install
 install -Dpm0755 ru %{buildroot}%{_bindir}/%{name}

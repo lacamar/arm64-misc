@@ -4,18 +4,16 @@
 
 Name:           anki
 Version:        %{tag}
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Anki - a powerful flashcard program
 License:        Gnu Affero Public License
 URL:            https://github.com/ankitects/anki
 
 # Build tools
-BuildRequires:  python3
 BuildRequires:  python3-pip
 BuildRequires:  python3-devel
 BuildRequires:  gcc
 BuildRequires:  gcc-c++
-BuildRequires:  redhat-rpm-config
 BuildRequires:  desktop-file-utils
 
 # Runtime dependencies
@@ -45,29 +43,19 @@ Requires:       python3-decorator
 %description
 Anki is a powerful, intelligent flashcard program. This package installs Anki using pip inside a system-wide virtual environment under /usr/share/anki.
 
-%prep
-# No source to unpack
-
-%build
-# Nothing to build, pip handles it
-
 %install
-mkdir -p %{buildroot}%{_datadir}/anki
 python3 -m venv --system-site-packages %{buildroot}%{_datadir}/anki
 
 rm -rf %{buildroot}%{_datadir}/anki/lib64
 ln -s lib %{buildroot}%{_datadir}/anki/lib64
 
-%{buildroot}%{_datadir}/anki/bin/python3 -m pip install --upgrade pip setuptools wheel
 %{buildroot}%{_datadir}/anki/bin/python3 -m pip install "aqt[qt6]==%{version}"
 
 find %{buildroot}%{_datadir}/anki -name "__pycache__" -type d -exec rm -rf {} +
 find %{buildroot}%{_datadir}/anki -name "*.pyc" -delete
 
 find %{buildroot}%{_datadir}/anki/bin -type f -exec grep -l "%{buildroot}" {} + | xargs -r sed -i "s|%{buildroot}||g"
-if [ -f %{buildroot}%{_datadir}/anki/pyvenv.cfg ]; then
-    sed -i "s|%{buildroot}||g" %{buildroot}%{_datadir}/anki/pyvenv.cfg
-fi
+sed -i "s|%{buildroot}||g" %{buildroot}%{_datadir}/anki/pyvenv.cfg
 
 mkdir -p %{buildroot}%{_bindir}
 cat > %{buildroot}%{_bindir}/anki << 'EOF'
@@ -76,17 +64,9 @@ exec %{_datadir}/anki/bin/anki "$@"
 EOF
 chmod 755 %{buildroot}%{_bindir}/anki
 
+install -Dm644 %{buildroot}%{_datadir}/anki/lib/python3.*/site-packages/_aqt/data/qt/icons/anki.png %{buildroot}%{_datadir}/pixmaps/anki.png
+
 mkdir -p %{buildroot}%{_datadir}/applications
-mkdir -p %{buildroot}%{_datadir}/pixmaps
-ICON_SRC=$(find %{buildroot}%{_datadir}/anki/lib/python3.*/site-packages/_aqt/data/qt/icons/anki.png -print -quit)
-if [ -z "$ICON_SRC" ]; then
-    ICON_SRC=$(find %{buildroot}%{_datadir}/anki/lib/python3.*/site-packages/_aqt/data/web/imgs/anki-logo-thin.png -print -quit)
-fi
-if [ -z "$ICON_SRC" ]; then
-    echo "ERROR: could not locate an anki icon inside the installed aqt wheel" >&2
-    exit 1
-fi
-install -Dm644 "$ICON_SRC" %{buildroot}%{_datadir}/pixmaps/anki.png
 
 cat > %{buildroot}%{_datadir}/applications/anki.desktop << 'EOF'
 [Desktop Entry]
@@ -101,7 +81,6 @@ StartupWMClass=anki
 Categories=Education;Languages;
 MimeType=application/x-apkg;
 EOF
-chmod 644 %{buildroot}%{_datadir}/applications/anki.desktop
 desktop-file-validate %{buildroot}%{_datadir}/applications/anki.desktop
 
 %files
@@ -111,6 +90,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/anki.desktop
 %{_datadir}/pixmaps/anki.png
 
 %changelog
+* Sat Oct 03 2026 Lachlan Marie <lchlnm@pm.me> - 26.09.3-3
+ - Drop setuptools/wheel from venv
+
 * Sat Sep 26 2026 Lachlan Marie <lchlnm@pm.me> - 26.09.3-2
  - Update to 26.09.3
 

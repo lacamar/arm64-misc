@@ -1,38 +1,21 @@
-diff --git a/README.md b/README.md
-index 84805d0..34f8c86 100644
---- a/README.md
-+++ b/README.md
-@@ -52,7 +52,8 @@ Tools: `tabs_list`, `tab_new`, `tab_select`, `tab_close`, `navigate`, `go_back`,
- 
- Sites must be allowed before Claude can act on them: a prompt window asks
- (allow once / always / deny), and the toolbar popup manages allowed sites or
--allows all. Shortcuts are stored in `$XDG_CONFIG_HOME/zen-control/shortcuts.json`.
-+allows all. Tabs Claude acts on get a 🤖 title prefix, an orange glow and a
-+Stop button that blocks Claude on that tab until resumed from the popup. Shortcuts are stored in `$XDG_CONFIG_HOME/zen-control/shortcuts.json`.
- 
- Typical flow: `navigate` → `read_page` (get refs like `e12`) → `click`/`type`
- with a ref → `screenshot` to verify.
 diff --git a/extension/background.js b/extension/background.js
-index 90be9c6..2022e59 100644
+index 24a1b8d..5869ced 100644
 --- a/extension/background.js
 +++ b/extension/background.js
-@@ -10,7 +10,9 @@ let ws = null;
+@@ -10,6 +10,8 @@ let ws = null;
  let backoff = 1000;
  let currentTabId = null;
- let browserId = null;
--let settings = { allSites: false, allowedSites: [], label: "" };
-+let settings = { allSites: false, allowedSites: [], label: "", markTitle: true, markBorder: true };
+ let settings = { allSites: false, allowedSites: [] };
 +const controlled = new Set();
 +const stopped = new Set();
  const sessionAllowed = new Set();
  const prompts = new Map(); // host -> {promise, resolve, windowId}
  const MAX_REQUESTS = 1000;
-@@ -51,13 +53,14 @@ function connect() {
+@@ -45,12 +47,13 @@ function connect() {
      try {
        const result = await handle(msg.cmd, msg.args || {});
        reply = { type: "result", id: msg.id, ok: true, result };
 +      if (!UNGATED.has(msg.cmd) && currentTabId != null) mark(currentTabId);
-       if (gif.recording && FRAME_CMDS.has(msg.cmd) && currentTabId === gif.tabId) await gifFrame().catch(() => {});
      } catch (e) {
        reply = { type: "result", id: msg.id, ok: false, error: String(e && e.message || e) };
      }
@@ -43,14 +26,14 @@ index 90be9c6..2022e59 100644
    ws.onerror = () => { /* onclose follows */ };
  }
  
-@@ -183,6 +186,25 @@ async function screenshot(tab) {
+@@ -176,6 +179,23 @@ async function screenshot(tab) {
    return { dataUrl: out, width: outW, height: outH, viewportWidth: w, viewportHeight: h, scale, raw: { width: bmp.width, height: bmp.height } };
  }
  
 +/* ---------- controlled-tab markers ---------- */
 +
 +function markerState(tabId) {
-+  return { on: controlled.has(tabId), stopped: stopped.has(tabId), title: settings.markTitle, border: settings.markBorder };
++  return { on: controlled.has(tabId), stopped: stopped.has(tabId) };
 +}
 +function pushMarker(tabId) {
 +  browser.tabs.sendMessage(tabId, { cmd: "marker", args: markerState(tabId) }).catch(() => {});
@@ -61,15 +44,13 @@ index 90be9c6..2022e59 100644
 +  pushMarker(tabId);
 +}
 +function unmarkAll() {
-+  const tabs = [...controlled];
-+  controlled.clear();
-+  for (const id of tabs) pushMarker(id);
++  for (const id of controlled) { controlled.delete(id); pushMarker(id); }
 +}
 +
  /* ---------- site permissions ---------- */
  
  function hostOf(url) {
-@@ -214,11 +236,24 @@ async function saveSettings(patch) {
+@@ -207,8 +227,17 @@ async function saveSettings(patch) {
    await browser.storage.local.set({ settings });
  }
  
@@ -88,40 +69,32 @@ index 90be9c6..2022e59 100644
 +  }
  });
  browser.windows.onRemoved.addListener((id) => { for (const p of prompts.values()) if (p.windowId === id) p.resolve("deny"); });
--browser.storage.onChanged.addListener((changes) => { if (changes.settings) settings = { ...settings, ...changes.settings.newValue }; });
-+browser.storage.onChanged.addListener((changes) => {
-+  if (!changes.settings) return;
-+  settings = { ...settings, ...changes.settings.newValue };
-+  for (const id of controlled) pushMarker(id);
-+});
- 
- /* ---------- network capture ---------- */
- 
-@@ -284,6 +319,10 @@ async function handle(cmd, args) {
+ browser.storage.onChanged.addListener((changes) => { if (changes.settings) settings = { ...settings, ...changes.settings.newValue }; });
+@@ -245,6 +274,10 @@ async function handle(cmd, args) {
      if (cmd === "navigate" || cmd === "tab_new") { if (args.url) await ensureAllowed(args.url); }
      else await ensureAllowed((await resolveTab(args.tabId)).url);
    }
-+  if (!["ping", "tabs_list", "tab_new", "gif_stop", "gif_clear", "gif_export"].includes(cmd)) {
++  if (!["ping", "tabs_list", "tab_new"].includes(cmd)) {
 +    const t = cmd === "tab_select" ? { id: args.tabId } : await resolveTab(args.tabId);
 +    if (stopped.has(t.id)) throw new Error(`The user stopped Claude on tab ${t.id}. Ask them before continuing; they can resume it from the Zen Control toolbar button.`);
 +  }
    switch (cmd) {
      case "ping":
-       return { pong: true, currentTabId, browserId };
-@@ -374,7 +413,7 @@ async function handle(cmd, args) {
+       return { pong: true, currentTabId };
+@@ -321,7 +354,7 @@ async function handle(cmd, args) {
    }
  }
  
 -browser.tabs.onRemoved.addListener((id) => { if (id === currentTabId) currentTabId = null; });
 +browser.tabs.onRemoved.addListener((id) => { if (id === currentTabId) currentTabId = null; controlled.delete(id); stopped.delete(id); });
  setBadge(false);
- browser.storage.local.get(["settings", "browserId"]).then(async (st) => {
+ browser.storage.local.get("settings").then((st) => {
    settings = { ...settings, ...st.settings };
 diff --git a/extension/content.js b/extension/content.js
-index ec15df0..4c35d23 100644
+index ec15df0..5fcc2ff 100644
 --- a/extension/content.js
 +++ b/extension/content.js
-@@ -424,7 +424,55 @@
+@@ -424,7 +424,53 @@
      return { count: out.length, logs: out.slice(-(args.limit || 100)) };
    }
  
@@ -132,10 +105,9 @@ index ec15df0..4c35d23 100644
 +  let host = null;
 +  let titleObserver = null;
 +  function applyTitle() {
-+    const want = marker.on && marker.title;
 +    const t = document.title;
-+    if (want && !t.startsWith(TITLE_MARK)) document.title = TITLE_MARK + t;
-+    else if (!want && t.startsWith(TITLE_MARK)) document.title = t.slice(TITLE_MARK.length);
++    if (marker.on && !t.startsWith(TITLE_MARK)) document.title = TITLE_MARK + t;
++    else if (!marker.on && t.startsWith(TITLE_MARK)) document.title = t.slice(TITLE_MARK.length);
 +  }
 +  function buildHost() {
 +    host = document.createElement("zen-control-marker");
@@ -152,7 +124,7 @@ index ec15df0..4c35d23 100644
 +    const pill = root.querySelector(".pill");
 +    root.querySelector("button").addEventListener("click", () => browser.runtime.sendMessage({ type: marker.stopped ? "resume_tab" : "stop_tab" }));
 +    host.render = () => {
-+      root.querySelector(".glow").hidden = !marker.border || marker.stopped;
++      root.querySelector(".glow").hidden = marker.stopped;
 +      pill.classList.toggle("stopped", !!marker.stopped);
 +      pill.querySelector("span").textContent = marker.stopped ? "Claude is stopped on this tab" : "Claude is controlling this tab";
 +      pill.querySelector("button").textContent = marker.stopped ? "Resume" : "Stop";
@@ -160,8 +132,7 @@ index ec15df0..4c35d23 100644
 +  }
 +  function applyMarker(state) {
 +    marker = state || { on: false };
-+    const show = marker.on && (marker.border || marker.stopped || marker.title);
-+    if (show) {
++    if (marker.on) {
 +      if (!host) buildHost();
 +      if (!host.isConnected) document.documentElement.append(host);
 +      host.render();
@@ -179,7 +150,7 @@ index ec15df0..4c35d23 100644
    browser.runtime.onMessage.addListener((msg) => {
      const h = handlers[msg && msg.cmd];
 diff --git a/extension/manifest.json b/extension/manifest.json
-index e10e5c6..410c4bc 100644
+index b1acd27..9f89f37 100644
 --- a/extension/manifest.json
 +++ b/extension/manifest.json
 @@ -1,7 +1,7 @@
@@ -192,22 +163,19 @@ index e10e5c6..410c4bc 100644
    "browser_specific_settings": {
      "gecko": {
 diff --git a/extension/popup.html b/extension/popup.html
-index 7aaa9b0..056f2d9 100644
+index 36305e5..4b8d835 100644
 --- a/extension/popup.html
 +++ b/extension/popup.html
-@@ -4,7 +4,10 @@
+@@ -4,6 +4,7 @@
  <body>
    <h1>Zen Control</h1>
    <div class="row"><span id="current"></span><button id="toggle" hidden></button></div>
 +  <div class="row" id="stoppedRow" hidden><span>Claude is stopped on this tab</span><button id="resume" class="primary">Resume</button></div>
    <div class="row"><label><input type="checkbox" id="all"> Allow on all sites without asking</label></div>
-+  <div class="row"><label><input type="checkbox" id="markTitle"> Mark controlled tabs with 🤖 in the title</label></div>
-+  <div class="row"><label><input type="checkbox" id="markBorder"> Glow around controlled pages</label></div>
    <p class="muted">Always-allowed sites</p>
    <ul id="sites"></ul>
-   <div class="row"><input type="text" id="label" placeholder="Browser label (optional)"></div>
 diff --git a/extension/popup.js b/extension/popup.js
-index dc22c31..e2dc8c9 100644
+index 0479f2b..c6ba81d 100644
 --- a/extension/popup.js
 +++ b/extension/popup.js
 @@ -1,5 +1,6 @@
@@ -217,22 +185,11 @@ index dc22c31..e2dc8c9 100644
  
  async function save(patch) {
    settings = { ...settings, ...patch };
-@@ -9,6 +10,8 @@ async function save(patch) {
- 
- function render() {
-   document.getElementById("all").checked = settings.allSites;
-+  document.getElementById("markTitle").checked = settings.markTitle;
-+  document.getElementById("markBorder").checked = settings.markBorder;
-   const toggle = document.getElementById("toggle");
-   const allowed = host && settings.allowedSites.includes(host);
-   document.getElementById("current").textContent = host ? host : "This page can't be controlled";
-@@ -31,12 +34,20 @@ function render() {
- }
+@@ -32,7 +33,13 @@ function render() {
  
  (async () => {
--  settings = { allSites: false, allowedSites: [], label: "", ...(await browser.storage.local.get("settings")).settings };
+   settings = { allSites: false, allowedSites: [], ...(await browser.storage.local.get("settings")).settings };
 -  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-+  settings = { allSites: false, allowedSites: [], label: "", markTitle: true, markBorder: true, ...(await browser.storage.local.get("settings")).settings };
 +  [tab] = await browser.tabs.query({ active: true, currentWindow: true });
 +  const state = await browser.runtime.sendMessage({ type: "marker_query", tabId: tab.id });
 +  document.getElementById("stoppedRow").hidden = !state?.stopped;
@@ -241,11 +198,5 @@ index dc22c31..e2dc8c9 100644
 +    document.getElementById("stoppedRow").hidden = true;
 +  });
    try { const u = new URL(tab.url); if (/^(https?|file):$/.test(u.protocol)) host = u.host || "file"; } catch {}
-   document.getElementById("label").value = settings.label || "";
    document.getElementById("toggle").addEventListener("click", () => save({ allowedSites: settings.allowedSites.includes(host) ? settings.allowedSites.filter((x) => x !== host) : [...settings.allowedSites, host] }));
    document.getElementById("all").addEventListener("change", (e) => save({ allSites: e.target.checked }));
-+  document.getElementById("markTitle").addEventListener("change", (e) => save({ markTitle: e.target.checked }));
-+  document.getElementById("markBorder").addEventListener("change", (e) => save({ markBorder: e.target.checked }));
-   document.getElementById("label").addEventListener("change", (e) => save({ label: e.target.value.trim() }));
-   render();
- })();

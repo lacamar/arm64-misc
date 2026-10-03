@@ -1,31 +1,16 @@
 %undefine __brp_mangle_shebangs
 
-%global forgeurl https://github.com/dnglab/dnglab
-
 Name:           dnglab
 Version:        0.8.0
 Release:        6%{?dist}
 Summary:        Camera RAW to DNG file format converter
 
 License:        LGPL-2.1-only
-URL:            %{forgeurl}
-Source0:        %{forgeurl}/archive/refs/tags/v%{version}/%{name}-%{version}.tar.gz
-# Adds `--full-size-preview` to `convert`/`ftpserver`: forces the DNG
-# preview/thumbnail to be rendered from the full raw sensor data instead of
-# using whatever (often much smaller) JPEG preview the camera embedded,
-# matching Adobe DNG Converter's "Full Size JPEG Preview" behavior -- see
-# rawler/src/dng/convert.rs's generate_preview(), which otherwise always
-# prefers the camera's own embedded preview when one exists. Not upstream.
+URL:            https://github.com/dnglab/dnglab
+Source0:        %{url}/archive/refs/tags/v%{version}/%{name}-%{version}.tar.gz
+# Not upstream: --full-size-preview renders the DNG preview from raw data
 Patch0:         0001-full-size-preview.patch
-# Adds a LibRaw-style "auto bright" exposure-normalization step to
-# RawDevelop's default pipeline (rawler/src/imgop/develop.rs), used both by
-# the --full-size-preview fallback render and by `dnglab convert`'s
-# standalone raw-to-image mode. Without it, that render is plain WB + camera
-# color matrix + sRGB gamma with no exposure adjustment, which looks
-# noticeably darker/flatter for any properly-exposed (headroom-preserving)
-# shot than what other raw viewers show -- e.g. swayimg's raw.cpp, which
-# decodes via LibRaw's dcraw_process() with auto-bright on by default. Not
-# upstream.
+# Not upstream: LibRaw-style auto-bright in the default develop pipeline
 Patch1:         0002-auto-bright-preview.patch
 # Adobe DNG Converter parity: keep camera Make/lens/EXIF tags. Not upstream.
 Patch2:         0003-preserve-camera-exif-and-lens.patch
@@ -53,24 +38,20 @@ operation, extracting the original raw file that is embedded in a DNG.
 %install
 install -Dm755 target/rpm/%{name} %{buildroot}%{_bindir}/%{name}
 
-install -Dm644 bin/%{name}/manpages/%{name}.1 %{buildroot}%{_mandir}/man1/%{name}.1
-for man in bin/%{name}/manpages/%{name}-*.1; do
-    install -Dm644 "$man" %{buildroot}%{_mandir}/man1/"$(basename "$man")"
-done
+install -Dm644 -t %{buildroot}%{_mandir}/man1 bin/%{name}/manpages/*.1
 
-install -Dm644 bin/%{name}/completions/%{name}.bash %{buildroot}%{_datadir}/bash-completion/completions/%{name}
-install -Dm644 bin/%{name}/completions/%{name}.fish %{buildroot}%{_datadir}/fish/vendor_completions.d/%{name}.fish
-install -Dm644 bin/%{name}/completions/_%{name} %{buildroot}%{_datadir}/zsh/site-functions/_%{name}
+install -Dm644 bin/%{name}/completions/%{name}.bash %{buildroot}%{bash_completions_dir}/%{name}
+install -Dm644 bin/%{name}/completions/%{name}.fish %{buildroot}%{fish_completions_dir}/%{name}.fish
+install -Dm644 bin/%{name}/completions/_%{name} %{buildroot}%{zsh_completions_dir}/_%{name}
 
 %files
 %license LICENSE
 %doc README.md
 %{_bindir}/%{name}
-%{_mandir}/man1/%{name}.1*
-%{_mandir}/man1/%{name}-*.1*
-%{_datadir}/bash-completion/completions/%{name}
-%{_datadir}/fish/vendor_completions.d/%{name}.fish
-%{_datadir}/zsh/site-functions/_%{name}
+%{_mandir}/man1/%{name}*.1*
+%{bash_completions_dir}/%{name}
+%{fish_completions_dir}/%{name}.fish
+%{zsh_completions_dir}/_%{name}
 
 %changelog
 * Wed Sep 23 2026 Lachlan Marie <lchlnm@pm.me> - 0.8.0-6

@@ -9,7 +9,6 @@ Source0:        %{url}/archive/v%{version}/giil-%{version}.tar.gz
 
 BuildArch:      noarch
 
-Requires:       bash
 Requires:       curl
 Requires:       gum
 Requires:       nodejs >= 18
@@ -23,8 +22,6 @@ Chromium are installed on first run into $XDG_CACHE_HOME/giil.
 
 %prep
 %autosetup -n giil-%{version}
-
-%build
 
 %install
 install -Dpm0755 giil %{buildroot}%{_bindir}/%{name}

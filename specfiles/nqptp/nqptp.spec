@@ -33,9 +33,6 @@ autoreconf -i -f
 
 %install
 %make_install
-mkdir -p %{buildroot}%{_unitdir}
-# mv %{buildroot}%{_libdir}/systemd/system/%{name}.service \
-#    %{buildroot}%{_unitdir}/%{name}.service
 install -D -m 0644 %{SOURCE1} %{buildroot}%{_sysusersdir}/nqptp.conf
 
 %pre

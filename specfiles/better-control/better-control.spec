@@ -1,12 +1,13 @@
 %global tag 6.12.1
 Name:           better-control
 Version:        %{tag}
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        A simple control panel for linux based on the GTK framework
 
 License: GNU GPL v3
 URL: https://github.com/better-ecosystem/better-control
 Source0: https://github.com/better-ecosystem/better-control/archive/refs/tags/v%{version}.tar.gz
+BuildArch: noarch
 BuildRequires: make
 
 Requires: gtk3
@@ -15,7 +16,6 @@ Requires: NetworkManager
 Requires: bluez
 Requires: pulseaudio-utils
 Requires: python3-dbus
-Requires: python3
 Requires: gammastep
 Requires: python3-requests
 Requires: python3-qrcode
@@ -31,24 +31,23 @@ A simple control panel for linux based on the GTK framework
 %prep
 %autosetup
 
-%build
-
-
 %install
 make install DESTDIR=%{buildroot}
 
 %files
 %license LICENSE
 %doc README.md
-%{_datadir}/better-control/*
+%{_datadir}/better-control
 %{_bindir}/better-control
 %{_bindir}/control
 %{_bindir}/betterctl
 %{_datadir}/applications/better-control.desktop
-%define debug_package %{nil}
 
 
 %changelog
+* Sat Oct 03 2026 Lachlan Marie <lchlnm@pm.me> - 6.12.1-2
+ - Build as noarch
+
 * Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 6.12.1-1
  - Update to 6.12.1
 

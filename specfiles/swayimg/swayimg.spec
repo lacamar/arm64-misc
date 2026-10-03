@@ -3,14 +3,13 @@
 
 Name:           swayimg
 Version:        %{tag}
-Release:        5%{?dist}
+Release:        6%{?dist}
 Summary:        Lightweight image viewer for Wayland display servers
 
 License:        MIT
 URL:            https://github.com/artemsen/%{name}
 Source:         %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
 
-Patch0:          %{url}/commit/5c2d958.patch#/swayimg-5.0-missing-includes.patch
 # Adds an "exif" imagelist.order sort mode using the EXIF capture time
 # (DateTimeOriginal/DateTimeDigitized/DateTime, via exiv2), falling back to
 # path order when unavailable. Not upstream.
@@ -31,9 +30,6 @@ Patch2:          0002-tiff-fix-dng-orientation-double-apply.patch
 # Color managed OpenGL ES renderer: ICC/CICP, wide gamut, HDR (PQ output
 # via wp_color_management_v1), software fallback. Not upstream.
 Patch3:          0003-render-color-managed-gpu-hdr.patch
-
-# Exclude x86 and all the platforms where luajit is not available
-ExcludeArch:    %{ix86} riscv64 ppc64 ppc64le
 
 BuildRequires:  desktop-file-utils
 BuildRequires:  gcc-c++
@@ -90,11 +86,7 @@ Swayimg is a lightweight image viewer for Wayland display servers.
 
 
 %prep
-%autosetup -N
-%patch -P 0 -p1 -F3
-%patch -P 1 -p1 -F3
-%patch -P 2 -p1 -F3
-%patch -P 3 -p1 -F3
+%autosetup -p1
 
 
 %build
@@ -114,13 +106,8 @@ Swayimg is a lightweight image viewer for Wayland display servers.
 %check
 desktop-file-validate %{buildroot}%{_datadir}/applications/swayimg.desktop
 %if %{with tests}
-%ifarch s390x
-# A few tests fail on s390x (endianness?)
-%global gtest_exclude ImageLoadTest.*
-%else
 # HEIF test requires libheif-freeworld from rpmfusion
 %global gtest_exclude ImageLoadTest.heif
-%endif
 
 export LANG=en_US.UTF-8 # ImageListTest.SortAlphaUnicode fails with LANG=C
 %meson_test --test-args='--gtest_filter=-%{gtest_exclude}'
@@ -141,6 +128,9 @@ export LANG=en_US.UTF-8 # ImageListTest.SortAlphaUnicode fails with LANG=C
 
 
 %changelog
+* Wed Sep 30 2026 Lachlan Marie <lchlnm@pm.me> - 5.6-6
+ - Decode 16-bit and float TIFF in high precision
+
 * Sat Sep 26 2026 Lachlan Marie <lchlnm@pm.me> - 5.6-5
  - Add color managed GPU renderer
  - Add ICC/CICP color space support

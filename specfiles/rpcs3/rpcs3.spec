@@ -18,44 +18,31 @@ local externals = {
  { name="soundtouch", ref="a0fba77", owner="RPCS3", path="SoundTouch/soundtouch/", version="2.4.0",  license="LGPLv2.1" },
  { name="asmjit", ref="416f735", owner="asmjit", path="asmjit/asmjit/", license="zlib" },
  { name="cubeb", ref="4848575", owner="mozilla", path="cubeb/cubeb", license="ISC" },
- { name="curl", ref="a05f349", owner="curl", path="curl/curl", version="8.17.0",  license="MIT" },
  { name="discord-rpc", ref="3dc2c32", owner="Vestrel", path="discord-rpc/discord-rpc", license="MIT" },
  { name="gamemode", ref="c54d6d4", owner="FeralInteractive", path="feralinteractive/feralinteractive", version="1.8.2", license="BSD-3-Clause" },
- { name="ffmpeg-core", ref="4230054", owner="RPCS3", path="ffmpeg", version="7.1.2", license="LGPLv2.1" },
  { name="Fusion", ref="015d684", owner="xioTechnologies", path="fusion/fusion", version="1.3.2",  license="MIT" },
  { name="glslang", ref="f0bd025", owner="KhronosGroup", path="glslang/glslang", version="15.3.0",  license="BSD-3-Clause" },
  { name="hidapi", ref="d6b2a97", owner="RPCS3", path="hidapi/hidapi", version="0.15.0",  license="GPLv3, BSD" },
  { name="libpng", ref="3061454", owner="pnggroup", path="libpng/libpng", version="1.6.55",  license="PNGRLLv2" },
- { name="SDL", ref="d9d5536", owner="libsdl-org", path="libsdl-org/SDL", version="3.4.2",  license="zlib" },
  { name="libusb", ref="87a5563", owner="libusb", path="libusb/libusb", version="1.0.29",  license="LGPLv2.1" },
- { name="llvm-project", ref="cd70802", owner="llvm", path="llvm/llvm", version="19.1.7",  license="Apache-v2" },
  { name="miniupnp", ref="d66872e", owner="miniupnp", path="miniupnp/miniupnp", version="2.3.9",  license="BSD-3-Clause" },
- { name="opencv_minimal", ref="6900a12", owner="Megamouse", path="opencv/opencv", version="4.12.0" },
  { name="protobuf", ref="edaa823", owner="protocolbuffers", path="protobuf/protobuf", version="33.4",  license="BSD-3-Clause" },
  { name="pugixml", ref="ee86beb", owner="zeux", path="pugixml", version="1.15",  license="MIT" },
  { name="rtmidi", ref="1e5b499", owner="thestk", path="rtmidi", version="6.0.0",  license="MIT" },
  { name="stb", ref="013ac3b", owner="nothings", path="stblib/stb", license="MIT" },
  { name="wolfssl", ref="1d363f3", owner="wolfSSL", path="wolfssl/wolfssl", version="5.8.2",  license="GPLv3" },
  { name="yaml-cpp", ref="51a5d62", owner="RPCS3", path="yaml-cpp/yaml-cpp", version="0.9.0",  license="MIT" },
- { name="zlib", ref="da607da", owner="madler", path="zlib/zlib", version="1.3.2",  license="zlib" },
- { name="zstd", ref="f8745da", owner="facebook", path="zstd/zstd", version="1.5.7",  license="GPLv2" },
 }
 
 for i, s in ipairs(externals) do
-  si = 100 + i
-  print(string.format("Source%d: https://github.com/%s/%s/archive/%s/%s-%s.tar.gz", si, s.owner, s.name, s.ref, s.name, s.ref).."\n")
-  if s.bcond and not rpm.isdefined(string.format("with_%s", s.bcond)) then goto continue1 end
-  print(string.format("Provides: bundled(%s) = %s", (s.package or s.name), (s.version or "0")).."\n")
-  ::continue1::
+  print(string.format("Source%d: https://github.com/%s/%s/archive/%s/%s-%s.tar.gz", 100 + i, s.owner, s.name, s.ref, s.name, s.ref).."\n")
+  print(string.format("Provides: bundled(%s) = %s", s.name, (s.version or "0")).."\n")
 end
 
 function print_setup_externals()
   for i, s in ipairs(externals) do
-    si = 100 + i
-    if s.bcond and not rpm.isdefined(string.format("with_%s", s.bcond)) then goto continue2 end
-    print(string.format("mkdir -p 3rdparty/%s", (s.path or s.name)).."\n")
-    print(string.format("tar -xzf %s --strip-components=1 -C 3rdparty/%s", rpm.expand("%{SOURCE"..si.."}"), (s.path or s.name)).."\n")
-    ::continue2::
+    print(string.format("mkdir -p 3rdparty/%s", s.path).."\n")
+    print(string.format("tar -xzf %s --strip-components=1 -C 3rdparty/%s", rpm.expand("%{SOURCE"..(100 + i).."}"), s.path).."\n")
   end
 end
 }
@@ -86,27 +73,16 @@ BuildRequires:  libwayland-egl
 BuildRequires:  libcurl-devel
 BuildRequires:  opencv-devel
 BuildRequires:  libzstd-devel
-BuildRequires:  git-all
 
 %if 0%{?fedora} <= 44
 BuildRequires:  rtmidi-devel
 %endif
 
 BuildRequires:  alsa-lib-devel
-BuildRequires:  cmake
-BuildRequires:  ninja-build
-BuildRequires:  glew
-BuildRequires:  glew-devel
 BuildRequires:  libatomic
 BuildRequires:  libevdev-devel
-BuildRequires:  libudev-devel
-BuildRequires:  openal-soft-devel
-# BuildRequires:  openal-devel
-BuildRequires:  qt6-qtbase-devel
 BuildRequires:  qt6-qtbase-private-devel
-BuildRequires:  vulkan-devel
 BuildRequires:  pipewire-jack-audio-connection-kit-devel
-# BuildRequires:  jack-audio-connection-kit-devel
 BuildRequires:  qt6-qtmultimedia-devel
 BuildRequires:  qt6-qtsvg-devel
 BuildRequires:  llvm-devel
@@ -135,25 +111,13 @@ echo '#pragma GCC diagnostic pop' \
 %build
 export CXXFLAGS="$CXXFLAGS -Wno-error=old-style-cast -Wno-old-style-cast"
 
-%if %{with clang}
-export CC=clang
-export CXX=clang++
-export LINKER=ld.lld
-%else
-export CC=gcc
-export CXX=g++
-export LINKER=gold
-%endif
-export LINKER_FLAG="-fuse-ld=${LINKER}"
-
-cmake -B build \
+cmake -B build -G Ninja \
       -Wno-dev \
       -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
       -DLLVM_TARGETS_TO_BUILD=AArch64 \
-      -DCMAKE_EXE_LINKER_FLAGS="${LINKER_FLAG}" \
-      -DCMAKE_MODULE_LINKER_FLAGS="${LINKER_FLAG}" \
-      -DCMAKE_SHARED_LINKER_FLAGS="${LINKER_FLAG}" \
+      -DCMAKE_EXE_LINKER_FLAGS="-L/usr/lib64/pipewire-0.3/jack" \
+      -DCMAKE_MODULE_LINKER_FLAGS="-fuse-ld=gold" \
+      -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=gold" \
       -DUSE_PRECOMPILED_HEADERS=OFF \
       -DBUILD_RPCS3_TESTS=OFF \
       -DRUN_RPCS3_TESTS=OFF \
@@ -170,16 +134,12 @@ cmake -B build \
       -DOpenGL_GL_PREFERENCE=LEGACY \
       -DCMAKE_INSTALL_PREFIX=%{_prefix} \
       -DCMAKE_INSTALL_LIBDIR=%{_lib} \
-      -DCMAKE_EXE_LINKER_FLAGS="-L/usr/lib64/pipewire-0.3/jack" \
-      -DSTATIC_LINK_LLVM=ON \
-      -G Ninja
-cd build
-ninja
+      -DSTATIC_LINK_LLVM=ON
+%ninja_build -C build
 
 
 %install
-cd build
-DESTDIR=%{buildroot} ninja install
+%ninja_install -C build
 
 
 %files

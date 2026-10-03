@@ -55,12 +55,8 @@ A simple and lightweight app for running Windows games using UMU-Launcher/UMU-Pr
 %files
 %license LICENSE
 %{_bindir}/faugus-launcher
-#{_bindir}/faugus-proton-manager
-#{_bindir}/faugus-shortcut
 %{python3_sitelib}/faugus
 %{_datadir}/applications/*.desktop
-#{_datadir}/icons/hicolor/256x256/apps/*.png
-#{_datadir}/icons/hicolor/256x256/apps/faugus-mono.svg
 %{_datadir}/icons/hicolor/scalable/apps/faugus-launcher.svg
 %{_datadir}/icons/hicolor/scalable/apps/faugus-mono.svg
 %{_datadir}/icons/hicolor/scalable/apps/io.github.Faugus.faugus-launcher.svg

@@ -1,20 +1,15 @@
 %global tag 4.3
-%define aname meteo_qt
 
 Name:           meteo-qt
 Version:        %{tag}
 Release:        %autorelease
-Group:          Graphical desktop/Other
 Summary:        Weather status system tray application
 License:        GPLv3
 URL:            https://github.com/dglent/meteo-qt
 Source0:        https://github.com/dglent/meteo-qt/archive/refs/tags/v%{version}.tar.gz
 BuildArch:      noarch
-BuildRequires:  python3-qt5-devel
-BuildRequires:  qt5-qttools
 BuildRequires:  python3-pyqt6-base
 BuildRequires:  qt6-qttools
-BuildRequires:  qt5-linguist
 BuildRequires:  qt6-linguist
 
 
@@ -62,9 +57,7 @@ rm -rf %{buildroot}%{python3_sitelib}/usr
 %{_datadir}/applications/meteo-qt.desktop
 %{_datadir}/icons/weather-few-clouds.png
 
-%dir %{_datadir}/meteo_qt
-%dir %{_datadir}/meteo_qt/translations
-%{_datadir}/meteo_qt/translations/*.qm
+%{_datadir}/meteo_qt
 
 
 %changelog

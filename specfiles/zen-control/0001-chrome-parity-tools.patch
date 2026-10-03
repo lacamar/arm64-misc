@@ -1,65 +1,22 @@
-diff --git a/README.md b/README.md
-index 3cf4795..84805d0 100644
---- a/README.md
-+++ b/README.md
-@@ -45,7 +45,14 @@ claude mcp add --scope user zen-browser -- node /home/zjones/zen-control/server/
- Tools: `tabs_list`, `tab_new`, `tab_select`, `tab_close`, `navigate`, `go_back`,
- `go_forward`, `reload`, `read_page`, `find`, `get_text`, `click`, `hover`,
- `type`, `press_key`, `select_option`, `scroll`, `wait_for`, `screenshot`,
--`evaluate`, `console_logs`, `browser_status`.
-+`evaluate`, `console_logs`, `network_requests`, `file_upload`, `upload_image`,
-+`gif_creator`, `resize_window`, `browser_batch`, `shortcuts_list`,
-+`shortcuts_save`, `shortcuts_execute`, `list_connected_browsers`,
-+`select_browser`, `browser_status`.
-+
-+Sites must be allowed before Claude can act on them: a prompt window asks
-+(allow once / always / deny), and the toolbar popup manages allowed sites or
-+allows all. Shortcuts are stored in `$XDG_CONFIG_HOME/zen-control/shortcuts.json`.
- 
- Typical flow: `navigate` → `read_page` (get refs like `e12`) → `click`/`type`
- with a ref → `screenshot` to verify.
 diff --git a/extension/background.js b/extension/background.js
-index a018451..90be9c6 100644
+index a018451..24a1b8d 100644
 --- a/extension/background.js
 +++ b/extension/background.js
-@@ -9,6 +9,17 @@ const MAX_SHOT_SIDE = 1568;
+@@ -9,6 +9,13 @@ const MAX_SHOT_SIDE = 1568;
  let ws = null;
  let backoff = 1000;
  let currentTabId = null;
-+let browserId = null;
-+let settings = { allSites: false, allowedSites: [], label: "" };
++let settings = { allSites: false, allowedSites: [] };
 +const sessionAllowed = new Set();
 +const prompts = new Map(); // host -> {promise, resolve, windowId}
 +const MAX_REQUESTS = 1000;
 +const net = new Map();     // tabId -> [request]
 +const inflight = new Map(); // requestId -> request
-+const gif = { tabId: null, recording: false, frames: [] };
-+const MAX_GIF_FRAMES = 300;
-+const FRAME_CMDS = new Set(["navigate", "back", "forward", "reload", "tab_new", "tab_select", "click", "hover", "type", "press_key", "select_option", "scroll", "upload", "wait_for", "evaluate"]);
-+const UNGATED = new Set(["ping", "tabs_list", "tab_select", "tab_close", "resize_window", "gif_stop", "gif_clear", "gif_export"]);
++const UNGATED = new Set(["ping", "tabs_list", "tab_select", "tab_close", "resize_window"]);
  
  /* ---------- connection ---------- */
  
-@@ -28,7 +39,9 @@ function connect() {
-   ws.onopen = () => {
-     backoff = 1000;
-     setBadge(true);
--    ws.send(JSON.stringify({ type: "hello", ua: navigator.userAgent }));
-+    browser.runtime.getBrowserInfo().then((b) => {
-+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "hello", ua: navigator.userAgent, browserId, name: b.name, version: b.version, label: settings.label }));
-+    });
-   };
-   ws.onmessage = async (ev) => {
-     let msg;
-@@ -38,6 +51,7 @@ function connect() {
-     try {
-       const result = await handle(msg.cmd, msg.args || {});
-       reply = { type: "result", id: msg.id, ok: true, result };
-+      if (gif.recording && FRAME_CMDS.has(msg.cmd) && currentTabId === gif.tabId) await gifFrame().catch(() => {});
-     } catch (e) {
-       reply = { type: "result", id: msg.id, ok: false, error: String(e && e.message || e) };
-     }
-@@ -169,12 +183,110 @@ async function screenshot(tab) {
+@@ -169,9 +176,75 @@ async function screenshot(tab) {
    return { dataUrl: out, width: outW, height: outH, viewportWidth: w, viewportHeight: h, scale, raw: { width: bmp.width, height: bmp.height } };
  }
  
@@ -125,38 +82,6 @@ index a018451..90be9c6 100644
 +  Object.assign(r, { error: d.error, ms: Math.round(d.timeStamp - r.start) });
 +}, { urls: ["<all_urls>"] });
 +
-+/* ---------- GIF recording ---------- */
-+
-+async function gifFrame() {
-+  await sleep(250);
-+  const dataUrl = await withTimeout(browser.tabs.captureTab(gif.tabId, { format: "jpeg", quality: 85 }), 10000, "captureTab");
-+  gif.frames.push(dataUrl);
-+  if (gif.frames.length > MAX_GIF_FRAMES) gif.frames.shift();
-+}
-+
-+async function gifExport(args) {
-+  if (!gif.frames.length) throw new Error("No frames recorded; use gif_creator start first");
-+  const maxW = args.maxWidth || 800;
-+  const first = await createImageBitmap(await (await fetch(gif.frames[0])).blob());
-+  const scale = Math.min(1, maxW / first.width);
-+  const w = Math.round(first.width * scale), h = Math.round(first.height * scale);
-+  first.close();
-+  const canvas = document.createElement("canvas");
-+  canvas.width = w; canvas.height = h;
-+  const ctx = canvas.getContext("2d");
-+  const rgba = [];
-+  for (const f of gif.frames) {
-+    const bmp = await createImageBitmap(await (await fetch(f)).blob());
-+    ctx.drawImage(bmp, 0, 0, w, h);
-+    bmp.close();
-+    rgba.push(ctx.getImageData(0, 0, w, h).data);
-+  }
-+  const bytes = encodeGif(rgba, w, h, args.frameDelayMs || 1000);
-+  let bin = "";
-+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-+  return { b64: btoa(bin), frames: gif.frames.length, width: w, height: h, bytes: bytes.length };
-+}
-+
  /* ---------- command dispatch ---------- */
  
  async function handle(cmd, args) {
@@ -166,12 +91,8 @@ index a018451..90be9c6 100644
 +  }
    switch (cmd) {
      case "ping":
--      return { pong: true, currentTabId };
-+      return { pong: true, currentTabId, browserId };
- 
-     case "tabs_list": {
-       const tabs = await browser.tabs.query({});
-@@ -215,6 +327,34 @@ async function handle(cmd, args) {
+       return { pong: true, currentTabId };
+@@ -215,6 +288,20 @@ async function handle(cmd, args) {
        const t = await resolveTab(args.tabId);
        return await screenshot(t);
      }
@@ -189,32 +110,16 @@ index a018451..90be9c6 100644
 +      if (args.clear) net.set(t.id, []);
 +      return { count: out.length, total, requests: out };
 +    }
-+    case "gif_start": {
-+      const t = await resolveTab(args.tabId);
-+      Object.assign(gif, { tabId: t.id, recording: true, frames: gif.tabId === t.id ? gif.frames : [] });
-+      await gifFrame();
-+      return { recording: true, tabId: t.id, frames: gif.frames.length };
-+    }
-+    case "gif_stop":
-+      gif.recording = false;
-+      return { recording: false, frames: gif.frames.length };
-+    case "gif_clear":
-+      gif.frames = [];
-+      return { frames: 0 };
-+    case "gif_export":
-+      return await gifExport(args);
      case "evaluate": {
        // Runs in the content-script sandbox (full DOM access, page-world variables via window.wrappedJSObject).
        const t = await resolveTab(args.tabId);
-@@ -236,4 +376,9 @@ async function handle(cmd, args) {
+@@ -236,4 +323,7 @@ async function handle(cmd, args) {
  
  browser.tabs.onRemoved.addListener((id) => { if (id === currentTabId) currentTabId = null; });
  setBadge(false);
 -connect();
-+browser.storage.local.get(["settings", "browserId"]).then(async (st) => {
++browser.storage.local.get("settings").then((st) => {
 +  settings = { ...settings, ...st.settings };
-+  browserId = st.browserId || crypto.randomUUID();
-+  if (!st.browserId) await browser.storage.local.set({ browserId });
 +  connect();
 +});
 diff --git a/extension/content.js b/extension/content.js
@@ -267,79 +172,8 @@ index d083d19..ec15df0 100644
  
    browser.runtime.onMessage.addListener((msg) => {
      const h = handlers[msg && msg.cmd];
-diff --git a/extension/gif.js b/extension/gif.js
-new file mode 100644
-index 0000000..de7f195
---- /dev/null
-+++ b/extension/gif.js
-@@ -0,0 +1,65 @@
-+/* Zen Control — minimal animated GIF encoder (fixed 6x7x6 palette, no dithering). */
-+function encodeGif(frames, width, height, delayMs) {
-+  const out = [];
-+  const bytes = (...b) => { for (const x of b) out.push(x & 255); };
-+  const u16 = (n) => bytes(n, n >> 8);
-+  for (const c of "GIF89a") out.push(c.charCodeAt(0));
-+  u16(width); u16(height);
-+  bytes(0xf7, 0, 0);
-+  for (let i = 0; i < 256; i++) {
-+    if (i < 252) bytes(Math.round(Math.floor(i / 42) * 51), Math.round((Math.floor(i / 6) % 7) * 42.5), (i % 6) * 51);
-+    else bytes(0, 0, 0);
-+  }
-+  bytes(0x21, 0xff, 11); for (const c of "NETSCAPE2.0") out.push(c.charCodeAt(0)); bytes(3, 1, 0, 0, 0);
-+  frames.forEach((rgba, f) => {
-+    const delay = Math.round((f === frames.length - 1 ? Math.max(delayMs, 2000) : delayMs) / 10);
-+    bytes(0x21, 0xf9, 4, 0, delay, delay >> 8, 0, 0);
-+    bytes(0x2c); u16(0); u16(0); u16(width); u16(height); bytes(0);
-+    const idx = new Uint8Array(width * height);
-+    for (let i = 0, p = 0; i < idx.length; i++, p += 4) {
-+      idx[i] = Math.round(rgba[p] / 51) * 42 + Math.round(rgba[p + 1] / 42.5) * 6 + Math.round(rgba[p + 2] / 51);
-+    }
-+    bytes(8);
-+    const data = lzw(idx, 8);
-+    for (let i = 0; i < data.length; i += 255) {
-+      const n = Math.min(255, data.length - i);
-+      out.push(n);
-+      for (let j = 0; j < n; j++) out.push(data[i + j]);
-+    }
-+    bytes(0);
-+  });
-+  bytes(0x3b);
-+  return new Uint8Array(out);
-+}
-+
-+function lzw(indices, minCodeSize) {
-+  const clear = 1 << minCodeSize, eoi = clear + 1;
-+  let codeSize = minCodeSize + 1, next = eoi + 1;
-+  let dict = new Map();
-+  const out = [];
-+  let cur = 0, bits = 0;
-+  const emit = (c) => { cur |= c << bits; bits += codeSize; while (bits >= 8) { out.push(cur & 255); cur >>>= 8; bits -= 8; } };
-+  emit(clear);
-+  let prefix = indices[0];
-+  for (let i = 1; i < indices.length; i++) {
-+    const k = indices[i];
-+    const key = (prefix << 8) | k;
-+    const code = dict.get(key);
-+    if (code !== undefined) { prefix = code; continue; }
-+    emit(prefix);
-+    if (next === 4096) {
-+      emit(clear);
-+      dict = new Map();
-+      codeSize = minCodeSize + 1;
-+      next = eoi + 1;
-+    } else {
-+      if (next >= 1 << codeSize) codeSize++;
-+      dict.set(key, next++);
-+    }
-+    prefix = k;
-+  }
-+  emit(prefix);
-+  emit(eoi);
-+  if (bits > 0) out.push(cur & 255);
-+  return out;
-+}
 diff --git a/extension/manifest.json b/extension/manifest.json
-index fe1ffd9..e10e5c6 100644
+index fe1ffd9..b1acd27 100644
 --- a/extension/manifest.json
 +++ b/extension/manifest.json
 @@ -1,7 +1,7 @@
@@ -351,7 +185,7 @@ index fe1ffd9..e10e5c6 100644
    "description": "Lets Claude Code drive this browser through a local MCP bridge (ws://127.0.0.1:17373).",
    "browser_specific_settings": {
      "gecko": {
-@@ -14,10 +14,12 @@
+@@ -14,7 +14,8 @@
      "activeTab",
      "webNavigation",
      "storage",
@@ -361,11 +195,7 @@ index fe1ffd9..e10e5c6 100644
    ],
    "background": {
      "scripts": [
-+      "gif.js",
-       "background.js"
-     ],
-     "persistent": true
-@@ -36,7 +38,8 @@
+@@ -36,7 +37,8 @@
    ],
    "browser_action": {
      "default_title": "Zen Control: disconnected",
@@ -410,10 +240,10 @@ index 0000000..4f9a746
 +}
 diff --git a/extension/popup.html b/extension/popup.html
 new file mode 100644
-index 0000000..7aaa9b0
+index 0000000..36305e5
 --- /dev/null
 +++ b/extension/popup.html
-@@ -0,0 +1,13 @@
+@@ -0,0 +1,12 @@
 +<!doctype html>
 +<html>
 +<head><meta charset="utf-8"><link rel="stylesheet" href="ui.css"></head>
@@ -423,16 +253,15 @@ index 0000000..7aaa9b0
 +  <div class="row"><label><input type="checkbox" id="all"> Allow on all sites without asking</label></div>
 +  <p class="muted">Always-allowed sites</p>
 +  <ul id="sites"></ul>
-+  <div class="row"><input type="text" id="label" placeholder="Browser label (optional)"></div>
 +  <script src="popup.js"></script>
 +</body>
 +</html>
 diff --git a/extension/popup.js b/extension/popup.js
 new file mode 100644
-index 0000000..dc22c31
+index 0000000..0479f2b
 --- /dev/null
 +++ b/extension/popup.js
-@@ -0,0 +1,42 @@
+@@ -0,0 +1,40 @@
 +let settings;
 +let host = null;
 +
@@ -466,21 +295,19 @@ index 0000000..dc22c31
 +}
 +
 +(async () => {
-+  settings = { allSites: false, allowedSites: [], label: "", ...(await browser.storage.local.get("settings")).settings };
++  settings = { allSites: false, allowedSites: [], ...(await browser.storage.local.get("settings")).settings };
 +  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
 +  try { const u = new URL(tab.url); if (/^(https?|file):$/.test(u.protocol)) host = u.host || "file"; } catch {}
-+  document.getElementById("label").value = settings.label || "";
 +  document.getElementById("toggle").addEventListener("click", () => save({ allowedSites: settings.allowedSites.includes(host) ? settings.allowedSites.filter((x) => x !== host) : [...settings.allowedSites, host] }));
 +  document.getElementById("all").addEventListener("change", (e) => save({ allSites: e.target.checked }));
-+  document.getElementById("label").addEventListener("change", (e) => save({ label: e.target.value.trim() }));
 +  render();
 +})();
 diff --git a/extension/ui.css b/extension/ui.css
 new file mode 100644
-index 0000000..e3f0499
+index 0000000..dc82b6f
 --- /dev/null
 +++ b/extension/ui.css
-@@ -0,0 +1,10 @@
+@@ -0,0 +1,9 @@
 +:root { color-scheme: light dark; font: 14px system-ui, sans-serif; }
 +body { margin: 0; padding: 16px; min-width: 300px; }
 +h1 { font-size: 15px; margin: 0 0 12px; }
@@ -490,172 +317,38 @@ index 0000000..e3f0499
 +.row { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin: 6px 0; }
 +.muted { opacity: .7; font-size: 12px; }
 +ul { list-style: none; padding: 0; margin: 0 0 12px; max-height: 200px; overflow: auto; }
-+input[type=text] { font: inherit; flex: 1; padding: 4px 6px; }
 diff --git a/server/index.js b/server/index.js
-index d71610a..a8c80ce 100644
+index d71610a..1bb52fe 100644
 --- a/server/index.js
 +++ b/server/index.js
-@@ -9,20 +9,29 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+@@ -9,10 +9,14 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
  import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
  import { WebSocketServer, WebSocket } from "ws";
  import { z } from "zod";
-+import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
++import { readFile, stat } from "node:fs/promises";
 +import { homedir } from "node:os";
-+import { basename, dirname, extname, join, resolve } from "node:path";
++import { basename, extname, resolve } from "node:path";
  
  const PORT = Number(process.env.ZEN_CONTROL_PORT || 17373);
  const HOST = "127.0.0.1";
  const CMD_TIMEOUT_MS = 45000;
 +const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
-+const CONFIG_DIR = join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "zen-control");
-+const SHORTCUTS_FILE = join(CONFIG_DIR, "shortcuts.json");
-+const NOT_CONNECTED = "The Zen Control extension is not connected. Make sure Zen is running with the extension installed (toolbar icon should show 'on').";
  const log = (...a) => console.error("[zen-control]", ...a);
  
  /* ---------- transport to the extension (owner or proxy) ---------- */
- 
--let ext = null;          // extension socket (when we own the port)
-+const exts = new Map();  // browserId -> {sock, info, since} (when we own the port)
- let upstream = null;     // socket to the owning bridge (when proxying)
- let mode = "starting";
-+let selectedBrowser = null;
- const pending = new Map(); // id -> {resolve, reject, timer}
-+const routes = new Map();  // id -> {ext, deliver} (owner: which extension a command went to)
- let seq = 0;
--const ctlClients = new Set();
-+let anonSeq = 0;
- 
- function settle(msg) {
-   const p = pending.get(msg.id);
-@@ -32,24 +41,44 @@ function settle(msg) {
-   msg.ok ? p.resolve(msg.result) : p.reject(new Error(msg.error || "Unknown error"));
- }
- 
--function sendCommand(cmd, args, timeout = CMD_TIMEOUT_MS) {
--  const target = mode === "owner" ? ext : upstream;
--  if (!target || target.readyState !== WebSocket.OPEN) {
--    const why = mode === "owner"
--      ? "The Zen Control extension is not connected. Make sure Zen is running with the extension installed (toolbar icon should show 'on')."
--      : "Not connected to the browser bridge yet; try again in a second.";
--    return Promise.reject(new Error(why));
-+function listBrowsers() {
-+  return [...exts.entries()].map(([id, e]) => ({ browserId: id, ...e.info, connectedAt: new Date(e.since).toISOString() }));
-+}
-+
-+function pickExt(id) {
-+  if (id) {
-+    const e = exts.get(id);
-+    if (!e) throw new Error(`Browser "${id}" is not connected. Use list_connected_browsers.`);
-+    return e;
-   }
-+  let best = null;
-+  for (const e of exts.values()) if (!best || e.since > best.since) best = e;
-+  if (!best) throw new Error(NOT_CONNECTED);
-+  return best;
-+}
-+
-+function dispatch(msg, deliver) {
-+  if (msg.cmd === "__browsers") return deliver({ type: "result", id: msg.id, ok: true, result: listBrowsers() });
-+  let e;
-+  try { e = pickExt(msg.browser); } catch (err) { return deliver({ type: "result", id: msg.id, ok: false, error: err.message }); }
-+  routes.set(msg.id, { ext: e, deliver });
-+  e.sock.send(JSON.stringify({ type: "cmd", id: msg.id, cmd: msg.cmd, args: msg.args }));
-+}
-+
-+function sendCommand(cmd, args, timeout = CMD_TIMEOUT_MS) {
-+  if (mode !== "owner" && (!upstream || upstream.readyState !== WebSocket.OPEN)) return Promise.reject(new Error("Not connected to the browser bridge yet; try again in a second."));
-   const id = `${process.pid}-${++seq}`;
-+  const msg = { type: "cmd", id, cmd, args, browser: selectedBrowser || undefined };
-   return new Promise((resolve, reject) => {
--    const timer = setTimeout(() => { pending.delete(id); reject(new Error(`Timed out after ${timeout}ms waiting for the browser (${cmd})`)); }, timeout + 1000);
-+    const timer = setTimeout(() => { pending.delete(id); routes.delete(id); reject(new Error(`Timed out after ${timeout}ms waiting for the browser (${cmd})`)); }, timeout + 1000);
-     pending.set(id, { resolve, reject, timer });
--    target.send(JSON.stringify({ type: "cmd", id, cmd, args }));
-+    if (mode === "owner") dispatch(msg, settle);
-+    else upstream.send(JSON.stringify(msg));
-   });
- }
- 
- function startOwner() {
--  const wss = new WebSocketServer({ host: HOST, port: PORT });
-+  const wss = new WebSocketServer({ host: HOST, port: PORT, maxPayload: 2 * MAX_UPLOAD_BYTES });
-   wss.on("listening", () => { mode = "owner"; log(`listening on ws://${HOST}:${PORT}`); });
-   wss.on("error", (e) => {
-     if (e.code === "EADDRINUSE") { wss.close(); startProxy(); }
-@@ -58,28 +87,37 @@ function startOwner() {
-   wss.on("connection", (sock, req) => {
-     const path = (req.url || "/").split("?")[0];
-     if (path === "/ext") {
--      if (ext && ext.readyState === WebSocket.OPEN) ext.close();
--      ext = sock;
-+      let id = `anon-${++anonSeq}`;
-+      const entry = { sock, info: {}, since: Date.now() };
-+      exts.set(id, entry);
-       log("extension connected");
-       sock.on("message", (data) => {
-         let msg; try { msg = JSON.parse(data); } catch { return; }
-+        if (msg.type === "hello") {
-+          exts.delete(id);
-+          id = msg.browserId || id;
-+          const old = exts.get(id);
-+          if (old && old.sock !== sock) old.sock.close();
-+          entry.info = { name: msg.name, version: msg.version, label: msg.label || undefined };
-+          exts.set(id, entry);
-+          return;
-+        }
-         if (msg.type !== "result") return;
--        // route: our own request, or one from a ctl client (id prefixed with its pid)
--        if (pending.has(msg.id)) return settle(msg);
--        for (const c of ctlClients) if (c.ids.has(msg.id)) { c.ids.delete(msg.id); c.sock.send(JSON.stringify(msg)); return; }
-+        const r = routes.get(msg.id);
-+        if (r) { routes.delete(msg.id); r.deliver(msg); }
-+      });
-+      sock.on("close", () => {
-+        if (exts.get(id) === entry) exts.delete(id);
-+        log("extension disconnected");
-+        for (const [rid, r] of routes) if (r.ext === entry) { routes.delete(rid); r.deliver({ type: "result", id: rid, ok: false, error: "Extension disconnected" }); }
-       });
--      sock.on("close", () => { if (ext === sock) { ext = null; log("extension disconnected"); } for (const p of pending.values()) { clearTimeout(p.timer); p.reject(new Error("Extension disconnected")); } pending.clear(); });
-     } else if (path === "/ctl") {
--      const c = { sock, ids: new Set() };
--      ctlClients.add(c);
-+      const deliver = (m) => { if (sock.readyState === WebSocket.OPEN) sock.send(JSON.stringify(m)); };
-       sock.on("message", (data) => {
-         let msg; try { msg = JSON.parse(data); } catch { return; }
--        if (msg.type !== "cmd") return;
--        if (!ext || ext.readyState !== WebSocket.OPEN) return sock.send(JSON.stringify({ type: "result", id: msg.id, ok: false, error: "The Zen Control extension is not connected. Make sure Zen is running with the extension installed." }));
--        c.ids.add(msg.id);
--        ext.send(JSON.stringify(msg));
-+        if (msg.type === "cmd") dispatch(msg, deliver);
-       });
--      sock.on("close", () => ctlClients.delete(c));
-+      sock.on("close", () => { for (const [rid, r] of routes) if (r.deliver === deliver) routes.delete(rid); });
-     } else {
-       sock.close();
-     }
-@@ -88,7 +126,7 @@ function startOwner() {
- 
- function startProxy() {
-   mode = "proxy";
--  const sock = new WebSocket(`ws://${HOST}:${PORT}/ctl`);
-+  const sock = new WebSocket(`ws://${HOST}:${PORT}/ctl`, { maxPayload: 2 * MAX_UPLOAD_BYTES });
-   sock.on("open", () => { upstream = sock; log("proxying through existing bridge"); });
-   sock.on("message", (data) => { let msg; try { msg = JSON.parse(data); } catch { return; } if (msg.type === "result") settle(msg); });
-   const retry = () => {
-@@ -103,6 +141,37 @@ function startProxy() {
+@@ -103,6 +107,24 @@ function startProxy() {
  
  startOwner();
  
 +/* ---------- helpers ---------- */
 +
 +const MIME = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml", ".pdf": "application/pdf", ".txt": "text/plain", ".csv": "text/csv", ".json": "application/json", ".zip": "application/zip", ".doc": "application/msword", ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".mp4": "video/mp4", ".mp3": "audio/mpeg" };
-+const expand = (p) => resolve(p.replace(/^~(?=$|\/)/, homedir()));
 +
 +async function loadFiles(paths) {
 +  let total = 0;
 +  const files = [];
 +  for (const p of paths) {
-+    const full = expand(p);
++    const full = resolve(p.replace(/^~(?=$|\/)/, homedir()));
 +    const s = await stat(full);
 +    if (!s.isFile()) throw new Error(`${full} is not a file`);
 +    total += s.size;
@@ -665,22 +358,10 @@ index d71610a..a8c80ce 100644
 +  return files;
 +}
 +
-+async function readShortcuts() {
-+  try { return JSON.parse(await readFile(SHORTCUTS_FILE, "utf8")); }
-+  catch (e) { if (e.code === "ENOENT") return {}; throw e; }
-+}
-+
-+function fillVars(v, vars) {
-+  if (typeof v === "string") return v.replace(/\{\{(\w+)\}\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
-+  if (Array.isArray(v)) return v.map((x) => fillVars(x, vars));
-+  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fillVars(x, vars)]));
-+  return v;
-+}
-+
  /* ---------- MCP surface ---------- */
  
  const server = new McpServer({ name: "zen-browser", version: "0.1.0" });
-@@ -117,13 +186,29 @@ const targetShape = {
+@@ -117,13 +139,29 @@ const targetShape = {
  function text(obj) {
    return { content: [{ type: "text", text: typeof obj === "string" ? obj : JSON.stringify(obj, null, 2) }] };
  }
@@ -693,13 +374,13 @@ index d71610a..a8c80ce 100644
    });
  }
  
-+async function runActions(actions, stopOnError = true) {
++async function runActions(actions, stopOnError) {
 +  const content = [];
 +  let failed = 0;
 +  for (const [i, a] of actions.entries()) {
-+    const run = runs.get(a.tool);
++    const run = a.tool !== "browser_batch" && runs.get(a.tool);
 +    let r;
-+    if (!run || ["browser_batch", "shortcuts_execute", "shortcuts_save"].includes(a.tool)) r = { isError: true, content: [{ type: "text", text: `Error: unknown or disallowed tool "${a.tool}"` }] };
++    if (!run) r = { isError: true, content: [{ type: "text", text: `Error: unknown or disallowed tool "${a.tool}"` }] };
 +    else { try { r = await run(a.args || {}); } catch (e) { r = { isError: true, content: [{ type: "text", text: `Error: ${e.message || e}` }] }; } }
 +    content.push({ type: "text", text: `--- ${i + 1}. ${a.tool}${r.isError ? " (failed)" : ""}` }, ...r.content);
 +    if (r.isError) { failed++; if (stopOnError) { content.push({ type: "text", text: `Stopped after action ${i + 1}; ${actions.length - i - 1} not run.` }); break; } }
@@ -710,7 +391,7 @@ index d71610a..a8c80ce 100644
  tool("tabs_list", "List open Zen browser tabs (id, url, title) and which tab is current.", {}, async () => text(await sendCommand("tabs_list", {})));
  tool("tab_new", "Open a new tab, optionally at a URL, and make it the current tab.", { url: z.string().url().optional(), active: z.boolean().optional().describe("Focus the tab (default true)") }, async (a) => text(await sendCommand("tab_new", a)));
  tool("tab_select", "Make a tab current and bring it to the front.", { tabId: z.number().int() }, async (a) => text(await sendCommand("tab_select", a)));
-@@ -132,6 +217,8 @@ tool("navigate", "Navigate the current tab to a URL and wait for the page to loa
+@@ -132,6 +170,8 @@ tool("navigate", "Navigate the current tab to a URL and wait for the page to loa
  tool("go_back", "Go back in history and wait for load.", { tabId }, async (a) => text(await sendCommand("back", a)));
  tool("go_forward", "Go forward in history and wait for load.", { tabId }, async (a) => text(await sendCommand("forward", a)));
  tool("reload", "Reload the page and wait for load.", { tabId, bypassCache: z.boolean().optional() }, async (a) => text(await sendCommand("reload", a)));
@@ -719,45 +400,22 @@ index d71610a..a8c80ce 100644
  
  tool("read_page", "Get a compact outline of the visible page: headings, text, and every interactive element with a ref (e.g. [e7] button \"Sign in\") that click/type/hover accept. Call this before interacting; refs go stale after navigation.",
    { filter: z.enum(["all", "interactive"]).optional().describe("'interactive' omits plain text (default 'all')"), maxChars: z.number().int().optional().describe("Truncate output (default 20000)"), tabId },
-@@ -154,18 +241,93 @@ tool("scroll", "Scroll the page by direction (up/down/left/right/top/bottom, def
+@@ -154,6 +194,14 @@ tool("scroll", "Scroll the page by direction (up/down/left/right/top/bottom, def
  tool("wait_for", "Wait until a CSS selector exists or text appears on the page (or just sleep if neither given). timeout in ms (default 10000).",
    { selector: z.string().optional(), text: z.string().optional(), timeout: z.number().int().optional(), tabId }, async (a) => text(await sendCommand("wait_for", a, (a.timeout || 10000) + 2000)));
  
-+const uploadTarget = { ...targetShape, x: z.number().optional().describe("Drop at viewport x (with y) instead of a ref/selector"), y: z.number().optional() };
-+tool("file_upload", "Upload local files into a page: sets an <input type=file> (ref/selector, a label/button wrapping one, or the page's only file input) or drops the files onto a drop zone (ref/selector or x/y). Max 50 MB total.",
-+  { paths: z.array(z.string()).min(1).describe("Absolute or ~ paths"), ...uploadTarget },
-+  async ({ paths, ...a }) => text(await sendCommand("upload", { ...a, files: await loadFiles(paths) }, 60000)));
-+tool("upload_image", "Upload an image into a page like file_upload: either a local image file (path) or a fresh screenshot of a tab (screenshot=true, screenshotTabId defaults to the target tab).",
-+  { path: z.string().optional(), screenshot: z.boolean().optional(), screenshotTabId: z.number().int().optional(), filename: z.string().optional(), ...uploadTarget },
-+  async ({ path, screenshot, screenshotTabId, filename, ...a }) => {
-+    let files;
-+    if (path) files = await loadFiles([path]);
-+    else if (screenshot) {
-+      const r = await sendCommand("screenshot", { tabId: screenshotTabId ?? a.tabId });
-+      files = [{ name: "screenshot.png", mime: "image/png", b64: r.dataUrl.replace(/^data:image\/png;base64,/, "") }];
-+    } else throw new Error("Pass path or screenshot=true");
-+    if (filename) files[0].name = filename;
++tool("file_upload", "Upload local files, or a fresh screenshot of a tab (screenshot=true), into a page: sets an <input type=file> (ref/selector, a label/button wrapping one, or the page's only file input) or drops the files onto a drop zone (ref/selector or x/y). Max 50 MB total.",
++  { paths: z.array(z.string()).optional().describe("Absolute or ~ paths"), screenshot: z.boolean().optional(), screenshotTabId: z.number().int().optional().describe("Tab to screenshot (default: the target tab)"), ...targetShape, x: z.number().optional().describe("Drop at viewport x (with y) instead of a ref/selector"), y: z.number().optional() },
++  async ({ paths, screenshot, screenshotTabId, ...a }) => {
++    if (!paths?.length && !screenshot) throw new Error("Pass paths or screenshot=true");
++    const files = paths?.length ? await loadFiles(paths) : [];
++    if (screenshot) files.push({ name: "screenshot.png", mime: "image/png", b64: (await sendCommand("screenshot", { tabId: screenshotTabId ?? a.tabId })).dataUrl.split(",")[1] });
 +    return text(await sendCommand("upload", { ...a, files }, 60000));
 +  });
-+
  tool("screenshot", "Capture the visible viewport of the current tab as a PNG (scaled to CSS pixels so click x/y match).", { tabId }, async (a) => {
    const r = await sendCommand("screenshot", a);
    const b64 = r.dataUrl.replace(/^data:image\/png;base64,/, "");
-   return { content: [{ type: "text", text: `Viewport ${r.viewportWidth}x${r.viewportHeight} CSS px; image ${r.width}x${r.height}${r.scale < 1 ? ` (scaled ${r.scale.toFixed(2)}; divide image coords by scale for click)` : ""}` }, { type: "image", data: b64, mimeType: "image/png" }] };
- });
-+tool("gif_creator", "Record the current tab as an animated GIF. start: begin recording (a frame is captured after every page action). stop: stop recording. export: write the GIF to path (frames kept). clear: drop frames.",
-+  { action: z.enum(["start", "stop", "export", "clear"]), path: z.string().optional().describe("Output file for export (absolute or ~)"), frameDelayMs: z.number().int().positive().optional().describe("Per-frame delay for export (default 1000)"), maxWidth: z.number().int().positive().optional().describe("Export width cap (default 800)"), tabId },
-+  async ({ action, path, ...a }) => {
-+    if (action !== "export") return text(await sendCommand(`gif_${action}`, a));
-+    if (!path) throw new Error("export needs path");
-+    const r = await sendCommand("gif_export", a, 120000);
-+    const out = expand(path);
-+    await mkdir(dirname(out), { recursive: true });
-+    await writeFile(out, Buffer.from(r.b64, "base64"));
-+    return text({ path: out, frames: r.frames, width: r.width, height: r.height, bytes: r.bytes });
-+  });
- tool("evaluate", "Run JavaScript in the page (async function body; use `return` for a result, which is JSON-serialized). Runs in the extension's content-script sandbox with full DOM access; the page's own JS globals are reachable via window.wrappedJSObject.",
-   { code: z.string(), tabId }, async (a) => text((await sendCommand("evaluate", a)).result));
+@@ -164,6 +212,16 @@ tool("evaluate", "Run JavaScript in the page (async function body; use `return`
  tool("console_logs", "Read console output and uncaught errors captured on the current page since it loaded.",
    { level: z.enum(["log", "info", "warn", "error", "debug"]).optional(), limit: z.number().int().optional(), clear: z.boolean().optional(), tabId },
    async (a) => { const r = await sendCommand("console_logs", a); return text(r.count ? r.logs.map((l) => `[${new Date(l.t).toISOString().slice(11, 19)}] ${l.level}: ${l.text}`).join("\n") : "No console output captured."); });
@@ -768,49 +426,9 @@ index d71610a..a8c80ce 100644
 +    if (!r.count) return text("No requests captured for this tab.");
 +    return text(r.requests.map((q) => `${q.method} ${q.error ? `ERR ${q.error}` : q.status ?? "pending"} ${q.type}${q.fromCache ? " (cache)" : ""}${q.ms != null ? ` ${q.ms}ms` : ""} ${q.url}`).join("\n") + (r.total > r.count ? `\n(${r.total - r.count} earlier omitted)` : ""));
 +  });
-+
-+tool("list_connected_browsers", "List browsers (Zen profiles/instances) with the Zen Control extension connected, and which one this session targets.", {}, async () => {
-+  const list = await sendCommand("__browsers", {}, 3000);
-+  return text({ selected: selectedBrowser || "(most recently connected)", browsers: list });
-+});
-+tool("select_browser", "Target a specific connected browser (browserId from list_connected_browsers) for all following commands; omit browserId to go back to the most recently connected one.",
-+  { browserId: z.string().optional() }, async ({ browserId }) => {
-+    if (browserId) {
-+      const list = await sendCommand("__browsers", {}, 3000);
-+      if (!list.some((b) => b.browserId === browserId)) throw new Error(`Browser "${browserId}" is not connected`);
-+    }
-+    selectedBrowser = browserId || null;
-+    return text({ selected: selectedBrowser || "(most recently connected)" });
-+  });
-+
 +tool("browser_batch", "Run several tools in one call, in order. Each action is {tool, args} using the tool names above (e.g. navigate, click, type, screenshot). Stops at the first error unless stopOnError=false.",
 +  { actions: z.array(z.object({ tool: z.string(), args: z.record(z.string(), z.any()).optional() })).min(1), stopOnError: z.boolean().optional() },
 +  async (a) => runActions(a.actions, a.stopOnError !== false));
-+tool("shortcuts_list", `List saved shortcuts (named action sequences stored in ${SHORTCUTS_FILE}).`, {}, async () => {
-+  const s = await readShortcuts();
-+  const names = Object.keys(s);
-+  return text(names.length ? names.map((n) => `${n}: ${s[n].description || ""} (${s[n].actions.length} actions)`).join("\n") : "No shortcuts saved.");
-+});
-+tool("shortcuts_save", "Save (or overwrite) a named shortcut: a browser_batch action list. String args may contain {{var}} placeholders filled at execution. Pass an empty actions list to delete it.",
-+  { name: z.string().regex(/^[\w.-]+$/), description: z.string().optional(), actions: z.array(z.object({ tool: z.string(), args: z.record(z.string(), z.any()).optional() })) },
-+  async ({ name, description, actions }) => {
-+    const s = await readShortcuts();
-+    if (actions.length) s[name] = { description, actions }; else delete s[name];
-+    await mkdir(CONFIG_DIR, { recursive: true });
-+    await writeFile(SHORTCUTS_FILE, JSON.stringify(s, null, 2) + "\n");
-+    return text(actions.length ? `Saved shortcut "${name}"` : `Deleted shortcut "${name}"`);
-+  });
-+tool("shortcuts_execute", "Run a saved shortcut, filling {{var}} placeholders from vars.",
-+  { name: z.string(), vars: z.record(z.string(), z.string()).optional(), stopOnError: z.boolean().optional() },
-+  async ({ name, vars, stopOnError }) => {
-+    const sc = (await readShortcuts())[name];
-+    if (!sc) throw new Error(`No shortcut "${name}". Use shortcuts_list.`);
-+    return runActions(fillVars(sc.actions, vars || {}), stopOnError !== false);
-+  });
-+
  tool("browser_status", "Check whether the Zen Control extension is connected to this bridge.", {}, async () => {
--  try { const r = await sendCommand("ping", {}, 3000); return text({ connected: true, mode, currentTabId: r.currentTabId }); }
-+  try { const r = await sendCommand("ping", {}, 3000); return text({ connected: true, mode, browser: r.browserId, selected: selectedBrowser || undefined, currentTabId: r.currentTabId }); }
+   try { const r = await sendCommand("ping", {}, 3000); return text({ connected: true, mode, currentTabId: r.currentTabId }); }
    catch (e) { return text({ connected: false, mode, error: e.message }); }
- });
- 

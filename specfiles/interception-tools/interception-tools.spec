@@ -17,11 +17,6 @@ BuildRequires: libevdev-devel
 BuildRequires: yaml-cpp-devel
 BuildRequires: systemd-devel
 
-Requires: libevdev
-Requires: systemd
-Requires: yaml-cpp
-Requires: glibc
-
 %description
 The Interception Tools is a small set of utilities for operating on input events of evdev devices.
 
@@ -29,14 +24,11 @@ The Interception Tools is a small set of utilities for operating on input events
 %setup -qn tools-v%{version}
 
 %build
-cmake -B build \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=%{_prefix} \
-    -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-cmake --build build -j%{?_smp_build_nproc}
+%cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+%cmake_build
 
 %install
-make -C build install DESTDIR=%{buildroot}
+%cmake_install
 install -Dm0755 udevmon.service %{buildroot}/%{_unitdir}/udevmon.service
 
 %files

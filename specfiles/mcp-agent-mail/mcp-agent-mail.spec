@@ -15,7 +15,6 @@ Source0:        %{url}/archive/v%{version}/mcp_agent_mail-%{version}.tar.gz
 Patch0:         0001-xdg-default-paths.patch
 
 BuildRequires:  python3.14-devel
-BuildRequires:  python-rpm-macros
 BuildRequires:  uv
 BuildRequires:  gcc
 Requires:       /usr/bin/python3.14
@@ -28,8 +27,6 @@ backed by Git and SQLite.
 
 %prep
 %autosetup -p1 -n mcp_agent_mail-%{version}
-
-%build
 
 %install
 export UV_PYTHON_DOWNLOADS=never UV_LINK_MODE=copy UV_NO_CACHE=1

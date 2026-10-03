@@ -12,31 +12,21 @@ Version:     %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
 Release:     1%{?dist}
 Summary:     A tool for launching non-steam games with proton
 
-# F41 doesn't ship urllib3 >= 2.0 needed
-%global urllib3 2.3.0
-
 License:        GPLv3
 URL:            https://github.com/Open-Wine-Components/%{_name}
 Source0:        %{url}/archive/%{commit}/%{_name}-%{shortcommit}.tar.gz
-Source1:        https://github.com/urllib3/urllib3/releases/download/%{urllib3}/urllib3-%{urllib3}.tar.gz
 Source2:        umu-launcher-%{commit}-vendor.tar.zst
-Source3:        umu-launcher-git-tarballer
 
 BuildArch:      x86_64 aarch64
 BuildRequires:  meson >= 0.54.0
 BuildRequires:  ninja-build
-BuildRequires:  cmake
-BuildRequires:  g++
 BuildRequires:  gcc-c++
 BuildRequires:  scdoc
 BuildRequires:  git
-BuildRequires:  sed
 BuildRequires:  python3-devel
 BuildRequires:  python3-build
 BuildRequires:  python3-installer
 BuildRequires:  python3-hatchling
-BuildRequires:  python
-BuildRequires:  python3
 BuildRequires:  python3-pip
 BuildRequires:  libzstd-devel
 BuildRequires:  python3-hatch-vcs
@@ -44,12 +34,10 @@ BuildRequires:  python3-wheel
 BuildRequires:  python3-xlib
 BuildRequires:  python3-pyzstd
 BuildRequires:  python3-vdf
-BuildRequires:  python3-hatch-vcs
 BuildRequires:  cargo
+BuildRequires:  cargo-rpm-macros
 BuildRequires:  python3-urllib3
-BuildRequires:  rust2rpm
 
-Requires:	python
 Requires:	python3
 Requires:	python3-xlib
 Requires:	python3-filelock

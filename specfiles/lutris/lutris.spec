@@ -1,17 +1,7 @@
-## START: Set by rpmautospec
-## (rpmautospec version 0.8.5)
-## RPMAUTOSPEC: autorelease, autochangelog
-%define autorelease(e:s:pb:n) %{?-p:0.}%{lua:
-    release_number = 6;
-    base_release_number = tonumber(rpm.expand("%{?-b*}%{!?-b:1}"));
-    print(release_number + base_release_number - 1);
-}%{?-e:.%{-e*}}%{?-s:.%{-s*}}%{!?-n:%{?dist}}
-## END: Set by rpmautospec
-
 %define debug_package %{nil}
 Name:           lutris
 Version:        0.5.22
-Release:        %autorelease
+Release:        6%{?dist}
 Summary:        Install and play any video game easily
 
 # Automatically converted from old format: GPLv3 - review is highly recommended.
@@ -34,27 +24,6 @@ Requires:       hicolor-icon-theme
 Requires:       gnome-desktop3
 Requires:       python3-distro
 Requires:       python3-cairo
-
-# Tests
-BuildRequires:  python3dist(pytest)
-BuildRequires:  pkgconfig(gdk-3.0)
-BuildRequires:  pkgconfig(webkit2gtk-4.1)
-BuildRequires:  pkgconfig(py3cairo)
-BuildRequires:  libX11-devel
-
-%if 0%{?fedora} || 0%{?rhel} < 10
-%ifarch x86_64
-Recommends:     mesa-dri-drivers(x86-32)
-Recommends:     mesa-vulkan-drivers(x86-32)
-Recommends:     vulkan-loader(x86-32)
-Recommends:     mesa-libGL(x86-32)
-Recommends:     libXScrnSaver(x86-32)
-Recommends:     pipewire(x86-32)
-Recommends:     libFAudio(x86-32)
-Recommends:     wine-pulseaudio(x86-32)
-Recommends:     wine-core(x86-32)
-%endif
-%endif
 
 Requires:       libXScrnSaver
 Requires:       mesa-vulkan-drivers
@@ -104,34 +73,13 @@ desktop-file-install --dir=%{buildroot}%{_datadir}/applications share/applicatio
 desktop-file-install --dir=%{buildroot}%{_datadir}/applications share/applications/net.%{name}.Lutris1.desktop
 %find_lang %{name} --with-man
 
-%check
-# Tests disabled for now. Let's retry next patch.
-
-# Python tests: Disabled because either they are querying hardware (Don't work in mock) or they're
-# trying to spawn processes, which is also blocked.
-#%%pytest --ignore=tests/test_dialogs.py --ignore=tests/test_installer.py --ignore=tests/test_api.py -k "not GetNvidiaDriverInfo and not GetNvidiaGpuInfo and not import_module and not options"
-
 %files -f %{pyproject_files} -f %{name}.lang
 %{_bindir}/%{name}
 %{_datadir}/%{name}/
 %{_datadir}/applications/net.%{name}.Lutris.desktop
 %{_datadir}/applications/net.%{name}.Lutris1.desktop
-%{_datadir}/icons/hicolor/scalable/apps/net.lutris.Lutris.svg
-%{_datadir}/icons/hicolor/16x16/apps/net.lutris.Lutris.png
-%{_datadir}/icons/hicolor/22x22/apps/net.lutris.Lutris.png
-%{_datadir}/icons/hicolor/24x24/apps/net.lutris.Lutris.png
-%{_datadir}/icons/hicolor/32x32/apps/net.lutris.Lutris.png
-%{_datadir}/icons/hicolor/48x48/apps/net.lutris.Lutris.png
-%{_datadir}/icons/hicolor/64x64/apps/net.lutris.Lutris.png
-%{_datadir}/icons/hicolor/128x128/apps/net.lutris.Lutris.png
-%{_datadir}/icons/hicolor/128x128/mimetypes/application-x-lutris.png
-%{_datadir}/icons/hicolor/16x16/mimetypes/application-x-lutris.png
-%{_datadir}/icons/hicolor/22x22/mimetypes/application-x-lutris.png
-%{_datadir}/icons/hicolor/24x24/mimetypes/application-x-lutris.png
-%{_datadir}/icons/hicolor/32x32/mimetypes/application-x-lutris.png
-%{_datadir}/icons/hicolor/48x48/mimetypes/application-x-lutris.png
-%{_datadir}/icons/hicolor/64x64/mimetypes/application-x-lutris.png
-%{_datadir}/icons/hicolor/scalable/mimetypes/application-x-lutris.svg
+%{_datadir}/icons/hicolor/*/apps/net.lutris.Lutris.*
+%{_datadir}/icons/hicolor/*/mimetypes/application-x-lutris.*
 %{_datadir}/mime/packages/application-x-lutris.xml
 %{_datadir}/man/man1/%{name}.1.gz
 %{_metainfodir}/net.lutris.Lutris.metainfo.xml

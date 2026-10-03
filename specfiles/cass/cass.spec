@@ -34,14 +34,10 @@ export CARGO_PROFILE_RPM_LTO=thin
 
 %install
 install -Dpsm0755 target/rpm/%{name} %{buildroot}%{_bindir}/%{name}
-target/rpm/%{name} completions bash > %{name}.bash
-target/rpm/%{name} completions zsh > _%{name}
-target/rpm/%{name} completions fish > %{name}.fish
-target/rpm/%{name} man > %{name}.1
-install -Dpm0644 %{name}.bash %{buildroot}%{bash_completions_dir}/%{name}
-install -Dpm0644 _%{name} %{buildroot}%{zsh_completions_dir}/_%{name}
-install -Dpm0644 %{name}.fish %{buildroot}%{fish_completions_dir}/%{name}.fish
-install -Dpm0644 %{name}.1 %{buildroot}%{_mandir}/man1/%{name}.1
+target/rpm/%{name} completions bash | install -Dm0644 /dev/stdin %{buildroot}%{bash_completions_dir}/%{name}
+target/rpm/%{name} completions zsh | install -Dm0644 /dev/stdin %{buildroot}%{zsh_completions_dir}/_%{name}
+target/rpm/%{name} completions fish | install -Dm0644 /dev/stdin %{buildroot}%{fish_completions_dir}/%{name}.fish
+target/rpm/%{name} man | install -Dm0644 /dev/stdin %{buildroot}%{_mandir}/man1/%{name}.1
 
 %files
 %license LICENSE

@@ -86,34 +86,15 @@ mv AppleColorEmoji.ttf-with-pua-varsel AppleColorEmoji.ttf
 rm AppleColorEmoji.ttf-with-pua
 
 %install
-install -m 0755 -d %{buildroot}%{fontdir}
-install -m 0644 -p AppleColorEmoji.ttf \
-    %{buildroot}%{fontdir}/
-
-install -m 0755 -d %{buildroot}%{fontconfig_avail} \
-                   %{buildroot}%{fontconfig_confdir}
-install -m 0644 -p %{SOURCE1} \
-    %{buildroot}%{fontconfig_avail}/%{fontconf}
-ln -s %{fontconfig_avail}/%{fontconf} \
-    %{buildroot}%{fontconfig_confdir}/%{fontconf}
-
-install -m 0755 -d %{buildroot}%{_metainfodir}
-install -m 0644 -p %{SOURCE2} \
-    %{buildroot}%{_metainfodir}/%{fontname}.metainfo.xml
+install -Dpm644 AppleColorEmoji.ttf -t %{buildroot}%{fontdir}
+install -Dpm644 %{SOURCE1} %{buildroot}%{fontconfig_avail}/%{fontconf}
+install -d %{buildroot}%{fontconfig_confdir}
+ln -s %{fontconfig_avail}/%{fontconf} %{buildroot}%{fontconfig_confdir}/%{fontconf}
+install -Dpm644 %{SOURCE2} %{buildroot}%{_metainfodir}/%{fontname}.metainfo.xml
 
 %check
 appstream-util validate-relax --nonet \
     %{buildroot}/%{_metainfodir}/%{fontname}.metainfo.xml
-
-%post
-if [ -x /usr/bin/fc-cache ]; then
-    fc-cache -f %{_datadir}/fonts >/dev/null 2>&1 || :
-fi
-
-%postun
-if [ $1 -eq 0 ] && [ -x /usr/bin/fc-cache ]; then
-    fc-cache -f %{_datadir}/fonts >/dev/null 2>&1 || :
-fi
 
 %files
 %license LICENSE

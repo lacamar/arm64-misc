@@ -6,36 +6,28 @@
 Name:           wldash
 Version:        %{tag}
 Release:        4%{?dist}
-Summary:        Hot corners for Wayland. Create anchors in the corners of your monitors and execute a command of your choice.
+Summary:        Dashboard, launcher and control panel for Wayland
 
 License:        GNU GPL v3
 URL:            https://git.sr.ht/~kennylevinsen/%{name}
 Source0:        https://git.sr.ht/~kennylevinsen/%{name}/archive/%{shortcommit}.tar.gz
 Source1:        %{name}-%{shortcommit}-vendor.tar.zst
 
-BuildArch:      %{_target_cpu}
-BuildRequires:  rust
-BuildRequires:  cargo
-BuildRequires:  pkgconfig
 BuildRequires:  wayland-devel
 BuildRequires:  fontconfig-devel
 BuildRequires:  dbus-devel
 BuildRequires:  pulseaudio-libs-devel
 BuildRequires:  libxkbcommon-devel
 BuildRequires:  rust-packaging
-BuildRequires:  cargo
 
 %description
-Hot corners for Wayland. Create anchors in the corners of your monitors and execute a command of your choice.
+A wayland launcher/dashboard with calculator, battery, volume, brightness,
+clock and date widgets.
 
 %prep
 %autosetup -n %{name}-%{shortcommit} -p1 -a1
 mv %{name}-%{shortcommit}-vendor/vendor vendor
-mv %{name}-%{shortcommit}-vendor/vendor-config.toml vendor-config.toml
-rm -rf wldash-1156b35-vendor
 %cargo_prep -v vendor
-
-%generate_buildrequires
 
 %build
 %cargo_vendor_manifest

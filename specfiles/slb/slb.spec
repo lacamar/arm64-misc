@@ -29,12 +29,9 @@ go build -trimpath -buildmode=pie -o %{name} \
 
 %install
 install -Dpm0755 %{name} %{buildroot}%{_bindir}/%{name}
-./%{name} completion bash > slb.bash
-./%{name} completion zsh > _slb
-./%{name} completion fish > slb.fish
-install -Dpm0644 slb.bash %{buildroot}%{bash_completions_dir}/slb
-install -Dpm0644 _slb %{buildroot}%{zsh_completions_dir}/_slb
-install -Dpm0644 slb.fish %{buildroot}%{fish_completions_dir}/slb.fish
+./%{name} completion bash | install -Dm0644 /dev/stdin %{buildroot}%{bash_completions_dir}/slb
+./%{name} completion zsh | install -Dm0644 /dev/stdin %{buildroot}%{zsh_completions_dir}/_slb
+./%{name} completion fish | install -Dm0644 /dev/stdin %{buildroot}%{fish_completions_dir}/slb.fish
 
 %files
 %license LICENSE

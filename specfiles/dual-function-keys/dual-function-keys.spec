@@ -18,10 +18,6 @@ BuildRequires: libevdev-devel
 BuildRequires: yaml-cpp-devel
 
 Requires: interception-tools
-Requires: libevdev
-Requires: systemd
-Requires: yaml-cpp
-Requires: glibc
 
 %description
 Tap for one key, hold for another. Great for modifier keys like: hold for ctrl, tap for delete. A hand-saver for those with restricted finger mobility. A plugin for interception tools.
@@ -30,11 +26,10 @@ Tap for one key, hold for another. Great for modifier keys like: hold for ctrl, 
 %autosetup
 
 %build
-make DESTDIR=%{buildroot} PREFIX=%{_prefix} -j%{?_smp_build_nproc}
+%make_build PREFIX=%{_prefix}
 
 %install
-make install DESTDIR=%{buildroot} PREFIX=%{_prefix}
-
+%make_install PREFIX=%{_prefix}
 
 %files
 %license LICENSE.md

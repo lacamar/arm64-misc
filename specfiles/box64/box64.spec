@@ -1,6 +1,3 @@
-# Tests are disabled as they require x86_64 libraries to run
-%bcond tests 0
-
 %global forgeurl https://github.com/ptitSeb/box64
 
 %global common_description %{expand:
@@ -8,22 +5,8 @@ Box64 lets you run x86_64 Linux programs (such as games) on non-x86_64 Linux
 systems, like ARM (host system needs to be 64-bit little-endian).}
 
 %global tag 0.4.5.1
-# Raw upstream git tag, exactly as it appears in box64's repo (e.g.
-# "v0.4.5-1") - box64 sometimes suffixes a hotfix number with a literal
-# "-N", which rpm's Version field can't contain, so the tag global above is
-# always the hyphen-free, rpm-legal normalized form. Source0 below must
-# fetch the real ref, so it uses tag_ref (kept exact) rather than
-# reconstructing "v" + version, which silently 404s whenever a tag doesn't
-# fit the plain "vMAJOR.MINOR.PATCH" shape.
-# NOTE: rpm expands macros even inside comments (a bare %%autosetup or
-# %%{tag} reference here would itself be expanded and misparsed as a real
-# directive) - keep every macro-looking token in this comment block
-# %%-escaped.
+# Exact upstream tag; may carry a -N suffix rpm Version can't hold
 %global tag_ref v0.4.5-1
-# GitHub's archive generator strips a leading "v" from the tag (but keeps
-# everything else literal, hyphens included) when naming the extracted
-# top-level directory - e.g. tag "v0.4.5-1" unpacks as "box64-0.4.5-1", not
-# "box64-" + version (0.4.5.1). %%autosetup below needs this exact name.
 %global tag_ref_nov %(echo %{tag_ref} | sed 's/^v//')
 
 Name:           box64
@@ -41,19 +24,12 @@ BuildRequires:  make
 BuildRequires:  perl-podlators
 BuildRequires:  systemd-rpm-macros
 
-# box64 only supports these architectures
-ExclusiveArch:  aarch64 riscv64 ppc64le %{x86_64}
+ExclusiveArch:  aarch64
 
 Requires:       %{name}-data = %{version}-%{release}
-# These should not be pulled in on x86_64 as they can cause a loop and prevent
-# any binary from successfully executing (#2344770)
-%ifnarch %{x86_64}
 Recommends:     %{name}-binfmts = %{version}-%{release}
-%endif
-%ifarch aarch64
 Requires(post): %{_sbindir}/update-alternatives
 Requires(postun): %{_sbindir}/update-alternatives
-%endif
 
 %description    %{common_description}
 
@@ -65,7 +41,6 @@ BuildArch:      noarch
 
 This package provides common data files for box64.
 
-%ifnarch %{x86_64}
 %package        binfmts
 Summary:        binfmt_misc handler configurations for box64
 
@@ -73,9 +48,7 @@ Summary:        binfmt_misc handler configurations for box64
 
 This package provides binfmt_misc handler configurations to use box64 to
 execute x86_64 binaries.
-%endif
 
-%ifarch aarch64
 %package        asahi
 Summary:        Apple Silicon version of box64
 
@@ -87,7 +60,6 @@ Requires(postun): %{_sbindir}/update-alternatives
 
 This package contains a version of box64 targeting Apple Silicon systems using
 a 16k page size.
-%endif
 
 %prep
 %autosetup -n %{name}-%{tag_ref_nov} -p1
@@ -102,55 +74,26 @@ sed -i 's/\r$//' docs/*.md
 sed -i 's:/etc/binfmt.d:%{_binfmtdir}:g' CMakeLists.txt
 
 %build
-%global common_flags -DNOGIT=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBOX32=ON -DBOX32_BINFMT=ON -DBOX32_FMT=ON
-%ifarch aarch64
-%global common_flags -DARM_DYNAREC=ON %{common_flags}
+%global common_flags -DARM_DYNAREC=ON -DNOGIT=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBOX32=ON -DBOX32_BINFMT=ON -DBOX32_FMT=ON
 
 # Apple Silicon
-%cmake %{common_flags} -DM1=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBOX32=ON -DBOX32_BINFMT=ON
+%cmake %{common_flags} -DM1=ON
 %cmake_build
 cp -p %{__cmake_builddir}/%{name} %{name}.asahi
 rm -r %{__cmake_builddir}
 
-%endif
-
-%cmake %{common_flags} -DNO_LIB_INSTALL=ON \
-%ifarch aarch64
-  -DARM64=ON
-%endif
-%ifarch riscv64
-  -DRV64=ON
-%endif
-%ifarch ppc64le
-  -DPPC64LE=ON
-%endif
-%ifarch %{x86_64}
-  -DLD80BITS=ON \
-  -DNOALIGN=ON
-%endif
+%cmake %{common_flags} -DNO_LIB_INSTALL=ON -DARM64=ON
 %cmake_build
 
 # Build manpage
 pod2man --stderr docs/%{name}.pod > docs/%{name}.1
 
 %install
-%ifarch %{x86_64}
-# Install manually as cmake_install doesn't seem to work on x86_64
-install -Dpm0755 -t %{buildroot}%{_bindir} %{__cmake_builddir}/%{name}
-install -Ddpm0755 %{buildroot}%{_binfmtdir}
-sed 's:${CMAKE_INSTALL_PREFIX}/bin/${BOX64}:%{_bindir}/%{name}:' \
-  < system/box32.conf.cmake > system/box32.conf
-sed 's:${CMAKE_INSTALL_PREFIX}/bin/${BOX64}:%{_bindir}/%{name}:' \
-  < system/box64.conf.cmake > system/box64.conf
-install -Dpm0644 -t %{buildroot}%{_sysconfdir} system/box64.box64rc
-%else
 %cmake_install
-%endif
 
 # Install manpage
 install -Dpm0644 -t %{buildroot}%{_mandir}/man1 docs/%{name}.1
 
-%ifarch aarch64
 mv %{buildroot}%{_bindir}/%{name} %{buildroot}%{_bindir}/%{name}.aarch64
 touch %{buildroot}%{_bindir}/%{name}
 chmod +x %{buildroot}%{_bindir}/%{name}
@@ -175,27 +118,14 @@ if [ $1 -eq 0 ] ; then
   %{_sbindir}/update-alternatives --remove %{name} %{_bindir}/%{name}.asahi
 fi
 
-%endif
-
-%if %{with tests}
-%check
-%ctest
-%endif
-
 %files
-%ifarch aarch64
 %ghost %{_bindir}/%{name}
 %{_bindir}/%{name}.aarch64
-%else
-%{_bindir}/%{name}
-%endif
 %{_bindir}/box64-configurator
 
-%ifarch aarch64
 %files asahi
 %ghost %{_bindir}/%{name}
 %{_bindir}/%{name}.asahi
-%endif
 
 %files data
 %license LICENSE
@@ -207,11 +137,9 @@ fi
 %config(noreplace) %{_sysconfdir}/box64.box64rc
 %{_datadir}/applications/box64-configurator.desktop
 
-%ifnarch %{x86_64}
 %files binfmts
 %{_binfmtdir}/box32.conf
 %{_binfmtdir}/box64.conf
-%endif
 
 %changelog
 * Fri Aug 21 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.5.1-2

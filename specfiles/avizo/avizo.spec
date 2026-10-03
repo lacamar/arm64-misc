@@ -9,8 +9,6 @@ License: GNU GPL v3
 URL: https://github.com/heyjuvi/avizo
 Source0: https://github.com/heyjuvi/avizo/archive/refs/tags/%{version}.tar.gz
 
-BuildRequires: boost
-BuildRequires: cmake
 BuildRequires: pkgconfig
 BuildRequires: meson
 BuildRequires: gcc
@@ -29,15 +27,11 @@ Avizo is a simple notification daemon, mainly intended to be used for multimedia
 %autosetup
 
 %build
-meson setup build \
-    -Dbuildtype=release \
-    -Dprefix=%{_prefix}
-ninja -C build
+%meson
+%meson_build
 
 %install
-DESTDIR=%{buildroot} ninja -C build install
-
-
+%meson_install
 
 %files
 %license LICENSE

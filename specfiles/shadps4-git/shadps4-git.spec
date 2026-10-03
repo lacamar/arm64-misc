@@ -19,7 +19,6 @@ License:        GPL-2.0-or-later
 URL:            https://github.com/shadps4-emu/shadPS4
 Source0:        https://github.com/shadps4-emu/shadPS4/archive/%{commit}/shadPS4-%{commit}.tar.gz
 Source1:        https://github.com/shadps4-emu/ext-ffmpeg-core/releases/download/%{ffmpeg_sha}/ffmpeg-linux-arm64.zip
-Source2:        https://github.com/shadps4-emu/ext-ffmpeg-core/releases/download/%{ffmpeg_sha}/ffmpeg-linux-x64.zip
 # Native aarch64 support: box64 dynarec as guest CPU, bridges, JIT fault recovery,
 # portable SRT walker, 16K page tracking (github.com/lacamar/shadps4 branch aarch64)
 Patch0:         0001-native-aarch64-box64.patch
@@ -34,12 +33,9 @@ local externals = {
  { name="abseil-cpp", ref="76bb24329e8bf5f39704eb10d21b9a80befa7c81", owner="abseil", path="abseil-cpp" },
  { name="box64", ref="496fb4bebf13f9172db7cd33a52e9aad3bc89874", owner="ptitSeb", path="box64" },
  { name="cpp-httplib", ref="28f8264d134a576422cd0f99f19719c2749d9e47", owner="shadexternals", path="cpp-httplib" },
- { name="date", ref="a45ea7c17b4a7f320e199b71436074bd624c9e15", owner="HowardHinnant", path="date" },
  { name="ext-discord-rpc", ref="19f66e6dcabb2268965f453db9e5774ede43238f", owner="shadps4-emu", path="discord-rpc" },
  { name="rapidjson", ref="d621dc9e9c77f81e5c8a35b8dcc16dcd63351321", owner="Tencent", path="discord-rpc/thirdparty/rapidjson" },
- { name="epoll-shim", ref="18159584bb3d17e601b9315a7398ace018251bdc", owner="jiixyj", path="epoll-shim" },
  { name="ext-boost", ref="ca6f230e67be7cc45fc919057f07b2aee64dadc1", owner="shadps4-emu", path="ext-boost" },
- { name="ext-wepoll", ref="d3bb81035304a0dc6a5ca48ebf0f8cee1fe269e4", owner="shadps4-emu", path="ext-wepoll" },
  { name="ext-ffmpeg-core", ref="94dde08c8a9e4271a93a2a7e4159e9fb05d30c0a", owner="shadps4-emu", path="ffmpeg-core" },
  { name="ext-fmt", ref="ec73fb72477d80926c758894a3ab2cb3994fd051", owner="shadps4-emu", path="fmt" },
  { name="freetype", ref="b91f75bd02db43b06d634591eb286d3eb0ce3b65", owner="freetype", path="freetype" },
@@ -97,7 +93,7 @@ end
 
 Conflicts:      %{_name}
 Provides:       %{_name} = %{version}-%{release}
-ExclusiveArch:  aarch64 x86_64
+ExclusiveArch:  aarch64
 
 BuildRequires:  cmake
 BuildRequires:  ninja-build
@@ -148,11 +144,7 @@ instead of requiring an x86-64 host.
 sed -i '/^execute_process(/,/OUTPUT_STRIP_TRAILING_WHITESPACE)/c set(FFMPEG_GIT_SHA %{ffmpeg_sha})' \
   externals/ffmpeg-core/CMakeLists.txt
 mkdir -p %{__cmake_builddir}/externals
-%ifarch aarch64
 cp %{SOURCE1} %{__cmake_builddir}/externals/ffmpeg-%{ffmpeg_sha}.zip
-%else
-cp %{SOURCE2} %{__cmake_builddir}/externals/ffmpeg-%{ffmpeg_sha}.zip
-%endif
 
 %build
 %cmake -G Ninja \

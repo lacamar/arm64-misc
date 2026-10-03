@@ -1,5 +1,3 @@
-%global forgeurl https://github.com/iDescriptor/iDescriptor
-
 # lib/idevice-rs and lib/uxplay are git submodules; GitHub's tag archive
 # doesn't include submodule content, so they're pulled in as separate
 # sources pinned to the exact commit iDescriptor v%{version} points at
@@ -13,8 +11,8 @@ Release:        2%{?dist}
 Summary:        Cross-platform tool for managing iDevices (iPhone, iPad, iPod)
 
 License:        AGPL-3.0-or-later
-URL:            %{forgeurl}
-Source0:        %{forgeurl}/archive/refs/tags/v%{version}/iDescriptor-%{version}.tar.gz
+URL:            https://github.com/iDescriptor/iDescriptor
+Source0:        %{url}/archive/refs/tags/v%{version}/iDescriptor-%{version}.tar.gz
 Source1:        https://github.com/uncor3/idevice/archive/%{idevice_commit}/idevice-rs-%{idevice_commit}.tar.gz
 Source2:        https://github.com/iDescriptor/uxplay/archive/%{uxplay_commit}/uxplay-%{uxplay_commit}.tar.gz
 

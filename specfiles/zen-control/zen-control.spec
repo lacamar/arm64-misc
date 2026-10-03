@@ -9,7 +9,7 @@
 
 Name:           zen-control
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        4%{?dist}
+Release:        5%{?dist}
 Summary:        MCP bridge and WebExtension to drive the Zen browser from Claude Code
 
 License:        LicenseRef-Not-specified
@@ -19,10 +19,10 @@ Source0:        %{url}/archive/%{commit}/%{name}-%{shortcommit}.tar.gz
 Patch0:         0001-chrome-parity-tools.patch
 Patch1:         0002-controlled-tab-marker.patch
 Patch2:         0003-background-control.patch
+Patch3:         0004-page-robustness.patch
 
 BuildArch:      noarch
 
-BuildRequires:  nodejs >= 18
 BuildRequires:  nodejs-npm
 Requires:       nodejs >= 18
 Requires:       zen-browser
@@ -77,6 +77,15 @@ chmod 0755 %{buildroot}%{_bindir}/%{name}
 %config(noreplace) %{_sysconfdir}/zen/policies/policies.json
 
 %changelog
+* Sat Oct 03 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-5
+- Drop GIF recording, shortcuts, multi-browser
+- Fold upload_image into file_upload
+- Auto-dismiss dialogs in controlled tabs
+- Add handle_dialog
+- Reload unloaded tabs on use
+- Element screenshots
+- Pierce shadow DOM
+
 * Wed Sep 30 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-4
 - Drive background tabs without activating them
 - Never focus the Zen window

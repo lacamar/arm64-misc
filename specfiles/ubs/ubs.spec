@@ -33,8 +33,6 @@ agents.
 %prep
 %autosetup -p1 -n ultimate_bug_scanner-%{version}
 
-%build
-
 %install
 install -Dpm0755 ubs %{buildroot}%{_datadir}/%{name}/ubs
 install -pm0644 VERSION detectors.yml %{buildroot}%{_datadir}/%{name}/

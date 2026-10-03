@@ -32,12 +32,9 @@ go build -trimpath -buildmode=pie -o %{name} \
 
 %install
 install -Dpm0755 %{name} %{buildroot}%{_bindir}/%{name}
-./%{name} completion bash > caam.bash
-./%{name} completion zsh > _caam
-./%{name} completion fish > caam.fish
-install -Dpm0644 caam.bash %{buildroot}%{bash_completions_dir}/caam
-install -Dpm0644 _caam %{buildroot}%{zsh_completions_dir}/_caam
-install -Dpm0644 caam.fish %{buildroot}%{fish_completions_dir}/caam.fish
+./%{name} completion bash | install -Dm0644 /dev/stdin %{buildroot}%{bash_completions_dir}/caam
+./%{name} completion zsh | install -Dm0644 /dev/stdin %{buildroot}%{zsh_completions_dir}/_caam
+./%{name} completion fish | install -Dm0644 /dev/stdin %{buildroot}%{fish_completions_dir}/caam.fish
 
 %files
 %license LICENSE

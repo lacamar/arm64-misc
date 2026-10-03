@@ -48,9 +48,6 @@ BuildRequires:  protobuf-devel
 BuildRequires:  protobuf-compiler
 BuildRequires:  systemd-rpm-macros
 
-Requires(post):   systemd
-Requires(preun):  systemd
-Requires(postun): systemd
 
 Recommends:     gnupg2
 Recommends:     pass
@@ -66,11 +63,8 @@ work with Proton Mail's end-to-end encryption.
 unzip -q %{SOURCE2} -d %{_builddir}/sentry-native-src
 
 %build
-export GO111MODULE=on
-export GOFLAGS=-mod=vendor
 export GOPROXY=off
 export GOSUMDB=off
-export CGO_ENABLED=1
 
 make build-nogui \
     BRIDGE_APP_VERSION=%{version} \

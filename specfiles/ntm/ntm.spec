@@ -30,12 +30,9 @@ go build -trimpath -buildmode=pie -tags=ensemble_experimental -o %{name} \
 
 %install
 install -Dpm0755 %{name} %{buildroot}%{_bindir}/%{name}
-./%{name} completion bash > ntm.bash
-./%{name} completion zsh > _ntm
-./%{name} completion fish > ntm.fish
-install -Dpm0644 ntm.bash %{buildroot}%{bash_completions_dir}/ntm
-install -Dpm0644 _ntm %{buildroot}%{zsh_completions_dir}/_ntm
-install -Dpm0644 ntm.fish %{buildroot}%{fish_completions_dir}/ntm.fish
+./%{name} completion bash | install -Dm0644 /dev/stdin %{buildroot}%{bash_completions_dir}/ntm
+./%{name} completion zsh | install -Dm0644 /dev/stdin %{buildroot}%{zsh_completions_dir}/_ntm
+./%{name} completion fish | install -Dm0644 /dev/stdin %{buildroot}%{fish_completions_dir}/ntm.fish
 
 %files
 %license LICENSE

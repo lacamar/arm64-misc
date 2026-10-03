@@ -41,9 +41,6 @@ BuildRequires:  systemd-rpm-macros
 Requires:       gtk3
 Requires:       libayatana-appindicator-gtk3
 Requires:       xdg-user-dirs
-Requires(post):   systemd
-Requires(preun):  systemd
-Requires(postun): systemd
 
 %description
 LocalSend is an open source cross-platform app that lets you share files

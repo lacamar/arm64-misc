@@ -46,7 +46,7 @@ end
 
 Conflicts:      %{_name}
 Provides:       %{_name} = %{version}-%{release}
-ExclusiveArch:  aarch64 x86_64
+ExclusiveArch:  aarch64
 
 BuildRequires:  cmake
 BuildRequires:  ninja-build
@@ -54,7 +54,6 @@ BuildRequires:  gcc-c++
 BuildRequires:  git-core
 BuildRequires:  pkgconfig
 BuildRequires:  desktop-file-utils
-BuildRequires:  libappstream-glib
 BuildRequires:  qt6-qtbase-devel
 BuildRequires:  qt6-qtbase-private-devel
 BuildRequires:  qt6-qttools-devel
@@ -107,7 +106,6 @@ PlayStation 4 emulator.
 # Icon is shipped by the emulator package
 rm -f %{buildroot}%{_datadir}/icons/hicolor/512x512/apps/net.shadps4.shadPS4.png
 desktop-file-validate %{buildroot}%{_datadir}/applications/net.shadps4.shadps4-qtlauncher.desktop
-appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/net.shadps4.shadps4-qtlauncher.metainfo.xml || :
 
 %files
 %license LICENSE

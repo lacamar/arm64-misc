@@ -1,4 +1,4 @@
-From ba392aa39635ad51a4f0287bf73f12d6a421ce5c Mon Sep 17 00:00:00 2001
+From d9aff6f8f7b208f9c3d7930bed35c9ae9fcb09c6 Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Sat, 26 Sep 2026 13:35:23 +0200
 Subject: [PATCH] render: color managed GPU renderer with HDR output
@@ -6,17 +6,18 @@ Subject: [PATCH] render: color managed GPU renderer with HDR output
 ---
  meson.build           |  20 +-
  meson.options         |   8 +
- src/colorspace.cpp    | 494 +++++++++++++++++++++++
- src/colorspace.hpp    | 120 ++++++
+ src/colorspace.cpp    | 514 ++++++++++++++++++++++++
+ src/colorspace.hpp    | 121 ++++++
  src/formatfactory.cpp |  11 +-
  src/formats/avif.cpp  |  57 ++-
+ src/formats/exr.cpp   |  47 ++-
  src/formats/heif.cpp  |  85 +++-
  src/formats/jpeg.cpp  |  70 +++-
  src/formats/jxl.cpp   | 133 +++++-
  src/formats/png.cpp   | 118 +++++-
  src/formats/raw.cpp   |  25 +-
  src/formats/svg.cpp   |  17 +
- src/formats/tiff.cpp  |   6 +
+ src/formats/tiff.cpp  | 165 ++++++++
  src/formats/webp.cpp  |  10 +
  src/gpu.hpp           |  25 ++
  src/gpu_gles.cpp      | 911 ++++++++++++++++++++++++++++++++++++++++++
@@ -28,7 +29,7 @@ Subject: [PATCH] render: color managed GPU renderer with HDR output
  src/ui_wayland.cpp    | 306 +++++++++++++-
  src/ui_wayland.hpp    |  36 ++
  src/viewer.cpp        |   2 +-
- 24 files changed, 2627 insertions(+), 107 deletions(-)
+ 25 files changed, 2839 insertions(+), 122 deletions(-)
  create mode 100644 src/colorspace.cpp
  create mode 100644 src/colorspace.hpp
  create mode 100644 src/gpu.hpp
@@ -141,10 +142,10 @@ index 85f5a29..f21bd09 100644
      'drm',
 diff --git a/src/colorspace.cpp b/src/colorspace.cpp
 new file mode 100644
-index 0000000..fe9bc16
+index 0000000..54a744a
 --- /dev/null
 +++ b/src/colorspace.cpp
-@@ -0,0 +1,494 @@
+@@ -0,0 +1,514 @@
 +// SPDX-License-Identifier: MIT
 +// Color spaces and color management.
 +
@@ -611,6 +612,26 @@ index 0000000..fe9bc16
 +    }
 +}
 +
++void ColorSpace::set_peak(const Pixmap& pm)
++{
++    float max = 1.0F;
++    for (size_t y = 0; y < pm.height(); ++y) {
++        const auto* px = static_cast<const uint16_t*>(pm.ptr(0, y));
++        for (size_t x = 0; x < pm.width(); ++x, px += 4) {
++            float rgb[3];
++            for (size_t c = 0; c < 3; ++c) {
++                rgb[c] = decode(half_to_float(px[c]), c);
++            }
++            for (size_t c = 0; c < 3; ++c) {
++                max = std::max(max, matrix[c * 3] * rgb[0] +
++                                        matrix[c * 3 + 1] * rgb[1] +
++                                        matrix[c * 3 + 2] * rgb[2]);
++            }
++        }
++    }
++    peak = max;
++}
++
 +float ColorSpace::decode(const float value, const size_t channel) const
 +{
 +    switch (transfer) {
@@ -641,10 +662,10 @@ index 0000000..fe9bc16
 +}
 diff --git a/src/colorspace.hpp b/src/colorspace.hpp
 new file mode 100644
-index 0000000..7b1b6bd
+index 0000000..34b988a
 --- /dev/null
 +++ b/src/colorspace.hpp
-@@ -0,0 +1,120 @@
+@@ -0,0 +1,121 @@
 +// SPDX-License-Identifier: MIT
 +// Color spaces and color management.
 +
@@ -695,6 +716,7 @@ index 0000000..7b1b6bd
 +    static void tonemap(float rgb[3], float peak, float headroom);
 +
 +    void set_peak_nits(float nits);
++    void set_peak(const Pixmap& pm);
 +    float decode(float value, size_t channel) const;
 +
 +    [[nodiscard]] bool is_srgb() const;
@@ -878,6 +900,88 @@ index 1a39d3d..d26f0e4 100644
  };
  
  // register format in factory
+diff --git a/src/formats/exr.cpp b/src/formats/exr.cpp
+index bc0fba0..52abaab 100644
+--- a/src/formats/exr.cpp
++++ b/src/formats/exr.cpp
+@@ -10,9 +10,13 @@
+ #include <ImfArray.h>
+ #include <ImfInputFile.h>
+ #include <ImfRgbaFile.h>
++#include <ImfStandardAttributes.h>
+ #include <ImfTiledRgbaFile.h>
+ #pragma GCC diagnostic pop
+ 
++#include <algorithm>
++#include <array>
++#include <cmath>
+ #include <cstring>
+ #include <format>
+ 
+@@ -72,28 +76,35 @@ public:
+             ImagePtr image = std::make_shared<Image>();
+             image->frames.resize(1);
+             Pixmap& pm = image->frames[0].pm;
+-            pm.create(Pixmap::ARGB, width, height);
++            pm.create(Pixmap::F16, width, height);
+ 
+-            // put image to pixmap
++            // put image to pixmap, un-premultiplied
+             for (int y = 0; y < height; ++y) {
++                auto* dst = static_cast<uint16_t*>(pm.ptr(0, y));
+                 for (int x = 0; x < width; ++x) {
+-                    argb_t& dst = pm.at(x, y);
+                     const Imf::Rgba& clr = pixels[y][x];
+-                    dst.a = static_cast<uint8_t>(
+-                        std::min(static_cast<size_t>(argb_t::max),
+-                                 static_cast<size_t>(clr.a * argb_t::max)));
+-                    dst.r = static_cast<uint8_t>(
+-                        std::min(static_cast<size_t>(argb_t::max),
+-                                 static_cast<size_t>(clr.r * argb_t::max)));
+-                    dst.g = static_cast<uint8_t>(
+-                        std::min(static_cast<size_t>(argb_t::max),
+-                                 static_cast<size_t>(clr.g * argb_t::max)));
+-                    dst.b = static_cast<uint8_t>(
+-                        std::min(static_cast<size_t>(argb_t::max),
+-                                 static_cast<size_t>(clr.b * argb_t::max)));
++                    const float a = sanitize(clr.a, 1.0F);
++                    const float k = a > 0 ? 1.0F / a : 0;
++                    *dst++ = float_to_half(sanitize(clr.r, HALF_MAX) * k);
++                    *dst++ = float_to_half(sanitize(clr.g, HALF_MAX) * k);
++                    *dst++ = float_to_half(sanitize(clr.b, HALF_MAX) * k);
++                    *dst++ = float_to_half(a);
+                 }
+             }
+ 
++            std::array<float, 8> xy = { 0.64F, 0.33F, 0.30F,   0.60F,
++                                        0.15F, 0.06F, 0.3127F, 0.3290F };
++            if (Imf::hasChromaticities(exr_header)) {
++                const Imf::Chromaticities& c =
++                    Imf::chromaticities(exr_header);
++                xy = { c.red.x,  c.red.y,  c.green.x, c.green.y,
++                       c.blue.x, c.blue.y, c.white.x, c.white.y };
++            }
++            const auto cs = ColorSpace::from_chromaticities(
++                xy, ColorSpace::Transfer::Linear);
++            cs->set_peak(pm);
++            pm.set_color(cs);
++
+             std::string compression;
+             getCompressionNameFromId(exr_header.compression(), compression);
+             image->format =
+@@ -107,6 +118,12 @@ public:
+     }
+ 
+ private:
++    static float sanitize(const half value, const float max)
++    {
++        const float f = value;
++        return std::isfinite(f) ? std::clamp(f, 0.0F, max) : 0;
++    }
++
+     /** Max image size. */
+     static constexpr int MAX_SIZE = 10000000;
+ 
 diff --git a/src/formats/heif.cpp b/src/formats/heif.cpp
 index 3179b66..59d2932 100644
 --- a/src/formats/heif.cpp
@@ -1583,22 +1687,203 @@ index 4ef91ea..86f9f20 100644
              const RsvgRectangle viewbox = {
                  .x = x + scale * svg_offset_x,
 diff --git a/src/formats/tiff.cpp b/src/formats/tiff.cpp
-index 0d7e6a9..41450f1 100644
+index 0d7e6a9..a2a2aa4 100644
 --- a/src/formats/tiff.cpp
 +++ b/src/formats/tiff.cpp
-@@ -68,6 +68,12 @@ public:
+@@ -7,8 +7,11 @@
+ #include <tiffio.h>
+ 
+ #include <algorithm>
++#include <cmath>
+ #include <cstring>
++#include <format>
+ #include <memory>
++#include <vector>
+ 
+ namespace {
+ 
+@@ -52,6 +55,37 @@ public:
+         ImagePtr image = std::make_shared<Image>();
+         image->frames.resize(1);
+         Pixmap& pm = image->frames[0].pm;
++
++        uint32_t icc_size = 0;
++        void* icc = nullptr;
++        TIFFGetField(tiff.get(), TIFFTAG_ICCPROFILE, &icc_size, &icc);
++
++        const Layout layout = get_layout(tiff.get());
++        if (layout.bits) {
++            pm.create(Pixmap::F16, width, height);
++            if (!decode_deep(tiff.get(), layout, pm)) {
++                return nullptr;
++            }
++            std::shared_ptr<ColorSpace> cs =
++                ColorSpace::from_icc(icc, icc_size);
++            if (!cs && icc) {
++                ColorSpace::apply_icc(pm, icc, icc_size);
++            } else {
++                if (!cs && layout.floating) {
++                    cs = ColorSpace::from_cicp(1, 8);
++                }
++                if (cs && layout.floating) {
++                    cs->set_peak(pm);
++                }
++                if (cs && !cs->is_srgb()) {
++                    pm.set_color(cs);
++                }
++            }
++            image->format = std::format("TIFF ({}-bit{})", layout.bits,
++                                        layout.floating ? " float" : "");
++            return image;
++        }
++
+         pm.create(Pixmap::ARGB, width, height);
+ 
+         // get orientation
+@@ -68,12 +102,143 @@ public:
  
          pm.abgr_to_argb();
  
-+        uint32_t icc_size = 0;
-+        void* icc = nullptr;
-+        if (TIFFGetField(tiff.get(), TIFFTAG_ICCPROFILE, &icc_size, &icc)) {
++        if (icc) {
 +            ColorSpace::apply_icc(pm, icc, icc_size);
 +        }
 +
          image->format = "TIFF";
  
          return image;
+     }
+ 
+ private:
++    struct Layout {
++        uint16_t bits = 0;
++        bool floating = false;
++        size_t samples = 0;
++        size_t colors = 0;
++        bool alpha = false;
++        bool premultiplied = false;
++    };
++
++    static Layout get_layout(TIFF* tiff)
++    {
++        uint16_t bits = 8;
++        uint16_t format = SAMPLEFORMAT_UINT;
++        uint16_t samples = 1;
++        uint16_t planar = PLANARCONFIG_CONTIG;
++        uint16_t photometric = 0;
++        TIFFGetFieldDefaulted(tiff, TIFFTAG_BITSPERSAMPLE, &bits);
++        TIFFGetFieldDefaulted(tiff, TIFFTAG_SAMPLEFORMAT, &format);
++        TIFFGetFieldDefaulted(tiff, TIFFTAG_SAMPLESPERPIXEL, &samples);
++        TIFFGetFieldDefaulted(tiff, TIFFTAG_PLANARCONFIG, &planar);
++        TIFFGetField(tiff, TIFFTAG_PHOTOMETRIC, &photometric);
++
++        Layout layout;
++        const bool deep = (bits == 16 && (format == SAMPLEFORMAT_UINT ||
++                                          format == SAMPLEFORMAT_IEEEFP)) ||
++            (bits == 32 && format == SAMPLEFORMAT_IEEEFP);
++        const size_t colors = photometric == PHOTOMETRIC_RGB ? 3
++            : photometric == PHOTOMETRIC_MINISBLACK          ? 1
++                                                             : 0;
++        if (!deep || !colors || samples < colors ||
++            planar != PLANARCONFIG_CONTIG) {
++            return layout;
++        }
++        layout.bits = bits;
++        layout.floating = format == SAMPLEFORMAT_IEEEFP;
++        layout.samples = samples;
++        layout.colors = colors;
++
++        uint16_t extra = 0;
++        uint16_t* types = nullptr;
++        if (samples > colors &&
++            TIFFGetField(tiff, TIFFTAG_EXTRASAMPLES, &extra, &types) &&
++            extra) {
++            layout.alpha = types[0] == EXTRASAMPLE_ASSOCALPHA ||
++                types[0] == EXTRASAMPLE_UNASSALPHA;
++            layout.premultiplied = types[0] == EXTRASAMPLE_ASSOCALPHA;
++        }
++        return layout;
++    }
++
++    static bool decode_deep(TIFF* tiff, const Layout& layout, Pixmap& pm)
++    {
++        const size_t pixel = layout.samples * layout.bits / 8;
++        const size_t row = pm.width() * pixel;
++        const bool tiled = TIFFIsTiled(tiff);
++        uint32_t tile_w = 0;
++        uint32_t tile_h = 1;
++        std::vector<uint8_t> tile;
++        if (tiled) {
++            TIFFGetField(tiff, TIFFTAG_TILEWIDTH, &tile_w);
++            TIFFGetField(tiff, TIFFTAG_TILELENGTH, &tile_h);
++            if (!tile_w || !tile_h) {
++                return false;
++            }
++            tile.resize(TIFFTileSize(tiff));
++        }
++        std::vector<uint8_t> band(std::max<size_t>(TIFFScanlineSize(tiff), row) *
++                                  tile_h);
++
++        for (size_t y = 0; y < pm.height(); y += tile_h) {
++            const size_t rows = std::min<size_t>(tile_h, pm.height() - y);
++            if (tiled) {
++                for (size_t x = 0; x < pm.width(); x += tile_w) {
++                    if (TIFFReadTile(tiff, tile.data(), x, y, 0, 0) < 0) {
++                        return false;
++                    }
++                    const size_t len =
++                        std::min<size_t>(tile_w, pm.width() - x) * pixel;
++                    for (size_t r = 0; r < rows; ++r) {
++                        std::memcpy(band.data() + r * row + x * pixel,
++                                    tile.data() + r * tile_w * pixel, len);
++                    }
++                }
++            } else if (TIFFReadScanline(tiff, band.data(), y, 0) < 0) {
++                return false;
++            }
++            for (size_t r = 0; r < rows; ++r) {
++                convert_row(layout, band.data() + r * row,
++                            static_cast<uint16_t*>(pm.ptr(0, y + r)),
++                            pm.width());
++            }
++        }
++        return true;
++    }
++
++    static void convert_row(const Layout& layout, const uint8_t* src,
++                            uint16_t* dst, const size_t width)
++    {
++        const auto sample = [&](const size_t i) -> float {
++            if (layout.bits == 32) {
++                float f;
++                std::memcpy(&f, src + i * 4, 4);
++                return std::isfinite(f) ? std::clamp(f, 0.0F, 65504.0F) : 0;
++            }
++            uint16_t v;
++            std::memcpy(&v, src + i * 2, 2);
++            if (!layout.floating) {
++                return v / 65535.0F;
++            }
++            const float f = half_to_float(v);
++            return std::isfinite(f) ? std::max(f, 0.0F) : 0;
++        };
++        for (size_t x = 0; x < width; ++x) {
++            const size_t base = x * layout.samples;
++            const float a = layout.alpha
++                ? std::min(sample(base + layout.colors), 1.0F)
++                : 1.0F;
++            const float k = layout.premultiplied ? (a > 0 ? 1.0F / a : 0)
++                                                 : 1.0F;
++            for (size_t c = 0; c < 3; ++c) {
++                const size_t i = base + (layout.colors == 3 ? c : 0);
++                *dst++ = float_to_half(sample(i) * k);
++            }
++            *dst++ = float_to_half(a);
++        }
++    }
++
+     // Tiff image wrapper
+     using TiffImage = std::unique_ptr<TIFF, decltype(&TIFFClose)>;
+ 
 diff --git a/src/formats/webp.cpp b/src/formats/webp.cpp
 index 3761ad0..cdddd04 100644
 --- a/src/formats/webp.cpp

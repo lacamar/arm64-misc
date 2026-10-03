@@ -1,62 +1,59 @@
 diff --git a/extension/background.js b/extension/background.js
-index 2022e59..891e0c1 100644
+index 5869ced..55ffb6e 100644
 --- a/extension/background.js
 +++ b/extension/background.js
-@@ -26,6 +26,7 @@ const UNGATED = new Set(["ping", "tabs_list", "tab_select", "tab_close", "resize
+@@ -13,7 +13,7 @@ let settings = { allSites: false, allowedSites: [] };
+ const controlled = new Set();
+ const stopped = new Set();
+ const sessionAllowed = new Set();
+-const prompts = new Map(); // host -> {promise, resolve, windowId}
++const prompts = new Map(); // host -> {promise, resolve}
+ const MAX_REQUESTS = 1000;
+ const net = new Map();     // tabId -> [request]
+ const inflight = new Map(); // requestId -> request
+@@ -21,9 +21,9 @@ const UNGATED = new Set(["ping", "tabs_list", "tab_select", "tab_close", "resize
+ 
  /* ---------- connection ---------- */
  
- function setBadge(connected) {
-+  if (prompts.size) return updatePromptBadge();
-   browser.browserAction.setBadgeText({ text: connected ? "on" : "" });
-   browser.browserAction.setBadgeBackgroundColor({ color: connected ? "#16a34a" : "#6b7280" });
+-function setBadge(connected) {
+-  browser.browserAction.setBadgeText({ text: connected ? "on" : "" });
+-  browser.browserAction.setBadgeBackgroundColor({ color: connected ? "#16a34a" : "#6b7280" });
++function setBadge(connected = ws?.readyState === WebSocket.OPEN) {
++  browser.browserAction.setBadgeText({ text: prompts.size ? "?" : connected ? "on" : "" });
++  browser.browserAction.setBadgeBackgroundColor({ color: prompts.size ? "#d97706" : connected ? "#16a34a" : "#6b7280" });
    browser.browserAction.setTitle({ title: `Zen Control: ${connected ? "connected" : "disconnected"}` });
-@@ -150,22 +151,32 @@ async function sendToContent(tab, cmd, args) {
-   return r;
  }
  
--async function screenshot(tab) {
+@@ -144,21 +144,7 @@ async function sendToContent(tab, cmd, args) {
+ }
+ 
+ async function screenshot(tab) {
 -  if (!tab.active) {
 -    await browser.tabs.update(tab.id, { active: true });
-+async function captureVisible(tab, opts) {
-+  if (tab.active) return withTimeout(browser.tabs.captureVisibleTab(tab.windowId, opts), 10000, "captureVisibleTab");
-+  const [prev] = await browser.tabs.query({ active: true, windowId: tab.windowId });
-+  await browser.tabs.update(tab.id, { active: true });
-+  try {
-     await sleep(300);
-+    return await withTimeout(browser.tabs.captureVisibleTab(tab.windowId, opts), 10000, "captureVisibleTab");
-+  } finally {
-+    if (prev) await browser.tabs.update(prev.id, { active: true }).catch(() => {});
-   }
+-    await sleep(300);
+-  }
 -  let dataUrl;
-+}
-+
-+async function capture(tab, opts) {
-   try {
+-  try {
 -    // Firefox-specific: captures a specific tab, works even when it isn't focused.
 -    dataUrl = await withTimeout(browser.tabs.captureTab(tab.id, { format: "png" }), 10000, "captureTab");
-+    return await withTimeout(browser.tabs.captureTab(tab.id, opts), 10000, "captureTab");
-   } catch (e) {
-     try {
+-  } catch (e) {
+-    try {
 -      dataUrl = await withTimeout(browser.tabs.captureVisibleTab(tab.windowId, { format: "png" }), 10000, "captureVisibleTab");
-+      return await captureVisible(tab, opts);
-     } catch (e2) {
-       throw new Error(`Screenshot failed: captureTab: ${e.message}; captureVisibleTab: ${e2.message}`);
-     }
-   }
-+}
-+
-+async function screenshot(tab) {
-+  const dataUrl = await capture(tab, { format: "png" });
+-    } catch (e2) {
+-      throw new Error(`Screenshot failed: captureTab: ${e.message}; captureVisibleTab: ${e2.message}`);
+-    }
+-  }
++  const dataUrl = await withTimeout(browser.tabs.captureTab(tab.id, { format: "png" }), 10000, "captureTab");
    // Scale the capture to CSS pixels so coordinates match what click(x, y) expects.
    let dpr = 1, cssW = null, cssH = null;
    try {
-@@ -219,18 +230,27 @@ async function ensureAllowed(url) {
+@@ -210,13 +196,16 @@ async function ensureAllowed(url) {
      let resolve;
      p = { promise: new Promise((r) => { resolve = r; }), resolve };
      prompts.set(host, p);
 -    const w = await browser.windows.create({ type: "popup", width: 460, height: 260, url: browser.runtime.getURL("permission.html?host=" + encodeURIComponent(host)) });
 -    p.windowId = w.id;
-+    updatePromptBadge();
++    setBadge();
 +    browser.notifications.create("site:" + host, { type: "basic", iconUrl: "icon.svg", title: "Zen Control", message: `Claude wants access to ${host}. Open the Zen Control toolbar button to allow or deny.` }).catch(() => {});
      setTimeout(() => p.resolve("deny"), 120000);
    }
@@ -65,24 +62,13 @@ index 2022e59..891e0c1 100644
 -  if (p.windowId != null) browser.windows.remove(p.windowId).catch(() => {});
 +  if (prompts.get(host) === p) {
 +    prompts.delete(host);
-+    updatePromptBadge();
++    setBadge();
 +    browser.notifications.clear("site:" + host).catch(() => {});
 +  }
    if (decision === "always") await saveSettings({ allowedSites: [...new Set([...settings.allowedSites, host])] });
    else if (decision === "once") sessionAllowed.add(host);
    else throw new Error(`The user did not allow Zen Control on ${host}. They can allow it from the Zen Control toolbar button.`);
- }
- 
-+function updatePromptBadge() {
-+  if (!prompts.size) return setBadge(ws && ws.readyState === WebSocket.OPEN);
-+  browser.browserAction.setBadgeText({ text: "?" });
-+  browser.browserAction.setBadgeBackgroundColor({ color: "#d97706" });
-+}
-+
- async function saveSettings(patch) {
-   settings = { ...settings, ...patch };
-   await browser.storage.local.set({ settings });
-@@ -239,6 +259,7 @@ async function saveSettings(patch) {
+@@ -230,6 +219,7 @@ async function saveSettings(patch) {
  browser.runtime.onMessage.addListener((msg, sender) => {
    if (!msg) return;
    if (msg.type === "site_decision") { const p = prompts.get(msg.host); if (p) p.resolve(msg.decision); }
@@ -90,24 +76,15 @@ index 2022e59..891e0c1 100644
    else if (msg.type === "marker_query") { const id = msg.tabId ?? sender.tab?.id; if (id != null) return Promise.resolve(markerState(id)); }
    else if (msg.type === "stop_tab" || msg.type === "resume_tab") {
      const id = msg.tabId ?? sender.tab?.id;
-@@ -248,7 +269,6 @@ browser.runtime.onMessage.addListener((msg, sender) => {
+@@ -239,7 +229,6 @@ browser.runtime.onMessage.addListener((msg, sender) => {
      return Promise.resolve(markerState(id));
    }
  });
 -browser.windows.onRemoved.addListener((id) => { for (const p of prompts.values()) if (p.windowId === id) p.resolve("deny"); });
- browser.storage.onChanged.addListener((changes) => {
-   if (!changes.settings) return;
-   settings = { ...settings, ...changes.settings.newValue };
-@@ -284,7 +304,7 @@ browser.webRequest.onErrorOccurred.addListener((d) => {
+ browser.storage.onChanged.addListener((changes) => { if (changes.settings) settings = { ...settings, ...changes.settings.newValue }; });
  
- async function gifFrame() {
-   await sleep(250);
--  const dataUrl = await withTimeout(browser.tabs.captureTab(gif.tabId, { format: "jpeg", quality: 85 }), 10000, "captureTab");
-+  const dataUrl = await capture(await browser.tabs.get(gif.tabId), { format: "jpeg", quality: 85 });
-   gif.frames.push(dataUrl);
-   if (gif.frames.length > MAX_GIF_FRAMES) gif.frames.shift();
- }
-@@ -332,7 +352,7 @@ async function handle(cmd, args) {
+ /* ---------- network capture ---------- */
+@@ -287,7 +276,7 @@ async function handle(cmd, args) {
        return { currentTabId, tabs: tabs.map(tabInfo) };
      }
      case "tab_new": {
@@ -116,7 +93,7 @@ index 2022e59..891e0c1 100644
        currentTabId = t.id;
        if (args.url) await withLoad(t.id, async () => {}, args.timeout);
        return tabInfo(await browser.tabs.get(t.id));
-@@ -340,8 +360,7 @@ async function handle(cmd, args) {
+@@ -295,8 +284,7 @@ async function handle(cmd, args) {
      case "tab_select": {
        const t = await browser.tabs.get(args.tabId);
        currentTabId = t.id;
@@ -127,7 +104,7 @@ index 2022e59..891e0c1 100644
      }
      case "tab_close": {
 diff --git a/extension/manifest.json b/extension/manifest.json
-index 410c4bc..3bdc406 100644
+index 9f89f37..4772678 100644
 --- a/extension/manifest.json
 +++ b/extension/manifest.json
 @@ -1,7 +1,7 @@
@@ -183,7 +160,7 @@ index 4f9a746..0000000
 -  document.getElementById(decision).addEventListener("click", () => browser.runtime.sendMessage({ type: "site_decision", host, decision }));
 -}
 diff --git a/extension/popup.html b/extension/popup.html
-index 056f2d9..c8b29f3 100644
+index 4b8d835..fa4035a 100644
 --- a/extension/popup.html
 +++ b/extension/popup.html
 @@ -3,6 +3,7 @@
@@ -195,10 +172,10 @@ index 056f2d9..c8b29f3 100644
    <div class="row" id="stoppedRow" hidden><span>Claude is stopped on this tab</span><button id="resume" class="primary">Resume</button></div>
    <div class="row"><label><input type="checkbox" id="all"> Allow on all sites without asking</label></div>
 diff --git a/extension/popup.js b/extension/popup.js
-index e2dc8c9..5b996ca 100644
+index c6ba81d..2002b7c 100644
 --- a/extension/popup.js
 +++ b/extension/popup.js
-@@ -33,7 +33,34 @@ function render() {
+@@ -31,7 +31,34 @@ function render() {
    if (!settings.allowedSites.length) ul.innerHTML = '<li class="muted">None</li>';
  }
  
@@ -230,23 +207,23 @@ index e2dc8c9..5b996ca 100644
 +
  (async () => {
 +  renderPrompts();
-   settings = { allSites: false, allowedSites: [], label: "", markTitle: true, markBorder: true, ...(await browser.storage.local.get("settings")).settings };
+   settings = { allSites: false, allowedSites: [], ...(await browser.storage.local.get("settings")).settings };
    [tab] = await browser.tabs.query({ active: true, currentWindow: true });
    const state = await browser.runtime.sendMessage({ type: "marker_query", tabId: tab.id });
 diff --git a/extension/ui.css b/extension/ui.css
-index e3f0499..ccd88b2 100644
+index dc82b6f..3fc743d 100644
 --- a/extension/ui.css
 +++ b/extension/ui.css
-@@ -8,3 +8,4 @@ button.primary { background: #16a34a; border-color: #16a34a; color: #fff; }
+@@ -7,3 +7,4 @@ button.primary { background: #16a34a; border-color: #16a34a; color: #fff; }
+ .row { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin: 6px 0; }
  .muted { opacity: .7; font-size: 12px; }
  ul { list-style: none; padding: 0; margin: 0 0 12px; max-height: 200px; overflow: auto; }
- input[type=text] { font: inherit; flex: 1; padding: 4px 6px; }
 +.prompt { border: 1px solid #d97706; border-radius: 6px; padding: 8px; margin: 0 0 12px; }
 diff --git a/server/index.js b/server/index.js
-index a8c80ce..edeb456 100644
+index 1bb52fe..2ae22fc 100644
 --- a/server/index.js
 +++ b/server/index.js
-@@ -210,8 +210,8 @@ async function runActions(actions, stopOnError = true) {
+@@ -163,8 +163,8 @@ async function runActions(actions, stopOnError) {
  }
  
  tool("tabs_list", "List open Zen browser tabs (id, url, title) and which tab is current.", {}, async () => text(await sendCommand("tabs_list", {})));

@@ -1,7 +1,7 @@
 %global tag 5.5.2
 Name:           shairport-sync
 Version:        %{tag}
-Release:        6%{?dist}
+Release:        7%{?dist}
 Summary:        AirTunes emulator. Multi-Room with Audio Synchronisation
 # MIT licensed except for tinysvcmdns under BSD,
 # FFTConvolver/ under GPLv3+ and audio_sndio.c
@@ -11,7 +11,6 @@ License:        LicenseRef-Callaway-MIT AND LicenseRef-Callaway-BSD AND GPL-3.0-
 URL:            https://github.com/mikebrady/shairport-sync
 Source0:        https://github.com/mikebrady/%{name}/archive/%{version}/%{name}-%{version}.tar.gz
 
-%{?systemd_requires}
 Requires: avahi
 BuildRequires: make
 BuildRequires:  systemd
@@ -62,7 +61,7 @@ EOF
 
 %build
 autoreconf -i -f
-%configure --sysconfdir=/etc \
+%configure \
 --with-systemd-startup \
 --without-create-user-group \
 --with-os=linux \
@@ -80,8 +79,8 @@ autoreconf -i -f
 --with-convolution \
 --with-ffmpeg \
 --with-mpris-interface \
---with-dbus-interface
-# --with-airplay-2
+--with-dbus-interface \
+--with-airplay-2
 
 sed -i '/getent group shairport-sync/ d' Makefile
 sed -i '/getent passwd shairport-sync/ d' Makefile
@@ -110,8 +109,6 @@ install -m0644 -D shairport-sync.sysusers.conf %{buildroot}%{_sysusersdir}/shair
 %config(noreplace) /etc/shairport-sync.conf
 %config(noreplace) /etc/dbus-1/system.d/shairport-sync-mpris.conf
 %config(noreplace) /etc/dbus-1/system.d/shairport-sync-dbus.conf
-
-
 /usr/bin/shairport-sync
 /usr/share/man/man1/shairport-sync.1.gz
 %{_unitdir}/%{name}.service
@@ -119,10 +116,11 @@ install -m0644 -D shairport-sync.sysusers.conf %{buildroot}%{_sysusersdir}/shair
 %license LICENSES
 %attr(-, %{name}, %{name}) %{_sharedstatedir}/%{name}
 %{_sysusersdir}/shairport-sync.conf
-%{_sysconfdir}/dbus-1/system.d/shairport-sync-mpris.conf
-%{_sysconfdir}/dbus-1/system.d/shairport-sync-dbus.conf
 
 %changelog
+* Sat Oct 03 2026 Lachlan Marie <lchlnm@pm.me> - 5.5.2-7
+ - Enable AirPlay 2
+
 * Tue Sep 15 2026 Lachlan Marie <lchlnm@pm.me> - 5.5.2-6
  - Update to 5.5.2
 

@@ -23,8 +23,6 @@ BuildRequires: anda-srpm-macros
 BuildRequires: cargo-rpm-macros
 BuildRequires: mold
 
-Packager: Owen Zimmerman owen@fyralabs.com
-
 %description
 Yazi (means "duck") is a terminal file manager written in Rust, based on non-blocking async I/O.
 
@@ -32,21 +30,11 @@ Yazi (means "duck") is a terminal file manager written in Rust, based on non-blo
 %autosetup -n %{_name}-%{commit}
 %cargo_prep_online
 
-git init
-git config user.email "builder@example.invalid"
-git config user.name "RPM Builder"
-git add .
-git commit -qm "snapshot"
-
-export VERGEN_GIT_SHA=%{shortcommit}
-
 %build
 export VERGEN_GIT_SHA=%{shortcommit}
 %cargo_build
 
 %install
-rm -rf %{buildroot}
-
 install -Dm755 target/rpm/ya %{buildroot}%{_bindir}/ya
 install -Dm755 target/rpm/yazi %{buildroot}%{_bindir}/yazi
 

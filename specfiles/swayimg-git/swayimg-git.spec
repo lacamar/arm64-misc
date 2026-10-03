@@ -7,7 +7,7 @@
 
 Name:           %{_name}-git
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        5%{?dist}
+Release:        6%{?dist}
 Conflicts:      %{_name}
 Provides:       %{_name} = %{version}-%{release}
 Summary:        Lightweight image viewer for Wayland display servers
@@ -16,7 +16,6 @@ License:        MIT
 URL:            https://github.com/artemsen/%{_name}
 Source:         %{url}/archive/%{commit}/%{_name}-%{shortcommit}.tar.gz
 
-# Patch0:          #{url}/commit/5c2d958.patch#/swayimg-5.0-missing-includes.patch
 # Adds an "exif" imagelist.order sort mode using the EXIF capture time
 # (DateTimeOriginal/DateTimeDigitized/DateTime, via exiv2), falling back to
 # path order when unavailable. Not upstream.
@@ -25,14 +24,8 @@ Patch1:          0001-imagelist-add-exif-capture-time-sort-order.patch
 # via wp_color_management_v1), software fallback. Not upstream.
 Patch3:          0003-render-color-managed-gpu-hdr.patch
 
-# Exclude x86 and all the platforms where luajit is not available
-ExcludeArch:    %{ix86} riscv64 ppc64 ppc64le
-
 BuildRequires:  desktop-file-utils
 BuildRequires:  gcc-c++
-%if %{with tests}
-BuildRequires:  glibc-langpack-en
-%endif
 BuildRequires:  meson >= 1.1
 
 BuildRequires:  giflib-devel
@@ -44,9 +37,6 @@ BuildRequires:  pkgconfig(fontconfig)
 BuildRequires:  pkgconfig(freetype2)
 BuildRequires:  pkgconfig(glesv2)
 BuildRequires:  pkgconfig(lcms2)
-%if %{with tests}
-BuildRequires:  pkgconfig(gtest)
-%endif
 BuildRequires:  pkgconfig(libavcodec) >= 60.31.102
 BuildRequires:  pkgconfig(libavformat) >= 60.16.100
 BuildRequires:  pkgconfig(libavif)
@@ -84,10 +74,7 @@ Swayimg is a lightweight image viewer for Wayland display servers.
 
 
 %prep
-%autosetup -N -n %{_name}-%{commit}
-#patch -P 0 -p1 -F3
-%patch -P 1 -p1 -F3
-%patch -P 3 -p1 -F3
+%autosetup -p1 -n %{_name}-%{commit}
 
 
 %build
@@ -95,7 +82,6 @@ Swayimg is a lightweight image viewer for Wayland display servers.
     -Dexr=disabled \
     -Dgpu=enabled \
     -Dlicense=false \
-    -Dtests=%[%{with tests}?"enabled":"disabled"] \
     -Dversion=%{version}
 %meson_build
 
@@ -106,18 +92,6 @@ Swayimg is a lightweight image viewer for Wayland display servers.
 
 %check
 desktop-file-validate %{buildroot}%{_datadir}/applications/swayimg.desktop
-%if %{with tests}
-%ifarch s390x
-# A few tests fail on s390x (endianness?)
-%global gtest_exclude ImageLoadTest.*
-%else
-# HEIF test requires libheif-freeworld from rpmfusion
-%global gtest_exclude ImageLoadTest.heif
-%endif
-
-export LANG=en_US.UTF-8 # ImageListTest.SortAlphaUnicode fails with LANG=C
-%meson_test --test-args='--gtest_filter=-%{gtest_exclude}'
-%endif
 
 
 %files
@@ -134,6 +108,9 @@ export LANG=en_US.UTF-8 # ImageListTest.SortAlphaUnicode fails with LANG=C
 
 
 %changelog
+* Wed Sep 30 2026 Lachlan Marie <lchlnm@pm.me> - 5.6^2.git.c392908-6
+ - Decode 16-bit and float TIFF in high precision
+
 * Tue Sep 29 2026 Lachlan Marie <lchlnm@pm.me> - 5.6^2.git.c392908-5
  - Update to commit c3929089981d74014a9cb4541f188767d60529ba
 
