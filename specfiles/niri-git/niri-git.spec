@@ -31,7 +31,7 @@
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -56,6 +56,7 @@ Patch:          niri-pr4574.patch
 Patch:          niri-pr4330.patch
 # https://github.com/niri-wm/niri/pull/4392
 Patch:          niri-pr4392.patch
+Patch:          niri-scratchpad.patch
 
 BuildRequires:  cargo-rpm-macros >= 26
 BuildRequires:  pkgconfig(udev)
@@ -161,6 +162,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Sat Oct 03 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^8.git.ed22699d-2
+ - Add scratchpad actions
+
 * Fri Oct 02 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^8.git.ed22699d-1
  - Update to commit ed22699d99462f61ab171472d3ea67e844ea580d
  - Add NIRI_CTM_GAMMA knob

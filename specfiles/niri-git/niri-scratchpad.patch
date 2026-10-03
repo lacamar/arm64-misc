@@ -1,0 +1,590 @@
+diff --git a/niri-config/src/binds.rs b/niri-config/src/binds.rs
+index d02aa595..3c0f11eb 100644
+--- a/niri-config/src/binds.rs
++++ b/niri-config/src/binds.rs
+@@ -346,6 +346,12 @@ pub enum Action {
+     FocusFloating,
+     FocusTiling,
+     SwitchFocusBetweenFloatingAndTiling,
++    MoveWindowToScratchpad,
++    #[knuffel(skip)]
++    MoveWindowToScratchpadById(u64),
++    ToggleScratchpad,
++    #[knuffel(skip)]
++    ToggleScratchpadById(u64),
+     #[knuffel(skip)]
+     MoveFloatingWindowById {
+         id: Option<u64>,
+@@ -685,6 +691,12 @@ impl From<niri_ipc::Action> for Action {
+             niri_ipc::Action::SwitchFocusBetweenFloatingAndTiling {} => {
+                 Self::SwitchFocusBetweenFloatingAndTiling
+             }
++            niri_ipc::Action::MoveWindowToScratchpad { id: None } => Self::MoveWindowToScratchpad,
++            niri_ipc::Action::MoveWindowToScratchpad { id: Some(id) } => {
++                Self::MoveWindowToScratchpadById(id)
++            }
++            niri_ipc::Action::ToggleScratchpad { id: None } => Self::ToggleScratchpad,
++            niri_ipc::Action::ToggleScratchpad { id: Some(id) } => Self::ToggleScratchpadById(id),
+             niri_ipc::Action::MoveFloatingWindow { id, x, y } => {
+                 Self::MoveFloatingWindowById { id, x, y }
+             }
+diff --git a/niri-ipc/src/lib.rs b/niri-ipc/src/lib.rs
+index dfbe59a0..4a19fa28 100644
+--- a/niri-ipc/src/lib.rs
++++ b/niri-ipc/src/lib.rs
+@@ -837,6 +837,25 @@ pub enum Action {
+     FocusTiling {},
+     /// Toggles the focus between the floating and the tiling layout.
+     SwitchFocusBetweenFloatingAndTiling {},
++    /// Move a window to the scratchpad.
++    MoveWindowToScratchpad {
++        /// Id of the window to move.
++        ///
++        /// If `None`, uses the focused window.
++        #[cfg_attr(feature = "clap", arg(long))]
++        id: Option<u64>,
++    },
++    /// Show or hide a scratchpad window.
++    ///
++    /// Hides the focused scratchpad window, otherwise brings the next scratchpad window to the
++    /// active workspace.
++    ToggleScratchpad {
++        /// Id of the window to toggle.
++        ///
++        /// Hidden if on the active workspace, otherwise brought to it.
++        #[cfg_attr(feature = "clap", arg(long))]
++        id: Option<u64>,
++    },
+     /// Move a floating window on screen.
+     #[cfg_attr(feature = "clap", clap(about = "Move the floating window on screen"))]
+     MoveFloatingWindow {
+@@ -1358,6 +1377,8 @@ pub struct Window {
+     pub is_floating: bool,
+     /// Whether this window requests your attention.
+     pub is_urgent: bool,
++    /// Whether this window is hidden in the scratchpad.
++    pub is_in_scratchpad: bool,
+     /// Position- and size-related properties of the window.
+     pub layout: WindowLayout,
+     /// Timestamp when the window was most recently focused.
+diff --git a/src/input/mod.rs b/src/input/mod.rs
+index e0f47c88..0dd0fcd4 100644
+--- a/src/input/mod.rs
++++ b/src/input/mod.rs
+@@ -2213,6 +2213,40 @@ impl State {
+                 // FIXME: granular
+                 self.niri.queue_redraw_all();
+             }
++            Action::MoveWindowToScratchpad => {
++                self.niri.layout.move_window_to_scratchpad(None);
++                self.maybe_warp_cursor_to_focus();
++                // FIXME: granular
++                self.niri.queue_redraw_all();
++            }
++            Action::MoveWindowToScratchpadById(id) => {
++                let window = self.niri.layout.windows().find(|(_, m)| m.id().get() == id);
++                let window = window.map(|(_, m)| m.window.clone());
++                if let Some(window) = window {
++                    self.niri.layout.move_window_to_scratchpad(Some(&window));
++                    // FIXME: granular
++                    self.niri.queue_redraw_all();
++                }
++            }
++            Action::ToggleScratchpad => {
++                self.niri.layout.toggle_scratchpad(None);
++                self.maybe_warp_cursor_to_focus();
++                // FIXME: granular
++                self.niri.queue_redraw_all();
++            }
++            Action::ToggleScratchpadById(id) => {
++                let window = self
++                    .niri
++                    .layout
++                    .find_window_and_output_by(|m, _| m.id().get() == id)
++                    .map(|(m, _)| m.window.clone());
++                if let Some(window) = window {
++                    self.niri.layout.toggle_scratchpad(Some(&window));
++                    self.maybe_warp_cursor_to_focus();
++                    // FIXME: granular
++                    self.niri.queue_redraw_all();
++                }
++            }
+             Action::MoveFloatingWindowById { id, x, y } => {
+                 let window = if let Some(id) = id {
+                     let window = self.niri.layout.windows().find(|(_, m)| m.id().get() == id);
+diff --git a/src/ipc/client.rs b/src/ipc/client.rs
+index 78022ed9..fa3e2e69 100644
+--- a/src/ipc/client.rs
++++ b/src/ipc/client.rs
+@@ -706,7 +706,12 @@ fn print_output(output: Output) -> anyhow::Result<()> {
+ fn print_window(window: &Window) {
+     let focused = if window.is_focused { " (focused)" } else { "" };
+     let urgent = if window.is_urgent { " (urgent)" } else { "" };
+-    println!("Window ID {}:{focused}{urgent}", window.id);
++    let scratchpad = if window.is_in_scratchpad {
++        " (scratchpad)"
++    } else {
++        ""
++    };
++    println!("Window ID {}:{focused}{urgent}{scratchpad}", window.id);
+ 
+     if let Some(title) = &window.title {
+         println!("  Title: \"{title}\"");
+diff --git a/src/ipc/server.rs b/src/ipc/server.rs
+index 374216c2..7af59859 100644
+--- a/src/ipc/server.rs
++++ b/src/ipc/server.rs
+@@ -516,6 +516,7 @@ async fn handle_event_stream_client(client: EventStreamClient) -> anyhow::Result
+ fn make_ipc_window(
+     mapped: &Mapped,
+     workspace_id: Option<WorkspaceId>,
++    is_in_scratchpad: bool,
+     layout: WindowLayout,
+ ) -> niri_ipc::Window {
+     with_toplevel_role(mapped.toplevel(), |role| niri_ipc::Window {
+@@ -527,6 +528,7 @@ fn make_ipc_window(
+         is_focused: mapped.is_focused(),
+         is_floating: mapped.is_floating(),
+         is_urgent: mapped.is_urgent(),
++        is_in_scratchpad,
+         layout,
+         focus_timestamp: mapped.get_focus_timestamp().map(Timestamp::from),
+     })
+@@ -713,7 +715,12 @@ impl State {
+             }
+ 
+             let Some(ipc_win) = state.windows.get(&id) else {
+-                let window = make_ipc_window(mapped, ws_id, window_layout);
++                let window = make_ipc_window(
++                    mapped,
++                    ws_id,
++                    layout.is_in_scratchpad(&mapped.window),
++                    window_layout,
++                );
+                 events.push(Event::WindowOpenedOrChanged { window });
+                 return;
+             };
+@@ -727,7 +734,12 @@ impl State {
+             });
+ 
+             if changed {
+-                let window = make_ipc_window(mapped, ws_id, window_layout);
++                let window = make_ipc_window(
++                    mapped,
++                    ws_id,
++                    layout.is_in_scratchpad(&mapped.window),
++                    window_layout,
++                );
+                 events.push(Event::WindowOpenedOrChanged { window });
+                 return;
+             }
+diff --git a/src/layout/mod.rs b/src/layout/mod.rs
+index 5480c431..8c79d078 100644
+--- a/src/layout/mod.rs
++++ b/src/layout/mod.rs
+@@ -360,6 +360,8 @@ pub struct Layout<W: LayoutElement> {
+     interactive_move: Option<InteractiveMoveState<W>>,
+     /// Ongoing drag-and-drop operation.
+     dnd: Option<DndData<W>>,
++    /// Windows hidden in the scratchpad, oldest first.
++    scratchpad: Vec<RemovedTile<W>>,
+     /// Clock for driving animations.
+     clock: Clock,
+     /// Time that we last updated render elements for.
+@@ -496,6 +498,7 @@ pub enum ConfigureIntent {
+ }
+ 
+ /// Tile that was just removed from the layout.
++#[derive(Debug)]
+ pub struct RemovedTile<W: LayoutElement> {
+     tile: Tile<W>,
+     /// Width of the column the tile was in.
+@@ -724,6 +727,7 @@ impl<W: LayoutElement> Layout<W> {
+             last_active_workspace_id: HashMap::new(),
+             interactive_move: None,
+             dnd: None,
++            scratchpad: Vec::new(),
+             clock,
+             update_render_elements_time: Duration::ZERO,
+             overview_open: false,
+@@ -749,6 +753,7 @@ impl<W: LayoutElement> Layout<W> {
+             last_active_workspace_id: HashMap::new(),
+             interactive_move: None,
+             dnd: None,
++            scratchpad: Vec::new(),
+             clock,
+             update_render_elements_time: Duration::ZERO,
+             overview_open: false,
+@@ -1157,6 +1162,10 @@ impl<W: LayoutElement> Layout<W> {
+         window: &W::Id,
+         transaction: Transaction,
+     ) -> Option<RemovedTile<W>> {
++        if let Some(idx) = self.scratchpad_idx(window) {
++            return Some(self.scratchpad.remove(idx));
++        }
++
+         if let Some(state) = &self.interactive_move {
+             match state {
+                 InteractiveMoveState::Starting { window_id, .. } => {
+@@ -1270,6 +1279,15 @@ impl<W: LayoutElement> Layout<W> {
+             }
+         }
+ 
++        if let Some(idx) = self.scratchpad_idx(window) {
++            let tile = &mut self.scratchpad[idx].tile;
++            if let Some(serial) = serial {
++                tile.window_mut().on_commit(serial);
++            }
++            tile.update_window();
++            return;
++        }
++
+         match &mut self.monitor_set {
+             MonitorSet::Normal { monitors, .. } => {
+                 for mon in monitors {
+@@ -1408,6 +1426,14 @@ impl<W: LayoutElement> Layout<W> {
+             }
+         }
+ 
++        if let Some(removed) = self
++            .scratchpad
++            .iter()
++            .find(|r| r.tile.window().is_wl_surface(wl_surface))
++        {
++            return Some((removed.tile.window(), None));
++        }
++
+         match &self.monitor_set {
+             MonitorSet::Normal { monitors, .. } => {
+                 for mon in monitors {
+@@ -1440,6 +1466,14 @@ impl<W: LayoutElement> Layout<W> {
+             }
+         }
+ 
++        if let Some(removed) = self
++            .scratchpad
++            .iter_mut()
++            .find(|r| r.tile.window().is_wl_surface(wl_surface))
++        {
++            return Some((removed.tile.window_mut(), None));
++        }
++
+         match &mut self.monitor_set {
+             MonitorSet::Normal { monitors, .. } => {
+                 for mon in monitors {
+@@ -1474,6 +1508,12 @@ impl<W: LayoutElement> Layout<W> {
+             }
+         }
+ 
++        for removed in &self.scratchpad {
++            if f(removed.tile.window(), None) {
++                return Some((removed.tile.window(), None));
++            }
++        }
++
+         match &self.monitor_set {
+             MonitorSet::Normal { monitors, .. } => {
+                 for mon in monitors {
+@@ -1513,6 +1553,14 @@ impl<W: LayoutElement> Layout<W> {
+             }
+         }
+ 
++        if let Some(removed) = self
++            .scratchpad
++            .iter_mut()
++            .find(|r| f(r.tile.window(), None))
++        {
++            return Some((removed.tile.window_mut(), None));
++        }
++
+         match &mut self.monitor_set {
+             MonitorSet::Normal { monitors, .. } => {
+                 for mon in monitors {
+@@ -1635,6 +1683,11 @@ impl<W: LayoutElement> Layout<W> {
+             }
+         }
+ 
++        if self.is_in_scratchpad(window) {
++            self.toggle_scratchpad(Some(window));
++            return;
++        }
++
+         let MonitorSet::Normal {
+             monitors,
+             active_monitor_idx,
+@@ -1792,6 +1845,15 @@ impl<W: LayoutElement> Layout<W> {
+             f(move_.tile.window(), Some(&move_.output), None, layout);
+         }
+ 
++        for removed in &self.scratchpad {
++            f(
++                removed.tile.window(),
++                None,
++                None,
++                removed.tile.ipc_layout_template(),
++            );
++        }
++
+         match &self.monitor_set {
+             MonitorSet::Normal { monitors, .. } => {
+                 for mon in monitors {
+@@ -1817,6 +1879,10 @@ impl<W: LayoutElement> Layout<W> {
+             f(move_.tile.window_mut(), Some(&move_.output));
+         }
+ 
++        for removed in &mut self.scratchpad {
++            f(removed.tile.window_mut(), None);
++        }
++
+         match &mut self.monitor_set {
+             MonitorSet::Normal { monitors, .. } => {
+                 for mon in monitors {
+@@ -2502,6 +2568,10 @@ impl<W: LayoutElement> Layout<W> {
+ 
+         let zoom = self.overview_zoom();
+ 
++        for removed in &self.scratchpad {
++            assert!(!self.has_window(removed.tile.window().id()));
++        }
++
+         let mut move_win_id = None;
+         if let Some(state) = &self.interactive_move {
+             match state {
+@@ -3373,6 +3443,88 @@ impl<W: LayoutElement> Layout<W> {
+         workspace.move_floating_window(id, x, y, animate);
+     }
+ 
++    fn scratchpad_idx(&self, window: &W::Id) -> Option<usize> {
++        self.scratchpad
++            .iter()
++            .position(|r| r.tile.window().id() == window)
++    }
++
++    pub fn is_in_scratchpad(&self, window: &W::Id) -> bool {
++        self.scratchpad_idx(window).is_some()
++    }
++
++    pub fn move_window_to_scratchpad(&mut self, window: Option<&W::Id>) {
++        let Some(id) = window.or_else(|| self.focus().map(|win| win.id())).cloned() else {
++            return;
++        };
++        if self.is_in_scratchpad(&id) {
++            return;
++        }
++        if let Some(mut removed) = self.remove_window(&id, Transaction::new()) {
++            removed.tile.is_scratchpad = true;
++            self.scratchpad.push(removed);
++        }
++    }
++
++    pub fn toggle_scratchpad(&mut self, window: Option<&W::Id>) {
++        let Some(active_ws) = self.active_workspace() else {
++            return;
++        };
++        let active_ws_id = active_ws.id();
++
++        let id = match window {
++            Some(id) if active_ws.has_window(id) => {
++                self.move_window_to_scratchpad(Some(id));
++                return;
++            }
++            Some(id) => id.clone(),
++            None => {
++                let focus = self.focus().map(|win| win.id().clone());
++                let visible: Vec<_> = self
++                    .workspaces()
++                    .flat_map(|(_, _, ws)| {
++                        ws.tiles()
++                            .filter(|tile| tile.is_scratchpad && ws.is_floating(tile.window().id()))
++                            .map(|tile| (ws.id(), tile.window().id().clone()))
++                    })
++                    .collect();
++
++                if let Some(focus) = focus.filter(|f| visible.iter().any(|(_, id)| id == f)) {
++                    self.move_window_to_scratchpad(Some(&focus));
++                    return;
++                }
++                if let Some((_, id)) = visible.iter().find(|(ws, _)| *ws == active_ws_id) {
++                    self.activate_window(id);
++                    return;
++                }
++                match visible.into_iter().next() {
++                    Some((_, id)) => id,
++                    None => match self.scratchpad.first() {
++                        Some(removed) => removed.tile.window().id().clone(),
++                        None => return,
++                    },
++                }
++            }
++        };
++
++        let Some(mut removed) = self.remove_window(&id, Transaction::new()) else {
++            return;
++        };
++        removed.tile.is_scratchpad = true;
++
++        self.active_monitor().unwrap().add_tile(
++            removed.tile,
++            MonitorAddWindowTarget::Auto,
++            ActivateWindow::Yes,
++            true,
++            removed.width,
++            removed.is_full_width,
++            true,
++            None,
++        );
++        self.start_open_animation_for_window(&id);
++    }
++
+     pub fn focus_output(&mut self, output: &Output) {
+         if let MonitorSet::Normal {
+             monitors,
+@@ -4950,6 +5102,12 @@ impl<W: LayoutElement> Layout<W> {
+ 
+         self.is_active = is_active;
+ 
++        for removed in &mut self.scratchpad {
++            let win = removed.tile.window_mut();
++            win.set_activated(false);
++            win.send_pending_configure();
++        }
++
+         let mut ongoing_scrolling_dnd = self.dnd.is_some().then_some(true);
+ 
+         if let Some(InteractiveMoveState::Moving(move_)) = &mut self.interactive_move {
+diff --git a/src/layout/tests.rs b/src/layout/tests.rs
+index a2da4ce5..76df3d7d 100644
+--- a/src/layout/tests.rs
++++ b/src/layout/tests.rs
+@@ -625,6 +625,14 @@ enum Op {
+     FocusFloating,
+     FocusTiling,
+     SwitchFocusFloatingTiling,
++    MoveWindowToScratchpad {
++        #[proptest(strategy = "proptest::option::of(1..=5usize)")]
++        id: Option<usize>,
++    },
++    ToggleScratchpad {
++        #[proptest(strategy = "proptest::option::of(1..=5usize)")]
++        id: Option<usize>,
++    },
+     MoveFloatingWindow {
+         #[proptest(strategy = "proptest::option::of(1..=5usize)")]
+         id: Option<usize>,
+@@ -897,7 +905,7 @@ impl Op {
+                 layout.unset_workspace_name(ws_ref);
+             }
+             Op::AddWindow { mut params } => {
+-                if layout.has_window(&params.id) {
++                if layout.has_window(&params.id) || layout.is_in_scratchpad(&params.id) {
+                     return;
+                 }
+                 if let Some(parent_id) = params.parent_id {
+@@ -922,6 +930,10 @@ impl Op {
+                 mut params,
+                 next_to_id,
+             } => {
++                if layout.is_in_scratchpad(&params.id) {
++                    return;
++                }
++
+                 let mut found_next_to = false;
+ 
+                 if let Some(InteractiveMoveState::Moving(move_)) = &layout.interactive_move {
+@@ -991,6 +1003,10 @@ impl Op {
+                 mut params,
+                 ws_name,
+             } => {
++                if layout.is_in_scratchpad(&params.id) {
++                    return;
++                }
++
+                 let ws_name = format!("ws{ws_name}");
+                 let mut ws_id = None;
+ 
+@@ -1367,6 +1383,14 @@ impl Op {
+             Op::SwitchFocusFloatingTiling => {
+                 layout.switch_focus_floating_tiling();
+             }
++            Op::MoveWindowToScratchpad { id } => {
++                let id = id.filter(|id| layout.has_window(id));
++                layout.move_window_to_scratchpad(id.as_ref());
++            }
++            Op::ToggleScratchpad { id } => {
++                let id = id.filter(|id| layout.has_window(id) || layout.is_in_scratchpad(id));
++                layout.toggle_scratchpad(id.as_ref());
++            }
+             Op::MoveFloatingWindow { id, x, y, animate } => {
+                 let id = id.filter(|id| layout.has_window(id));
+                 layout.move_floating_window(id.as_ref(), x, y, animate);
+@@ -3167,6 +3191,48 @@ fn set_width_fixed_negative() {
+     check_ops(ops);
+ }
+ 
++#[test]
++fn scratchpad_toggle() {
++    let ops = [
++        Op::AddOutput(1),
++        Op::AddWindow {
++            params: TestWindowParams::new(1),
++        },
++        Op::AddWindow {
++            params: TestWindowParams::new(2),
++        },
++        Op::MoveWindowToScratchpad { id: None },
++    ];
++    let mut layout = check_ops(ops);
++    assert_eq!(layout.focus().unwrap().id(), &1);
++    assert!(!layout.has_window(&2));
++    assert!(layout.is_in_scratchpad(&2));
++    assert!(layout
++        .find_window_and_output_by(|w, _| w.id() == &2)
++        .is_some());
++
++    layout.toggle_scratchpad(None);
++    assert_eq!(layout.focus().unwrap().id(), &2);
++    assert!(layout.active_workspace().unwrap().is_floating(&2));
++
++    layout.switch_workspace_down();
++    layout.toggle_scratchpad(None);
++    assert_eq!(layout.focus().unwrap().id(), &2);
++    assert!(layout.active_workspace().unwrap().has_window(&2));
++
++    layout.toggle_scratchpad(None);
++    assert!(!layout.has_window(&2));
++
++    layout.toggle_scratchpad(Some(&2));
++    assert_eq!(layout.focus().unwrap().id(), &2);
++    layout.toggle_scratchpad(Some(&2));
++    assert!(!layout.has_window(&2));
++
++    layout.remove_window(&2, Transaction::new());
++    assert!(layout.scratchpad.is_empty());
++    layout.verify_invariants();
++}
++
+ #[test]
+ fn set_height_fixed_negative() {
+     let ops = [
+diff --git a/src/layout/tile.rs b/src/layout/tile.rs
+index db8ce678..5b9860cf 100644
+--- a/src/layout/tile.rs
++++ b/src/layout/tile.rs
+@@ -62,6 +62,9 @@ pub struct Tile<W: LayoutElement> {
+     /// Whether the tile should float upon unfullscreening.
+     pub(super) restore_to_floating: bool,
+ 
++    /// Whether the window was moved to the scratchpad.
++    pub(super) is_scratchpad: bool,
++
+     /// The size that the window should assume when going floating.
+     ///
+     /// This is generally the last size the window had when it was floating. It can be unknown if
+@@ -200,6 +203,7 @@ impl<W: LayoutElement> Tile<W> {
+             sizing_mode,
+             fullscreen_backdrop: SolidColorBuffer::new((0., 0.), [0., 0., 0., 1.]),
+             restore_to_floating: false,
++            is_scratchpad: false,
+             floating_window_size: None,
+             floating_pos: None,
+             floating_preset_width_idx: None,
