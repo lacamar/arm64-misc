@@ -1,5 +1,5 @@
 Name:           open-hpl
-Version:        1.3.34
+Version:        1.3.35
 Release:        1%{?dist}
 Summary:        Native aarch64 port of Frictional Games' HPL engine
 
@@ -146,6 +146,9 @@ launcher bunker 1944430 "Amnesia The Bunker" \
 %{_datadir}/icons/hicolor/128x128/apps/open-hpl-*.png
 
 %changelog
+* Sun Oct 04 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.35-1
+- Fix build on Fedora 43
+
 * Sun Oct 04 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.34-1
 - SOMA: liquid surfaces and fog
 - SOMA: agents, death, game-over reload
