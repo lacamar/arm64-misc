@@ -1,0 +1,165 @@
+diff --git a/src-tauri/src/commands/config.rs b/src-tauri/src/commands/config.rs
+index fd82ec2..0255280 100644
+--- a/src-tauri/src/commands/config.rs
++++ b/src-tauri/src/commands/config.rs
+@@ -75,6 +75,9 @@ pub async fn set_install_directory(
+     tracing::error!("Unable to persist installation directory: {:?}", err);
+     CommandError::Configuration("Unable to persist installation directory".to_owned())
+   })?;
++  if let Err(err) = config_lock.sync_system_tooling() {
++    tracing::warn!("Failed to sync system tooling: {err}");
++  }
+   Ok(())
+ }
+ 
+diff --git a/src-tauri/src/config.rs b/src-tauri/src/config.rs
+index 5a87121..7c453d4 100644
+--- a/src-tauri/src/config.rs
++++ b/src-tauri/src/config.rs
+@@ -597,6 +597,35 @@ impl LauncherConfig {
+       .is_some_and(|config| config.has_installed_mod(source, mod_name))
+   }
+ 
++  #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
++  pub fn sync_system_tooling(&mut self) -> Result<()> {
++    const SYSTEM_DIR: &str = "/usr/lib64/opengoal";
++    let Ok(version) = fs::read_to_string(Path::new(SYSTEM_DIR).join("VERSION")) else {
++      return Ok(());
++    };
++    let Ok(install_dir) = self.install_dir() else {
++      return Ok(());
++    };
++    let version = version.trim().to_owned();
++    let official_dir = install_dir.join("versions").join("official");
++    create_dir(&official_dir)?;
++    for entry in fs::read_dir(&official_dir)?.flatten() {
++      if fs::read_link(entry.path()).is_ok_and(|t| t == Path::new(SYSTEM_DIR)) {
++        fs::remove_file(entry.path())?;
++      }
++    }
++    std::os::unix::fs::symlink(SYSTEM_DIR, official_dir.join(&version))?;
++    if self.active_version.as_ref() != Some(&version) {
++      self.set_active_version(Some(version))?;
++    }
++    self.copy_active_binaries()
++  }
++
++  #[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
++  pub fn sync_system_tooling(&mut self) -> Result<()> {
++    Ok(())
++  }
++
+   pub fn copy_active_binaries(&self) -> anyhow::Result<()> {
+     let install_dir = self.install_dir()?;
+     let version = self.active_version()?;
+diff --git a/src-tauri/src/main.rs b/src-tauri/src/main.rs
+index da7db9e..46f608d 100644
+--- a/src-tauri/src/main.rs
++++ b/src-tauri/src/main.rs
+@@ -73,8 +73,18 @@ static TAURI_APP: OnceCell<tauri::AppHandle> = OnceCell::const_new();
+ fn main() {
+   #[cfg(target_os = "linux")]
+   unsafe {
++    let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some();
+     // temporary fix for: https://github.com/tauri-apps/tauri/issues/5143
+-    std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
++    if !wayland && std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
++      std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
++    }
++    // SDL only picks wayland on compositors with fifo-v1
++    if wayland
++      && std::env::var_os("SDL_VIDEO_DRIVER").is_none()
++      && std::env::var_os("SDL_VIDEODRIVER").is_none()
++    {
++      std::env::set_var("SDL_VIDEO_DRIVER", "wayland");
++    }
+   }
+   // In the event that some catastrophic happens, atleast log it out
+   // the panic_hook will log to a file on the desktop
+@@ -132,13 +142,17 @@ fn main() {
+       //
+       // This allows us to avoid hacky globals, and pass around information (in this case, the config)
+       // to the relevant places
+-      let config = config::LauncherConfig::load_config(
++      let mut config = config::LauncherConfig::load_config(
+         app
+           .path()
+           .app_config_dir()
+           .expect("Failed to resolve app config directory"),
+       );
+ 
++      if let Err(err) = config.sync_system_tooling() {
++        warn!("Failed to sync system tooling: {err}");
++      }
++
+       if config.active_version.is_some() {
+         if let Err(err) = config.ensure_active_binaries_exist() {
+           warn!("Failed to ensure active binaries exist: {err}");
+diff --git a/src/components/header/Header.svelte b/src/components/header/Header.svelte
+index e37b985..73546f4 100644
+--- a/src/components/header/Header.svelte
++++ b/src/components/header/Header.svelte
+@@ -69,6 +69,7 @@
+     const latestVersion = latestToolingVersion?.version;
+ 
+     if (!latestVersion) return;
++    if (!latestToolingVersion?.downloadUrl) return;
+     if (versionState.activeToolingVersion === latestVersion) return;
+ 
+     // Check that we havn't already downloaded it
+diff --git a/src/lib/utils/github.ts b/src/lib/utils/github.ts
+index 7a734f6..e57234d 100644
+--- a/src/lib/utils/github.ts
++++ b/src/lib/utils/github.ts
+@@ -31,6 +31,8 @@ function getDownloadLinkForCurrentPlatform(githubRelease: GitHubRelease) {
+         !asset.name.toLowerCase().includes("lsp") &&
+         asset.name.toLowerCase().includes(userArch),
+     );
++  } else if (plat == "linux" && arch() !== "x86_64") {
++    return undefined;
+   } else {
+     matchingAsset = githubRelease.assets.find(
+       (asset) =>
+diff --git a/src/routes/settings/Versions.svelte b/src/routes/settings/Versions.svelte
+index 0ffd254..ce90d58 100644
+--- a/src/routes/settings/Versions.svelte
++++ b/src/routes/settings/Versions.svelte
+@@ -82,7 +82,9 @@
+     }
+ 
+     // filter incompatible releases
+-    releases = releases.filter((r) => r.downloadUrl !== undefined);
++    releases = releases.filter(
++      (r) => r.isDownloaded || r.downloadUrl !== undefined,
++    );
+     releases = releases.filter((r) => !r.invalid);
+ 
+     // if no releases are found, early out
+diff --git a/src/state/requirements-store.ts b/src/state/requirements-store.ts
+index 7ab952a..f49f7ce 100644
+--- a/src/state/requirements-store.ts
++++ b/src/state/requirements-store.ts
+@@ -30,9 +30,9 @@ async function evaluateRequirements(
+   const architecture = arch();
+   const osType = type();
+ 
+-  const isAVXRelevant = osType !== "macos";
++  const isAVXRelevant = osType !== "macos" && architecture !== "aarch64";
+   const isTryingToUseARMOutsideOfMacOS =
+-    architecture === "aarch64" && osType !== "macos";
++    architecture === "aarch64" && osType === "windows";
+   const isVCCRelevant = osType === "windows";
+ 
+   const isOpenGLMet = await isOpenGLRequirementMet(forceOpenGL);
+@@ -45,9 +45,9 @@ async function evaluateRequirements(
+ 
+   let requirementsMet: boolean;
+ 
+-  if (architecture === "aarch64" && osType !== "macos") {
++  if (isTryingToUseARMOutsideOfMacOS) {
+     requirementsMet = false;
+-  } else if (osType === "macos") {
++  } else if (osType === "macos" || architecture === "aarch64") {
+     requirementsMet = Boolean(isOpenGLMet && isDiskSpaceMet);
+   } else if (osType === "windows") {
+     requirementsMet = Boolean(
