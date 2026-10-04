@@ -1,0 +1,6 @@
+<!doctype html>
+<title>Frames</title>
+<style>body { margin: 0 } iframe { position: absolute; left: 50px; top: 100px; width: 400px; height: 200px; border: 2px solid #888 }</style>
+<h1>Outer</h1>
+<iframe title="Inner" src="http://localhost:8000/frame.html"></iframe>
+<script>window.log = []; addEventListener("message", (e) => log.push(e.data));</script>

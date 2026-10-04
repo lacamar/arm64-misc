@@ -9,7 +9,7 @@
 
 Name:           zen-control
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        6%{?dist}
+Release:        7%{?dist}
 Summary:        MCP bridge and WebExtension to drive the Zen browser from Claude Code
 
 License:        LicenseRef-Not-specified
@@ -21,6 +21,7 @@ Patch1:         0002-controlled-tab-marker.patch
 Patch2:         0003-background-control.patch
 Patch3:         0004-page-robustness.patch
 Patch4:         0005-trusted-input.patch
+Patch5:         0006-iframes-claude-folder.patch
 
 BuildArch:      noarch
 
@@ -82,6 +83,13 @@ chmod 0755 %{buildroot}%{_bindir}/%{name}
 %config(noreplace) %{_sysconfdir}/zen/policies/policies.json
 
 %changelog
+* Sat Oct 03 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-7
+- Iframe support, incl. cross-origin
+- Put new tabs in a "Claude" Zen folder
+- Fix stray click after HTML5 drag
+- List draggable elements
+- Fix read_page element count
+
 * Sat Oct 03 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-6
 - Trusted input via experiment API
 - Add drag, incl. HTML5 drag and drop

@@ -1,0 +1,29 @@
+<!doctype html><title>input test</title>
+<style>body{margin:0;font:16px sans-serif} #scroller{height:100px;width:300px;overflow:auto;border:1px solid} #drag{width:60px;height:60px;background:#c33;position:absolute;left:400px;top:20px}</style>
+<button id="b">Press me</button>
+<input id="t" placeholder="name"><input id="pw" type="password" value="hunter2">
+<textarea id="ta"></textarea>
+<div id="ce" contenteditable>edit me</div>
+<p id="para">Triple click selects this whole paragraph of words.</p>
+<div id="scroller"><div style="height:1000px">tall</div></div>
+<div id="drag"></div>
+<select id="s"><option value="1">One</option><option value="2">Two</option></select>
+<label><input id="cb" type="checkbox"> agree</label>
+<input id="cc" autocomplete="cc-number" value="4111111111111111"><input id="dt" type="date">
+<main><h1>Main title</h1><p>Main body text.</p></main>
+<div id="src" draggable="true" style="display:inline-block;padding:10px;background:#9c9">drag me</div> <div id="dst" style="display:inline-block;width:120px;height:40px;background:#99c">drop here</div>
+<div style="height:2000px"></div><button id="far">Far away</button>
+<script>
+window.log = [];
+const L = (e) => log.push(`${e.type}:${e.target.id || e.target.tagName}:${e.isTrusted ? "T" : "F"}${e.detail ? ":d" + e.detail : ""}${e.button ? ":b" + e.button : ""}${e.key ? ":k=" + e.key : ""}${e.inputType ? ":" + e.inputType : ""}${e.ctrlKey ? ":ctrl" : ""}${e.shiftKey ? ":shift" : ""}`);
+for (const t of ["click", "dblclick", "contextmenu", "mousedown", "mouseup", "keydown", "input", "beforeinput", "wheel", "mouseover", "auxclick"]) addEventListener(t, L, true);
+let dragging = null;
+drag.addEventListener("mousedown", (e) => { dragging = [e.clientX - drag.offsetLeft, e.clientY - drag.offsetTop]; });
+addEventListener("mousemove", (e) => { if (dragging && e.buttons & 1) { drag.style.left = e.clientX - dragging[0] + "px"; drag.style.top = e.clientY - dragging[1] + "px"; } });
+addEventListener("mouseup", () => { dragging = null; });
+window.secret = 42;
+src.addEventListener("dragstart", (e) => { e.dataTransfer.setData("text/plain", "payload"); log.push("dragstart:T"); });
+dst.addEventListener("dragover", (e) => e.preventDefault());
+dst.addEventListener("drop", (e) => { e.preventDefault(); log.push("drop:" + e.dataTransfer.getData("text/plain") + ":" + (e.isTrusted ? "T" : "F")); dst.textContent = "dropped"; });
+console.error("boot error xyz"); console.log("hello log");
+</script>

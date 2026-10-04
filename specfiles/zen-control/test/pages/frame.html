@@ -1,0 +1,11 @@
+<!doctype html>
+<title>Inner</title>
+<style>body { margin: 0 } #fb { position: absolute; left: 10px; top: 10px; width: 100px; height: 30px }</style>
+<button id="fb">Frame button</button>
+<input id="fi" placeholder="Frame input" style="position: absolute; left: 10px; top: 60px">
+<script>
+  const post = (s) => parent.postMessage(s, "*");
+  fb.onclick = (e) => post("fclick:" + (e.isTrusted ? "T" : "F"));
+  fi.onkeydown = (e) => post("fkey:" + e.key + ":" + (e.isTrusted ? "T" : "F"));
+  fi.oninput = () => post("finput:" + fi.value);
+</script>
