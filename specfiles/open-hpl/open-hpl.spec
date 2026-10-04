@@ -1,5 +1,5 @@
 Name:           open-hpl
-Version:        1.3.33
+Version:        1.3.34
 Release:        1%{?dist}
 Summary:        Native aarch64 port of Frictional Games' HPL engine
 
@@ -146,6 +146,15 @@ launcher bunker 1944430 "Amnesia The Bunker" \
 %{_datadir}/icons/hicolor/128x128/apps/open-hpl-*.png
 
 %changelog
+* Sun Oct 04 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.34-1
+- SOMA: liquid surfaces and fog
+- SOMA: agents, death, game-over reload
+- SOMA: GUI camera textures, ImGui fixes
+- SOMA: save format v16
+- SOMA: cached script bytecode
+- HPL2: delayed occlusion culling
+- HPL2: Newton joint limits
+
 * Sat Oct 03 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.33-1
 - Never write to game dirs
 - Caches in XDG cache dir
