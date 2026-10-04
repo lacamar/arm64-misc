@@ -8,7 +8,7 @@
 
 Name:           opengoal-launcher
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Launcher for OpenGOAL (Jak and Daxter trilogy PC port)
 License:        ISC
 URL:            https://github.com/open-goal/launcher
@@ -23,7 +23,6 @@ BuildRequires:  cmake
 BuildRequires:  gcc-c++
 BuildRequires:  rust
 BuildRequires:  nodejs-npm
-BuildRequires:  yarnpkg
 BuildRequires:  pkgconfig(webkit2gtk-4.1)
 BuildRequires:  pkgconfig(gtk+-3.0)
 BuildRequires:  pkgconfig(libsoup-3.0)
@@ -42,7 +41,8 @@ tooling version.
 %autosetup -n launcher-%{commit} -p1
 
 %build
-export YARN_CACHE_FOLDER=$PWD/.yarn-cache
+npm install --no-save --prefix .yarnbin yarn@1
+export PATH=$PWD/.yarnbin/node_modules/.bin:$PATH YARN_CACHE_FOLDER=$PWD/.yarn-cache
 yarn install --frozen-lockfile
 yarn tauri build --no-bundle
 
@@ -74,6 +74,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{appid}.desktop
 %{_datadir}/icons/hicolor/*/apps/%{appid}.png
 
 %changelog
+* Mon Oct 05 2026 Lachlan Marie <lchlnm@pm.me> - 2.11.1^1.git.7e1c23b-2
+- Bootstrap yarn via npm
+
 * Mon Oct 05 2026 Lachlan Marie <lchlnm@pm.me> - 2.11.1^1.git.7e1c23b-1
 - Initial package
 - Use system opengoal tooling
