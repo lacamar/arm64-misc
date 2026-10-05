@@ -1,5 +1,5 @@
 Name:           open-hpl
-Version:        1.3.35
+Version:        1.3.36
 Release:        1%{?dist}
 Summary:        Native aarch64 port of Frictional Games' HPL engine
 
@@ -47,21 +47,6 @@ and Amnesia: The Bunker are included.
 %autosetup -p1
 
 %build
-cd HPL2/dependencies/newton-dynamics
-%cmake \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DNEWTON_BUILD_CORE_ONLY=ON \
-    -DNEWTON_BUILD_SANDBOX_DEMOS=OFF \
-    -DNEWTON_BUILD_SHARED_LIBS=OFF \
-    -DNEWTON_WITH_AVX_PLUGIN=OFF \
-    -DNEWTON_WITH_REFERENCE_GPU_PLUGIN=OFF
-%cmake_build
-cd -
-
-newton=HPL2/dependencies/newton-dynamics/redhat-linux-build/lib
-install -Dpm0644 -t HPL2/dependencies/lib/linux/lib $newton/libdgCore.a $newton/libdgPhysics.a
-install -Dpm0644 $newton/libnewton.a HPL2/dependencies/lib/linux/lib/libNewton.a
-
 cd amnesia/src
 %cmake \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
@@ -146,6 +131,17 @@ launcher bunker 1944430 "Amnesia The Bunker" \
 %{_datadir}/icons/hicolor/128x128/apps/open-hpl-*.png
 
 %changelog
+* Mon Oct 05 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.36-1
+- SOMA: force fields, creature tails, agent pitch
+- SOMA: end credits, 05_01 -> 05_02
+- SOMA: terrain blend layers, decals, undergrowth
+- SOMA: sun cascaded shadows, underwater fog
+- SOMA: omnitool and voice screens
+- SOMA: agent movement like the real engine
+- SOMA: save and map transfer fixes
+- HPL2: in-tree Newton 2.36
+- HPL2: HPL3-style static collision combine
+
 * Sun Oct 04 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.35-1
 - Fix build on Fedora 43
 
