@@ -1,0 +1,84 @@
+diff -ru a/src/asahi/vulkan/hk_device_memory.c b/src/asahi/vulkan/hk_device_memory.c
+--- a/src/asahi/vulkan/hk_device_memory.c
++++ b/src/asahi/vulkan/hk_device_memory.c
+@@ -330,6 +330,12 @@
+                        "Memory object already mapped.");
+    }
+ 
++   /* The driver may hold its own mapping (host image copy, BO cache) */
++   if (fixed_addr && mem->bo->_map && mem->bo->_map != fixed_addr) {
++      munmap(mem->bo->_map, mem->bo->size);
++      mem->bo->_map = NULL;
++   }
++
+    mem->map = agx_bo_map_placed(mem->bo, fixed_addr);
+    assert(!fixed_addr || mem->map == fixed_addr);
+    *ppData = mem->map + offset;
+diff -ru a/src/asahi/vulkan/hk_image.c b/src/asahi/vulkan/hk_image.c
+--- a/src/asahi/vulkan/hk_image.c
++++ b/src/asahi/vulkan/hk_image.c
+@@ -1322,6 +1322,12 @@
+    hk_image_finish(dev, &image, NULL);
+ }
+ 
++static char *
++hk_image_plane_map(struct hk_image_plane *plane)
++{
++   return (char *)agx_bo_map(plane->bo) + plane->bo_offset_B;
++}
++
+ static void
+ hk_image_plane_bind(struct hk_device *dev, struct hk_image_plane *plane,
+                     struct hk_device_memory *mem, uint64_t *offset_B)
+@@ -1340,7 +1346,8 @@
+       UNREACHABLE("todo");
+    } else {
+       plane->addr = mem->bo->va->addr + *offset_B;
+-      plane->map = agx_bo_map(mem->bo) + *offset_B;
++      plane->bo = mem->bo;
++      plane->bo_offset_B = *offset_B;
+       plane->rem = mem->bo->size - (*offset_B);
+    }
+ 
+@@ -1450,7 +1457,7 @@
+       layout, info->imageSubresource.mipLevel);
+ 
+    const char *src = (const char *)info->pHostPointer;
+-   char *dst = (char *)dst_image->planes[plane].map + image_offset;
++   char *dst = hk_image_plane_map(&dst_image->planes[plane]) + image_offset;
+    for (unsigned layer = 0; layer < layers;
+         layer++, src += src_layer_stride, dst += dst_layer_stride) {
+       if (copy_memcpy) {
+@@ -1529,7 +1536,7 @@
+    bool tiled = ail_is_level_twiddled_uncompressed(
+       layout, info->imageSubresource.mipLevel);
+ 
+-   const char *src = (const char *)src_image->planes[plane].map + image_offset;
++   const char *src = hk_image_plane_map(&src_image->planes[plane]) + image_offset;
+    char *dst = (char *)info->pHostPointer;
+    for (unsigned layer = 0; layer < layers;
+         layer++, src += src_layer_stride, dst += dst_layer_stride) {
+@@ -1616,8 +1623,8 @@
+       dst_layout, info->dstSubresource.mipLevel);
+ 
+    const char *src =
+-      (const char *)src_image->planes[src_plane].map + src_image_offset;
+-   char *dst = (char *)dst_image->planes[dst_plane].map + dst_image_offset;
++      hk_image_plane_map(&src_image->planes[src_plane]) + src_image_offset;
++   char *dst = hk_image_plane_map(&dst_image->planes[dst_plane]) + dst_image_offset;
+    for (unsigned layer = 0; layer < layers_to_copy;
+         layer++, src += src_layer_stride, dst += dst_layer_stride) {
+ 
+diff -ru a/src/asahi/vulkan/hk_image.h b/src/asahi/vulkan/hk_image.h
+--- a/src/asahi/vulkan/hk_image.h
++++ b/src/asahi/vulkan/hk_image.h
+@@ -55,7 +55,8 @@
+    struct agx_va *va;
+ 
+    /* For host image copy */
+-   void *map;
++   struct agx_bo *bo;
++   uint64_t bo_offset_B;
+    uint32_t rem;
+ 
+    /* If the image has sparse residency, its residency is tracked in this

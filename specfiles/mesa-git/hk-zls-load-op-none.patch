@@ -1,0 +1,22 @@
+--- a/src/asahi/vulkan/hk_cmd_draw.c
++++ b/src/asahi/vulkan/hk_cmd_draw.c
+@@ -513,7 +513,8 @@
+                     z->resolveMode != VK_RESOLVE_MODE_NONE || partial_render ||
+                     true;
+ 
+-      zls.z_load = z->loadOp == VK_ATTACHMENT_LOAD_OP_LOAD || partial_render ||
++      zls.z_load = z->loadOp == VK_ATTACHMENT_LOAD_OP_LOAD ||
++                   z->loadOp == VK_ATTACHMENT_LOAD_OP_NONE || partial_render ||
+                    incomplete_render_area;
+    }
+ 
+@@ -528,7 +529,8 @@
+                     s->resolveMode != VK_RESOLVE_MODE_NONE || partial_render ||
+                     true;
+ 
+-      zls.s_load = s->loadOp == VK_ATTACHMENT_LOAD_OP_LOAD || partial_render ||
++      zls.s_load = s->loadOp == VK_ATTACHMENT_LOAD_OP_LOAD ||
++                   s->loadOp == VK_ATTACHMENT_LOAD_OP_NONE || partial_render ||
+                    incomplete_render_area;
+    }
+ 

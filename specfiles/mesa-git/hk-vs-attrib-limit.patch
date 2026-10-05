@@ -1,0 +1,90 @@
+Honeykrisp: ignore VS inputs past maxVertexInputAttributes.
+
+DXVK's D3D9 fixed-function VS reads 18 attributes and uses binding 16.
+Slots past 16 overflowed root attrib arrays, prolog keys and vb[].
+
+--- a/src/asahi/vulkan/hk_cmd_buffer.h
++++ b/src/asahi/vulkan/hk_cmd_buffer.h
+@@ -232,7 +232,7 @@
+    struct hk_api_shader *shaders[MESA_SHADER_MESH + 1];
+ 
+    /* Vertex buffers */
+-   struct hk_addr_range vb[AGX_MAX_VBUFS];
++   struct hk_addr_range vb[MESA_VK_MAX_VERTEX_BINDINGS];
+ 
+    /* Transform feedback buffers */
+    struct hk_addr_range xfb[4];
+--- a/src/asahi/vulkan/hk_cmd_draw.c
++++ b/src/asahi/vulkan/hk_cmd_draw.c
+@@ -2618,7 +2618,7 @@
+ agx_fill_velem_keys(const struct vk_vertex_input_state *vi,
+                     uint64_t attribs_read, struct agx_velem_key *keys)
+ {
+-   u_foreach_bit(a, vi->attributes_valid) {
++   u_foreach_bit(a, vi->attributes_valid & attribs_read) {
+       struct vk_vertex_attribute_state attr = vi->attributes[a];
+ 
+       assert(vi->bindings_valid & BITFIELD_BIT(attr.binding));
+@@ -2768,7 +2768,8 @@
+          agx_fill_velem_keys(dyn->vi, sw_vs->info.vs.attribs_read,
+                              key.prolog.attribs);
+ 
+-         u_foreach_bit(a, dyn->vi->attributes_valid) {
++         u_foreach_bit(a, dyn->vi->attributes_valid &
++                             sw_vs->info.vs.attribs_read) {
+             unsigned slot =
+                util_bitcount64(sw_vs->info.vs.attribs_read & BITFIELD_MASK(a));
+ 
+--- a/src/asahi/vulkan/hk_shader.c
++++ b/src/asahi/vulkan/hk_shader.c
+@@ -193,6 +193,20 @@
+    NIR_PASS(_, nir, nir_lower_compute_system_values, &csv_options);
+ }
+ 
++static bool
++zero_excess_vs_input(nir_builder *b, nir_intrinsic_instr *intr, void *data)
++{
++   if (intr->intrinsic != nir_intrinsic_load_input ||
++       nir_src_as_uint(intr->src[0]) + nir_intrinsic_base(intr) <
++          AGX_MAX_ATTRIBS)
++      return false;
++
++   b->cursor = nir_before_instr(&intr->instr);
++   nir_def_replace(&intr->def, nir_imm_zero(b, intr->def.num_components,
++                                            intr->def.bit_size));
++   return true;
++}
++
+ static void
+ hk_populate_vs_key(struct hk_vs_key *key,
+                    const struct vk_graphics_pipeline_state *state)
+@@ -1412,6 +1426,12 @@
+       /* Fold constant offset srcs for IO. */
+       NIR_PASS(_, nir, nir_opt_constant_folding);
+ 
++      /* DXVK fixed-function exceeds maxVertexInputAttributes */
++      if (sw_stage == MESA_SHADER_VERTEX) {
++         NIR_PASS(_, nir, nir_shader_intrinsics_pass, zero_excess_vs_input,
++                  nir_metadata_control_flow, NULL);
++      }
++
+       for (enum hk_vs_variant v = 0; v < HK_VS_VARIANTS; ++v) {
+          /* Only compile the software variant if we might use this shader with
+           * geometry/tessellation. We need to compile the hardware variant
+@@ -1440,11 +1460,15 @@
+             shader->info.vs.attribs_read =
+                nir->info.inputs_read >> VERT_ATTRIB_GENERIC0;
+ 
++            while (util_bitcount(shader->info.vs.attribs_read) > AGX_MAX_ATTRIBS)
++               shader->info.vs.attribs_read &=
++                  ~BITFIELD_BIT(util_last_bit(shader->info.vs.attribs_read) - 1);
++
+             if (shader->info.vs.use_prolog) {
+                NIR_PASS(_, clone, agx_nir_lower_vs_input_to_prolog);
+             } else {
+                struct agx_velem_key attribs[AGX_MAX_ATTRIBS];
+-               for (unsigned a = 0; a < AGX_MAX_ATTRIBS; ++a) {
++               u_foreach_bit(a, shader->info.vs.attribs_read) {
+                   if (key->vs.attribs[a].format) {
+                      unsigned slot = util_bitcount64(
+                         shader->info.vs.attribs_read & BITFIELD_MASK(a));

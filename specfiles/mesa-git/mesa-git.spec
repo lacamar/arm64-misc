@@ -95,7 +95,7 @@ Summary:        Mesa graphics libraries
 %global commitdate 20261003
 %global ver 26.3.0
 Version:        %{ver}~git%{commitdate}.%{shortcommit}
-Release:        1%{?dist}
+Release:        2%{?dist}
 License:        MIT AND BSD-3-Clause AND SGI-B-2.0
 URL:            https://mesa3d.org
 
@@ -107,6 +107,9 @@ Source1:        Mesa-MLAA-License-Clarification-Email.txt
 Source2:        https://gitlab.freedesktop.org/virgl/venus-protocol/-/archive/v1.1.3/venus-protocol-v1.1.3.tar.gz
 
 Patch0:         hk-heap-overflow.patch
+Patch1:         hk-zls-load-op-none.patch
+Patch2:         hk-placed-map.patch
+Patch3:         hk-vs-attrib-limit.patch
 
 # In CentOS/RHEL, Rust crates required to build NVK are vendored.
 # The minimum target versions are obtained from the .wrap files
@@ -759,6 +762,12 @@ ln -s libGLX_mesa.so.0 %{buildroot}%{_libdir}/libGLX_system.so.0
 %endif
 
 %changelog
+* Sun Oct 04 2026 lacamar <lchlnm@pm.me> - 26.3.0~git20261003.888a19e2-2
+- Honeykrisp: load depth/stencil on LOAD_OP_NONE
+- Fix DXVK tiler-mode black frames (Dead Space 2)
+- Honeykrisp: fix placed maps of driver-mapped memory (wow64)
+- Honeykrisp: fix >16 VS inputs (DXVK D3D9 FF black)
+
 * Sat Oct 03 2026 lacamar <lchlnm@pm.me> - 26.3.0~git20261003.888a19e2-1
 - mesa main snapshot
 - Honeykrisp: 512 MiB geometry heap (HK_HEAP_MB)
