@@ -1,0 +1,372 @@
+diff --git a/README.md b/README.md
+index 317805e..961db48 100644
+--- a/README.md
++++ b/README.md
+@@ -50,7 +50,8 @@ Tools: `tabs_list`, `tab_new`, `tab_select`, `tab_close`, `navigate`, `go_back`,
+ Typical flow: `navigate` → `read_page` (get refs like `e12`) → `click`/`type`
+ with a ref → `screenshot` to verify. Iframes (including cross-origin) are
+ inlined in `read_page`/`find` with refs like `f42:e3`. Tabs from `tab_new` go
+-into a "Claude" Zen folder.
++into a "Claude · <project>" Zen folder, and each Claude session keeps its own
++current tab. After upgrading, reconnect with `/mcp` and restart Zen.
+ 
+ Mouse, keyboard, wheel and `evaluate` go through a privileged experiment API
+ (`extensions.experiments.enabled`), so events are trusted and CSP doesn't
+diff --git a/extension/background.js b/extension/background.js
+index 003c7a9..7b7ba19 100644
+--- a/extension/background.js
++++ b/extension/background.js
+@@ -8,7 +8,7 @@ const MAX_SHOT_SIDE = 1568;
+ 
+ let ws = null;
+ let backoff = 1000;
+-let currentTabId = null;
++const current = new Map(); // MCP session -> tab
+ let settings = { allSites: false, allowedSites: [] };
+ const controlled = new Set();
+ const stopped = new Set();
+@@ -46,9 +46,9 @@ function connect() {
+     if (!msg || msg.type !== "cmd") return;
+     let reply;
+     try {
+-      const result = await handle(msg.cmd, msg.args || {});
++      const result = await handle(msg.cmd, msg.args || {}, msg.sid);
+       reply = { type: "result", id: msg.id, ok: true, result };
+-      if (!UNGATED.has(msg.cmd) && currentTabId != null) mark(currentTabId);
++      if (!UNGATED.has(msg.cmd) && current.has(msg.sid)) mark(current.get(msg.sid));
+     } catch (e) {
+       reply = { type: "result", id: msg.id, ok: false, error: String(e && e.message || e) };
+     }
+@@ -68,18 +68,18 @@ function scheduleReconnect() {
+ 
+ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+ 
+-async function resolveTab(tabId) {
++async function resolveTab(tabId, sid) {
+   if (tabId != null) {
+     const t = await browser.tabs.get(tabId);
+-    currentTabId = t.id;
++    current.set(sid, t.id);
+     return t;
+   }
+-  if (currentTabId != null) {
+-    try { return await browser.tabs.get(currentTabId); } catch { currentTabId = null; }
++  if (current.has(sid)) {
++    try { return await browser.tabs.get(current.get(sid)); } catch { current.delete(sid); }
+   }
+   const [active] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
+   if (!active) throw new Error("No active tab found");
+-  currentTabId = active.id;
++  current.set(sid, active.id);
+   return active;
+ }
+ 
+@@ -350,66 +350,65 @@ browser.webRequest.onErrorOccurred.addListener((d) => {
+ 
+ /* ---------- command dispatch ---------- */
+ 
+-async function handle(cmd, args) {
++async function handle(cmd, args, sid) {
+   if (args.url && !/^[a-z][\w+.-]*:(?!\d)/i.test(args.url)) args.url = "https://" + args.url;
+   if (!UNGATED.has(cmd)) {
+     if (cmd === "navigate" || cmd === "tab_new") { if (args.url) await ensureAllowed(args.url); }
+-    else await ensureAllowed((await resolveTab(args.tabId)).url);
++    else await ensureAllowed((await resolveTab(args.tabId, sid)).url);
+   }
+   if (!["ping", "tabs_list", "tab_new"].includes(cmd)) {
+-    const t = cmd === "tab_select" ? { id: args.tabId } : await resolveTab(args.tabId);
++    const t = cmd === "tab_select" ? { id: args.tabId } : await resolveTab(args.tabId, sid);
+     if (stopped.has(t.id)) throw new Error(`The user stopped Claude on tab ${t.id}. Ask them before continuing; they can resume it from the Zen Control toolbar button.`);
+   }
+   switch (cmd) {
+     case "ping":
+-      return { pong: true, currentTabId };
++      return { pong: true, currentTabId: current.get(sid) ?? null, version: browser.runtime.getManifest().version };
+ 
+     case "tabs_list": {
+       const tabs = await browser.tabs.query({});
+-      return { currentTabId, tabs: tabs.map(tabInfo) };
++      return { currentTabId: current.get(sid) ?? null, tabs: tabs.map(tabInfo) };
+     }
+     case "tab_new": {
+       const t = await browser.tabs.create({ url: args.url || "about:blank", active: !!args.active });
+-      currentTabId = t.id;
+-      priv?.folder(t.id, "Claude").catch(() => {});
++      current.set(sid, t.id);
++      priv?.folder(t.id, args.folder || "Claude").catch(() => {});
+       if (args.url) await withLoad(t.id, async () => {}, args.timeout);
+       return tabInfo(await browser.tabs.get(t.id));
+     }
+     case "tab_select": {
+       const t = await browser.tabs.get(args.tabId);
+-      currentTabId = t.id;
++      current.set(sid, t.id);
+       if (args.activate) await browser.tabs.update(t.id, { active: true });
+       return tabInfo(await browser.tabs.get(t.id));
+     }
+     case "tab_close": {
+-      const t = await resolveTab(args.tabId);
++      const t = await resolveTab(args.tabId, sid);
+       await browser.tabs.remove(t.id);
+-      if (currentTabId === t.id) currentTabId = null;
+       return { closed: t.id };
+     }
+     case "navigate": {
+-      const t = await resolveTab(args.tabId);
++      const t = await resolveTab(args.tabId, sid);
+       await withLoad(t.id, () => browser.tabs.update(t.id, { url: args.url }), args.timeout);
+       return tabInfo(await browser.tabs.get(t.id));
+     }
+     case "back":
+     case "forward":
+     case "reload": {
+-      const t = await resolveTab(args.tabId);
++      const t = await resolveTab(args.tabId, sid);
+       await withLoad(t.id, () => cmd === "back" ? browser.tabs.goBack(t.id) : cmd === "forward" ? browser.tabs.goForward(t.id) : browser.tabs.reload(t.id, { bypassCache: !!args.bypassCache }), args.timeout);
+       return tabInfo(await browser.tabs.get(t.id));
+     }
+     case "screenshot": {
+-      const t = await resolveTab(args.tabId);
++      const t = await resolveTab(args.tabId, sid);
+       return await screenshot(t, args);
+     }
+     case "resize_window": {
+-      const t = await resolveTab(args.tabId);
++      const t = await resolveTab(args.tabId, sid);
+       const w = await browser.windows.update(t.windowId, { state: "normal", width: args.width, height: args.height });
+       return { windowId: w.id, width: w.width, height: w.height, state: w.state };
+     }
+     case "network_requests": {
+-      const t = await resolveTab(args.tabId);
++      const t = await resolveTab(args.tabId, sid);
+       let list = net.get(t.id) || [];
+       if (args.urlPattern) list = list.filter((r) => r.url.includes(args.urlPattern));
+       const total = list.length;
+@@ -418,17 +417,17 @@ async function handle(cmd, args) {
+       return { count: out.length, total, requests: out };
+     }
+     case "read_page":
+-      return readPage(await resolveTab(args.tabId), args);
++      return readPage(await resolveTab(args.tabId, sid), args);
+     case "find":
+-      return find(await resolveTab(args.tabId), args);
++      return find(await resolveTab(args.tabId, sid), args);
+     case "evaluate": {
+-      const t = await resolveTab(args.tabId);
++      const t = await resolveTab(args.tabId, sid);
+       return priv ? { result: await trusted(await wake(t), "eval", args) } : await sendToContent(t, "evaluate", args);
+     }
+     default: {
+       // Everything else is a DOM command handled by content.js; wait for the
+       // page after actions that commonly navigate.
+-      const t = await resolveTab(args.tabId);
++      const t = await resolveTab(args.tabId, sid);
+       if (!priv && cmd === "drag") throw new Error("drag needs extensions.experiments.enabled=true (set by the zen-control policy)");
+       const r = priv && TRUSTED[cmd] ? await TRUSTED[cmd](await wake(t), args) : await sendToContent(t, cmd, args);
+       if (["click", "press_key", "type"].includes(cmd) && r && r.mayNavigate) {
+@@ -440,7 +439,7 @@ async function handle(cmd, args) {
+   }
+ }
+ 
+-browser.tabs.onRemoved.addListener((id) => { if (id === currentTabId) currentTabId = null; controlled.delete(id); stopped.delete(id); });
++browser.tabs.onRemoved.addListener((id) => { for (const [s, t] of current) if (t === id) current.delete(s); controlled.delete(id); stopped.delete(id); });
+ setBadge(false);
+ browser.storage.local.get("settings").then((st) => {
+   settings = { ...settings, ...st.settings };
+diff --git a/extension/content.js b/extension/content.js
+index 51dc39f..3f3eb33 100644
+--- a/extension/content.js
++++ b/extension/content.js
+@@ -74,7 +74,7 @@
+       el = query(args.selector);
+       if (!el) throw new Error(`No element matches selector "${args.selector}"`);
+     } else if (typeof args.x === "number" && typeof args.y === "number") {
+-      el = document.elementFromPoint(args.x, args.y);
++      el = deepAt(args.x, args.y);
+       if (!el) throw new Error(`No element at (${args.x}, ${args.y})`);
+     }
+     return el;
+@@ -89,6 +89,11 @@
+     return out;
+   }
+   const query = (sel) => document.querySelector(sel) || deepAll(sel)[0];
++  function deepAt(x, y) {
++    let el = document.elementFromPoint(x, y);
++    for (let sr; el !== host && (sr = el?.openOrClosedShadowRoot); ) { const e = sr.elementFromPoint(x, y); if (!e || e === el) break; el = e; }
++    return el;
++  }
+ 
+   /* ---------- page reading ---------- */
+   const INTERACTIVE = "a[href],button,input,select,textarea,summary,[role=button],[role=link],[role=checkbox],[role=radio],[role=tab],[role=menuitem],[role=option],[role=switch],[role=combobox],[role=textbox],[role=slider],[contenteditable=''],[contenteditable=true],[onclick],[tabindex]:not([tabindex=\"-1\"]),[draggable=true]";
+@@ -129,7 +134,7 @@
+   }
+   function labelText(el) {
+     if (el.id) {
+-      const l = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
++      const l = el.getRootNode().querySelector(`label[for="${CSS.escape(el.id)}"]`);
+       if (l) return l.innerText;
+     }
+     const wrap = el.closest("label");
+@@ -139,7 +144,7 @@
+     const aria = el.getAttribute("aria-label");
+     if (aria) return clean(aria);
+     const lab = el.getAttribute("aria-labelledby");
+-    if (lab) { const t = lab.split(/\s+/).map((id) => document.getElementById(id)?.innerText || "").join(" "); if (t.trim()) return clean(t); }
++    if (lab) { const t = lab.split(/\s+/).map((id) => el.getRootNode().getElementById(id)?.innerText || "").join(" "); if (t.trim()) return clean(t); }
+     if (role === "image") return clean(el.getAttribute("alt") || el.getAttribute("title") || "");
+     if (["textbox", "combobox", "checkbox", "radio"].includes(role)) {
+       return clean(labelText(el) || el.getAttribute("placeholder") || el.getAttribute("name") || el.getAttribute("title") || "");
+@@ -241,7 +246,8 @@
+   }
+ 
+   function active() {
+-    const el = document.activeElement;
++    let el = document.activeElement;
++    while (el?.openOrClosedShadowRoot?.activeElement) el = el.openOrClosedShadowRoot.activeElement;
+     const id = el?.localName === "iframe" || el?.localName === "frame" ? browser.runtime.getFrameId(el) : 0;
+     if (id > 0) throw { frame: id };
+     return el;
+@@ -356,7 +362,7 @@
+     try { if (el.willValidate && !el.checkValidity()) problems.push(el.validationMessage || "fails native constraint validation"); } catch {}
+     if (el.getAttribute("aria-invalid") === "true") problems.push("aria-invalid=true");
+     const ids = ((el.getAttribute("aria-errormessage") || "") + " " + (el.getAttribute("aria-describedby") || "")).trim().split(/\s+/).filter(Boolean);
+-    for (const id of ids) { const n = document.getElementById(id); const t = n && clean(n.innerText, 200); if (t) problems.push(t); }
++    for (const id of ids) { const n = el.getRootNode().getElementById(id); const t = n && clean(n.innerText, 200); if (t) problems.push(t); }
+     // Blur so on-blur validators run, then look for an error node near the field.
+     el.dispatchEvent(new FocusEvent("blur", { bubbles: true }));
+     el.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+@@ -494,7 +500,7 @@
+       return { uploaded: names, into: describe(input) || "input[type=file]" };
+     }
+     const { x, y } = typeof args.x === "number" ? { x: args.x, y: args.y } : center(el);
+-    const target = typeof args.x === "number" ? document.elementFromPoint(x, y) : el;
++    const target = typeof args.x === "number" ? deepAt(x, y) : el;
+     if (!target) throw new Error(`No element at (${x}, ${y})`);
+     for (const t of ["dragenter", "dragover", "drop"]) target.dispatchEvent(new DragEvent(t, { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, dataTransfer: dt }));
+     return { uploaded: names, droppedOn: describe(target) || target.tagName.toLowerCase() };
+diff --git a/extension/manifest.json b/extension/manifest.json
+index eb26791..018daf9 100644
+--- a/extension/manifest.json
++++ b/extension/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "manifest_version": 2,
+   "name": "Zen Control",
+-  "version": "0.1.2.6",
++  "version": "0.1.2.7",
+   "description": "Lets Claude Code drive this browser through a local MCP bridge (ws://127.0.0.1:17373).",
+   "browser_specific_settings": {
+     "gecko": {
+diff --git a/extension/privileged/actor.sys.mjs b/extension/privileged/actor.sys.mjs
+index 18cb5ef..b7f17b9 100644
+--- a/extension/privileged/actor.sys.mjs
++++ b/extension/privileged/actor.sys.mjs
+@@ -62,6 +62,12 @@ export class ZenControlChild extends JSWindowActorChild {
+     this.eu.synthesizeMouseAtPoint(x, y, ev, this.contentWindow);
+   }
+ 
++  deepAt(x, y) {
++    let el = this.document.elementFromPoint(x, y);
++    for (let sr; (sr = el?.openOrClosedShadowRoot); ) { const e = sr.elementFromPoint(x, y); if (!e || e === el) break; el = e; }
++    return el;
++  }
++
+   withoutMarker(fn) {
+     const m = this.document.querySelector("zen-control-marker");
+     m?.style.setProperty("display", "none", "important");
+@@ -98,7 +104,7 @@ export class ZenControlChild extends JSWindowActorChild {
+       await tick();
+       const ds = win.windowUtils.dragSession;
+       if (!ds) return this.mouse(toX, toY, { type: "mouseup", ...modifiers });
+-      const target = win.document.elementFromPoint(toX, toY);
++      const target = this.deepAt(toX, toY);
+       const send = (type) => eu.sendDragEvent(eu.createDragEventObject(type, target, win, ds.dataTransfer, { clientX: toX, clientY: toY, ...modifiers }), target, win);
+       if (target && !send("dragover")) send("drop");
+       ds.endDragSession(true, 0);
+@@ -115,7 +121,7 @@ export class ZenControlChild extends JSWindowActorChild {
+     amount = (direction === "up" || direction === "left" ? -1 : 1) * (amount ?? Math.round((horiz ? win.innerWidth : win.innerHeight) * 0.8));
+     const deltaX = horiz ? amount : 0, deltaY = horiz ? 0 : amount;
+     const can = (e, d, axis) => d && /auto|scroll/.test(win.getComputedStyle(e)[`overflow${axis}`]) && (axis === "Y" ? (d > 0 ? e.scrollTop + e.clientHeight < e.scrollHeight : e.scrollTop > 0) : d > 0 ? e.scrollLeft + e.clientWidth < e.scrollWidth : e.scrollLeft > 0);
+-    let el = doc.elementFromPoint(x, y);
++    let el = this.withoutMarker(() => this.deepAt(x, y));
+     while (el && el !== doc.body && el !== doc.documentElement && !can(el, deltaY, "Y") && !can(el, deltaX, "X")) el = el.parentElement || el.getRootNode().host;
+     const target = el && el !== doc.body && el !== doc.documentElement ? el : win;
+     let prevented = true;
+@@ -157,11 +163,13 @@ export class ZenControlChild extends JSWindowActorChild {
+ 
+   redirect(name, data) {
+     if (name === "keys" || name === "type") {
+-      const bc = this.document.activeElement?.browsingContext;
++      let a = this.document.activeElement;
++      while (a?.openOrClosedShadowRoot?.activeElement) a = a.openOrClosedShadowRoot.activeElement;
++      const bc = a?.browsingContext;
+       return bc && { frameId: bc.id, data };
+     }
+     if (name !== "click" && name !== "hover") return null;
+-    const el = this.withoutMarker(() => this.document.elementFromPoint(data.x, data.y));
++    const el = this.withoutMarker(() => this.deepAt(data.x, data.y));
+     if (!el?.browsingContext) return null;
+     const r = el.getBoundingClientRect(), cs = this.contentWindow.getComputedStyle(el);
+     return { frameId: el.browsingContext.id, data: { ...data, x: data.x - r.left - el.clientLeft - parseFloat(cs.paddingLeft), y: data.y - r.top - el.clientTop - parseFloat(cs.paddingTop) } };
+diff --git a/server/index.js b/server/index.js
+index 89ac801..0e84fbb 100644
+--- a/server/index.js
++++ b/server/index.js
+@@ -10,6 +10,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
+ import { WebSocketServer, WebSocket } from "ws";
+ import { z } from "zod";
+ import { readFile, stat } from "node:fs/promises";
++import { statSync } from "node:fs";
++import { fileURLToPath } from "node:url";
+ import { homedir } from "node:os";
+ import { basename, extname, resolve } from "node:path";
+ 
+@@ -18,6 +20,9 @@ const HOST = "127.0.0.1";
+ const CMD_TIMEOUT_MS = 45000;
+ const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+ const log = (...a) => console.error("[zen-control]", ...a);
++const SID = String(process.pid);
++const FOLDER = `Claude · ${basename(process.cwd()) || "/"}`;
++const SELF = fileURLToPath(import.meta.url), BUILT = statSync(SELF).mtimeMs;
+ 
+ /* ---------- transport to the extension (owner or proxy) ---------- */
+ 
+@@ -48,7 +53,7 @@ function sendCommand(cmd, args, timeout = CMD_TIMEOUT_MS) {
+   return new Promise((resolve, reject) => {
+     const timer = setTimeout(() => { pending.delete(id); reject(new Error(`Timed out after ${timeout}ms waiting for the browser (${cmd})`)); }, timeout + 1000);
+     pending.set(id, { resolve, reject, timer });
+-    target.send(JSON.stringify({ type: "cmd", id, cmd, args }));
++    target.send(JSON.stringify({ type: "cmd", id, cmd, args, sid: SID }));
+   });
+ }
+ 
+@@ -143,7 +148,10 @@ const runs = new Map();
+ function tool(name, description, shape, run) {
+   runs.set(name, run);
+   server.registerTool(name, { description, inputSchema: shape }, async (args) => {
+-    try { return await run(args); }
++    try {
++      if (statSync(SELF, { throwIfNoEntry: false })?.mtimeMs !== BUILT) throw new Error("zen-control was upgraded after this session started; reconnect zen-browser with /mcp");
++      return await run(args);
++    }
+     catch (e) { return { isError: true, content: [{ type: "text", text: `Error: ${e.message || e}` }] }; }
+   });
+ }
+@@ -163,7 +171,7 @@ async function runActions(actions, stopOnError) {
+ }
+ 
+ tool("tabs_list", "List open Zen browser tabs (id, url, title) and which tab is current.", {}, async () => text(await sendCommand("tabs_list", {})));
+-tool("tab_new", "Open a new background tab, optionally at a URL, and make it the current tab. All tools work on background tabs.", { url: z.string().optional(), active: z.boolean().optional().describe("Show the tab in its window (default false)") }, async (a) => text(await sendCommand("tab_new", a)));
++tool("tab_new", "Open a new background tab, optionally at a URL, and make it the current tab. All tools work on background tabs.", { url: z.string().optional(), active: z.boolean().optional().describe("Show the tab in its window (default false)") }, async (a) => text(await sendCommand("tab_new", { ...a, folder: FOLDER })));
+ tool("tab_select", "Make a tab the current target without showing it; all tools work on background tabs.", { tabId: z.number().int(), activate: z.boolean().optional().describe("Also show the tab in its window (default false)") }, async (a) => text(await sendCommand("tab_select", a)));
+ tool("tab_close", "Close a tab (default: the current one).", { tabId }, async (a) => text(await sendCommand("tab_close", a)));
+ tool("navigate", "Navigate the current tab to a URL and wait for the page to load.", { url: z.string().describe("URL; https:// is assumed without a scheme"), tabId }, async (a) => text(await sendCommand("navigate", a)));
+@@ -233,7 +241,7 @@ tool("browser_batch", "Run several tools in one call, in order. Each action is {
+   { actions: z.array(z.object({ tool: z.string(), args: z.record(z.string(), z.any()).optional() })).min(1), stopOnError: z.boolean().optional() },
+   async (a) => runActions(a.actions, a.stopOnError !== false));
+ tool("browser_status", "Check whether the Zen Control extension is connected to this bridge.", {}, async () => {
+-  try { const r = await sendCommand("ping", {}, 3000); return text({ connected: true, mode, currentTabId: r.currentTabId }); }
++  try { const r = await sendCommand("ping", {}, 3000); return text({ connected: true, mode, extension: r.version, currentTabId: r.currentTabId }); }
+   catch (e) { return text({ connected: false, mode, error: e.message }); }
+ });
+ 

@@ -21,8 +21,9 @@ user_pref("browser.aboutwelcome.enabled", false);
 user_pref("zen.welcome-screen.seen", true);
 P
 node $H/pages.mjs > $T/pages.log 2>&1 &
+PAGES=$!
 env -u DBUS_SESSION_BUS_ADDRESS -u WAYLAND_DISPLAY -u DISPLAY HOME=$T/home XDG_CACHE_HOME=$T/home/.cache MOZ_HEADLESS=1 MOZ_HEADLESS_WIDTH=1280 MOZ_HEADLESS_HEIGHT=800 \
   /opt/zen/zen --profile $T/profile --no-remote about:blank > $T/zen.log 2>&1 &
 ZEN=$!
 node $H/client.mjs "$W" "$@" || true
-kill $ZEN 2>/dev/null; sleep 1
+kill $ZEN $PAGES 2>/dev/null; sleep 1
