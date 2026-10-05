@@ -1,3 +1,16 @@
+diff --git a/src-tauri/src/commands/binaries.rs b/src-tauri/src/commands/binaries.rs
+index 39f0230..0e9f461 100644
+--- a/src-tauri/src/commands/binaries.rs
++++ b/src-tauri/src/commands/binaries.rs
+@@ -558,6 +558,8 @@ pub async fn launch_game(
+     .stderr(log_file_err)
+     .current_dir(exec_info.executable_dir);
+ 
++  #[cfg(target_os = "linux")]
++  command.env("SDL_APP_ID", format!("opengoal-{game_name}"));
+   #[cfg(windows)]
+   {
+     const CREATE_NO_WINDOW: u32 = 0x08000000;
 diff --git a/src-tauri/src/commands/config.rs b/src-tauri/src/commands/config.rs
 index fd82ec2..0255280 100644
 --- a/src-tauri/src/commands/config.rs

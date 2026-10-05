@@ -5,14 +5,23 @@
 
 %global debug_package %{nil}
 %global appid OpenGOAL-Launcher
+%global jakcommit efb21c3e8c5a40a74f2e86510f915da55eaeba34
+%global jakraw https://raw.githubusercontent.com/open-goal/jak-project/%{jakcommit}/game/assets
 
 Name:           opengoal-launcher
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Launcher for OpenGOAL (Jak and Daxter trilogy PC port)
 License:        ISC
 URL:            https://github.com/open-goal/launcher
 Source0:        %{url}/archive/%{commit}/launcher-%{commit}.tar.gz
+Source1:        opengoal-play
+Source10:       %{jakraw}/jak1/app64.png#/jak1-64.png
+Source11:       %{jakraw}/jak1/app256.png#/jak1-256.png
+Source12:       %{jakraw}/jak2/app64.png#/jak2-64.png
+Source13:       %{jakraw}/jak2/app256.png#/jak2-256.png
+Source14:       %{jakraw}/jak3/app64.png#/jak3-64.png
+Source15:       %{jakraw}/jak3/app256.png#/jak3-256.png
 # Use system opengoal tooling, hide x86 downloads, native wayland for gk
 Patch0:         0001-linux-aarch64.patch
 
@@ -32,6 +41,7 @@ BuildRequires:  desktop-file-utils
 
 Requires:       opengoal
 Requires:       webkit2gtk4.1
+Requires:       jq
 
 %description
 Official launcher for OpenGOAL. Uses the system opengoal package as its
@@ -64,16 +74,42 @@ Icon=%{appid}
 Categories=Game;
 StartupWMClass=%{appid}
 EOF
-desktop-file-validate %{buildroot}%{_datadir}/applications/%{appid}.desktop
+install -Dpm0755 %{SOURCE1} %{buildroot}%{_bindir}/opengoal-play
+while read -r game title; do
+  for s in 64 256; do
+    install -Dpm0644 %{_sourcedir}/$game-$s.png %{buildroot}%{_datadir}/icons/hicolor/${s}x${s}/apps/opengoal-$game.png
+  done
+  cat > %{buildroot}%{_datadir}/applications/opengoal-$game.desktop <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=$title
+Comment=Play with OpenGOAL
+Exec=opengoal-play $game
+Icon=opengoal-$game
+Categories=Game;
+StartupWMClass=opengoal-$game
+DESKTOP
+done <<GAMES
+jak1 Jak and Daxter: The Precursor Legacy
+jak2 Jak II
+jak3 Jak 3
+GAMES
+desktop-file-validate %{buildroot}%{_datadir}/applications/*.desktop
 
 %files
 %license LICENSE
 %doc README.md
 %{_bindir}/%{name}
-%{_datadir}/applications/%{appid}.desktop
-%{_datadir}/icons/hicolor/*/apps/%{appid}.png
+%{_bindir}/opengoal-play
+%{_datadir}/applications/*.desktop
+%{_datadir}/icons/hicolor/*/apps/*.png
 
 %changelog
+* Mon Oct 05 2026 Lachlan Marie <lchlnm@pm.me> - 2.11.1^1.git.7e1c23b-3
+- Add Jak 1-3 desktop entries
+- Add opengoal-play
+- Per-game wayland app_id
+
 * Mon Oct 05 2026 Lachlan Marie <lchlnm@pm.me> - 2.11.1^1.git.7e1c23b-2
 - Bootstrap yarn via npm
 

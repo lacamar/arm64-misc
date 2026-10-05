@@ -1,0 +1,7 @@
+#!/bin/sh
+game=${1:?usage: opengoal-play jak1|jak2|jak3}
+cfg=${XDG_CONFIG_HOME:-$HOME/.config}/OpenGOAL-Launcher/settings.json
+dir=$(jq -er --arg g "$game" 'select(.games[$g].isInstalled) | .installationDir' "$cfg" 2>/dev/null) || exec opengoal-launcher
+[ -n "$WAYLAND_DISPLAY" ] && [ -z "$SDL_VIDEO_DRIVER$SDL_VIDEODRIVER" ] && export SDL_VIDEO_DRIVER=wayland
+export SDL_APP_ID=opengoal-$game
+cd "$dir/active/bin" && exec ./gk -v --proj-path "$dir/active/$game/data" --game "$game" -- -boot -fakeiso
