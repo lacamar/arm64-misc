@@ -10,7 +10,7 @@
 
 Name:           opengoal-launcher
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        3%{?dist}
+Release:        4%{?dist}
 Summary:        Launcher for OpenGOAL (Jak and Daxter trilogy PC port)
 License:        ISC
 URL:            https://github.com/open-goal/launcher
@@ -64,7 +64,7 @@ done
 install -Dpm0644 src-tauri/icons/128x128@2x.png %{buildroot}%{_datadir}/icons/hicolor/256x256/apps/%{appid}.png
 install -Dpm0644 src-tauri/icons/icon.png %{buildroot}%{_datadir}/icons/hicolor/512x512/apps/%{appid}.png
 install -dm0755 %{buildroot}%{_datadir}/applications
-cat > %{buildroot}%{_datadir}/applications/%{appid}.desktop <<EOF
+cat > %{buildroot}%{_datadir}/applications/%{name}.desktop <<EOF
 [Desktop Entry]
 Type=Application
 Name=OpenGOAL Launcher
@@ -72,7 +72,7 @@ Comment=%{summary}
 Exec=%{name}
 Icon=%{appid}
 Categories=Game;
-StartupWMClass=%{appid}
+StartupWMClass=%{name}
 EOF
 install -Dpm0755 %{SOURCE1} %{buildroot}%{_bindir}/opengoal-play
 while read -r game title; do
@@ -105,6 +105,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/*.desktop
 %{_datadir}/icons/hicolor/*/apps/*.png
 
 %changelog
+* Mon Oct 05 2026 Lachlan Marie <lchlnm@pm.me> - 2.11.1^1.git.7e1c23b-4
+- Match launcher desktop file to app_id
+
 * Mon Oct 05 2026 Lachlan Marie <lchlnm@pm.me> - 2.11.1^1.git.7e1c23b-3
 - Add Jak 1-3 desktop entries
 - Add opengoal-play
