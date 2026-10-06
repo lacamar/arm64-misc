@@ -1,0 +1,1610 @@
+diff --git a/resources/xdg-session-management-v1.xml b/resources/xdg-session-management-v1.xml
+new file mode 100644
+index 0000000..9cfe5f8
+--- /dev/null
++++ b/resources/xdg-session-management-v1.xml
+@@ -0,0 +1,333 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<protocol name="xdg_session_management_v1">
++  <copyright>
++    Copyright 2018 Mike Blumenkrantz
++    Copyright 2018 Samsung Electronics Co., Ltd
++    Copyright 2018 Red Hat Inc.
++
++    Permission is hereby granted, free of charge, to any person obtaining a
++    copy of this software and associated documentation files (the "Software"),
++    to deal in the Software without restriction, including without limitation
++    the rights to use, copy, modify, merge, publish, distribute, sublicense,
++    and/or sell copies of the Software, and to permit persons to whom the
++    Software is furnished to do so, subject to the following conditions:
++
++    The above copyright notice and this permission notice (including the next
++    paragraph) shall be included in all copies or substantial portions of the
++    Software.
++
++    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
++    THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
++    DEALINGS IN THE SOFTWARE.
++  </copyright>
++
++  <description summary="Protocol for managing application sessions">
++    This description provides a high-level overview of the interplay between
++    the interfaces defined this protocol. For details, see the protocol
++    specification.
++
++    The xdg_session_manager protocol declares interfaces necessary to
++    allow clients to restore toplevel state from previous executions. The
++    xdg_session_manager_v1.get_session request can be used to obtain a
++    xdg_session_v1 resource representing the state of a set of toplevels.
++
++    Clients may obtain the session string to use in future calls through
++    the xdg_session_v1.created event. Compositors will use this string
++    as an identifiable token for future runs, possibly storing data about
++    the related toplevels in persistent storage. Clients that wish to
++    track sessions in multiple environments may use the $XDG_CURRENT_DESKTOP
++    environment variable.
++
++    Toplevels are managed through the xdg_session_v1.add_toplevel and
++    xdg_session_v1.remove_toplevel pair of requests. Clients will explicitly
++    request a toplevel to be restored according to prior state through the
++    xdg_session_v1.restore_toplevel request before the toplevel is mapped.
++
++    Compositors may store session information up to any arbitrary level, and
++    apply any limits and policies to the amount of data stored and its lifetime.
++    Clients must account for missing sessions and partial session restoration.
++
++    Warning! The protocol described in this file is currently in the testing
++    phase. Backward compatible changes may be added together with the
++    corresponding interface version bump. Backward incompatible changes can
++    only be done by creating a new major version of the extension.
++  </description>
++
++  <interface name="xdg_session_manager_v1" version="1">
++    <description summary="manage sessions for applications">
++      The xdg_session_manager_v1 interface defines base requests for creating and
++      managing a session for an application. Sessions persist across application
++      and compositor restarts unless explicitly destroyed. A session is created
++      for the purpose of maintaining an application's xdg_toplevel surfaces
++      across compositor or application restarts. The compositor should remember
++      as many states as possible for surfaces in a given session, but there is
++      no requirement for which states must be remembered.
++
++      Policies such as cache eviction are declared an implementation detail of
++      the compositor. Clients should account for no longer existing sessions.
++    </description>
++
++    <enum name="error">
++      <entry name="in_use" summary="a requested session is already in use"
++             value="1"/>
++      <entry name="invalid_session_id" summary="invalid session identifier"
++             value="2"/>
++      <entry name="invalid_reason" summary="invalid reason" value="3"/>
++    </enum>
++
++    <enum name="reason">
++      <description summary="reason for getting a session">
++        The reason may determine in what way a session restores the window
++        management state of associated toplevels.
++
++        For example newly launched applications might be launched on the active
++        workspace with restored size and position, while a recovered
++        application might restore additional state such as active workspace and
++        stacking order.
++      </description>
++      <entry name="launch" value="1">
++        <description summary="an app is newly launched">
++          A new app instance is launched, for example from an app launcher.
++        </description>
++      </entry>
++      <entry name="recover" value="2">
++        <description summary="an app recovered">
++          An app instance is recovering from for example a compositor or app crash.
++        </description>
++      </entry>
++      <entry name="session_restore" value="3">
++        <description summary="an app restored">
++          An app instance is restored, for example part of a restored session, or
++          restored from having been temporarily terminated due to resource
++          constraints.
++        </description>
++      </entry>
++    </enum>
++
++    <request name="destroy" type="destructor">
++      <description summary="Destroy this object">
++        Destroy the manager object. The existing session objects will be
++        unaffected.
++      </description>
++    </request>
++
++    <request name="get_session">
++      <description summary="create or restore a session">
++        Create a session object corresponding to either an existing session
++        identified by the given session identifier string or a new session.
++        While the session object exists, the session is considered to be "in
++        use".
++
++        If an identifier string represents a session that is currently actively
++        in use by the the same client, an 'in_use' error is raised. If some
++        other client is currently using the same session, the new session will
++        replace managing the associated state.
++
++        If the reason is not a valid enum entry, the 'invalid_reason' protocol
++        error is raised.
++
++        NULL is passed to initiate a new session. If a session_id is passed
++        which does not represent a valid session, the compositor treats it as if
++        NULL had been passed.
++
++        The session id string must be UTF-8 encoded. It is also limited by the
++        maximum length of wayland messages (around 4KB). The 'invalid_session_id'
++        protocol error will be raised if an invalid string is provided.
++
++        A client is allowed to have any number of in use sessions at the same
++        time.
++      </description>
++      <arg name="id" type="new_id" interface="xdg_session_v1"/>
++      <arg name="reason" type="uint" enum="reason"
++           summary="reason for session"/>
++      <arg name="session_id" type="string"
++           summary="the session to restore"
++           allow-null="true"/>
++    </request>
++  </interface>
++
++  <interface name="xdg_session_v1" version="1">
++    <description summary="A session for an application">
++      A xdg_session_v1 object represents a session for an application. While the
++      object exists, all surfaces which have been added to the session will
++      have states stored by the compositor which can be reapplied at a later
++      time. Two sessions cannot exist for the same identifier string.
++
++      States for surfaces added to a session are automatically updated by the
++      compositor when they are changed.
++    </description>
++
++    <enum name="error">
++      <entry name="name_in_use"
++             summary="toplevel name is already in use"
++             value="1"/>
++      <entry name="already_mapped"
++             summary="toplevel was already mapped when restored"
++             value="2"/>
++      <entry name="invalid_name"
++             summary="provided toplevel name is invalid"
++             value="3"/>
++      <entry name="already_added"
++             summary="toplevel already added"
++             value="4"/>
++    </enum>
++
++    <request name="destroy" type="destructor">
++      <description summary="Destroy the session">
++        Destroy a session object, preserving the current state but not continuing
++        to make further updates if state changes occur. This makes the associated
++        xdg_toplevel_session_v1 objects inert.
++      </description>
++    </request>
++
++    <request name="remove" type="destructor">
++      <description summary="Remove the session">
++        Remove the session, making it no longer available for restoration. A
++        compositor should in response to this request remove the data related to
++        this session from its storage.
++      </description>
++    </request>
++
++    <request name="add_toplevel">
++      <description summary="add a new surface to the session">
++        Attempt to add a given surface to the session. The passed name is used
++        to identify what window is being restored, and may be used to store
++        window specific state within the session.
++
++        The name given to the toplevel must not correspond to any previously
++        existing toplevel names in the session. If the name matches an already
++        known toplevel name in the session, a 'name_in_use' protocol error will
++        be raised.
++
++        The toplevel object must not be added more than once to any session
++        created by the client, otherwise the 'already_added' protocol error
++        will be raised.
++
++        This request will return a xdg_toplevel_session_v1 for later
++        manipulation. As this resource is created from an empty initial state,
++        compositors must not emit a xdg_toplevel_session_v1.restored event for
++        resources created through this request.
++
++        The name string must be UTF-8 encoded. It is also limited by the maximum
++        length of wayland messages (around 4KB). The 'invalid_name' protocol
++        error will be raised if an invalid string is provided.
++      </description>
++      <arg name="id" type="new_id" interface="xdg_toplevel_session_v1"/>
++      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
++      <arg name="name" type="string" summary="name identifying the toplevel"/>
++    </request>
++
++    <request name="restore_toplevel">
++      <description summary="restore a surface state">
++        Inform the compositor that the toplevel associated with the passed name
++        should have its window management state restored.
++
++        If the toplevel name was previously granted to another xdg_toplevel,
++        the 'name_in_use' protocol error will be raised.
++
++        The toplevel object must not be added more than once to any session
++        created by the client, otherwise the 'already_added' protocol error
++        will be raised.
++
++        This request must be called prior to the first commit on the associated
++        wl_surface after creating the toplevel, otherwise an 'already_mapped'
++        error is raised.
++
++        As part of the initial configure sequence, if the toplevel was
++        successfully restored, a xdg_toplevel_session_v1.restored event is
++        emitted. If the toplevel name was not known in the session, this request
++        will be equivalent to the xdg_toplevel_session_v1.add_toplevel request,
++        and no such event will be emitted. See the xdg_toplevel_session_v1.restored
++        event for further details.
++
++        The name string must be UTF-8 encoded. It is also limited by the maximum
++        length of wayland messages (around 4KB). The 'invalid_name' protocol
++        error will be raised if an invalid string is provided.
++      </description>
++      <arg name="id" type="new_id" interface="xdg_toplevel_session_v1"/>
++      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
++      <arg name="name" type="string" summary="name identifying the toplevel"/>
++    </request>
++
++    <request name="remove_toplevel">
++      <description summary="remove a surface from the session">
++        Remove a specified surface from the session and render any related
++        xdg_toplevel_session_v1 object inert. The compositor should remove any
++        data related to the toplevel in the corresponding session from its internal
++        storage.
++
++        The window is specified by its name in the session. The name string
++        must be encoded in UTF-8, and it is limited in size by the maximum
++        length of wayland messages (around 4KB).
++      </description>
++      <arg name="name" type="string" summary="name identifying the toplevel"/>
++    </request>
++
++    <event name="created">
++      <description summary="newly-created session id">
++        Emitted at most once some time after getting a new session object. It
++        means that no previous state was restored, and a new session was created.
++        The passed id can be persistently stored and used to restore previous
++        sessions.
++      </description>
++      <arg name="session_id" type="string"/>
++    </event>
++
++    <event name="restored">
++      <description summary="the session has been restored">
++        Emitted at most once some time after getting a new session object. It
++        means that previous state was at least partially restored. The same id
++        can again be used to restore previous sessions.
++      </description>
++    </event>
++
++    <event name="replaced">
++      <description summary="the session has been replaced">
++        Emitted at most once, if the session was taken over by some other
++        client. When this happens, the session and all its toplevel session
++        objects become inert, and should be destroyed.
++      </description>
++    </event>
++  </interface>
++
++  <interface name="xdg_toplevel_session_v1" version="1">
++    <description summary="A session for an application">
++      A xdg_toplevel_session_v1 resource acts as a handle for the given
++      toplevel in the session. It allows for receiving events after a
++      toplevel state was restored, and has the requests to manage them.
++    </description>
++
++    <request name="destroy" type="destructor">
++      <description summary="Destroy the object">
++        Destroy the object. This has no effect over window management of the
++        associated toplevel.
++      </description>
++    </request>
++
++    <request name="rename">
++      <description summary="change the name of toplevel session">
++        Renames the toplevel session. The new name can be used in subsequent requests
++        to identify this session object. The state associated with this toplevel
++        session will be preserved.
++
++        If the xdg_session_v1 already contains a toplevel with the specified name,
++        the 'name_in_use' protocol error will be raised.
++      </description>
++      <arg name="name" type="string" summary="new name to identify the toplevel"/>
++    </request>
++
++    <event name="restored">
++      <description summary="a toplevel's session has been restored">
++        The "restored" event is emitted prior to the first
++        xdg_toplevel.configure for the toplevel. It will only be emitted after
++        xdg_session_v1.restore_toplevel, and the initial empty surface state has
++        been applied, and it indicates that the surface's session is being
++        restored with this configure event.
++      </description>
++    </event>
++  </interface>
++</protocol>
+diff --git a/resources/xx-session-management-v1.xml b/resources/xx-session-management-v1.xml
+new file mode 100644
+index 0000000..42458d9
+--- /dev/null
++++ b/resources/xx-session-management-v1.xml
+@@ -0,0 +1,264 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<protocol name="xx_session_management_v1">
++  <copyright>
++    Copyright 2018 Mike Blumenkrantz
++    Copyright 2018 Samsung Electronics Co., Ltd
++    Copyright 2018 Red Hat Inc.
++
++    Permission is hereby granted, free of charge, to any person obtaining a
++    copy of this software and associated documentation files (the "Software"),
++    to deal in the Software without restriction, including without limitation
++    the rights to use, copy, modify, merge, publish, distribute, sublicense,
++    and/or sell copies of the Software, and to permit persons to whom the
++    Software is furnished to do so, subject to the following conditions:
++
++    The above copyright notice and this permission notice (including the next
++    paragraph) shall be included in all copies or substantial portions of the
++    Software.
++
++    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
++    THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
++    DEALINGS IN THE SOFTWARE.
++  </copyright>
++
++  <description summary="Protocol for managing application sessions">
++    This description provides a high-level overview of the interplay between
++    the interfaces defined this protocol. For details, see the protocol
++    specification.
++
++    The xx_session_manager protocol declares interfaces necessary to
++    allow clients to restore toplevel state from previous executions. The
++    xx_session_manager_v1.get_session request can be used to obtain a
++    xx_session_v1 resource representing the state of a set of toplevels.
++
++    Clients may obtain the session string to use in future calls through
++    the xx_session_v1.created event. Compositors will use this string
++    as an identifiable token for future runs, possibly storing data about
++    the related toplevels in persistent storage.
++
++    Toplevels are managed through the xx_session_v1.add_toplevel and
++    xx_session_toplevel_v1.remove pair of requests. Clients will explicitly
++    request a toplevel to be restored according to prior state through the
++    xx_session_v1.restore_toplevel request before the toplevel is mapped.
++
++    Warning! The protocol described in this file is currently in the
++    experimental phase. Backwards incompatible major versions of the
++    protocol are to be expected. Exposing this protocol without an opt-in
++    mechanism is discouraged.
++  </description>
++
++  <interface name="xx_session_manager_v1" version="1">
++    <description summary="manage sessions for applications">
++      The xx_session_manager interface defines base requests for creating and
++      managing a session for an application. Sessions persist across application
++      and compositor restarts unless explicitly destroyed. A session is created
++      for the purpose of maintaining an application's xdg_toplevel surfaces
++      across compositor or application restarts. The compositor should remember
++      as many states as possible for surfaces in a given session, but there is
++      no requirement for which states must be remembered.
++    </description>
++
++    <enum name="error">
++      <entry name="in_use" summary="a requested session is already in use"
++             value="1"/>
++    </enum>
++
++    <enum name="reason">
++      <description summary="reason for getting a session">
++        The reason may determine in what way a session restores the window
++        management state of associated toplevels.
++
++        For example newly launched applications might be launched on the active
++        workspace with restored size and position, while a recovered
++        applications might restore additional state such as active workspace and
++        stacking order.
++      </description>
++      <entry name="launch" value="1">
++        <description summary="an app is newly launched">
++          A new app instance is launched, for example from an app launcher.
++        </description>
++      </entry>
++      <entry name="recover" value="2">
++        <description summary="an app recovered">
++          A app instance is recovering from for example a compositor or app crash.
++        </description>
++      </entry>
++      <entry name="session_restore" value="3">
++        <description summary="an app restored">
++          A app instance is restored, for example part of a restored session, or
++          restored from having been temporarily terminated due to resource
++          constraints.
++        </description>
++      </entry>
++    </enum>
++
++    <request name="destroy" type="destructor">
++      <description summary="Destroy this object">
++        This has no effect other than to destroy the xx_session_manager object.
++      </description>
++    </request>
++
++    <request name="get_session">
++      <description summary="create or restore a session">
++        Create a session object corresponding to either an existing session
++        identified by the given session identifier string or a new session.
++        While the session object exists, the session is considered to be "in
++        use".
++
++        If a identifier string represents a session that is currently actively
++        in use by the the same client, an 'in_use' error is raised. If some
++        other client is currently using the same session, the new session will
++        replace managing the associated state.
++
++        NULL is passed to initiate a new session. If an id is passed which does
++        not represent a valid session, the compositor treats it as if NULL had
++        been passed.
++
++        A client is allowed to have any number of in use sessions at the same
++        time.
++      </description>
++      <arg name="id" type="new_id" interface="xx_session_v1"/>
++      <arg name="reason" type="uint" enum="reason"
++           summary="reason for session"/>
++      <arg name="session" type="string"
++           summary="the session to restore"
++           allow-null="true"/>
++    </request>
++  </interface>
++
++  <interface name="xx_session_v1" version="1">
++    <description summary="A session for an application">
++      A xx_session_v1 object represents a session for an application. While the
++      object exists, all surfaces which have been added to the session will
++      have states stored by the compositor which can be reapplied at a later
++      time. Two sessions cannot exist for the same identifier string.
++
++      States for surfaces added to a session are automatically updated by the
++      compositor when they are changed.
++
++      Surfaces which have been added to a session are automatically removed from
++      the session if xdg_toplevel.destroy is called for the surface.
++    </description>
++
++    <enum name="error">
++      <entry name="invalid_restore"
++             summary="restore cannot be performed after initial toplevel commit"
++             value="1"/>
++      <entry name="name_in_use"
++             summary="toplevel name is already in used"
++             value="2"/>
++      <entry name="already_mapped"
++             summary="toplevel was already mapped when restored"
++             value="3"/>
++    </enum>
++
++    <request name="destroy" type="destructor">
++      <description summary="Destroy the session">
++        Destroy a session object, preserving the current state but not continuing
++        to make further updates if state changes occur. This makes the associated
++        xx_toplevel_session_v1 objects inert.
++      </description>
++    </request>
++
++    <request name="remove" type="destructor">
++      <description summary="Remove the session">
++        Remove the session, making it no longer available for restoration. A
++        compositor should in response to this request remove the data related to
++        this session from its storage.
++      </description>
++    </request>
++
++    <request name="add_toplevel">
++      <description summary="add a new surface to the session">
++        Attempt to add a given surface to the session. The passed name is used
++        to identify what window is being restored, and may be used store window
++        specific state within the session.
++
++        Calling this with a toplevel that is already managed by the session with
++        the same associated will raise an in_use error.
++      </description>
++      <arg name="id" type="new_id" interface="xx_toplevel_session_v1"/>
++      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
++      <arg name="name" type="string"/>
++    </request>
++
++    <request name="restore_toplevel">
++      <description summary="restore a surface state">
++        Inform the compositor that the toplevel associated with the passed name
++        should have its window management state restored.
++
++        Calling this with a toplevel that is already managed by the session with
++        the same associated will raise an in_use error.
++
++        This request must be called prior to the first commit on the associated
++        wl_surface, otherwise an already_mapped error is raised.
++
++        As part of the initial configure sequence, if the toplevel was
++        successfully restored, a xx_toplevel_session_v1.restored event is
++        emitted. See the xx_toplevel_session_v1.restored event for further
++        details.
++      </description>
++      <arg name="id" type="new_id" interface="xx_toplevel_session_v1"/>
++      <arg name="toplevel" type="object" interface="xdg_toplevel"/>
++      <arg name="name" type="string"/>
++    </request>
++
++    <event name="created">
++      <description summary="newly-created session id">
++        Emitted at most once some time after getting a new session object. It
++        means that no previous state was restored, and a new session was created.
++        The passed id can be used to restore previous sessions.
++      </description>
++      <arg name="id" type="string"/>
++    </event>
++
++    <event name="restored">
++      <description summary="the session has been restored">
++        Emitted at most once some time after getting a new session object. It
++        means that previous state was at least partially restored. The same id
++        can again be used to restore previous sessions.
++      </description>
++    </event>
++
++    <event name="replaced">
++      <description summary="the session has been restored">
++        Emitted at most once, if the session was taken over by some other
++        client. When this happens, the session and all its toplevel session
++        objects become inert, and should be destroyed.
++      </description>
++    </event>
++  </interface>
++
++  <interface name="xx_toplevel_session_v1" version="1">
++    <request name="destroy" type="destructor">
++      <description summary="Destroy the object">
++        Destroy the object. This has no effect window management of the
++        associated toplevel.
++      </description>
++    </request>
++
++    <request name="remove" type="destructor">
++      <description summary="remove a surface from the session">
++        Remove a specified surface from the session and render any corresponding
++        xx_toplevel_session_v1 object inert. The compositor should remove any
++        data related to the toplevel in the corresponding session from its internal
++        storage.
++      </description>
++    </request>
++
++    <event name="restored">
++      <description summary="a toplevel's session has been restored">
++        The "restored" event is emitted prior to the first
++        xdg_toplevel.configure for the toplevel. It will only be emitted after
++        xx_session_v1.restore_toplevel, and the initial empty surface state has
++        been applied, and it indicates that the surface's session is being
++        restored with this configure event.
++      </description>
++      <arg name="surface" type="object" interface="xdg_toplevel"/>
++    </event>
++  </interface>
++</protocol>
+diff --git a/src/handlers/compositor.rs b/src/handlers/compositor.rs
+index 53f2912..cee86fe 100644
+--- a/src/handlers/compositor.rs
++++ b/src/handlers/compositor.rs
+@@ -21,6 +21,7 @@ use super::xdg_shell::add_mapped_toplevel_pre_commit_hook;
+ use crate::handlers::XDG_ACTIVATION_TOKEN_TIMEOUT;
+ use crate::layout::{ActivateWindow, AddWindowTarget, LayoutElement as _};
+ use crate::niri::{CastTarget, ClientState, LockState, State};
++use crate::protocols::session_management::take_restore_state;
+ use crate::utils::transaction::Transaction;
+ use crate::utils::{is_mapped, send_scale_transform};
+ use crate::window::{InitialConfigureState, Mapped, ResolvedWindowRules, Unmapped};
+@@ -202,11 +203,25 @@ impl CompositorHandler for State {
+                     };
+                     let window = mapped.window.clone();
+ 
++                    let saved = take_restore_state(surface);
++                    let workspace_id = workspace_id.or_else(|| {
++                        let saved = saved.as_ref()?;
++                        let output = output.as_ref()?;
++                        let mut wss = self.niri.layout.workspaces().filter(|(mon, _, _)| {
++                            mon.is_some_and(|mon| mon.output() == output)
++                        });
++                        let ws = wss.by_ref().take(saved.workspace_idx + 1).last()?.2;
++                        Some(ws.id())
++                    });
++                    let column_idx = saved
++                        .filter(|s| s.floating_pos.is_none())
++                        .and_then(|s| s.column_idx);
++
+                     let target = if let Some(p) = &parent {
+                         // Open dialogs next to their parent window.
+                         AddWindowTarget::NextTo(p)
+                     } else if let Some(id) = workspace_id {
+-                        AddWindowTarget::Workspace(id)
++                        AddWindowTarget::Workspace(id, column_idx)
+                     } else if let Some(output) = &output {
+                         AddWindowTarget::Output(output)
+                     } else {
+diff --git a/src/layout/mod.rs b/src/layout/mod.rs
+index 8c79d07..cd7b542 100644
+--- a/src/layout/mod.rs
++++ b/src/layout/mod.rs
+@@ -529,8 +529,8 @@ pub enum AddWindowTarget<'a, W: LayoutElement> {
+     Auto,
+     /// On this output.
+     Output(&'a Output),
+-    /// On this workspace.
+-    Workspace(WorkspaceId),
++    /// On this workspace, optionally in a new column at this index.
++    Workspace(WorkspaceId, Option<usize>),
+     /// Next to this existing window.
+     NextTo(&'a W::Id),
+ }
+@@ -1004,14 +1004,22 @@ impl<W: LayoutElement> Layout<W> {
+ 
+                         (mon_idx, MonitorAddWindowTarget::Auto)
+                     }
+-                    AddWindowTarget::Workspace(ws_id) => {
++                    AddWindowTarget::Workspace(ws_id, column_idx) => {
+                         let mon_idx = monitors.iter().position(|mon| mon.has_ws(ws_id)).unwrap();
++                        let column_idx = column_idx.map(|idx| {
++                            let ws = monitors[mon_idx]
++                                .workspaces
++                                .iter()
++                                .find(|ws| ws.id() == ws_id)
++                                .unwrap();
++                            idx.min(ws.scrolling().columns().count())
++                        });
+ 
+                         (
+                             mon_idx,
+                             MonitorAddWindowTarget::Workspace {
+                                 id: ws_id,
+-                                column_idx: None,
++                                column_idx,
+                             },
+                         )
+                     }
+@@ -1093,7 +1101,7 @@ impl<W: LayoutElement> Layout<W> {
+                         (0, WorkspaceAddWindowTarget::Auto)
+                     }
+                     AddWindowTarget::Output(_) => panic!(),
+-                    AddWindowTarget::Workspace(ws_id) => {
++                    AddWindowTarget::Workspace(ws_id, _) => {
+                         let ws_idx = workspaces.iter().position(|ws| ws.id() == ws_id).unwrap();
+                         (ws_idx, WorkspaceAddWindowTarget::Auto)
+                     }
+diff --git a/src/layout/tests.rs b/src/layout/tests.rs
+index 76df3d7..5a9726d 100644
+--- a/src/layout/tests.rs
++++ b/src/layout/tests.rs
+@@ -1069,7 +1069,7 @@ impl Op {
+                 let win = TestWindow::new(params);
+                 layout.add_window(
+                     win,
+-                    AddWindowTarget::Workspace(ws_id),
++                    AddWindowTarget::Workspace(ws_id, None),
+                     None,
+                     None,
+                     false,
+diff --git a/src/niri.rs b/src/niri.rs
+index 6f528d2..cbfdd33 100644
+--- a/src/niri.rs
++++ b/src/niri.rs
+@@ -158,6 +158,7 @@ use crate::protocols::foreign_toplevel::{self, ForeignToplevelManagerState};
+ use crate::protocols::gamma_control::GammaControlManagerState;
+ use crate::protocols::mutter_x11_interop::MutterX11InteropManagerState;
+ use crate::protocols::output_management::OutputManagementManagerState;
++use crate::protocols::session_management::{self, SessionManagementState};
+ use crate::protocols::screencopy::{Screencopy, ScreencopyBuffer, ScreencopyManagerState};
+ use crate::protocols::virtual_pointer::VirtualPointerManagerState;
+ use crate::render_helpers::blur::BlurOptions;
+@@ -333,6 +334,7 @@ pub struct Niri {
+     pub gamma_control_manager_state: GammaControlManagerState,
+     pub activation_state: XdgActivationState,
+     pub mutter_x11_interop_state: MutterX11InteropManagerState,
++    pub session_management_state: SessionManagementState,
+ 
+     // This will not work as is outside of tests, so it is gated with #[cfg(test)] for now. In
+     // particular, shaders will need to learn about the single pixel buffer. Also, it must be
+@@ -2603,6 +2605,17 @@ impl Niri {
+         let mutter_x11_interop_state =
+             MutterX11InteropManagerState::new::<State, _>(&display_handle, move |_| true);
+ 
++        let session_management_state = SessionManagementState::new(&display_handle);
++        event_loop
++            .insert_source(
++                Timer::from_duration(session_management::SAVE_INTERVAL),
++                |_, _, state| {
++                    state.save_sessions();
++                    TimeoutAction::ToDuration(session_management::SAVE_INTERVAL)
++                },
++            )
++            .unwrap();
++
+         #[cfg(test)]
+         let single_pixel_buffer_state = SinglePixelBufferState::new::<State>(&display_handle);
+ 
+@@ -2803,6 +2816,7 @@ impl Niri {
+             gamma_control_manager_state,
+             activation_state,
+             mutter_x11_interop_state,
++            session_management_state,
+             #[cfg(test)]
+             single_pixel_buffer_state,
+ 
+diff --git a/src/protocols/mod.rs b/src/protocols/mod.rs
+index 9a6b25a..80fa017 100644
+--- a/src/protocols/mod.rs
++++ b/src/protocols/mod.rs
+@@ -4,6 +4,7 @@ pub mod gamma_control;
+ pub mod mutter_x11_interop;
+ pub mod output_management;
+ pub mod screencopy;
++pub mod session_management;
+ pub mod virtual_pointer;
+ 
+ pub mod raw;
+diff --git a/src/protocols/raw.rs b/src/protocols/raw.rs
+index fac1e4d..18b1479 100644
+--- a/src/protocols/raw.rs
++++ b/src/protocols/raw.rs
+@@ -23,3 +23,63 @@ pub mod mutter_x11_interop {
+         }
+     }
+ }
++
++pub mod xdg_session_management {
++    pub mod v1 {
++        pub use self::generated::server;
++
++        mod generated {
++            pub mod server {
++                #![allow(dead_code, non_camel_case_types, unused_unsafe, unused_variables)]
++                #![allow(non_upper_case_globals, non_snake_case, unused_imports)]
++                #![allow(missing_docs, clippy::all)]
++
++                use smithay::reexports::wayland_protocols::xdg::shell::server::*;
++                use smithay::reexports::wayland_server;
++                use wayland_server::protocol::*;
++
++                pub mod __interfaces {
++                    use smithay::reexports::wayland_protocols::xdg::shell::server::__interfaces::*;
++                    use smithay::reexports::wayland_server;
++                    use wayland_server::protocol::__interfaces::*;
++                    wayland_scanner::generate_interfaces!(
++                        "resources/xdg-session-management-v1.xml"
++                    );
++                }
++                use self::__interfaces::*;
++
++                wayland_scanner::generate_server_code!("resources/xdg-session-management-v1.xml");
++            }
++        }
++    }
++}
++
++pub mod xx_session_management {
++    pub mod v1 {
++        pub use self::generated::server;
++
++        mod generated {
++            pub mod server {
++                #![allow(dead_code, non_camel_case_types, unused_unsafe, unused_variables)]
++                #![allow(non_upper_case_globals, non_snake_case, unused_imports)]
++                #![allow(missing_docs, clippy::all)]
++
++                use smithay::reexports::wayland_protocols::xdg::shell::server::*;
++                use smithay::reexports::wayland_server;
++                use wayland_server::protocol::*;
++
++                pub mod __interfaces {
++                    use smithay::reexports::wayland_protocols::xdg::shell::server::__interfaces::*;
++                    use smithay::reexports::wayland_server;
++                    use wayland_server::protocol::__interfaces::*;
++                    wayland_scanner::generate_interfaces!(
++                        "resources/xx-session-management-v1.xml"
++                    );
++                }
++                use self::__interfaces::*;
++
++                wayland_scanner::generate_server_code!("resources/xx-session-management-v1.xml");
++            }
++        }
++    }
++}
+diff --git a/src/protocols/session_management.rs b/src/protocols/session_management.rs
+new file mode 100644
+index 0000000..73f9d3b
+--- /dev/null
++++ b/src/protocols/session_management.rs
+@@ -0,0 +1,743 @@
++use std::collections::HashMap;
++use std::hash::{BuildHasher, RandomState};
++use std::path::PathBuf;
++use std::sync::Mutex;
++use std::time::{Duration, SystemTime, UNIX_EPOCH};
++
++use directories::BaseDirs;
++use niri_config::{FloatOrInt, FloatingPosition, PresetSize, RelativeTo};
++use serde::{Deserialize, Serialize};
++use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
++use smithay::reexports::wayland_server::{
++    Client, DataInit, DisplayHandle, New, Resource, WEnum,
++};
++use smithay::wayland::compositor::with_states;
++use smithay::wayland::shell::xdg::ToplevelSurface;
++use smithay::wayland::{Dispatch2, GlobalDispatch2};
++
++use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::XdgToplevel;
++
++use super::raw::xdg_session_management::v1::server::xdg_session_manager_v1::{
++    self, XdgSessionManagerV1,
++};
++use super::raw::xdg_session_management::v1::server::xdg_session_v1::{self, XdgSessionV1};
++use super::raw::xdg_session_management::v1::server::xdg_toplevel_session_v1::{
++    self, XdgToplevelSessionV1,
++};
++use super::raw::xx_session_management::v1::server::xx_session_manager_v1::{
++    self, XxSessionManagerV1,
++};
++use super::raw::xx_session_management::v1::server::xx_session_v1::{self, XxSessionV1};
++use super::raw::xx_session_management::v1::server::xx_toplevel_session_v1::{
++    self, XxToplevelSessionV1,
++};
++use crate::layout::{LayoutElement, SizingMode};
++use crate::niri::State;
++use crate::window::ResolvedWindowRules;
++
++const VERSION: u32 = 1;
++const MAX_AGE: Duration = Duration::from_secs(30 * 24 * 3600);
++pub const SAVE_INTERVAL: Duration = Duration::from_secs(1);
++
++#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
++pub struct ToplevelState {
++    pub output: Option<String>,
++    pub workspace_name: Option<String>,
++    pub workspace_idx: usize,
++    pub column_idx: Option<usize>,
++    pub size: Option<(i32, i32)>,
++    pub floating_pos: Option<(f64, f64)>,
++    pub fullscreen: bool,
++    pub maximized: bool,
++}
++
++#[derive(Default, Serialize, Deserialize)]
++struct StoredSession {
++    last_used: u64,
++    toplevels: HashMap<String, ToplevelState>,
++}
++
++#[derive(Clone, PartialEq)]
++enum SessionResource {
++    Xdg(XdgSessionV1),
++    Xx(XxSessionV1),
++}
++
++struct ActiveSession {
++    resource: SessionResource,
++    toplevels: HashMap<String, ToplevelSurface>,
++}
++
++pub struct SessionManagementState {
++    path: Option<PathBuf>,
++    sessions: HashMap<String, StoredSession>,
++    active: HashMap<String, ActiveSession>,
++    dirty: bool,
++}
++
++pub struct SessionManagerGlobalData;
++pub struct SessionManagerData;
++pub struct SessionData(Mutex<Option<String>>);
++pub struct ToplevelSessionData<S> {
++    session: S,
++    toplevel: Option<ToplevelSurface>,
++}
++
++enum AddError {
++    AlreadyAdded,
++    NameInUse,
++    AlreadyMapped,
++}
++
++struct RestoreData(Mutex<Option<ToplevelState>>);
++
++fn now() -> u64 {
++    SystemTime::now()
++        .duration_since(UNIX_EPOCH)
++        .map_or(0, |d| d.as_secs())
++}
++
++fn new_session_id() -> String {
++    let s = RandomState::new();
++    format!("{:016x}{:016x}", s.hash_one(0u8), s.hash_one(1u8))
++}
++
++fn set_restore_state(surface: &WlSurface, value: Option<ToplevelState>) {
++    with_states(surface, |states| {
++        let data = states
++            .data_map
++            .get_or_insert_threadsafe(|| RestoreData(Mutex::new(None)));
++        *data.0.lock().unwrap() = value;
++    });
++}
++
++pub fn restore_state(surface: &WlSurface) -> Option<ToplevelState> {
++    with_states(surface, |states| {
++        states
++            .data_map
++            .get::<RestoreData>()
++            .and_then(|d| d.0.lock().unwrap().clone())
++    })
++}
++
++pub fn take_restore_state(surface: &WlSurface) -> Option<ToplevelState> {
++    with_states(surface, |states| {
++        states
++            .data_map
++            .get::<RestoreData>()
++            .and_then(|d| d.0.lock().unwrap().take())
++    })
++}
++
++impl ToplevelState {
++    pub fn apply(&self, rules: &mut ResolvedWindowRules) {
++        if self.output.is_some() {
++            rules.open_on_output = self.output.clone();
++        }
++        rules.open_on_workspace = self.workspace_name.clone();
++        if let Some((w, h)) = self.size {
++            rules.default_width = Some(Some(PresetSize::Fixed(w)));
++            rules.default_height = Some(Some(PresetSize::Fixed(h)));
++        }
++        rules.open_floating = Some(self.floating_pos.is_some());
++        if let Some((x, y)) = self.floating_pos {
++            rules.default_floating_position = Some(FloatingPosition {
++                x: FloatOrInt(x),
++                y: FloatOrInt(y),
++                relative_to: RelativeTo::TopLeft,
++            });
++        }
++        rules.open_fullscreen = Some(self.fullscreen);
++        rules.open_maximized_to_edges = Some(self.maximized);
++    }
++}
++
++impl SessionManagementState {
++    pub fn new(display: &DisplayHandle) -> Self {
++        display.create_global::<State, XdgSessionManagerV1, _>(VERSION, SessionManagerGlobalData);
++        display.create_global::<State, XxSessionManagerV1, _>(VERSION, SessionManagerGlobalData);
++
++        let path = BaseDirs::new()
++            .and_then(|d| d.state_dir().map(|p| p.join("niri/sessions.json")));
++        let mut sessions: HashMap<String, StoredSession> = path
++            .as_ref()
++            .and_then(|p| std::fs::read(p).ok())
++            .and_then(|data| {
++                serde_json::from_slice(&data)
++                    .map_err(|err| warn!("error parsing session store: {err}"))
++                    .ok()
++            })
++            .unwrap_or_default();
++        let cutoff = now().saturating_sub(MAX_AGE.as_secs());
++        sessions.retain(|_, s| s.last_used >= cutoff);
++
++        Self {
++            path,
++            sessions,
++            active: HashMap::new(),
++            dirty: false,
++        }
++    }
++
++    fn deactivate(&mut self, resource: &SessionResource) {
++        let Some(id) = resource.data().and_then(|d| d.0.lock().unwrap().take()) else {
++            return;
++        };
++        if self.active.get(&id).is_some_and(|a| a.resource == *resource) {
++            self.active.remove(&id);
++        }
++    }
++
++    fn open_session(&mut self, client: &Client, session_id: Option<String>) -> Option<(String, bool)> {
++        if let Some(old) = session_id.as_ref().and_then(|id| self.active.get(id)) {
++            if old.resource.client().as_ref() == Some(client) {
++                return None;
++            }
++            let old = old.resource.clone();
++            self.deactivate(&old);
++            old.replaced();
++        }
++
++        let (sid, restored) = match session_id.filter(|sid| self.sessions.contains_key(sid)) {
++            Some(sid) => (sid, true),
++            None => (new_session_id(), false),
++        };
++        self.sessions.entry(sid.clone()).or_default().last_used = now();
++        self.dirty = true;
++        Some((sid, restored))
++    }
++
++    fn activate(&mut self, sid: String, resource: SessionResource) {
++        let toplevels = HashMap::new();
++        self.active.insert(sid, ActiveSession { resource, toplevels });
++    }
++
++    fn remove_session(&mut self, resource: &SessionResource) {
++        let id = resource.data().and_then(|d| d.0.lock().unwrap().clone());
++        self.deactivate(resource);
++        if let Some(id) = id {
++            self.sessions.remove(&id);
++            self.dirty = true;
++        }
++    }
++
++    fn add_toplevel(
++        &mut self,
++        sid: &str,
++        surface: &ToplevelSurface,
++        name: String,
++        restore: bool,
++    ) -> Result<Option<ToplevelState>, AddError> {
++        if self.tracks(surface) {
++            return Err(AddError::AlreadyAdded);
++        }
++        let active = self.active.get_mut(sid).unwrap();
++        if active.toplevels.get(&name).is_some_and(|t| t.alive()) {
++            return Err(AddError::NameInUse);
++        }
++        if restore && surface.is_initial_configure_sent() {
++            return Err(AddError::AlreadyMapped);
++        }
++
++        let stored = self.sessions.entry(sid.to_owned()).or_default();
++        let saved = if restore {
++            stored.toplevels.get(&name).cloned()
++        } else {
++            stored.toplevels.remove(&name);
++            None
++        };
++        active.toplevels.insert(name, surface.clone());
++        Ok(saved)
++    }
++
++    fn name_of(&self, sid: &str, toplevel: &ToplevelSurface) -> Option<String> {
++        let active = self.active.get(sid)?;
++        let (name, _) = active.toplevels.iter().find(|(_, t)| *t == toplevel)?;
++        Some(name.clone())
++    }
++
++    fn remove_toplevel(&mut self, sid: &str, name: &str) {
++        if let Some(active) = self.active.get_mut(sid) {
++            active.toplevels.remove(name);
++        }
++        if let Some(s) = self.sessions.get_mut(sid) {
++            s.toplevels.remove(name);
++            self.dirty = true;
++        }
++    }
++
++    fn rename_toplevel(&mut self, sid: &str, toplevel: &ToplevelSurface, name: String) -> bool {
++        let Some(old) = self.name_of(sid, toplevel) else {
++            return true;
++        };
++        let active = self.active.get_mut(sid).unwrap();
++        if active.toplevels.get(&name).is_some_and(|t| t.alive()) {
++            return false;
++        }
++        let t = active.toplevels.remove(&old).unwrap();
++        active.toplevels.insert(name.clone(), t);
++        if let Some(s) = self.sessions.get_mut(sid) {
++            if let Some(saved) = s.toplevels.remove(&old) {
++                s.toplevels.insert(name, saved);
++                self.dirty = true;
++            }
++        }
++        true
++    }
++
++    fn tracks(&self, toplevel: &ToplevelSurface) -> bool {
++        self.active
++            .values()
++            .any(|a| a.toplevels.values().any(|t| t == toplevel))
++    }
++
++    fn write(&mut self) {
++        let Some(path) = &self.path else { return };
++        let res = (|| {
++            std::fs::create_dir_all(path.parent().unwrap())?;
++            let tmp = path.with_extension("json.tmp");
++            std::fs::write(&tmp, serde_json::to_vec(&self.sessions)?)?;
++            std::fs::rename(&tmp, path)
++        })();
++        if let Err(err) = res {
++            warn!("error writing session store: {err}");
++        }
++        self.dirty = false;
++    }
++}
++
++impl State {
++    pub fn save_sessions(&mut self) {
++        let sm = &mut self.niri.session_management_state;
++        let mut tracked: HashMap<WlSurface, (String, String)> = HashMap::new();
++        for (id, active) in &mut sm.active {
++            active.toplevels.retain(|_, t| t.alive());
++            for (name, t) in &active.toplevels {
++                tracked.insert(t.wl_surface().clone(), (id.clone(), name.clone()));
++            }
++        }
++
++        let layout = &self.niri.layout;
++        let mut updates = Vec::new();
++        layout.with_windows(|mapped, output, ws_id, wl| {
++            let (Some(output), Some(ws_id)) = (output, ws_id) else {
++                return;
++            };
++            let Some(key) = tracked.get(mapped.toplevel().wl_surface()) else {
++                return;
++            };
++            let Some((ws_idx, ws)) = layout.find_workspace_by_id(ws_id) else {
++                return;
++            };
++            let mode = mapped.sizing_mode();
++            updates.push((
++                key.clone(),
++                ToplevelState {
++                    output: Some(output.name()),
++                    workspace_name: ws.name().cloned(),
++                    workspace_idx: ws_idx,
++                    column_idx: wl.pos_in_scrolling_layout.map(|(col, _)| col - 1),
++                    size: (mode == SizingMode::Normal).then_some(wl.window_size),
++                    floating_pos: mapped
++                        .is_floating()
++                        .then_some(wl.tile_pos_in_workspace_view)
++                        .flatten()
++                        .map(|(x, y)| {
++                            let loc = ws.floating().working_area().loc;
++                            (x - loc.x, y - loc.y)
++                        }),
++                    fullscreen: mode == SizingMode::Fullscreen,
++                    maximized: mode == SizingMode::Maximized,
++                },
++            ));
++        });
++
++        let sm = &mut self.niri.session_management_state;
++        for ((id, name), mut new) in updates {
++            let session = sm.sessions.entry(id).or_default();
++            let old = session.toplevels.entry(name).or_default();
++            if new.size.is_none() {
++                new.size = old.size;
++            }
++            if *old != new {
++                *old = new;
++                sm.dirty = true;
++            }
++        }
++
++        if sm.dirty {
++            sm.write();
++        }
++    }
++}
++
++impl SessionResource {
++    fn data(&self) -> Option<&SessionData> {
++        match self {
++            Self::Xdg(r) => r.data(),
++            Self::Xx(r) => r.data(),
++        }
++    }
++
++    fn client(&self) -> Option<Client> {
++        match self {
++            Self::Xdg(r) => r.client(),
++            Self::Xx(r) => r.client(),
++        }
++    }
++
++    fn replaced(&self) {
++        match self {
++            Self::Xdg(r) => r.replaced(),
++            Self::Xx(r) => r.replaced(),
++        }
++    }
++}
++
++impl SessionData {
++    fn id(&self) -> Option<String> {
++        self.0.lock().unwrap().clone()
++    }
++}
++
++/// Returns the active session id and toplevel, or `None` for an inert toplevel session.
++fn resolve_toplevel(
++    state: &State,
++    data: &SessionData,
++    toplevel: &XdgToplevel,
++) -> Option<(String, ToplevelSurface)> {
++    let sid = data.id()?;
++    let surface = state.niri.xdg_shell_state.get_toplevel(toplevel)?;
++    Some((sid, surface))
++}
++
++impl<I: Resource + 'static> GlobalDispatch2<I, State> for SessionManagerGlobalData
++where
++    SessionManagerData: Dispatch2<I, State>,
++{
++    fn bind(
++        &self,
++        _state: &mut State,
++        _handle: &DisplayHandle,
++        _client: &Client,
++        manager: New<I>,
++        data_init: &mut DataInit<'_, State>,
++    ) {
++        data_init.init(manager, SessionManagerData);
++    }
++}
++
++impl Dispatch2<XdgSessionManagerV1, State> for SessionManagerData {
++    fn request(
++        &self,
++        state: &mut State,
++        client: &Client,
++        resource: &XdgSessionManagerV1,
++        request: xdg_session_manager_v1::Request,
++        _dhandle: &DisplayHandle,
++        data_init: &mut DataInit<'_, State>,
++    ) {
++        let xdg_session_manager_v1::Request::GetSession {
++            id,
++            reason,
++            session_id,
++        } = request
++        else {
++            return;
++        };
++        if !matches!(reason, WEnum::Value(_)) {
++            resource.post_error(
++                xdg_session_manager_v1::Error::InvalidReason,
++                "invalid reason",
++            );
++            return;
++        }
++
++        let sm = &mut state.niri.session_management_state;
++        let Some((sid, restored)) = sm.open_session(client, session_id) else {
++            resource.post_error(xdg_session_manager_v1::Error::InUse, "session in use");
++            return;
++        };
++        let session = data_init.init(id, SessionData(Mutex::new(Some(sid.clone()))));
++        sm.activate(sid.clone(), SessionResource::Xdg(session.clone()));
++        if restored {
++            session.restored();
++        } else {
++            session.created(sid);
++        }
++    }
++}
++
++impl Dispatch2<XxSessionManagerV1, State> for SessionManagerData {
++    fn request(
++        &self,
++        state: &mut State,
++        client: &Client,
++        resource: &XxSessionManagerV1,
++        request: xx_session_manager_v1::Request,
++        _dhandle: &DisplayHandle,
++        data_init: &mut DataInit<'_, State>,
++    ) {
++        let xx_session_manager_v1::Request::GetSession { id, session, .. } = request else {
++            return;
++        };
++
++        let sm = &mut state.niri.session_management_state;
++        let Some((sid, restored)) = sm.open_session(client, session) else {
++            resource.post_error(xx_session_manager_v1::Error::InUse, "session in use");
++            return;
++        };
++        let session = data_init.init(id, SessionData(Mutex::new(Some(sid.clone()))));
++        sm.activate(sid.clone(), SessionResource::Xx(session.clone()));
++        if restored {
++            session.restored();
++        } else {
++            session.created(sid);
++        }
++    }
++}
++
++impl Dispatch2<XdgSessionV1, State> for SessionData {
++    fn request(
++        &self,
++        state: &mut State,
++        _client: &Client,
++        resource: &XdgSessionV1,
++        request: xdg_session_v1::Request,
++        _dhandle: &DisplayHandle,
++        data_init: &mut DataInit<'_, State>,
++    ) {
++        let (id, toplevel, name, restore) = match request {
++            xdg_session_v1::Request::Destroy => {
++                let resource = SessionResource::Xdg(resource.clone());
++                state.niri.session_management_state.deactivate(&resource);
++                return;
++            }
++            xdg_session_v1::Request::Remove => {
++                let resource = SessionResource::Xdg(resource.clone());
++                state.niri.session_management_state.remove_session(&resource);
++                return;
++            }
++            xdg_session_v1::Request::RemoveToplevel { name } => {
++                if let Some(sid) = self.id() {
++                    state.niri.session_management_state.remove_toplevel(&sid, &name);
++                }
++                return;
++            }
++            xdg_session_v1::Request::AddToplevel { id, toplevel, name } => {
++                (id, toplevel, name, false)
++            }
++            xdg_session_v1::Request::RestoreToplevel { id, toplevel, name } => {
++                (id, toplevel, name, true)
++            }
++        };
++
++        let resolved = resolve_toplevel(state, self, &toplevel);
++        let sm = &mut state.niri.session_management_state;
++        let saved = match &resolved {
++            Some((sid, surface)) => match sm.add_toplevel(sid, surface, name, restore) {
++                Ok(saved) => saved,
++                Err(err) => {
++                    let (code, msg) = match err {
++                        AddError::AlreadyAdded => {
++                            (xdg_session_v1::Error::AlreadyAdded, "toplevel already added")
++                        }
++                        AddError::NameInUse => {
++                            (xdg_session_v1::Error::NameInUse, "toplevel name in use")
++                        }
++                        AddError::AlreadyMapped => {
++                            (xdg_session_v1::Error::AlreadyMapped, "toplevel already mapped")
++                        }
++                    };
++                    resource.post_error(code, msg);
++                    return;
++                }
++            },
++            None => None,
++        };
++
++        let surface = resolved.map(|(_, s)| s);
++        let toplevel_session = data_init.init(
++            id,
++            ToplevelSessionData {
++                session: resource.clone(),
++                toplevel: surface.clone(),
++            },
++        );
++        if let (Some(saved), Some(surface)) = (saved, surface) {
++            set_restore_state(surface.wl_surface(), Some(saved));
++            toplevel_session.restored();
++        }
++    }
++
++    fn destroyed(
++        &self,
++        state: &mut State,
++        _client: smithay::reexports::wayland_server::backend::ClientId,
++        resource: &XdgSessionV1,
++    ) {
++        let resource = SessionResource::Xdg(resource.clone());
++        state.niri.session_management_state.deactivate(&resource);
++    }
++}
++
++impl Dispatch2<XxSessionV1, State> for SessionData {
++    fn request(
++        &self,
++        state: &mut State,
++        _client: &Client,
++        resource: &XxSessionV1,
++        request: xx_session_v1::Request,
++        _dhandle: &DisplayHandle,
++        data_init: &mut DataInit<'_, State>,
++    ) {
++        let (id, toplevel, name, restore) = match request {
++            xx_session_v1::Request::Destroy => {
++                let resource = SessionResource::Xx(resource.clone());
++                state.niri.session_management_state.deactivate(&resource);
++                return;
++            }
++            xx_session_v1::Request::Remove => {
++                let resource = SessionResource::Xx(resource.clone());
++                state.niri.session_management_state.remove_session(&resource);
++                return;
++            }
++            xx_session_v1::Request::AddToplevel { id, toplevel, name } => {
++                (id, toplevel, name, false)
++            }
++            xx_session_v1::Request::RestoreToplevel { id, toplevel, name } => {
++                (id, toplevel, name, true)
++            }
++        };
++
++        let resolved = resolve_toplevel(state, self, &toplevel);
++        let sm = &mut state.niri.session_management_state;
++        let saved = match &resolved {
++            Some((sid, surface)) => match sm.add_toplevel(sid, surface, name, restore) {
++                Ok(saved) => saved,
++                Err(err) => {
++                    let (code, msg) = match err {
++                        AddError::AlreadyAdded => {
++                            let session = resource.clone();
++                            data_init.init(id, ToplevelSessionData { session, toplevel: None });
++                            return;
++                        }
++                        AddError::NameInUse => {
++                            (xx_session_v1::Error::NameInUse, "toplevel name in use")
++                        }
++                        AddError::AlreadyMapped => {
++                            (xx_session_v1::Error::AlreadyMapped, "toplevel already mapped")
++                        }
++                    };
++                    resource.post_error(code, msg);
++                    return;
++                }
++            },
++            None => None,
++        };
++
++        let surface = resolved.map(|(_, s)| s);
++        let toplevel_session = data_init.init(
++            id,
++            ToplevelSessionData {
++                session: resource.clone(),
++                toplevel: surface.clone(),
++            },
++        );
++        if let (Some(saved), Some(surface)) = (saved, surface) {
++            set_restore_state(surface.wl_surface(), Some(saved));
++            toplevel_session.restored(&toplevel);
++        }
++    }
++
++    fn destroyed(
++        &self,
++        state: &mut State,
++        _client: smithay::reexports::wayland_server::backend::ClientId,
++        resource: &XxSessionV1,
++    ) {
++        let resource = SessionResource::Xx(resource.clone());
++        state.niri.session_management_state.deactivate(&resource);
++    }
++}
++
++impl<S: Resource> ToplevelSessionData<S> {
++    fn ids(&self) -> Option<(String, &ToplevelSurface)> {
++        let sid = self.session.data::<SessionData>()?.id()?;
++        Some((sid, self.toplevel.as_ref()?))
++    }
++}
++
++impl Dispatch2<XdgToplevelSessionV1, State> for ToplevelSessionData<XdgSessionV1> {
++    fn request(
++        &self,
++        state: &mut State,
++        _client: &Client,
++        _resource: &XdgToplevelSessionV1,
++        request: xdg_toplevel_session_v1::Request,
++        _dhandle: &DisplayHandle,
++        _data_init: &mut DataInit<'_, State>,
++    ) {
++        let xdg_toplevel_session_v1::Request::Rename { name } = request else {
++            return;
++        };
++        let Some((sid, toplevel)) = self.ids() else {
++            return;
++        };
++        let sm = &mut state.niri.session_management_state;
++        if !sm.rename_toplevel(&sid, toplevel, name) {
++            self.session
++                .post_error(xdg_session_v1::Error::NameInUse, "toplevel name in use");
++        }
++    }
++}
++
++impl Dispatch2<XxToplevelSessionV1, State> for ToplevelSessionData<XxSessionV1> {
++    fn request(
++        &self,
++        state: &mut State,
++        _client: &Client,
++        _resource: &XxToplevelSessionV1,
++        request: xx_toplevel_session_v1::Request,
++        _dhandle: &DisplayHandle,
++        _data_init: &mut DataInit<'_, State>,
++    ) {
++        let xx_toplevel_session_v1::Request::Remove = request else {
++            return;
++        };
++        let Some((sid, toplevel)) = self.ids() else {
++            return;
++        };
++        let sm = &mut state.niri.session_management_state;
++        if let Some(name) = sm.name_of(&sid, toplevel) {
++            sm.remove_toplevel(&sid, &name);
++        }
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn apply_saved_state() {
++        let saved = ToplevelState {
++            output: Some("DP-1".into()),
++            size: Some((800, 600)),
++            floating_pos: Some((10., 20.)),
++            maximized: true,
++            ..Default::default()
++        };
++        let json = serde_json::to_string(&saved).unwrap();
++        assert_eq!(serde_json::from_str::<ToplevelState>(&json).unwrap(), saved);
++
++        let mut rules = ResolvedWindowRules::default();
++        saved.apply(&mut rules);
++        assert_eq!(rules.open_on_output.as_deref(), Some("DP-1"));
++        assert_eq!(rules.default_width, Some(Some(PresetSize::Fixed(800))));
++        assert_eq!(rules.open_floating, Some(true));
++        assert_eq!(rules.default_floating_position.unwrap().y, FloatOrInt(20.));
++        assert_eq!(rules.open_maximized_to_edges, Some(true));
++        assert_eq!(rules.open_fullscreen, Some(false));
++    }
++}
+diff --git a/src/window/mod.rs b/src/window/mod.rs
+index 7fc4826..b448a3f 100644
+--- a/src/window/mod.rs
++++ b/src/window/mod.rs
+@@ -14,6 +14,7 @@ use smithay::wayland::shell::xdg::{
+     SurfaceCachedState, ToplevelSurface, XdgToplevelSurfaceRoleAttributes,
+ };
+ 
++use crate::protocols::session_management::restore_state;
+ use crate::utils::with_toplevel_role;
+ 
+ pub mod mapped;
+@@ -333,6 +334,12 @@ impl ResolvedWindowRules {
+             resolved.open_on_workspace = open_on_workspace.map(|x| x.to_owned());
+         });
+ 
++        if let WindowRef::Unmapped(unmapped) = window {
++            if let Some(saved) = restore_state(unmapped.toplevel().wl_surface()) {
++                saved.apply(&mut resolved);
++            }
++        }
++
+         resolved
+     }
+ 
