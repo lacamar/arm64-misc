@@ -1,5 +1,5 @@
 Name:           open-hpl
-Version:        1.3.36
+Version:        1.3.37
 Release:        1%{?dist}
 Summary:        Native aarch64 port of Frictional Games' HPL engine
 
@@ -72,7 +72,8 @@ PKGDIR=%{_libexecdir}/%{name}
 
 # oh_gamedir <appid> <steam dir> <icon name>: sets $gamedir
 oh_gamedir() {
-    for steam in "$HOME/.steam/steam" "$HOME/.local/share/Steam" ""; do
+    for steam in "$HOME/.steam/steam" "$HOME/.local/share/Steam" \
+        "$HOME/.var/app/com.valvesoftware.Steam/.local/share/Steam" ""; do
         [ -n "$steam" ] || { echo "Open HPL: no Steam install found" >&2; exit 1; }
         [ -d "$steam/steamapps/common" ] && break
     done
@@ -84,6 +85,10 @@ oh_gamedir() {
         [ -z "$src" ] || install -Dm0644 "$src" "$icon"
     fi
     gamedir="$steam/steamapps/common/$2"
+    [ -d "$gamedir" ] || gamedir=$(sed -n 's/^[[:space:]]*"path"[[:space:]]*"\(.*\)"$/\1/p' \
+        "$steam/steamapps/libraryfolders.vdf" 2>/dev/null | while IFS= read -r lib; do
+            if [ -d "$lib/steamapps/common/$2" ]; then echo "$lib/steamapps/common/$2"; break; fi
+        done)
     [ -d "$gamedir" ] || { echo "Open HPL: install $2 via Steam first" >&2; exit 1; }
 }
 EOF
@@ -131,6 +136,16 @@ launcher bunker 1944430 "Amnesia The Bunker" \
 %{_datadir}/icons/hicolor/128x128/apps/open-hpl-*.png
 
 %changelog
+* Tue Oct 06 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.37-1
+- SOMA: lens flares, detail maps, sRGB GUI
+- SOMA: liquid buoyancy, HPL3 sun shadows
+- SOMA: dialog branch events, save fixes
+- Create missing XDG dirs on first run
+- No OpenAL temp log in $HOME
+- Rebirth/Bunker: log to XDG state dir
+- Find games in all Steam libraries
+- Fix Newton crash on disjoint hulls
+
 * Mon Oct 05 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.36-1
 - SOMA: force fields, creature tails, agent pitch
 - SOMA: end credits, 05_01 -> 05_02
