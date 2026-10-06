@@ -1,21 +1,21 @@
-%global bumpver 30
+%global bumpver 31
 %global _name box64
 %global tag 0.4.5.1
 
-%global commit 50069bcf69f62a780074cf8458c5339f00579a5a
+%global commit bc41dacc8cd45353a5918e741170a9256afb4675
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           %{_name}-git
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        4%{?dist}
+Epoch:          1
+Release:        1%{?dist}
 Conflicts:      %{_name}
-Provides:       %{_name} = %{version}-%{release}
+Provides:       %{_name} = %{epoch}:%{version}-%{release}
 Summary:        Linux userspace x86_64 emulator with a twist, targeted at ARM64
 
 %global common_description %{expand:
 Box64 lets you run x86_64 Linux programs (such as games) on non-x86_64 Linux
 systems, like ARM (host system needs to be 64-bit little-endian).}
-
 
 License:        MIT
 URL:            https://box86.org
@@ -30,17 +30,19 @@ BuildRequires:  alternatives
 BuildRequires:  desktop-file-utils
 
 ExclusiveArch:  aarch64
+%global __requires_exclude_from ^%{_bindir}/box64-bash$
+%global __provides_exclude_from ^%{_bindir}/box64-bash$
 
 Requires:       alternatives
-Requires:       %{_name}-data = %{version}-%{release}
-Recommends:     %{name}-binfmts = %{version}-%{release}
+Requires:       %{_name}-data = %{epoch}:%{version}-%{release}
+Recommends:     %{name}-binfmts = %{epoch}:%{version}-%{release}
 Requires(post): %{_sbindir}/update-alternatives
 Requires(postun): %{_sbindir}/update-alternatives
 
 %description    %{common_description}
 
 %package        data
-Provides:       box64-data = %{version}-%{release}
+Provides:       box64-data = %{epoch}:%{version}-%{release}
 Summary:        Common files for %{_name}
 BuildArch:      noarch
 %description    data %{common_description}
@@ -49,7 +51,7 @@ This package provides common data files for box64.
 
 %package        binfmts
 Conflicts:      box64-binfmts
-Provides:       box64-binfmts = %{version}-%{release}
+Provides:       box64-binfmts = %{epoch}:%{version}-%{release}
 Summary:        binfmt_misc handler configurations for box64
 
 %description    binfmts %{common_description}
@@ -59,10 +61,10 @@ execute x86_64 binaries.
 
 %package        asahi
 Conflicts:      box64-asahi
-Provides:       box64-asahi = %{version}-%{release}
+Provides:       box64-asahi = %{epoch}:%{version}-%{release}
 Summary:        Apple Silicon version of box64
 
-Requires:       %{_name}-data = %{version}-%{release}
+Requires:       %{_name}-data = %{epoch}:%{version}-%{release}
 Requires(post): %{_sbindir}/update-alternatives
 Requires(postun): %{_sbindir}/update-alternatives
 
@@ -110,7 +112,7 @@ mv %{buildroot}%{_bindir}/%{_name} %{buildroot}%{_bindir}/%{_name}.aarch64
 touch %{buildroot}%{_bindir}/%{_name}
 chmod +x %{buildroot}%{_bindir}/%{_name}
 install -Dpm0755 -t %{buildroot}%{_bindir} \
-  %{_name}.asahi
+  %{_name}.asahi tests/box64-bash
 
 %post
 %{_sbindir}/update-alternatives --install %{_bindir}/%{_name} \
@@ -134,10 +136,12 @@ fi
 %ghost %{_bindir}/%{_name}
 %{_bindir}/%{_name}.aarch64
 %{_bindir}/box64-configurator
+%{_bindir}/box64-bash
 
 %files asahi
 %ghost %{_bindir}/%{_name}
 %{_bindir}/%{_name}.asahi
+%{_bindir}/box64-bash
 
 %files data
 %license LICENSE
@@ -154,6 +158,11 @@ fi
 %{_binfmtdir}/box64.conf
 
 %changelog
+* Tue Oct 06 2026 Lachlan Marie <lchlnm@pm.me> - 1:0.4.5.1^31.git.bc41dac-1
+ - Update to commit bc41dacc8cd45353a5918e741170a9256afb4675
+ - Add Epoch to fix version ordering
+ - Ship box64-bash
+
 * Tue Sep 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.5.1^30.git.50069bc-4
  - Update to commit 50069bcf69f62a780074cf8458c5339f00579a5a
 

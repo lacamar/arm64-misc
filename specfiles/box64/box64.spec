@@ -11,7 +11,8 @@ systems, like ARM (host system needs to be 64-bit little-endian).}
 
 Name:           box64
 Version:        %{tag}
-Release:        2%{?dist}
+Epoch:          1
+Release:        3%{?dist}
 Summary:        Linux userspace x86_64 emulator with a twist, targeted at ARM64
 
 License:        MIT
@@ -25,9 +26,11 @@ BuildRequires:  perl-podlators
 BuildRequires:  systemd-rpm-macros
 
 ExclusiveArch:  aarch64
+%global __requires_exclude_from ^%{_bindir}/box64-bash$
+%global __provides_exclude_from ^%{_bindir}/box64-bash$
 
-Requires:       %{name}-data = %{version}-%{release}
-Recommends:     %{name}-binfmts = %{version}-%{release}
+Requires:       %{name}-data = %{epoch}:%{version}-%{release}
+Recommends:     %{name}-binfmts = %{epoch}:%{version}-%{release}
 Requires(post): %{_sbindir}/update-alternatives
 Requires(postun): %{_sbindir}/update-alternatives
 
@@ -52,7 +55,7 @@ execute x86_64 binaries.
 %package        asahi
 Summary:        Apple Silicon version of box64
 
-Requires:       %{name}-data = %{version}-%{release}
+Requires:       %{name}-data = %{epoch}:%{version}-%{release}
 Requires(post): %{_sbindir}/update-alternatives
 Requires(postun): %{_sbindir}/update-alternatives
 
@@ -98,7 +101,7 @@ mv %{buildroot}%{_bindir}/%{name} %{buildroot}%{_bindir}/%{name}.aarch64
 touch %{buildroot}%{_bindir}/%{name}
 chmod +x %{buildroot}%{_bindir}/%{name}
 install -Dpm0755 -t %{buildroot}%{_bindir} \
-  %{name}.asahi
+  %{name}.asahi tests/box64-bash
 
 %post
 %{_sbindir}/update-alternatives --install %{_bindir}/%{name} \
@@ -122,10 +125,12 @@ fi
 %ghost %{_bindir}/%{name}
 %{_bindir}/%{name}.aarch64
 %{_bindir}/box64-configurator
+%{_bindir}/box64-bash
 
 %files asahi
 %ghost %{_bindir}/%{name}
 %{_bindir}/%{name}.asahi
+%{_bindir}/box64-bash
 
 %files data
 %license LICENSE
@@ -142,6 +147,10 @@ fi
 %{_binfmtdir}/box64.conf
 
 %changelog
+* Tue Oct 06 2026 Lachlan Marie <lchlnm@pm.me> - 1:0.4.5.1-3
+ - Add Epoch to fix version ordering
+ - Ship box64-bash
+
 * Fri Aug 21 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.5.1-2
  - Update to 0.4.5.1
 
