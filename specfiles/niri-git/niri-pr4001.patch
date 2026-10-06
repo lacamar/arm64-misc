@@ -1,0 +1,327 @@
+diff --git a/src/handlers/mod.rs b/src/handlers/mod.rs
+index b3b9f5fc..3573eaf5 100644
+--- a/src/handlers/mod.rs
++++ b/src/handlers/mod.rs
+@@ -25,6 +25,7 @@ use smithay::reexports::rustix::fs::{fcntl_setfl, OFlags};
+ use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::XdgToplevel;
+ use smithay::reexports::wayland_protocols_wlr::screencopy::v1::server::zwlr_screencopy_manager_v1::ZwlrScreencopyManagerV1;
+ use smithay::reexports::wayland_server::protocol::wl_output::WlOutput;
++use smithay::reexports::wayland_server::protocol::wl_pointer::WlPointer;
+ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
+ use smithay::reexports::wayland_server::Resource;
+ use smithay::utils::{Logical, Point, Rectangle, Serial};
+@@ -43,8 +44,9 @@ use smithay::wayland::keyboard_shortcuts_inhibit::{
+ };
+ use smithay::wayland::output::OutputHandler;
+ use smithay::wayland::pointer_constraints::{
+-    with_pointer_constraint, ConstraintRemove, PointerConstraintsHandler,
++    with_pointer_constraint, ConstraintRemove, PointerConstraint, PointerConstraintsHandler,
+ };
++use smithay::wayland::pointer_warp::PointerWarpHandler;
+ use smithay::wayland::security_context::{
+     SecurityContext, SecurityContextHandler, SecurityContextListenerSource,
+ };
+@@ -87,7 +89,9 @@ use crate::protocols::virtual_pointer::{
+     VirtualPointerInputBackend, VirtualPointerManagerState, VirtualPointerMotionAbsoluteEvent,
+     VirtualPointerMotionEvent,
+ };
+-use crate::utils::{output_size, send_scale_transform};
++use crate::utils::{
++    get_surface_size, get_surface_toplevel_coords, output_size, send_scale_transform,
++};
+ 
+ pub const XDG_ACTIVATION_TOKEN_TIMEOUT: Duration = Duration::from_secs(10);
+ 
+@@ -238,6 +242,99 @@ impl PointerConstraintsHandler for State {
+     }
+ }
+ 
++impl PointerWarpHandler for State {
++    fn warp_pointer(
++        &mut self,
++        surface: WlSurface,
++        _pointer: WlPointer,
++        pos: Point<f64, Logical>,
++        serial: Serial,
++    ) {
++        let Some(seat_pointer) = &self.niri.seat.get_pointer() else {
++            return;
++        };
++
++        let Some(last_serial) = seat_pointer.last_enter() else {
++            return;
++        };
++
++        if serial != last_serial {
++            return;
++        }
++
++        let surface_size = get_surface_size(&surface).to_f64();
++        if pos.x < 0. || pos.y < 0. || pos.x > surface_size.w || pos.y > surface_size.h {
++            return;
++        }
++
++        // Check the warp against an active pointer constraint. Constraints live on the
++        // pointer's focus surface, which may legitimately differ from the warp target
++        // (the enter serial is valid for any surface of the client).
++        let mut allow = true;
++        if let Some((focus_surface, origin)) = self.niri.pointer_contents.surface.clone() {
++            let pos_within_focus = seat_pointer.current_location() - origin;
++            with_pointer_constraint(&focus_surface, seat_pointer, |constraint| {
++                let Some(constraint) = constraint else { return };
++                if !constraint.is_active() {
++                    return;
++                }
++
++                // Constraint does not apply if the pointer is not within region.
++                if let Some(region) = constraint.region() {
++                    if !region.contains(pos_within_focus.to_i32_round()) {
++                        return;
++                    }
++                }
++
++                match &*constraint {
++                    // Deliberately honor warps while locked. The spec leaves this
++                    // implementation-defined, and the client holding the lock is the one
++                    // requesting the warp.
++                    PointerConstraint::Locked(_) => (),
++                    // A confined pointer must stay within the confine region.
++                    PointerConstraint::Confined(confine) => {
++                        if focus_surface != surface {
++                            allow = false;
++                        } else if let Some(region) = confine.region() {
++                            allow = region.contains(pos.to_i32_round());
++                        }
++                    }
++                }
++            });
++        }
++        if !allow {
++            return;
++        }
++
++        let Some((mapped, output)) = self.niri.layout.find_window_and_output(&surface) else {
++            return;
++        };
++
++        let Some(output) = output else {
++            return;
++        };
++
++        let Some(output_geo) = self.niri.global_space.output_geometry(output) else {
++            return;
++        };
++
++        let Some(monitor) = self.niri.layout.monitor_for_output(output) else {
++            return;
++        };
++
++        let Some(rect) = monitor.window_visual_rectangle(&mapped.window) else {
++            return;
++        };
++
++        let mut coords = pos;
++        coords += rect.loc;
++        coords += get_surface_toplevel_coords(&surface).to_f64();
++        coords += output_geo.loc.to_f64();
++
++        self.move_cursor(coords);
++    }
++}
++
+ impl InputMethodHandler for State {
+     fn new_popup(&mut self, surface: PopupSurface) {
+         let popup = PopupKind::InputMethod(surface);
+diff --git a/src/layout/floating.rs b/src/layout/floating.rs
+index c1935394..c7198338 100644
+--- a/src/layout/floating.rs
++++ b/src/layout/floating.rs
+@@ -372,6 +372,22 @@ impl<W: LayoutElement> FloatingSpace<W> {
+         self.working_area.intersection(window_rect)
+     }
+ 
++    /// Returns the geometry of the window matching id relative to and clamped to the working area.
++    ///
++    /// During animations, assumes the final tile position.
++    pub fn window_visual_rectangle(&self, id: &W::Id) -> Option<Rectangle<f64, Logical>> {
++        for (tile, pos) in self.tiles_with_offsets() {
++            if tile.window().id() == id {
++                let window_pos = pos + tile.window_loc();
++                let window_size = tile.window_size();
++                let window_rect = Rectangle::new(window_pos, window_size);
++                return self.working_area.intersection(window_rect);
++            }
++        }
++
++        None
++    }
++
+     pub fn popup_target_rect(&self, id: &W::Id) -> Option<Rectangle<f64, Logical>> {
+         for (tile, pos) in self.tiles_with_offsets() {
+             if tile.window().id() == id {
+diff --git a/src/layout/monitor.rs b/src/layout/monitor.rs
+index 761d226b..53c39e32 100644
+--- a/src/layout/monitor.rs
++++ b/src/layout/monitor.rs
+@@ -1354,6 +1354,19 @@ impl<W: LayoutElement> Monitor<W> {
+         self.active_workspace_ref().active_window_visual_rectangle()
+     }
+ 
++    /// Returns the geometry of the window matching id relative to and clamped to the view.
++    ///
++    /// During animations, assumes the final view position.
++    pub fn window_visual_rectangle(&self, id: &W::Id) -> Option<Rectangle<f64, Logical>> {
++        if self.overview_open {
++            return None;
++        }
++
++        self.workspaces
++            .iter()
++            .find_map(|ws| ws.window_visual_rectangle(id))
++    }
++
+     fn workspace_size(&self, zoom: f64) -> Size<f64, Logical> {
+         let ws_size = self.view_size.upscale(zoom);
+         let scale = self.scale.fractional_scale();
+diff --git a/src/layout/scrolling.rs b/src/layout/scrolling.rs
+index da261fca..0d3759c6 100644
+--- a/src/layout/scrolling.rs
++++ b/src/layout/scrolling.rs
+@@ -2604,6 +2604,29 @@ impl<W: LayoutElement> ScrollingSpace<W> {
+         view.intersection(window_rect)
+     }
+ 
++    /// Returns the geometry of the window matching id relative to and clamped to the view.
++    ///
++    /// During animations, assumes the final view position.
++    pub fn window_visual_rectangle(&self, id: &W::Id) -> Option<Rectangle<f64, Logical>> {
++        let final_view_offset = self.view_offset.target();
++        let view_off = Point::from((-final_view_offset, 0.));
++
++        for col in &self.columns {
++            for (tile, pos) in col.tiles() {
++                if tile.window().id() == id {
++                    let window_pos = view_off + pos + tile.window_loc();
++                    let window_size = tile.window_size();
++                    let window_rect = Rectangle::new(window_pos, window_size);
++
++                    let view = Rectangle::from_size(self.view_size);
++                    return view.intersection(window_rect);
++                }
++            }
++        }
++
++        None
++    }
++
+     pub fn popup_target_rect(&self, id: &W::Id) -> Option<Rectangle<f64, Logical>> {
+         for col in &self.columns {
+             for (tile, pos) in col.tiles() {
+diff --git a/src/layout/workspace.rs b/src/layout/workspace.rs
+index a7cab024..62dd4a00 100644
+--- a/src/layout/workspace.rs
++++ b/src/layout/workspace.rs
+@@ -1647,6 +1647,14 @@ impl<W: LayoutElement> Workspace<W> {
+         }
+     }
+ 
++    pub fn window_visual_rectangle(&self, window: &W::Id) -> Option<Rectangle<f64, Logical>> {
++        if self.floating.has_window(window) {
++            self.floating.window_visual_rectangle(window)
++        } else {
++            self.scrolling.window_visual_rectangle(window)
++        }
++    }
++
+     pub fn popup_target_rect(&self, window: &W::Id) -> Option<Rectangle<f64, Logical>> {
+         if self.floating.has_window(window) {
+             self.floating.popup_target_rect(window)
+diff --git a/src/niri.rs b/src/niri.rs
+index 0488eae6..45baa2bc 100644
+--- a/src/niri.rs
++++ b/src/niri.rs
+@@ -102,6 +102,7 @@ use smithay::wayland::keyboard_shortcuts_inhibit::{
+ use smithay::wayland::output::OutputManagerState;
+ use smithay::wayland::pointer_constraints::{with_pointer_constraint, PointerConstraintsState};
+ use smithay::wayland::pointer_gestures::PointerGesturesState;
++use smithay::wayland::pointer_warp::PointerWarpManager;
+ use smithay::wayland::presentation::PresentationState;
+ use smithay::wayland::relative_pointer::RelativePointerManagerState;
+ use smithay::wayland::security_context::SecurityContextState;
+@@ -331,6 +332,7 @@ pub struct Niri {
+     pub pointer_gestures_state: PointerGesturesState,
+     pub relative_pointer_state: RelativePointerManagerState,
+     pub pointer_constraints_state: PointerConstraintsState,
++    pub pointer_warp_manager: PointerWarpManager,
+     pub idle_notifier_state: IdleNotifierState<State>,
+     pub idle_inhibit_manager_state: IdleInhibitManagerState,
+     pub data_device_state: DataDeviceState,
+@@ -2542,6 +2544,7 @@ impl Niri {
+         let pointer_gestures_state = PointerGesturesState::new::<State>(&display_handle);
+         let relative_pointer_state = RelativePointerManagerState::new::<State>(&display_handle);
+         let pointer_constraints_state = PointerConstraintsState::new::<State>(&display_handle);
++        let pointer_warp_manager = PointerWarpManager::new::<State>(&display_handle);
+         let idle_notifier_state = IdleNotifierState::new(&display_handle, event_loop.clone());
+         let idle_inhibit_manager_state = IdleInhibitManagerState::new::<State>(&display_handle);
+         let data_device_state = DataDeviceState::new::<State>(&display_handle);
+@@ -2820,6 +2823,7 @@ impl Niri {
+             pointer_gestures_state,
+             relative_pointer_state,
+             pointer_constraints_state,
++            pointer_warp_manager,
+             idle_notifier_state,
+             idle_inhibit_manager_state,
+             data_device_state,
+diff --git a/src/utils/mod.rs b/src/utils/mod.rs
+index 6f3684cd..f337f9d0 100644
+--- a/src/utils/mod.rs
++++ b/src/utils/mod.rs
+@@ -26,7 +26,9 @@ use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
+ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
+ use smithay::reexports::wayland_server::{Client, DisplayHandle, Resource as _};
+ use smithay::utils::{Coordinate, Logical, Point, Rectangle, Size, Transform};
+-use smithay::wayland::compositor::{send_surface_state, with_states, SurfaceData};
++use smithay::wayland::compositor::{
++    get_parent, send_surface_state, with_states, SubsurfaceCachedState, SurfaceData,
++};
+ use smithay::wayland::fractional_scale::with_fractional_scale;
+ use smithay::wayland::shell::xdg::{
+     ToplevelCachedState, ToplevelConfigure, ToplevelState, ToplevelSurface, XdgToplevelSurfaceData,
+@@ -610,6 +612,37 @@ pub fn show_screenshot_notification(image_path: Option<&Path>) -> anyhow::Result
+     Ok(())
+ }
+ 
++/// Computes this surface's location relative to its toplevel wl_surface's geometry.
++///
++/// This function will go up the parent stack and add up the relative locations. Useful for
++/// transitive subsurfaces.
++pub fn get_surface_toplevel_coords(surface: &WlSurface) -> Point<i32, Logical> {
++    let mut offset = (0, 0).into();
++    let mut current = surface.clone();
++    while let Some(parent) = get_parent(&current) {
++        offset += with_states(&current, |states| {
++            states
++                .cached_state
++                .get::<SubsurfaceCachedState>()
++                .current()
++                .location
++        });
++        current = parent;
++    }
++
++    offset
++}
++
++pub fn get_surface_size(surface: &WlSurface) -> Size<i32, Logical> {
++    with_states(surface, |states| {
++        states
++            .data_map
++            .get::<RendererSurfaceStateUserData>()
++            .and_then(|d| d.lock().unwrap().surface_size())
++            .unwrap_or_default()
++    })
++}
++
+ #[inline(never)]
+ pub fn cause_panic() {
+     let a = Duration::from_secs(1);

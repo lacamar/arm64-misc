@@ -31,7 +31,7 @@
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        3%{?dist}
+Release:        4%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -58,6 +58,13 @@ Patch:          niri-pr4330.patch
 Patch:          niri-pr4392.patch
 Patch:          niri-scratchpad.patch
 Patch:          niri-session-management.patch
+# https://github.com/niri-wm/niri/pull/3956
+Patch:          niri-pr3956.patch
+Patch:          niri-wp-protocols.patch
+# https://github.com/niri-wm/niri/pull/4118
+Patch:          niri-pr4118.patch
+# https://github.com/niri-wm/niri/pull/4001
+Patch:          niri-pr4001.patch
 
 BuildRequires:  cargo-rpm-macros >= 26
 BuildRequires:  pkgconfig(udev)
@@ -163,6 +170,12 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Tue Oct 06 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^8.git.ed22699d-4
+ - Add PR 3956: drm syncobj
+ - Add fifo, commit-timing, content-type, alpha-modifier
+ - Add PR 4118: xdg-toplevel-tag
+ - Add PR 4001: pointer warp
+
 * Mon Oct 05 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^8.git.ed22699d-3
  - Add xdg/xx-session-management-v1
 
