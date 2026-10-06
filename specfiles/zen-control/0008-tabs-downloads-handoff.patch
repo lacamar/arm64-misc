@@ -1,0 +1,365 @@
+diff --git a/README.md b/README.md
+index 961db48..d7ed6d6 100644
+--- a/README.md
++++ b/README.md
+@@ -45,13 +45,14 @@ claude mcp add --scope user zen-browser -- node /home/zjones/zen-control/server/
+ Tools: `tabs_list`, `tab_new`, `tab_select`, `tab_close`, `navigate`, `go_back`,
+ `go_forward`, `reload`, `read_page`, `find`, `get_text`, `click`, `hover`,
+ `drag`, `type`, `press_key`, `form_input`, `scroll`, `wait_for`, `screenshot`,
+-`evaluate`, `console_logs`, `browser_status`.
++`evaluate`, `console_logs`, `downloads`, `handoff`, `browser_status`.
+ 
+ Typical flow: `navigate` → `read_page` (get refs like `e12`) → `click`/`type`
+ with a ref → `screenshot` to verify. Iframes (including cross-origin) are
+ inlined in `read_page`/`find` with refs like `f42:e3`. Tabs from `tab_new` go
+ into a "Claude · <project>" Zen folder, and each Claude session keeps its own
+-current tab. After upgrading, reconnect with `/mcp` and restart Zen.
++current tab. `handoff` pauses Claude with a Done/Skip banner so you can do a
++login, CAPTCHA or payment yourself. After upgrading, reconnect with `/mcp` and restart Zen.
+ 
+ Mouse, keyboard, wheel and `evaluate` go through a privileged experiment API
+ (`extensions.experiments.enabled`), so events are trusted and CSP doesn't
+diff --git a/extension/background.js b/extension/background.js
+index 7b7ba19..227f58b 100644
+--- a/extension/background.js
++++ b/extension/background.js
+@@ -9,6 +9,8 @@ const MAX_SHOT_SIDE = 1568;
+ let ws = null;
+ let backoff = 1000;
+ const current = new Map(); // MCP session -> tab
++const touched = new Map(); // MCP session -> Set(tab)
++const handoffs = new Map(); // tab -> {message, resolve}
+ let settings = { allSites: false, allowedSites: [] };
+ const controlled = new Set();
+ const stopped = new Set();
+@@ -17,7 +19,8 @@ const prompts = new Map(); // host -> {promise, resolve}
+ const MAX_REQUESTS = 1000;
+ const net = new Map();     // tabId -> [request]
+ const inflight = new Map(); // requestId -> request
+-const UNGATED = new Set(["ping", "tabs_list", "tab_select", "tab_close", "resize_window"]);
++const UNGATED = new Set(["ping", "tabs_list", "tab_select", "tab_close", "resize_window", "downloads"]);
++const TABLESS = ["ping", "tabs_list", "tab_new", "downloads"];
+ const priv = browser.zenControl;
+ 
+ /* ---------- connection ---------- */
+@@ -68,10 +71,16 @@ function scheduleReconnect() {
+ 
+ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+ 
++function use(sid, id) {
++  current.set(sid, id);
++  if (!touched.has(sid)) touched.set(sid, new Set());
++  touched.get(sid).add(id);
++}
++
+ async function resolveTab(tabId, sid) {
+   if (tabId != null) {
+     const t = await browser.tabs.get(tabId);
+-    current.set(sid, t.id);
++    use(sid, t.id);
+     return t;
+   }
+   if (current.has(sid)) {
+@@ -79,7 +88,7 @@ async function resolveTab(tabId, sid) {
+   }
+   const [active] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
+   if (!active) throw new Error("No active tab found");
+-  current.set(sid, active.id);
++  use(sid, active.id);
+   return active;
+ }
+ 
+@@ -208,9 +217,8 @@ async function screenshot(tab, args = {}) {
+ }
+ 
+ async function capture(tab, args) {
+-  if (frameOf(args.ref)) throw new Error("Element screenshots of iframe refs aren't supported; use region");
+   if (args.ref || args.selector || args.region) {
+-    const rect = await sendToContent(tab, "rect", args);
++    const rect = await pageRect(tab, args);
+     const zoom = Math.min(4, MAX_SHOT_SIDE / Math.max(rect.width, rect.height));
+     return { dataUrl: await withTimeout(browser.tabs.captureTab(tab.id, { format: "png", rect, scale: zoom }), 10000, "captureTab"), rect, zoom };
+   }
+@@ -235,6 +243,46 @@ async function capture(tab, args) {
+   return { dataUrl: out, width: outW, height: outH, viewportWidth: w, viewportHeight: h, scale, raw: { width: bmp.width, height: bmp.height } };
+ }
+ 
++async function pageRect(tab, args) {
++  const r = await sendToContent(tab, "rect", args);
++  const frames = frameOf(args.ref) && await browser.webNavigation.getAllFrames({ tabId: tab.id });
++  for (let f = frameOf(args.ref); f; ) {
++    const parent = frames.find((x) => x.frameId === f).parentFrameId;
++    const o = await sendToContent(tab, "frame_offset", { frameId: f }, parent);
++    r.x += o.x; r.y += o.y; f = parent;
++  }
++  return r;
++}
++
++async function handoff(t, args) {
++  const f = frameOf(args.ref);
++  if (args.ref || args.selector) await sendToContent(t, "highlight", args);
++  await browser.tabs.update(t.id, { active: true });
++  browser.notifications.create("handoff:" + t.id, { type: "basic", iconUrl: "icon.svg", title: "Claude needs you", message: args.message }).catch(() => {});
++  handoffs.get(t.id)?.resolve("replaced");
++  let h;
++  const user = await new Promise((resolve) => {
++    handoffs.set(t.id, (h = { message: args.message, resolve }));
++    controlled.add(t.id);
++    pushMarker(t.id);
++    setTimeout(() => resolve("timeout"), args.timeout || 300000);
++  });
++  if (handoffs.get(t.id) === h) handoffs.delete(t.id);
++  browser.notifications.clear("handoff:" + t.id).catch(() => {});
++  if (user === "closed") return { user };
++  pushMarker(t.id);
++  if (args.ref || args.selector) await sendToContent(t, "highlight", { off: true }, f).catch(() => {});
++  return { user, tab: tabInfo(await browser.tabs.get(t.id)) };
++}
++
++async function downloads(args) {
++  const search = () => browser.downloads.search({ orderBy: ["-startTime"], limit: args.limit || 5 });
++  let list = await search();
++  const end = Date.now() + (args.timeout || 60000);
++  while (args.wait && Date.now() < end && list.some((d) => d.state === "in_progress" && !d.paused)) { await sleep(500); list = await search(); }
++  return list.map((d) => ({ file: d.filename, state: d.state, error: d.error, bytes: d.bytesReceived, total: d.totalBytes, mime: d.mime, url: d.url, started: d.startTime }));
++}
++
+ async function readPage(tab, args, frameId) {
+   const r = await sendToContent(tab, "read_page", args, frameId);
+   const lines = [];
+@@ -260,7 +308,7 @@ async function find(tab, args) {
+ /* ---------- controlled-tab markers ---------- */
+ 
+ function markerState(tabId) {
+-  return { on: controlled.has(tabId), stopped: stopped.has(tabId) };
++  return { on: controlled.has(tabId), stopped: stopped.has(tabId), handoff: handoffs.get(tabId)?.message };
+ }
+ function pushMarker(tabId) {
+   browser.tabs.sendMessage(tabId, { cmd: "marker", args: markerState(tabId) }).catch(() => {});
+@@ -311,6 +359,7 @@ async function saveSettings(patch) {
+ browser.runtime.onMessage.addListener((msg, sender) => {
+   if (!msg) return;
+   if (msg.type === "site_decision") { const p = prompts.get(msg.host); if (p) p.resolve(msg.decision); }
++  else if (msg.type === "handoff_done") handoffs.get(sender.tab?.id)?.resolve(msg.result);
+   else if (msg.type === "prompts_query") return Promise.resolve([...prompts.keys()]);
+   else if (msg.type === "marker_query") { const id = msg.tabId ?? sender.tab?.id; if (id != null) return Promise.resolve(markerState(id)); }
+   else if (msg.type === "stop_tab" || msg.type === "resume_tab") {
+@@ -321,6 +370,10 @@ browser.runtime.onMessage.addListener((msg, sender) => {
+     return Promise.resolve(markerState(id));
+   }
+ });
++browser.notifications.onClicked.addListener(async (id) => {
++  const m = /^handoff:(\d+)$/.exec(id);
++  if (m) await browser.windows.update((await browser.tabs.get(+m[1])).windowId, { focused: true });
++});
+ browser.storage.onChanged.addListener((changes) => { if (changes.settings) settings = { ...settings, ...changes.settings.newValue }; });
+ 
+ /* ---------- network capture ---------- */
+@@ -356,7 +409,7 @@ async function handle(cmd, args, sid) {
+     if (cmd === "navigate" || cmd === "tab_new") { if (args.url) await ensureAllowed(args.url); }
+     else await ensureAllowed((await resolveTab(args.tabId, sid)).url);
+   }
+-  if (!["ping", "tabs_list", "tab_new"].includes(cmd)) {
++  if (!TABLESS.includes(cmd)) {
+     const t = cmd === "tab_select" ? { id: args.tabId } : await resolveTab(args.tabId, sid);
+     if (stopped.has(t.id)) throw new Error(`The user stopped Claude on tab ${t.id}. Ask them before continuing; they can resume it from the Zen Control toolbar button.`);
+   }
+@@ -365,19 +418,24 @@ async function handle(cmd, args, sid) {
+       return { pong: true, currentTabId: current.get(sid) ?? null, version: browser.runtime.getManifest().version };
+ 
+     case "tabs_list": {
+-      const tabs = await browser.tabs.query({});
+-      return { currentTabId: current.get(sid) ?? null, tabs: tabs.map(tabInfo) };
++      const tabs = await browser.tabs.query({}), mine = touched.get(sid) || new Set(), q = args.query?.toLowerCase();
++      const pick = args.all ? tabs : q ? tabs.filter((t) => `${t.title}\n${t.url}`.toLowerCase().includes(q)) : tabs.filter((t) => mine.has(t.id) || t.active);
++      return { currentTabId: current.get(sid) ?? null, total: tabs.length, tabs: pick.map(tabInfo) };
+     }
++    case "downloads":
++      return downloads(args);
++    case "handoff":
++      return handoff(await resolveTab(args.tabId, sid), args);
+     case "tab_new": {
+       const t = await browser.tabs.create({ url: args.url || "about:blank", active: !!args.active });
+-      current.set(sid, t.id);
++      use(sid, t.id);
+       priv?.folder(t.id, args.folder || "Claude").catch(() => {});
+       if (args.url) await withLoad(t.id, async () => {}, args.timeout);
+       return tabInfo(await browser.tabs.get(t.id));
+     }
+     case "tab_select": {
+       const t = await browser.tabs.get(args.tabId);
+-      current.set(sid, t.id);
++      use(sid, t.id);
+       if (args.activate) await browser.tabs.update(t.id, { active: true });
+       return tabInfo(await browser.tabs.get(t.id));
+     }
+@@ -439,7 +497,13 @@ async function handle(cmd, args, sid) {
+   }
+ }
+ 
+-browser.tabs.onRemoved.addListener((id) => { for (const [s, t] of current) if (t === id) current.delete(s); controlled.delete(id); stopped.delete(id); });
++browser.tabs.onRemoved.addListener((id) => {
++  for (const [s, t] of current) if (t === id) current.delete(s);
++  for (const set of touched.values()) set.delete(id);
++  handoffs.get(id)?.resolve("closed");
++  controlled.delete(id);
++  stopped.delete(id);
++});
+ setBadge(false);
+ browser.storage.local.get("settings").then((st) => {
+   settings = { ...settings, ...st.settings };
+diff --git a/extension/content.js b/extension/content.js
+index 3f3eb33..f62330e 100644
+--- a/extension/content.js
++++ b/extension/content.js
+@@ -40,7 +40,7 @@
+     for (const kind of ["alert", "confirm", "prompt"]) {
+       const orig = window.wrappedJSObject[kind];
+       window.wrappedJSObject[kind] = exportFunction(function (...args) {
+-        if (!marker.on || marker.stopped) return Reflect.apply(orig, window.wrappedJSObject, args);
++        if (!marker.on || marker.stopped || marker.handoff) return Reflect.apply(orig, window.wrappedJSObject, args);
+         const a = dialogAnswer;
+         dialogAnswer = null;
+         const accepted = kind === "alert" || !!a?.accept;
+@@ -507,9 +507,34 @@
+   }
+   function rect(args) {
+     if (args.region) { const [x0, y0, x1, y1] = args.region; return { x: x0 + scrollX, y: y0 + scrollY, width: x1 - x0, height: y1 - y0 }; }
+-    const r = resolveTarget(args).getBoundingClientRect();
+-    if (!r.width || !r.height) throw new Error("Element has no size (hidden?)");
+-    return { x: r.left + window.scrollX, y: r.top + window.scrollY, width: r.width, height: r.height };
++    const el = resolveTarget(args);
++    if (!FP) {
++      const r = el.getBoundingClientRect();
++      if (!r.width || !r.height) throw new Error("Element has no size (hidden?)");
++      return { x: r.left + scrollX, y: r.top + scrollY, width: r.width, height: r.height };
++    }
++    el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
++    const r = el.getBoundingClientRect(), x = Math.max(r.left, 0), y = Math.max(r.top, 0);
++    const width = Math.min(r.right, innerWidth) - x, height = Math.min(r.bottom, innerHeight) - y;
++    if (width <= 0 || height <= 0) throw new Error("Element has no size (hidden?)");
++    return { x, y, width, height };
++  }
++  function frameOffset({ frameId }) {
++    const f = deepAll("iframe, frame").find((e) => browser.runtime.getFrameId(e) === frameId);
++    if (!f) throw new Error(`Frame ${frameId} not found`);
++    const r = f.getBoundingClientRect(), cs = getComputedStyle(f);
++    return { x: r.left + f.clientLeft + parseFloat(cs.paddingLeft) + (FP ? 0 : scrollX), y: r.top + f.clientTop + parseFloat(cs.paddingTop) + (FP ? 0 : scrollY) };
++  }
++  let lit = null;
++  function highlight(args) {
++    if (lit) { lit.style == null ? lit.el.removeAttribute("style") : lit.el.setAttribute("style", lit.style); lit = null; }
++    if (args.off) return {};
++    const el = resolveTarget(args);
++    lit = { el, style: el.getAttribute("style") };
++    el.style.setProperty("outline", "3px solid #2563eb", "important");
++    el.style.setProperty("outline-offset", "2px", "important");
++    el.scrollIntoView({ block: "center", behavior: "instant" });
++    return { highlighted: describe(el) || el.localName };
+   }
+   function consoleLogs(args) {
+     let out = logs.slice();
+@@ -536,18 +561,23 @@
+       :host { all: initial; }
+       .glow { position: fixed; inset: 0; pointer-events: none; z-index: 2147483646; box-shadow: inset 0 0 0 3px #d97757, inset 0 0 28px rgba(217,119,87,.55); }
+       .pill { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 2147483647; display: flex; gap: 10px; align-items: center;
+-        font: 13px system-ui, sans-serif; color: #fff; background: #d97757; padding: 6px 8px 6px 12px; border-radius: 999px; box-shadow: 0 2px 10px rgba(0,0,0,.25); }
++        font: 13px system-ui, sans-serif; color: #fff; background: #d97757; padding: 6px 8px 6px 12px; border-radius: 999px; max-width: calc(100vw - 48px); box-shadow: 0 2px 10px rgba(0,0,0,.25); }
+       .pill.stopped { background: #6b7280; }
++      .pill.handoff { background: #2563eb; }
+       button { all: unset; cursor: pointer; background: rgba(255,255,255,.22); padding: 2px 10px; border-radius: 999px; }
+       button:hover { background: rgba(255,255,255,.35); }
+-    </style><div class="glow"></div><div class="pill"><span></span><button></button></div>`;
+-    const pill = root.querySelector(".pill");
+-    root.querySelector("button").addEventListener("click", () => browser.runtime.sendMessage({ type: marker.stopped ? "resume_tab" : "stop_tab" }));
++      button[hidden] { display: none; }
++    </style><div class="glow"></div><div class="pill"><span></span><button class="main"></button><button class="skip">Skip</button></div>`;
++    const pill = root.querySelector(".pill"), skip = root.querySelector(".skip");
++    root.querySelector(".main").addEventListener("click", () => browser.runtime.sendMessage(marker.handoff ? { type: "handoff_done", result: "done" } : { type: marker.stopped ? "resume_tab" : "stop_tab" }));
++    skip.addEventListener("click", () => browser.runtime.sendMessage({ type: "handoff_done", result: "skipped" }));
+     host.render = () => {
+-      root.querySelector(".glow").hidden = marker.stopped;
++      root.querySelector(".glow").hidden = marker.stopped || !!marker.handoff;
+       pill.classList.toggle("stopped", !!marker.stopped);
+-      pill.querySelector("span").textContent = marker.stopped ? "Claude is stopped on this tab" : "Claude is controlling this tab";
+-      pill.querySelector("button").textContent = marker.stopped ? "Resume" : "Stop";
++      pill.classList.toggle("handoff", !!marker.handoff);
++      skip.hidden = !marker.handoff;
++      pill.querySelector("span").textContent = marker.handoff ? `Claude needs you: ${marker.handoff}` : marker.stopped ? "Claude is stopped on this tab" : "Claude is controlling this tab";
++      pill.querySelector(".main").textContent = marker.handoff ? "Done" : marker.stopped ? "Resume" : "Stop";
+     };
+   }
+   function applyMarker(state) {
+@@ -566,7 +596,7 @@
+   }
+   browser.runtime.sendMessage({ type: "marker_query" }).then(applyMarker, () => {});
+ 
+-  const handlers = { ping: () => ({ pong: true, url: location.href }), read_page: readPage, find, click, hover, type, press_key: pressKey, scroll, form_input: formInput, point, focus: focusEl, validation: () => { const v = validationFor(active()); return v ? { validation: v } : {}; }, hide_marker: (a) => { if (host) host.style.display = a.hide ? "none" : ""; return {}; }, get_text: getText, wait_for: waitFor, evaluate, console_logs: consoleLogs, upload, rect, marker: applyMarker, dialog: (a) => { dialogAnswer = a; return { armed: true }; } };
++  const handlers = { ping: () => ({ pong: true, url: location.href }), read_page: readPage, find, click, hover, type, press_key: pressKey, scroll, form_input: formInput, point, focus: focusEl, validation: () => { const v = validationFor(active()); return v ? { validation: v } : {}; }, hide_marker: (a) => { if (host) host.style.display = a.hide ? "none" : ""; return {}; }, get_text: getText, wait_for: waitFor, evaluate, console_logs: consoleLogs, upload, rect, frame_offset: frameOffset, highlight, marker: applyMarker, dialog: (a) => { dialogAnswer = a; return { armed: true }; } };
+ 
+   browser.runtime.onMessage.addListener((msg) => {
+     const h = handlers[msg && msg.cmd];
+diff --git a/extension/manifest.json b/extension/manifest.json
+index 018daf9..f8e8e8c 100644
+--- a/extension/manifest.json
++++ b/extension/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "manifest_version": 2,
+   "name": "Zen Control",
+-  "version": "0.1.2.7",
++  "version": "0.1.2.8",
+   "description": "Lets Claude Code drive this browser through a local MCP bridge (ws://127.0.0.1:17373).",
+   "browser_specific_settings": {
+     "gecko": {
+@@ -16,7 +16,8 @@
+     "storage",
+     "<all_urls>",
+     "webRequest",
+-    "notifications"
++    "notifications",
++    "downloads"
+   ],
+   "background": {
+     "scripts": [
+diff --git a/server/index.js b/server/index.js
+index 0e84fbb..3a6fe9c 100644
+--- a/server/index.js
++++ b/server/index.js
+@@ -170,7 +170,13 @@ async function runActions(actions, stopOnError) {
+   return failed ? { isError: stopOnError, content } : { content };
+ }
+ 
+-tool("tabs_list", "List open Zen browser tabs (id, url, title) and which tab is current.", {}, async () => text(await sendCommand("tabs_list", {})));
++const clip = (s, n) => (s && s.length > n ? s.slice(0, n - 1) + "…" : s || "");
++tool("tabs_list", "List Zen tabs, one per line (* = current). By default only tabs this session used plus each window's active tab; query searches all tabs by title/URL; all=true lists every tab.",
++  { query: z.string().optional(), all: z.boolean().optional() }, async (a) => {
++    const r = await sendCommand("tabs_list", a);
++    const lines = r.tabs.map((t) => `${t.id === r.currentTabId ? "*" : " "} ${t.id}${t.active ? " (active)" : ""} ${clip(t.title, 80)} — ${clip(t.url, 150)}`);
++    return text(`${lines.join("\n")}\n(${r.tabs.length} of ${r.total} tabs${r.tabs.length < r.total ? "; pass query or all=true for others" : ""})`);
++  });
+ tool("tab_new", "Open a new background tab, optionally at a URL, and make it the current tab. All tools work on background tabs.", { url: z.string().optional(), active: z.boolean().optional().describe("Show the tab in its window (default false)") }, async (a) => text(await sendCommand("tab_new", { ...a, folder: FOLDER })));
+ tool("tab_select", "Make a tab the current target without showing it; all tools work on background tabs.", { tabId: z.number().int(), activate: z.boolean().optional().describe("Also show the tab in its window (default false)") }, async (a) => text(await sendCommand("tab_select", a)));
+ tool("tab_close", "Close a tab (default: the current one).", { tabId }, async (a) => text(await sendCommand("tab_close", a)));
+@@ -216,7 +222,7 @@ tool("file_upload", "Upload local files, or a fresh screenshot of a tab (screens
+     if (screenshot) files.push({ name: "screenshot.png", mime: "image/png", b64: (await sendCommand("screenshot", { tabId: screenshotTabId ?? a.tabId })).dataUrl.split(",")[1] });
+     return text(await sendCommand("upload", { ...a, files }, 60000));
+   });
+-tool("screenshot", "Capture the visible viewport of the current tab as a PNG (scaled to CSS pixels so click x/y match), or zoom into one element (ref/selector, even if scrolled off-screen) or a viewport region.",
++tool("screenshot", "Capture the visible viewport of the current tab as a PNG (scaled to CSS pixels so click x/y match), or zoom into one element (ref/selector, even if scrolled off-screen or inside an iframe) or a viewport region.",
+   { ...targetShape, region: z.array(z.number()).length(4).optional().describe("[x0, y0, x1, y1] viewport CSS px to zoom into") }, async (a) => {
+   const r = await sendCommand("screenshot", a);
+   const b64 = r.dataUrl.replace(/^data:image\/png;base64,/, "");
+@@ -237,6 +243,12 @@ tool("network_requests", "List HTTP requests made by a tab since its last top-le
+     if (!r.count) return text("No requests captured for this tab.");
+     return text(r.requests.map((q) => `${q.method} ${q.error ? `ERR ${q.error}` : q.status ?? "pending"} ${q.type}${q.fromCache ? " (cache)" : ""}${q.ms != null ? ` ${q.ms}ms` : ""} ${q.url}`).join("\n") + (r.total > r.count ? `\n(${r.total - r.count} earlier omitted)` : ""));
+   });
++tool("downloads", "List recent downloads, newest first, with their local file path and state. wait=true waits (up to timeout ms, default 60000) until in-progress ones finish — call it after a click that starts a download.",
++  { wait: z.boolean().optional(), timeout: z.number().int().optional(), limit: z.number().int().optional().describe("default 5") },
++  async (a) => text(await sendCommand("downloads", a, (a.timeout || 60000) + 2000)));
++tool("handoff", "Hand the tab to the user for a step you must not or cannot do (login, password, 2FA, CAPTCHA, payment, personal data): brings the tab to front, shows your message with Done/Skip buttons, optionally highlights ref/selector, and waits until they answer (timeout ms, default 300000). Returns user: done | skipped | timeout | closed, and the tab's URL.",
++  { message: z.string().describe("What the user should do, e.g. \"Log in, then click Done\""), ...targetShape, timeout: z.number().int().optional() },
++  async (a) => text(await sendCommand("handoff", a, (a.timeout || 300000) + 2000)));
+ tool("browser_batch", "Run several tools in one call, in order. Each action is {tool, args} using the tool names above (e.g. navigate, click, type, screenshot). Stops at the first error unless stopOnError=false.",
+   { actions: z.array(z.object({ tool: z.string(), args: z.record(z.string(), z.any()).optional() })).min(1), stopOnError: z.boolean().optional() },
+   async (a) => runActions(a.actions, a.stopOnError !== false));

@@ -9,7 +9,7 @@
 
 Name:           zen-control
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        8%{?dist}
+Release:        9%{?dist}
 Summary:        MCP bridge and WebExtension to drive the Zen browser from Claude Code
 
 License:        LicenseRef-Not-specified
@@ -23,6 +23,7 @@ Patch3:         0004-page-robustness.patch
 Patch4:         0005-trusted-input.patch
 Patch5:         0006-iframes-claude-folder.patch
 Patch6:         0007-shadow-sessions-stale.patch
+Patch7:         0008-tabs-downloads-handoff.patch
 
 BuildArch:      noarch
 
@@ -84,6 +85,12 @@ chmod 0755 %{buildroot}%{_bindir}/%{name}
 %config(noreplace) %{_sysconfdir}/zen/policies/policies.json
 
 %changelog
+* Tue Oct 06 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-9
+- Compact, filterable tabs_list
+- Add downloads tool
+- Add handoff tool
+- Element screenshots inside iframes
+
 * Mon Oct 05 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-8
 - Per-session current tab and Zen folder
 - Flag stale bridge after upgrade
