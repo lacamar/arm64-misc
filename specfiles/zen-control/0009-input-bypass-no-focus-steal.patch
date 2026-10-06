@@ -1,0 +1,110 @@
+diff --git a/README.md b/README.md
+index d7ed6d6..172ad3e 100644
+--- a/README.md
++++ b/README.md
+@@ -56,7 +56,9 @@ login, CAPTCHA or payment yourself. After upgrading, reconnect with `/mcp` and r
+ 
+ Mouse, keyboard, wheel and `evaluate` go through a privileged experiment API
+ (`extensions.experiments.enabled`), so events are trusted and CSP doesn't
+-apply. Without it, a degraded content-script path is used. `type`'s result includes a `validation` field
++apply. Other extensions' key/mouse handlers on the page (Vimium C etc.) are
++skipped while Claude's input is dispatched, and pages can't use Claude's clicks
++to raise the Zen window over other apps. Without it, a degraded content-script path is used. `type`'s result includes a `validation` field
+ when the field is rejected (native constraint message, `aria-invalid`, or
+ nearby error text) — check it before assuming a form will submit.
+ 
+diff --git a/extension/manifest.json b/extension/manifest.json
+index f8e8e8c..6c7c8c2 100644
+--- a/extension/manifest.json
++++ b/extension/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "manifest_version": 2,
+   "name": "Zen Control",
+-  "version": "0.1.2.8",
++  "version": "0.1.2.9",
+   "description": "Lets Claude Code drive this browser through a local MCP bridge (ws://127.0.0.1:17373).",
+   "browser_specific_settings": {
+     "gecko": {
+diff --git a/extension/privileged/actor.sys.mjs b/extension/privileged/actor.sys.mjs
+index b7f17b9..0a61a23 100644
+--- a/extension/privileged/actor.sys.mjs
++++ b/extension/privileged/actor.sys.mjs
+@@ -5,6 +5,9 @@ export class ZenControlParent extends JSWindowActorParent {}
+ const KEYS = { return: "Enter", enter: "Enter", esc: "Escape", escape: "Escape", space: " ", spacebar: " ", tab: "Tab", backspace: "Backspace", delete: "Delete", del: "Delete", insert: "Insert", home: "Home", end: "End", pageup: "PageUp", pagedown: "PageDown", up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight", arrowup: "ArrowUp", arrowdown: "ArrowDown", arrowleft: "ArrowLeft", arrowright: "ArrowRight", contextmenu: "ContextMenu", menu: "ContextMenu" };
+ const MODS = { ctrl: "ctrlKey", control: "ctrlKey", shift: "shiftKey", alt: "altKey", option: "altKey", meta: "metaKey", cmd: "metaKey", command: "metaKey", super: "metaKey", win: "metaKey" };
+ 
++const INPUT = /^(key|mouse|pointer|wheel$|click$|dblclick$|auxclick$|contextmenu$)/;
++const fromExtension = (fn) => { try { return !!Cu.getSandboxMetadata(Cu.getGlobalForObject(fn))?.addonId; } catch { return false; } };
++
+ function modsOf(parts) {
+   const mods = {};
+   for (const p of parts) {
+@@ -161,6 +164,12 @@ export class ZenControlChild extends JSWindowActorChild {
+     return run(SERIALIZE)(await v);
+   }
+ 
++  async bypassExtensions(fn) {
++    const off = [this.contentWindow, this.document].flatMap((t) => Services.els.getListenerInfoFor(t)).filter((l) => INPUT.test(l.type) && fromExtension(l.listenerObject) && l.enabled);
++    for (const l of off) l.enabled = false;
++    try { return await fn(); } finally { for (const l of off) l.enabled = true; }
++  }
++
+   redirect(name, data) {
+     if (name === "keys" || name === "type") {
+       let a = this.document.activeElement;
+@@ -179,7 +188,8 @@ export class ZenControlChild extends JSWindowActorChild {
+     try {
+       if (!["click", "hover", "drag", "wheel", "keys", "type", "eval"].includes(name)) throw new Error("Unknown command " + name);
+       const redirect = this.redirect(name, data || {});
+-      return redirect ? { redirect } : { result: await this[name](data || {}) };
++      const run = () => this[name](data || {});
++      return redirect ? { redirect } : { result: await (name === "eval" ? run() : this.bypassExtensions(run)) };
+     } catch (e) {
+       return { error: String(e?.message ?? e) };
+     }
+diff --git a/extension/privileged/api.js b/extension/privileged/api.js
+index dc09aa2..6ca5dd2 100644
+--- a/extension/privileged/api.js
++++ b/extension/privileged/api.js
+@@ -1,5 +1,19 @@
+ "use strict";
+ const resProto = Services.io.getProtocolHandler("resource").QueryInterface(Ci.nsIResProtocolHandler);
++const guarded = new WeakMap(), hooked = new WeakSet();
++
++// trusted input grants 5s of user activation, letting pages window.focus() and raise Zen
++function guard(browser) {
++  guarded.set(browser, Date.now() + 6000);
++  const win = browser.documentGlobal;
++  if (hooked.has(win)) return;
++  hooked.add(win);
++  win.addEventListener("framefocusrequested", (e) => {
++    if (!(guarded.get(e.target) > Date.now()) || (Services.focus.activeWindow === win && win.gBrowser.selectedBrowser === e.target)) return;
++    e.preventDefault();
++    e.stopImmediatePropagation();
++  }, true);
++}
+ 
+ this.zenControl = class extends ExtensionAPI {
+   onStartup() {
+@@ -16,8 +30,10 @@ this.zenControl = class extends ExtensionAPI {
+     return {
+       zenControl: {
+         async send(tabId, frameId, name, data) {
++          const browser = context.extension.tabManager.get(tabId).nativeTab.linkedBrowser;
+           try {
+-            const top = context.extension.tabManager.get(tabId).nativeTab.linkedBrowser.browsingContext;
++            guard(browser);
++            const top = browser.browsingContext;
+             for (;;) {
+               const bc = frameId ? top.getAllBrowsingContextsInSubtree().find((b) => b.id === frameId) : top;
+               if (!bc?.currentWindowGlobal) throw new Error(`Frame ${frameId} is gone`);
+@@ -27,6 +43,8 @@ this.zenControl = class extends ExtensionAPI {
+             }
+           } catch (e) {
+             throw new ExtensionUtils.ExtensionError(String(e?.message || e));
++          } finally {
++            guard(browser);
+           }
+         },
+         folder(tabId, label) {
