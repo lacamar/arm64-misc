@@ -1,0 +1,53 @@
+diff --git a/src/layout/mod.rs b/src/layout/mod.rs
+index afbc952..00654ad 100644
+--- a/src/layout/mod.rs
++++ b/src/layout/mod.rs
+@@ -5151,6 +5151,26 @@ impl<W: LayoutElement> Layout<W> {
+ 
+         self.is_active = is_active;
+ 
++        if let MonitorSet::Normal { monitors, .. } = &mut self.monitor_set {
++            for mon in monitors.iter_mut().filter(|_| !self.overview_open) {
++                let active = mon.active_workspace_idx;
++                let stray: Vec<_> = mon
++                    .workspaces
++                    .iter()
++                    .enumerate()
++                    .filter(|(idx, _)| *idx != active)
++                    .flat_map(|(_, ws)| {
++                        ws.tiles()
++                            .filter(|tile| tile.is_scratchpad && ws.is_floating(tile.window().id()))
++                            .map(|tile| tile.window().id().clone())
++                    })
++                    .collect();
++                for id in stray {
++                    mon.move_to_workspace(Some(&id), mon.active_workspace_idx, ActivateWindow::No);
++                }
++            }
++        }
++
+         let modal = self
+             .active_workspace()
+             .and_then(|ws| ws.modal_scratchpad())
+diff --git a/src/layout/tests.rs b/src/layout/tests.rs
+index 50a6765..4f47842 100644
+--- a/src/layout/tests.rs
++++ b/src/layout/tests.rs
+@@ -3216,10 +3216,15 @@ fn scratchpad_toggle() {
+     assert!(layout.active_workspace().unwrap().is_floating(&2));
+ 
+     layout.switch_workspace_down();
++    layout.refresh(true);
++    assert!(layout.active_workspace().unwrap().is_floating(&2));
++    layout.switch_workspace_up();
++    layout.refresh(true);
++    assert!(layout.active_workspace().unwrap().is_floating(&2));
++    assert_eq!(layout.focus().unwrap().id(), &1);
++
+     layout.toggle_scratchpad(None);
+     assert_eq!(layout.focus().unwrap().id(), &2);
+-    assert!(layout.active_workspace().unwrap().has_window(&2));
+-
+     layout.toggle_scratchpad(None);
+     assert!(!layout.has_window(&2));
+ 
