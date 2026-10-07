@@ -1,0 +1,57 @@
+diff --git a/smithay/src/backend/drm/compositor/mod.rs b/smithay/src/backend/drm/compositor/mod.rs
+index e0f4da20..04a86c69 100644
+--- a/smithay/src/backend/drm/compositor/mod.rs
++++ b/smithay/src/backend/drm/compositor/mod.rs
+@@ -1076,6 +1076,7 @@ where
+     cursor_size: Size<i32, Physical>,
+     cursor_state: Option<CursorState<G>>,
+     overlay_cursor: bool,
++    opaque_overlays_only: bool,
+ 
+     element_states: IndexMap<Id, ElementState<<F as ExportFramebuffer<A::Buffer>>::Framebuffer>>,
+     previous_element_states: IndexMap<Id, ElementState<<F as ExportFramebuffer<A::Buffer>>::Framebuffer>>,
+@@ -1193,6 +1194,8 @@ where
+         // apple-drm has no cursor plane, borrow the topmost overlay
+         let overlay_cursor =
+             driver.name().to_string_lossy() == "apple" && planes.cursor.is_empty() && !planes.overlay.is_empty();
++        // DCP blends translucent planes differently from GL
++        let opaque_overlays_only = driver.name().to_string_lossy() == "apple";
+         if overlay_cursor {
+             let mut plane = planes.overlay.remove(0);
+             plane.type_ = PlaneType::Cursor;
+@@ -1268,6 +1271,7 @@ where
+                         cursor_size,
+                         cursor_state,
+                         overlay_cursor,
++                        opaque_overlays_only,
+                         surface,
+                         damage_tracker,
+                         output_mode_source,
+@@ -1386,6 +1390,8 @@ where
+         // apple-drm has no cursor plane, borrow the topmost overlay
+         let overlay_cursor =
+             driver.name().to_string_lossy() == "apple" && planes.cursor.is_empty() && !planes.overlay.is_empty();
++        // DCP blends translucent planes differently from GL
++        let opaque_overlays_only = driver.name().to_string_lossy() == "apple";
+         if overlay_cursor {
+             let mut plane = planes.overlay.remove(0);
+             plane.type_ = PlaneType::Cursor;
+@@ -1460,6 +1466,7 @@ where
+             cursor_size,
+             cursor_state,
+             overlay_cursor,
++            opaque_overlays_only,
+             surface,
+             damage_tracker,
+             output_mode_source,
+@@ -3767,6 +3774,10 @@ where
+             return Err(None);
+         }
+ 
++        if self.opaque_overlays_only && !element_is_opaque {
++            return Err(None);
++        }
++
+         let element_id = element.id();
+ 
+         // Check if we have a free plane, otherwise we can exit early

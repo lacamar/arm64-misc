@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        5%{?dist}
+Release:        6%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -69,6 +69,7 @@ Patch:          niri-pr4118.patch
 Patch:          niri-pr4001.patch
 Patch:          niri-smithay-local.patch
 Patch:          niri-smithay-overlay-cursor.patch
+Patch:          niri-smithay-opaque-overlays.patch
 
 BuildRequires:  cargo-rpm-macros >= 26
 BuildRequires:  pkgconfig(udev)
@@ -176,6 +177,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Wed Oct 07 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^8.git.ed22699d-6
+ - Opaque-only overlay planes on apple-drm
+
 * Wed Oct 07 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^8.git.ed22699d-5
  - Vendor Smithay at pinned rev
  - Overlay-plane hardware cursor on apple-drm
