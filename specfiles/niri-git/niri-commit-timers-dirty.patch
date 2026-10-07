@@ -1,0 +1,63 @@
+diff --git a/src/handlers/compositor.rs b/src/handlers/compositor.rs
+index c8a35c2..df2688c 100644
+--- a/src/handlers/compositor.rs
++++ b/src/handlers/compositor.rs
+@@ -7,6 +7,7 @@ use smithay::reexports::wayland_server::protocol::wl_buffer;
+ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
+ use smithay::reexports::wayland_server::{Client, Resource};
+ use smithay::wayland::buffer::BufferHandler;
++use smithay::wayland::commit_timing::CommitTimerStateUserData;
+ use smithay::wayland::compositor::{
+     add_pre_commit_hook, get_parent, is_sync_subsurface, remove_pre_commit_hook, with_states,
+     BufferAssignment, CompositorClientState, CompositorHandler, CompositorState, SurfaceAttributes,
+@@ -51,6 +52,11 @@ impl CompositorHandler for State {
+ 
+     fn new_surface(&mut self, surface: &WlSurface) {
+         self.add_default_dmabuf_pre_commit_hook(surface);
++        add_pre_commit_hook::<Self, _>(surface, |state, _, surface| {
++            if with_states(surface, |s| s.data_map.get::<CommitTimerStateUserData>().is_some()) {
++                state.niri.commit_timers_dirty = true;
++            }
++        });
+     }
+ 
+     fn commit(&mut self, surface: &WlSurface) {
+diff --git a/src/niri.rs b/src/niri.rs
+index 45baa2b..513ea22 100644
+--- a/src/niri.rs
++++ b/src/niri.rs
+@@ -395,6 +395,7 @@ pub struct Niri {
+     pub pointer_visibility: PointerVisibility,
+     pub pointer_inactivity_timer: Option<RegistrationToken>,
+     pub commit_timer: Option<RegistrationToken>,
++    pub commit_timers_dirty: bool,
+     /// Whether the pointer inactivity timer got reset this event loop iteration.
+     ///
+     /// Used for limiting the reset to once per iteration, so that it's not spammed with high
+@@ -2861,6 +2862,7 @@ impl Niri {
+             pointer_visibility: PointerVisibility::Visible,
+             pointer_inactivity_timer: None,
+             commit_timer: None,
++            commit_timers_dirty: false,
+             pointer_inactivity_timer_got_reset: false,
+             notified_activity_this_iteration: false,
+             pointer_inside_hot_corner: false,
+@@ -5536,6 +5538,10 @@ impl Niri {
+     }
+ 
+     fn signal_commit_timers(&mut self) {
++        if !mem::take(&mut self.commit_timers_dirty) {
++            return;
++        }
++
+         let now = get_monotonic_time();
+         let mut wait: Option<Duration> = None;
+         let mut signal = |surface: &WlSurface, states: &SurfaceData| {
+@@ -5572,6 +5578,7 @@ impl Niri {
+             let timer = Timer::from_duration(wait);
+             let token = self.event_loop.insert_source(timer, |_, _, state| {
+                 state.niri.commit_timer = None;
++                state.niri.commit_timers_dirty = true;
+                 TimeoutAction::Drop
+             });
+             self.commit_timer = token.ok();
