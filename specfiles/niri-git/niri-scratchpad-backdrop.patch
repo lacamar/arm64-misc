@@ -1,0 +1,384 @@
+diff --git a/niri-config/src/layout.rs b/niri-config/src/layout.rs
+index f84528b..512e347 100644
+--- a/niri-config/src/layout.rs
++++ b/niri-config/src/layout.rs
+@@ -24,6 +24,7 @@ pub struct Layout {
+     pub gaps: f64,
+     pub struts: Struts,
+     pub background_color: Color,
++    pub scratchpad: Scratchpad,
+ }
+ 
+ impl Default for Layout {
+@@ -52,6 +53,7 @@ impl Default for Layout {
+                 PresetSize::Proportion(2. / 3.),
+             ],
+             background_color: DEFAULT_BACKGROUND_COLOR,
++            scratchpad: Scratchpad::default(),
+         }
+     }
+ }
+@@ -78,6 +80,7 @@ impl MergeWith<LayoutPart> for Layout {
+             default_column_display,
+             struts,
+             background_color,
++            scratchpad,
+         );
+ 
+         if let Some(x) = part.default_column_width {
+@@ -126,6 +129,22 @@ pub struct LayoutPart {
+     pub struts: Option<Struts>,
+     #[knuffel(child)]
+     pub background_color: Option<Color>,
++    #[knuffel(child)]
++    pub scratchpad: Option<Scratchpad>,
++}
++
++#[derive(knuffel::Decode, Debug, Default, Clone, Copy, PartialEq)]
++pub struct Scratchpad {
++    #[knuffel(child)]
++    pub width: Option<DefaultPresetSize>,
++    #[knuffel(child)]
++    pub height: Option<DefaultPresetSize>,
++    #[knuffel(child, unwrap(argument), default)]
++    pub backdrop_dim: FloatOrInt<0, 1>,
++    #[knuffel(child)]
++    pub backdrop_blur: bool,
++    #[knuffel(child)]
++    pub modal: bool,
+ }
+ 
+ #[derive(knuffel::Decode, Debug, Clone, Copy, PartialEq)]
+diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
+index 544dca1..d0dc4f9 100644
+--- a/niri-config/src/lib.rs
++++ b/niri-config/src/lib.rs
+@@ -1507,6 +1507,15 @@ mod tests {
+                     b: 0.25,
+                     a: 1.0,
+                 },
++                scratchpad: Scratchpad {
++                    width: None,
++                    height: None,
++                    backdrop_dim: FloatOrInt(
++                        0.0,
++                    ),
++                    backdrop_blur: false,
++                    modal: false,
++                },
+             },
+             prefer_no_csd: true,
+             cursor: Cursor {
+diff --git a/src/layout/floating.rs b/src/layout/floating.rs
+index c719833..7cf6b47 100644
+--- a/src/layout/floating.rs
++++ b/src/layout/floating.rs
+@@ -3,8 +3,9 @@ use std::iter::zip;
+ use std::rc::Rc;
+ 
+ use niri_config::utils::MergeWith as _;
+-use niri_config::{PresetSize, RelativeTo};
++use niri_config::{CornerRadius, PresetSize, RelativeTo};
+ use niri_ipc::{PositionChange, SizeChange, WindowLayout};
++use smithay::backend::renderer::element::Kind;
+ use smithay::backend::renderer::gles::GlesRenderer;
+ use smithay::utils::{Logical, Point, Rectangle, Scale, Serial, Size};
+ 
+@@ -18,7 +19,11 @@ use super::{
+ use crate::animation::{Animation, Clock};
+ use crate::layout::RenderLayer;
+ use crate::niri_render_elements;
++use crate::render_helpers::background_effect::{
++    BackgroundEffect, BackgroundEffectElement, RenderParams,
++};
+ use crate::render_helpers::renderer::NiriRenderer;
++use crate::render_helpers::solid_color::{SolidColorBuffer, SolidColorRenderElement};
+ use crate::render_helpers::xray::XrayPos;
+ use crate::render_helpers::RenderCtx;
+ use crate::utils::transaction::TransactionBlocker;
+@@ -68,11 +73,16 @@ pub struct FloatingSpace<W: LayoutElement> {
+ 
+     /// Configurable properties of the layout.
+     options: Rc<Options>,
++
++    scratchpad_dim: SolidColorBuffer,
++    scratchpad_blur: BackgroundEffect,
+ }
+ 
+ niri_render_elements! {
+     FloatingSpaceRenderElement<R> => {
+         Tile = TileRenderElement<R>,
++        SolidColor = SolidColorRenderElement,
++        BackgroundEffect = BackgroundEffectElement,
+         ClosingWindow = ClosingWindowRenderElement,
+     }
+ }
+@@ -219,6 +229,8 @@ impl<W: LayoutElement> FloatingSpace<W> {
+             scale,
+             clock,
+             options,
++            scratchpad_dim: SolidColorBuffer::new((0., 0.), [0., 0., 0., 0.]),
++            scratchpad_blur: BackgroundEffect::new(),
+         }
+     }
+ 
+@@ -286,6 +298,19 @@ impl<W: LayoutElement> FloatingSpace<W> {
+             tile_view_rect.loc -= offset + tile.render_offset();
+             tile.update_render_elements(is_active, tile_view_rect);
+         }
++
++        let config = self.options.layout.scratchpad;
++        self.scratchpad_dim.resize(self.view_size);
++        self.scratchpad_dim
++            .set_color([0., 0., 0., config.backdrop_dim.0 as f32]);
++        self.scratchpad_blur.update_config(self.options.blur);
++        let effect = niri_config::BackgroundEffect {
++            blur: Some(config.backdrop_blur),
++            xray: Some(false),
++            ..Default::default()
++        };
++        self.scratchpad_blur
++            .update_render_elements(CornerRadius::default(), effect, false);
+     }
+ 
+     pub fn tiles(&self) -> impl Iterator<Item = &Tile<W>> + '_ {
+@@ -1112,10 +1137,31 @@ impl<W: LayoutElement> FloatingSpace<W> {
+             // For the active tile, draw the focus ring.
+             let focus_ring = focus_ring && Some(tile.window().id()) == active.as_ref();
+ 
+-            let xray_pos = xray_pos.offset(tile_pos);
+-            tile.render(ctx.r(), tile_pos, xray_pos, focus_ring, &mut |elem| {
++            let tile_xray_pos = xray_pos.offset(tile_pos);
++            tile.render(ctx.r(), tile_pos, tile_xray_pos, focus_ring, &mut |elem| {
+                 push(elem.into())
+             });
++
++            if focus_ring && tile.is_scratchpad && layer.is_normal() {
++                let elem = SolidColorRenderElement::from_buffer(
++                    &self.scratchpad_dim,
++                    view_rect.loc,
++                    1.,
++                    Kind::Unspecified,
++                );
++                push(elem.into());
++
++                let params = RenderParams {
++                    geometry: view_rect,
++                    subregion: None,
++                    clip: None,
++                    scale: self.scale,
++                };
++                self.scratchpad_blur
++                    .render(ctx.as_gles(), None, params, xray_pos, &mut |elem| {
++                        push(elem.into())
++                    });
++            }
+         }
+     }
+ 
+diff --git a/src/layout/mod.rs b/src/layout/mod.rs
+index cd7b542..afbc952 100644
+--- a/src/layout/mod.rs
++++ b/src/layout/mod.rs
+@@ -3461,6 +3461,12 @@ impl<W: LayoutElement> Layout<W> {
+         self.scratchpad_idx(window).is_some()
+     }
+ 
++    fn working_area_size_of(&self, window: &W::Id) -> Option<Size<f64, Logical>> {
++        self.workspaces()
++            .find(|(_, _, ws)| ws.has_window(window))
++            .map(|(_, _, ws)| ws.working_area().size)
++    }
++
+     pub fn move_window_to_scratchpad(&mut self, window: Option<&W::Id>) {
+         let Some(id) = window.or_else(|| self.focus().map(|win| win.id())).cloned() else {
+             return;
+@@ -3468,8 +3474,10 @@ impl<W: LayoutElement> Layout<W> {
+         if self.is_in_scratchpad(&id) {
+             return;
+         }
++        let area = self.working_area_size_of(&id);
+         if let Some(mut removed) = self.remove_window(&id, Transaction::new()) {
+             removed.tile.is_scratchpad = true;
++            removed.tile.scratchpad_area = area;
+             self.scratchpad.push(removed);
+         }
+     }
+@@ -3515,12 +3523,45 @@ impl<W: LayoutElement> Layout<W> {
+             }
+         };
+ 
++        let area = self.working_area_size_of(&id);
+         let Some(mut removed) = self.remove_window(&id, Transaction::new()) else {
+             return;
+         };
+-        removed.tile.is_scratchpad = true;
++        let tile = &mut removed.tile;
++        tile.is_scratchpad = true;
++
++        let mon = self.active_monitor().unwrap();
++        let size = tile
++            .floating_window_size
++            .or_else(|| tile.window().expected_size());
++        if let (Some(src), Some(size)) = (area.or(tile.scratchpad_area), size) {
++            let dst = mon.working_area().size;
++            tile.floating_window_size = Some(Size::from((
++                (f64::from(size.w) * dst.w / src.w).round() as i32,
++                (f64::from(size.h) * dst.h / src.h).round() as i32,
++            )));
++        }
++
++        let config = mon.options.layout.scratchpad;
++        let width = config.width.and_then(|x| x.0);
++        let height = config.height.and_then(|x| x.0);
++        if width.is_some() || height.is_some() {
++            let win = tile.window();
++            let new = mon.active_workspace_ref().new_window_size(
++                width,
++                height,
++                true,
++                win.rules(),
++                (win.min_size(), win.max_size()),
++            );
++            let size = tile.floating_window_size.unwrap_or_default();
++            tile.floating_window_size = Some(Size::from((
++                if width.is_some() { new.w } else { size.w },
++                if height.is_some() { new.h } else { size.h },
++            )));
++        }
+ 
+-        self.active_monitor().unwrap().add_tile(
++        mon.add_tile(
+             removed.tile,
+             MonitorAddWindowTarget::Auto,
+             ActivateWindow::Yes,
+@@ -5110,6 +5151,18 @@ impl<W: LayoutElement> Layout<W> {
+ 
+         self.is_active = is_active;
+ 
++        let modal = self
++            .active_workspace()
++            .and_then(|ws| ws.modal_scratchpad())
++            .filter(|sp| {
++                self.focus()
++                    .is_none_or(|f| f.id() != sp.id() && !f.is_child_of(sp))
++            })
++            .map(|sp| sp.id().clone());
++        if let Some(id) = modal {
++            self.activate_window(&id);
++        }
++
+         for removed in &mut self.scratchpad {
+             let win = removed.tile.window_mut();
+             win.set_activated(false);
+diff --git a/src/layout/tests.rs b/src/layout/tests.rs
+index 5a9726d..50a6765 100644
+--- a/src/layout/tests.rs
++++ b/src/layout/tests.rs
+@@ -3233,6 +3233,43 @@ fn scratchpad_toggle() {
+     layout.verify_invariants();
+ }
+ 
++#[test]
++fn scratchpad_scales_to_output() {
++    let ops = [
++        Op::AddOutput(1),
++        Op::AddScaledOutput {
++            id: 2,
++            scale: 2.,
++            layout_config: None,
++        },
++        Op::FocusOutput(1),
++        Op::AddWindow {
++            params: TestWindowParams::new(1),
++        },
++        Op::MoveWindowToScratchpad { id: None },
++        Op::FocusOutput(2),
++    ];
++    let mut layout = check_ops(ops);
++    let size = layout.scratchpad[0].tile.window().expected_size().unwrap();
++
++    layout.toggle_scratchpad(None);
++    let win = layout.windows().next().unwrap().1;
++    assert_eq!(win.requested_size(), Some(size.downscale(2)));
++    layout.verify_invariants();
++
++    layout.toggle_scratchpad(None);
++    let mut options = Options::default();
++    options.layout.scratchpad.width = Some(niri_config::DefaultPresetSize(Some(
++        PresetSize::Proportion(0.5),
++    )));
++    options.layout.scratchpad.height =
++        Some(niri_config::DefaultPresetSize(Some(PresetSize::Fixed(100))));
++    layout.update_options(options);
++    layout.toggle_scratchpad(None);
++    let win = layout.windows().next().unwrap().1;
++    assert_eq!(win.requested_size(), Some(Size::from((320, 100))));
++}
++
+ #[test]
+ fn set_height_fixed_negative() {
+     let ops = [
+diff --git a/src/layout/tile.rs b/src/layout/tile.rs
+index 5b9860c..1979f21 100644
+--- a/src/layout/tile.rs
++++ b/src/layout/tile.rs
+@@ -65,6 +65,9 @@ pub struct Tile<W: LayoutElement> {
+     /// Whether the window was moved to the scratchpad.
+     pub(super) is_scratchpad: bool,
+ 
++    /// Working area size the window had when it was hidden in the scratchpad.
++    pub(super) scratchpad_area: Option<Size<f64, Logical>>,
++
+     /// The size that the window should assume when going floating.
+     ///
+     /// This is generally the last size the window had when it was floating. It can be unknown if
+@@ -204,6 +207,7 @@ impl<W: LayoutElement> Tile<W> {
+             fullscreen_backdrop: SolidColorBuffer::new((0., 0.), [0., 0., 0., 1.]),
+             restore_to_floating: false,
+             is_scratchpad: false,
++            scratchpad_area: None,
+             floating_window_size: None,
+             floating_pos: None,
+             floating_preset_width_idx: None,
+diff --git a/src/layout/workspace.rs b/src/layout/workspace.rs
+index 62dd4a0..ee447d0 100644
+--- a/src/layout/workspace.rs
++++ b/src/layout/workspace.rs
+@@ -1800,18 +1800,30 @@ impl<W: LayoutElement> Workspace<W> {
+     pub fn window_under(&self, pos: Point<f64, Logical>) -> Option<(&W, HitType)> {
+         // This logic is consistent with tiles_with_render_positions().
+         if self.is_floating_visible() {
+-            if let Some(rv) = self
+-                .floating
+-                .tiles_with_render_positions()
+-                .find_map(|(tile, tile_pos)| HitType::hit_tile(tile, tile_pos, pos))
+-            {
+-                return Some(rv);
++            let modal = self.options.layout.scratchpad.modal;
++            for (tile, tile_pos) in self.floating.tiles_with_render_positions() {
++                if let Some(rv) = HitType::hit_tile(tile, tile_pos, pos) {
++                    return Some(rv);
++                }
++                if modal && tile.is_scratchpad {
++                    return None;
++                }
+             }
+         }
+ 
+         self.scrolling.window_under(pos)
+     }
+ 
++    pub fn modal_scratchpad(&self) -> Option<&W> {
++        if !self.options.layout.scratchpad.modal || !self.is_floating_visible() {
++            return None;
++        }
++        self.floating
++            .tiles()
++            .find(|tile| tile.is_scratchpad)
++            .map(Tile::window)
++    }
++
+     pub fn resize_edges_under(&self, pos: Point<f64, Logical>) -> Option<ResizeEdge> {
+         self.tiles_with_render_positions()
+             .find_map(|(tile, tile_pos, visible)| {

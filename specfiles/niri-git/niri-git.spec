@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        8%{?dist}
+Release:        9%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -71,6 +71,7 @@ Patch:          niri-smithay-local.patch
 Patch:          niri-smithay-overlay-cursor.patch
 Patch:          niri-smithay-opaque-overlays.patch
 Patch:          niri-commit-timers-dirty.patch
+Patch:          niri-scratchpad-backdrop.patch
 
 BuildRequires:  cargo-rpm-macros >= 26
 BuildRequires:  pkgconfig(udev)
@@ -178,6 +179,10 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Wed Oct 07 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^8.git.ed22699d-9
+- Scale scratchpad size to target monitor
+- Add scratchpad width, height, backdrop-dim, backdrop-blur, modal options
+
 * Wed Oct 07 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^8.git.ed22699d-8
 - Walk commit timers only after timed commits
 
