@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        6%{?dist}
+Release:        7%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -177,6 +177,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Wed Oct 07 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^8.git.ed22699d-7
+- Session restore: saved workspace index over active named workspace
+
 * Wed Oct 07 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^8.git.ed22699d-6
  - Opaque-only overlay planes on apple-drm
 

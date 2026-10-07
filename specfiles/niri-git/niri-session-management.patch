@@ -619,20 +619,21 @@ index 53f2912..cee86fe 100644
  use crate::utils::transaction::Transaction;
  use crate::utils::{is_mapped, send_scale_transform};
  use crate::window::{InitialConfigureState, Mapped, ResolvedWindowRules, Unmapped};
-@@ -202,11 +203,25 @@ impl CompositorHandler for State {
+@@ -202,11 +203,26 @@ impl CompositorHandler for State {
                      };
                      let window = mapped.window.clone();
- 
+
 +                    let saved = take_restore_state(surface);
-+                    let workspace_id = workspace_id.or_else(|| {
-+                        let saved = saved.as_ref()?;
++                    let saved_ws = (|| {
++                        let saved = saved.as_ref().filter(|s| s.workspace_name.is_none())?;
 +                        let output = output.as_ref()?;
 +                        let mut wss = self.niri.layout.workspaces().filter(|(mon, _, _)| {
 +                            mon.is_some_and(|mon| mon.output() == output)
 +                        });
 +                        let ws = wss.by_ref().take(saved.workspace_idx + 1).last()?.2;
 +                        Some(ws.id())
-+                    });
++                    })();
++                    let workspace_id = saved_ws.or(workspace_id);
 +                    let column_idx = saved
 +                        .filter(|s| s.floating_pos.is_none())
 +                        .and_then(|s| s.column_idx);
