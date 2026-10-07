@@ -3,7 +3,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        8%{?dist}
+Release:        9%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -35,7 +35,7 @@ BuildRequires:  pkgconfig(systemd)
 BuildRequires:  pkgconfig(tllist) >= 1.1.0
 BuildRequires:  pkgconfig(wayland-client)
 BuildRequires:  pkgconfig(wayland-cursor)
-BuildRequires:  pkgconfig(wayland-protocols) >= 1.41
+BuildRequires:  pkgconfig(wayland-protocols) >= 1.49
 BuildRequires:  pkgconfig(wayland-scanner)
 BuildRequires:  pkgconfig(xkbcommon)
 # require *-static for header-only library
@@ -144,6 +144,9 @@ desktop-file-validate \
 
 
 %changelog
+* Wed Oct 07 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-9
+- Restore window placement via xdg-session-management
+
 * Fri Oct 02 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-8
 - Drop relaunch-command option
 - Write rule results on next save

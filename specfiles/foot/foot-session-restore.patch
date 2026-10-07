@@ -1,6 +1,6 @@
 diff -Nru '--exclude=build' -x '*.o' pristine/config.c foot-src/config.c
 --- pristine/config.c	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/config.c	2026-10-02 01:02:38.030560256 +0200
++++ foot-src/config.c	2026-10-07 14:13:01.986333249 +0200
 @@ -1300,6 +1300,52 @@
  }
  
@@ -117,7 +117,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/config.c foot-src/config.c
  }
 diff -Nru '--exclude=build' -x '*.o' pristine/config.h foot-src/config.h
 --- pristine/config.h	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/config.h	2026-10-02 01:02:38.030684840 +0200
++++ foot-src/config.h	2026-10-07 14:13:01.986522459 +0200
 @@ -227,6 +227,11 @@
      UNDERLINE_DASHED,
  };
@@ -146,8 +146,8 @@ diff -Nru '--exclude=build' -x '*.o' pristine/config.h foot-src/config.h
          enum {
 diff -Nru '--exclude=build' -x '*.o' pristine/doc/foot.ini.5.scd foot-src/doc/foot.ini.5.scd
 --- pristine/doc/foot.ini.5.scd	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/doc/foot.ini.5.scd	2026-10-02 01:02:38.031223427 +0200
-@@ -861,6 +861,78 @@
++++ foot-src/doc/foot.ini.5.scd	2026-10-07 14:16:55.159224487 +0200
+@@ -861,6 +861,82 @@
  	string. This option is ignored if
  	*indicator-position=none*. Default: _empty string_.
  
@@ -164,6 +164,10 @@ diff -Nru '--exclude=build' -x '*.o' pristine/doc/foot.ini.5.scd foot-src/doc/fo
 +were running in it, as configured in the *session-restore* section,
 +and finally executes the command line the window was originally
 +launched with (e.g. *footclient lf*), or the shell.
++
++If the compositor implements the xdg-session-management protocol,
++it is also asked to restore each window's size, position and
++workspace.
 +
 +*save*
 +	Whether to save, and restore, terminal sessions. Default: _yes_.
@@ -226,10 +230,30 @@ diff -Nru '--exclude=build' -x '*.o' pristine/doc/foot.ini.5.scd foot-src/doc/fo
  # SECTION: url
  
  Note that you can also add custom regular expressions, see the 'regex'
+diff -Nru '--exclude=build' -x '*.o' pristine/main.c foot-src/main.c
+--- pristine/main.c	2026-09-02 13:02:26.000000000 +0200
++++ foot-src/main.c	2026-10-07 14:14:59.825799216 +0200
+@@ -649,7 +649,7 @@
+         goto out;
+ 
+     if (!as_server && (term = term_init(
+-                           &conf, fdm, reaper, wayl, "foot", cwd, token, pty_path,
++                           &conf, fdm, reaper, wayl, "foot", cwd, token, NULL, pty_path,
+                            argc, argv, NULL,
+                            &term_shutdown_cb, &shutdown_ctx)) == NULL) {
+         goto out;
 diff -Nru '--exclude=build' -x '*.o' pristine/meson.build foot-src/meson.build
 --- pristine/meson.build	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/meson.build	2026-10-02 01:00:30.609320652 +0200
-@@ -334,6 +334,7 @@
++++ foot-src/meson.build	2026-10-07 14:14:59.824410249 +0200
+@@ -190,6 +190,7 @@
+   wayland_protocols_datadir / 'staging/xdg-toplevel-icon/xdg-toplevel-icon-v1.xml',
+   wayland_protocols_datadir / 'staging/xdg-system-bell/xdg-system-bell-v1.xml',
+   wayland_protocols_datadir / 'staging/color-management/color-management-v1.xml',
++  wayland_protocols_datadir / 'staging/xdg-session-management/xdg-session-management-v1.xml',
+ ]
+ 
+ if (wayland_protocols.version().version_compare('>=1.43'))
+@@ -334,6 +335,7 @@
    'render.c', 'render.h',
    'search.c', 'search.h',
    'server.c', 'server.h', 'client-protocol.h',
@@ -239,7 +263,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/meson.build foot-src/meson.build
    'spawn.c', 'spawn.h',
 diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
 --- pristine/server.c	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/server.c	2026-10-02 01:02:29.444727749 +0200
++++ foot-src/server.c	2026-10-07 14:14:59.825892008 +0200
 @@ -19,6 +19,7 @@
  #include "log.h"
  
@@ -274,6 +298,15 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
      if (instance->terminal != NULL)
          term_destroy(instance->terminal);
  
+@@ -391,7 +397,7 @@
+     instance->terminal = term_init(
+         conf != NULL ? conf : server->conf,
+         server->fdm, server->reaper, server->wayl, "footclient", cwd, token,
+-        NULL, cdata.argc, argv, (const char *const *)envp,
++        NULL, NULL, cdata.argc, argv, (const char *const *)envp,
+         &term_shutdown_handler, instance);
+ 
+     if (instance->terminal == NULL) {
 @@ -401,6 +407,10 @@
          goto shutdown;
      }
@@ -285,7 +318,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
      if (cdata.no_wait) {
          // the server owns the instance
          tll_push_back(server->terminals, instance);
-@@ -555,6 +565,31 @@
+@@ -555,6 +565,32 @@
      return true;
  }
  
@@ -300,7 +333,8 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
 +
 +    instance->terminal = term_init(
 +        server->conf, server->fdm, server->reaper, server->wayl, "footclient",
-+        cwd, NULL, NULL, 4, argv, NULL, &term_shutdown_handler, instance);
++        cwd, NULL, session_window_name(w), NULL, 4, argv, NULL,
++        &term_shutdown_handler, instance);
 +
 +    if (instance->terminal == NULL) {
 +        LOG_ERR("failed to restore window");
@@ -317,16 +351,17 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
  struct server *
  server_init(struct config *conf, struct fdm *fdm, struct reaper *reaper,
              struct wayland *wayl)
-@@ -631,6 +666,8 @@
+@@ -631,6 +667,9 @@
      if (!fdm_add(fdm, fd, EPOLLIN, &fdm_server, server))
          goto err;
  
-+    server->session = session_init(conf, fdm, reaper, &restore_window, server);
++    server->session = session_init(
++        conf, fdm, reaper, wayl, &restore_window, server);
 +
      LOG_INFO("accepting connections on %s", sock_path != NULL ? sock_path : "socket provided through socket activation");
  
      return server;
-@@ -648,6 +685,9 @@
+@@ -648,6 +687,9 @@
      if (server == NULL)
          return;
  
@@ -338,8 +373,8 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
  
 diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 --- pristine/session.c	1970-01-01 01:00:00.000000000 +0100
-+++ foot-src/session.c	2026-10-02 01:02:38.029903794 +0200
-@@ -0,0 +1,1414 @@
++++ foot-src/session.c	2026-10-07 14:16:08.366341512 +0200
+@@ -0,0 +1,1511 @@
 +#include "session.h"
 +
 +#include <dirent.h>
@@ -367,7 +402,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +#include "xmalloc.h"
 +
 +#define STATE_MAGIC "FOOT-SESSION"
-+#define STATE_VERSION 3
++#define STATE_VERSION 4
 +#define MAX_CHAIN_DEPTH 16
 +#define RULE_TIMEOUT_SECS 5
 +#define RULE_OUTPUT_MAX (64 * 1024)
@@ -382,6 +417,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +typedef tll(struct session_command) command_list_t;
 +
 +struct session_window {
++    char *name;
 +    char *cwd;
 +    char *snapshot;
 +    size_t launch_argc;
@@ -432,6 +468,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +    struct session *session;
 +    struct terminal *term;
 +    const struct config *conf;
++    char *name;
 +    size_t launch_argc;
 +    char **launch_argv;
 +    command_list_t restore_commands;
@@ -447,7 +484,9 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +    const struct config *conf;
 +    struct fdm *fdm;
 +    struct reaper *reaper;
++    struct wayland *wayl;
 +    char *path;
++    char *xdg_id;
 +    int timer_fd;
 +
 +    tll(struct session_tracked *) windows;
@@ -516,11 +555,19 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +{
 +    if (w == NULL)
 +        return;
++    free(w->name);
 +    free(w->cwd);
 +    free(w->snapshot);
 +    argv_free(w->launch_argc, w->launch_argv);
 +    command_list_free(&w->commands);
 +    free(w);
++}
++
++static char *
++toplevel_name_new(void)
++{
++    static unsigned seq;
++    return xasprintf("%lld-%d-%u", (long long)time(NULL), (int)getpid(), seq++);
 +}
 +
 +/* Paths and file I/O */
@@ -675,6 +722,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +static void
 +write_window(FILE *f, const struct session_window *w)
 +{
++    write_blob(f, w->name);
 +    write_blob(f, w->cwd);
 +    write_blob(f, w->snapshot);
 +    write_argv(f, w->launch_argc, w->launch_argv);
@@ -731,7 +779,9 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +    size_t count;
 +    int cols, rows;
 +
-+    bool ok = (w->cwd = read_blob(f)) != NULL &&
++    w->name = version >= 4 ? read_blob(f) : toplevel_name_new();
++
++    bool ok = w->name != NULL && (w->cwd = read_blob(f)) != NULL &&
 +        (version > 2 || fscanf(f, "%d %d\n", &cols, &rows) == 2) &&
 +        (w->snapshot = read_blob(f)) != NULL &&
 +        read_argv(f, &w->launch_argc, &w->launch_argv) &&
@@ -754,7 +804,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +}
 +
 +static void
-+read_state(const char *path, window_list_t *out)
++read_state(const char *path, window_list_t *out, char **xdg_id)
 +{
 +    FILE *f = fopen(path, "re");
 +    if (f == NULL)
@@ -765,8 +815,14 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +    size_t count;
 +    bool ok = fscanf(f, "%31s %d\n", magic, &version) == 2 &&
 +        streq(magic, STATE_MAGIC) &&
-+        (version == 2 || version == STATE_VERSION) &&
++        version >= 2 && version <= STATE_VERSION &&
++        (version < 4 || (*xdg_id = read_blob(f)) != NULL) &&
 +        fscanf(f, "%zu", &count) == 1 && fgetc(f) == '\n';
++
++    if (*xdg_id != NULL && (*xdg_id)[0] == '\0') {
++        free(*xdg_id);
++        *xdg_id = NULL;
++    }
 +
 +    for (size_t i = 0; ok && i < count; i++) {
 +        struct session_window *w = read_window(f, version);
@@ -798,6 +854,8 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +    const time_t now = now_secs();
 +    tll_foreach(s->closed, it) {
 +        if (now - it->item.at >= CLOSE_GRACE_SECS) {
++            if (s->wayl->xdg_session != NULL)
++                xdg_session_v1_remove_toplevel(s->wayl->xdg_session, it->item.w->name);
 +            window_free(it->item.w);
 +            tll_remove(s->closed, it);
 +        }
@@ -813,7 +871,9 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +    if (f == NULL)
 +        return;
 +
-+    fprintf(f, "%s %d\n%zu\n", STATE_MAGIC, STATE_VERSION, count);
++    fprintf(f, "%s %d\n", STATE_MAGIC, STATE_VERSION);
++    write_blob(f, s->xdg_id);
++    fprintf(f, "%zu\n", count);
 +    tll_foreach(s->windows, it) {
 +        if (it->item->saved != NULL)
 +            write_window(f, it->item->saved);
@@ -833,7 +893,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +        return;
 +    }
 +
-+    bool ok = count > 0
++    bool ok = count > 0 || s->xdg_id != NULL
 +        ? write_file_atomic(s->path, buf, len)
 +        : unlink(s->path) == 0 || errno == ENOENT;
 +
@@ -1342,6 +1402,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +
 +    struct session_window *w = xmalloc(sizeof(*w));
 +    *w = (struct session_window){
++        .name = xstrdup(t->name),
 +        .cwd = proc_cwd(chain[0].pid),
 +        .snapshot = term_snapshot_text(t->term, t->conf->session.scrollback_lines),
 +        .launch_argc = t->launch_argc,
@@ -1574,12 +1635,51 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +}
 +
 +static void
++xdg_session_created(void *data, struct xdg_session_v1 *xdg, const char *id)
++{
++    struct session *s = data;
++    free(s->xdg_id);
++    s->xdg_id = xstrdup(id);
++}
++
++static void
++xdg_session_restored(void *data, struct xdg_session_v1 *xdg)
++{
++}
++
++static void
++xdg_session_replaced(void *data, struct xdg_session_v1 *xdg)
++{
++    struct session *s = data;
++    LOG_WARN("compositor session taken over by another client");
++
++    xdg_session_v1_destroy(xdg);
++    s->wayl->xdg_session = NULL;
++    free(s->xdg_id);
++    s->xdg_id = NULL;
++}
++
++static const struct xdg_session_v1_listener xdg_session_listener = {
++    .created = &xdg_session_created,
++    .restored = &xdg_session_restored,
++    .replaced = &xdg_session_replaced,
++};
++
++static void
 +restore(struct session *s, session_restore_cb cb, void *data)
 +{
 +    window_list_t windows = tll_init();
-+    read_state(s->path, &windows);
-+    if (tll_length(windows) == 0)
-+        return;
++    read_state(s->path, &windows, &s->xdg_id);
++
++    if (s->wayl->session_manager != NULL) {
++        s->wayl->xdg_session = xdg_session_manager_v1_get_session(
++            s->wayl->session_manager,
++            tll_length(windows) > 0
++                ? XDG_SESSION_MANAGER_V1_REASON_SESSION_RESTORE
++                : XDG_SESSION_MANAGER_V1_REASON_LAUNCH,
++            s->xdg_id);
++        xdg_session_v1_add_listener(s->wayl->xdg_session, &xdg_session_listener, s);
++    }
 +
 +    tll_foreach(windows, it) {
 +        struct session_window *w = it->item;
@@ -1603,7 +1703,8 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +
 +struct session *
 +session_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
-+             session_restore_cb restore_cb, void *restore_data)
++             struct wayland *wayl, session_restore_cb restore_cb,
++             void *restore_data)
 +{
 +    if (!conf->session.enabled)
 +        return NULL;
@@ -1617,6 +1718,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +        .conf = conf,
 +        .fdm = fdm,
 +        .reaper = reaper,
++        .wayl = wayl,
 +        .path = path,
 +        .timer_fd = -1,
 +        .windows = tll_init(),
@@ -1656,6 +1758,11 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +
 +    checkpoint(s, false);
 +
++    if (s->wayl->xdg_session != NULL) {
++        xdg_session_v1_destroy(s->wayl->xdg_session);
++        s->wayl->xdg_session = NULL;
++    }
++
 +    if (s->timer_fd >= 0)
 +        fdm_del(s->fdm, s->timer_fd);
 +
@@ -1689,8 +1796,27 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +    }
 +
 +    free(s->written);
++    free(s->xdg_id);
 +    free(s->path);
 +    free(s);
++}
++
++static struct session_tracked *
++track(struct session *s, struct terminal *term, const struct config *conf,
++      char *name, size_t launch_argc, char *const *launch_argv)
++{
++    struct session_tracked *t = xmalloc(sizeof(*t));
++    *t = (struct session_tracked){
++        .session = s,
++        .term = term,
++        .conf = conf,
++        .name = name,
++        .launch_argc = launch_argc,
++        .launch_argv = argv_dup(launch_argc, launch_argv),
++        .restore_commands = tll_init(),
++    };
++    tll_push_back(s->windows, t);
++    return t;
 +}
 +
 +struct session_tracked *
@@ -1701,16 +1827,14 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +    if (s == NULL)
 +        return NULL;
 +
-+    struct session_tracked *t = xmalloc(sizeof(*t));
-+    *t = (struct session_tracked){
-+        .session = s,
-+        .term = term,
-+        .conf = conf,
-+        .launch_argc = launch_argc,
-+        .launch_argv = argv_dup(launch_argc, launch_argv),
-+        .restore_commands = tll_init(),
-+    };
-+    tll_push_back(s->windows, t);
++    struct session_tracked *t = track(
++        s, term, conf, toplevel_name_new(), launch_argc, launch_argv);
++
++    struct wl_window *win = term->window;
++    if (s->wayl->xdg_session != NULL) {
++        win->toplevel_session = xdg_session_v1_add_toplevel(
++            s->wayl->xdg_session, win->xdg_toplevel, t->name);
++    }
 +    return t;
 +}
 +
@@ -1719,8 +1843,8 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +                       const struct config *conf,
 +                       struct session_window *w)
 +{
-+    struct session_tracked *t = session_track(
-+        s, term, conf, w->launch_argc, w->launch_argv);
++    struct session_tracked *t = track(
++        s, term, conf, xstrdup(w->name), w->launch_argc, w->launch_argv);
 +
 +    tll_foreach(w->commands, it) {
 +        command_push(&t->restore_commands, false, it->item.cwd,
@@ -1746,18 +1870,26 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +        if (t->saved != NULL) {
 +            tll_push_back(s->closed, ((struct closed_window){t->saved, now_secs()}));
 +            t->saved = NULL;
-+        }
++        } else if (s->wayl->xdg_session != NULL)
++            xdg_session_v1_remove_toplevel(s->wayl->xdg_session, t->name);
 +    }
 +
 +    window_free(t->saved);
++    free(t->name);
 +    argv_free(t->launch_argc, t->launch_argv);
 +    command_list_free(&t->restore_commands);
 +    free(t);
 +}
++
++const char *
++session_window_name(const struct session_window *w)
++{
++    return w->name;
++}
 diff -Nru '--exclude=build' -x '*.o' pristine/session.h foot-src/session.h
 --- pristine/session.h	1970-01-01 01:00:00.000000000 +0100
-+++ foot-src/session.h	2026-10-02 01:02:29.444679457 +0200
-@@ -0,0 +1,30 @@
++++ foot-src/session.h	2026-10-07 14:16:08.365516381 +0200
+@@ -0,0 +1,33 @@
 +#pragma once
 +
 +#include <stdbool.h>
@@ -1766,6 +1898,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.h foot-src/session.h
 +#include "config.h"
 +#include "fdm.h"
 +#include "reaper.h"
++#include "wayland.h"
 +
 +struct session;
 +struct session_tracked;
@@ -1778,7 +1911,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.h foot-src/session.h
 +
 +struct session *session_init(
 +    const struct config *conf, struct fdm *fdm, struct reaper *reaper,
-+    session_restore_cb restore_cb, void *restore_data);
++    struct wayland *wayl, session_restore_cb restore_cb, void *restore_data);
 +void session_destroy(struct session *session);
 +
 +struct session_tracked *session_track(
@@ -1788,9 +1921,11 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.h foot-src/session.h
 +    struct session *session, struct terminal *term, const struct config *conf,
 +    struct session_window *w);
 +void session_untrack(struct session_tracked *tracked);
++
++const char *session_window_name(const struct session_window *w);
 diff -Nru '--exclude=build' -x '*.o' pristine/terminal.c foot-src/terminal.c
 --- pristine/terminal.c	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/terminal.c	2026-10-02 01:00:30.610065324 +0200
++++ foot-src/terminal.c	2026-10-07 14:14:59.825725216 +0200
 @@ -24,6 +24,7 @@
  #include "log.h"
  
@@ -1799,6 +1934,24 @@ diff -Nru '--exclude=build' -x '*.o' pristine/terminal.c foot-src/terminal.c
  #include "commands.h"
  #include "config.h"
  #include "debug.h"
+@@ -1171,7 +1172,7 @@
+ struct terminal *
+ term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
+           struct wayland *wayl, const char *foot_exe, const char *cwd,
+-          const char *token, const char *pty_path,
++          const char *token, const char *toplevel_name, const char *pty_path,
+           int argc, char *const *argv, const char *const *envp,
+           void (*shutdown_cb)(void *data, int exit_code), void *shutdown_data)
+ {
+@@ -1453,7 +1454,7 @@
+     term->scale = tll_front(term->wl->monitors).scale;
+ 
+     /* Initialize the Wayland window backend */
+-    if ((term->window = wayl_win_init(term, token)) == NULL)
++    if ((term->window = wayl_win_init(term, token, toplevel_name)) == NULL)
+         goto err;
+ 
+     /* Load fonts */
 @@ -1810,6 +1811,139 @@
      alarm_raised = 1;
  }
@@ -1941,8 +2094,16 @@ diff -Nru '--exclude=build' -x '*.o' pristine/terminal.c foot-src/terminal.c
  {
 diff -Nru '--exclude=build' -x '*.o' pristine/terminal.h foot-src/terminal.h
 --- pristine/terminal.h	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/terminal.h	2026-10-02 01:00:30.610213700 +0200
-@@ -849,6 +849,8 @@
++++ foot-src/terminal.h	2026-10-07 14:14:59.825018420 +0200
+@@ -842,13 +842,15 @@
+ struct terminal *term_init(
+     const struct config *conf, struct fdm *fdm, struct reaper *reaper,
+     struct wayland *wayl, const char *foot_exe, const char *cwd,
+-    const char *token, const char *pty_path,
++    const char *token, const char *toplevel_name, const char *pty_path,
+     int argc, char *const *argv, const char *const *envp,
+     void (*shutdown_cb)(void *data, int exit_code), void *shutdown_data);
+ 
  bool term_shutdown(struct terminal *term);
  int term_destroy(struct terminal *term);
  
@@ -1951,3 +2112,100 @@ diff -Nru '--exclude=build' -x '*.o' pristine/terminal.h foot-src/terminal.h
  void term_update_ascii_printer(struct terminal *term);
  void term_single_shift(struct terminal *term, enum charset_designator idx);
  
+diff -Nru '--exclude=build' -x '*.o' pristine/wayland.c foot-src/wayland.c
+--- pristine/wayland.c	2026-09-02 13:02:26.000000000 +0200
++++ foot-src/wayland.c	2026-10-07 14:14:59.824968086 +0200
+@@ -1567,6 +1567,15 @@
+             wayl->registry, name, &xdg_toplevel_icon_manager_v1_interface, required);
+     }
+ 
++    else if (streq(interface, xdg_session_manager_v1_interface.name)) {
++        const uint32_t required = 1;
++        if (!verify_iface_version(interface, version, required))
++            return;
++
++        wayl->session_manager = wl_registry_bind(
++            wayl->registry, name, &xdg_session_manager_v1_interface, required);
++    }
++
+     else if (streq(interface, xdg_system_bell_v1_interface.name)) {
+         const uint32_t required = 1;
+         if (!verify_iface_version(interface, version, required))
+@@ -1981,6 +1990,8 @@
+         xdg_system_bell_v1_destroy(wayl->system_bell);
+     if (wayl->toplevel_icon_manager != NULL)
+         xdg_toplevel_icon_manager_v1_destroy(wayl->toplevel_icon_manager);
++    if (wayl->session_manager != NULL)
++        xdg_session_manager_v1_destroy(wayl->session_manager);
+     if (wayl->single_pixel_manager != NULL)
+         wp_single_pixel_buffer_manager_v1_destroy(wayl->single_pixel_manager);
+     if (wayl->fractional_scale_manager != NULL)
+@@ -2054,7 +2065,7 @@
+ };
+ 
+ struct wl_window *
+-wayl_win_init(struct terminal *term, const char *token)
++wayl_win_init(struct terminal *term, const char *token, const char *toplevel_name)
+ {
+     struct wayland *wayl = term->wl;
+     const struct config *conf = term->conf;
+@@ -2110,6 +2121,11 @@
+ 
+     xdg_toplevel_set_app_id(win->xdg_toplevel, conf->app_id);
+ 
++    if (toplevel_name != NULL && wayl->xdg_session != NULL) {
++        win->toplevel_session = xdg_session_v1_restore_toplevel(
++            wayl->xdg_session, win->xdg_toplevel, toplevel_name);
++    }
++
+ #if defined(HAVE_XDG_TOPLEVEL_TAG)
+     if (conf->toplevel_tag != NULL && conf->toplevel_tag[0] != '\0') {
+         if (wayl->toplevel_tag_manager != NULL) {
+@@ -2347,6 +2363,8 @@
+         wl_callback_destroy(win->frame_callback);
+     if (win->xdg_toplevel_decoration != NULL)
+         zxdg_toplevel_decoration_v1_destroy(win->xdg_toplevel_decoration);
++    if (win->toplevel_session != NULL)
++        xdg_toplevel_session_v1_destroy(win->toplevel_session);
+     if (win->xdg_toplevel != NULL)
+         xdg_toplevel_destroy(win->xdg_toplevel);
+     if (win->xdg_surface != NULL)
+diff -Nru '--exclude=build' -x '*.o' pristine/wayland.h foot-src/wayland.h
+--- pristine/wayland.h	2026-09-02 13:02:26.000000000 +0200
++++ foot-src/wayland.h	2026-10-07 14:14:59.824539583 +0200
+@@ -19,6 +19,7 @@
+ #include <xdg-activation-v1.h>
+ #include <xdg-decoration-unstable-v1.h>
+ #include <xdg-output-unstable-v1.h>
++#include <xdg-session-management-v1.h>
+ #include <xdg-shell.h>
+ #include <xdg-system-bell-v1.h>
+ #include <xdg-toplevel-icon-v1.h>
+@@ -382,6 +383,7 @@
+     int preferred_buffer_scale;
+ 
+     struct zxdg_toplevel_decoration_v1 *xdg_toplevel_decoration;
++    struct xdg_toplevel_session_v1 *toplevel_session;
+ 
+     enum csd_mode csd_mode;
+ 
+@@ -485,6 +487,9 @@
+ 
+     struct xdg_toplevel_icon_manager_v1 *toplevel_icon_manager;
+ 
++    struct xdg_session_manager_v1 *session_manager;
++    struct xdg_session_v1 *xdg_session;
++
+     struct xdg_system_bell_v1 *system_bell;
+ 
+     struct {
+@@ -543,7 +548,8 @@
+     const struct wl_window *win, const struct wayl_surface *surf,
+     int width, int height, float scale);
+ 
+-struct wl_window *wayl_win_init(struct terminal *term, const char *token);
++struct wl_window *wayl_win_init(
++    struct terminal *term, const char *token, const char *toplevel_name);
+ void wayl_win_destroy(struct wl_window *win);
+ 
+ void wayl_win_scale(struct wl_window *win, const struct buffer *buf);
