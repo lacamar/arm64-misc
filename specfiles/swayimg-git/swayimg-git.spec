@@ -7,7 +7,7 @@
 
 Name:           %{_name}-git
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        6%{?dist}
+Release:        7%{?dist}
 Conflicts:      %{_name}
 Provides:       %{_name} = %{version}-%{release}
 Summary:        Lightweight image viewer for Wayland display servers
@@ -18,7 +18,7 @@ Source:         %{url}/archive/%{commit}/%{_name}-%{shortcommit}.tar.gz
 
 # Adds an "exif" imagelist.order sort mode using the EXIF capture time
 # (DateTimeOriginal/DateTimeDigitized/DateTime, via exiv2), falling back to
-# path order when unavailable. Not upstream.
+# file creation time, then modification time. Not upstream.
 Patch1:          0001-imagelist-add-exif-capture-time-sort-order.patch
 # Color managed OpenGL ES renderer: ICC/CICP, wide gamut, HDR (PQ output
 # via wp_color_management_v1), software fallback. Not upstream.
@@ -108,6 +108,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/swayimg.desktop
 
 
 %changelog
+* Wed Oct 07 2026 Lachlan Marie <lchlnm@pm.me> - 5.6^2.git.c392908-7
+ - Exif sort: fall back to file creation time
+
 * Wed Sep 30 2026 Lachlan Marie <lchlnm@pm.me> - 5.6^2.git.c392908-6
  - Decode 16-bit and float TIFF in high precision
 
