@@ -1,5 +1,5 @@
 Name:           open-hpl
-Version:        1.3.38
+Version:        1.3.39
 Release:        1%{?dist}
 Summary:        Native aarch64 port of Frictional Games' HPL engine
 
@@ -136,6 +136,16 @@ launcher bunker 1944430 "Amnesia The Bunker" \
 %{_datadir}/icons/hicolor/128x128/apps/open-hpl-*.png
 
 %changelog
+* Wed Oct 07 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.39-1
+- SOMA: edge glow
+- SOMA: color grading fades, save camera state
+- SOMA: voice end padding, effect fades
+- SOMA: death FX terminal, runtime entity create/destroy
+- SOMA: billboard brightness, fog/irradiance fades
+- SOMA: joint limit sounds, FBX .anm bone units
+- SOMA: liquid area deactivation fix
+- SOMA: keep map name across loads
+
 * Wed Oct 07 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.38-1
 - Amnesia: settings to XDG config dir
 - Flags and logs to XDG state dir
