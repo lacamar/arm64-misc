@@ -28,10 +28,11 @@
 %global tag 26.04
 %global commit ed22699d99462f61ab171472d3ea67e844ea580d
 %global shortcommit %{sub %{commit} 1 8}
+%global smithay_commit 79bbed5e1199090d787115614847a79c76607181
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        4%{?dist}
+Release:        5%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -42,6 +43,7 @@ License:        ((MIT OR Apache-2.0) AND BSD-3-Clause) AND ((MIT OR Apache-2.0) 
 URL:            https://github.com/niri-wm/niri
 VCS:            git+%{url}#%{commit}:
 Source:         %{url}/archive/%{commit}/niri-%{shortcommit}.tar.gz
+Source1:        https://github.com/Smithay/smithay/archive/%{smithay_commit}/smithay-%{sub %{smithay_commit} 1 8}.tar.gz
 Patch:          niri-argb2101010.patch
 Patch:          niri-ctm-gamma.patch
 # https://github.com/niri-wm/niri/pull/4485
@@ -65,6 +67,8 @@ Patch:          niri-wp-protocols.patch
 Patch:          niri-pr4118.patch
 # https://github.com/niri-wm/niri/pull/4001
 Patch:          niri-pr4001.patch
+Patch:          niri-smithay-local.patch
+Patch:          niri-smithay-overlay-cursor.patch
 
 BuildRequires:  cargo-rpm-macros >= 26
 BuildRequires:  pkgconfig(udev)
@@ -115,7 +119,9 @@ Windows are arranged in columns on an infinite strip going to the right.
 Opening a new window never causes existing windows to resize.
 
 %prep
-%autosetup -p1 -n niri-%{commit}
+%setup -q -n niri-%{commit} -a1
+mv smithay-%{smithay_commit} smithay
+%autopatch -p1
 
 %cargo_prep -N
 
@@ -170,6 +176,10 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Wed Oct 07 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^8.git.ed22699d-5
+ - Vendor Smithay at pinned rev
+ - Overlay-plane hardware cursor on apple-drm
+
 * Tue Oct 06 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^8.git.ed22699d-4
  - Add PR 3956: drm syncobj
  - Add fifo, commit-timing, content-type, alpha-modifier

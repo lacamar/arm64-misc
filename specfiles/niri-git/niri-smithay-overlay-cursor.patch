@@ -1,0 +1,155 @@
+diff --git a/smithay/src/backend/drm/compositor/mod.rs b/smithay/src/backend/drm/compositor/mod.rs
+index 3f471cf3..e0f4da20 100644
+--- a/smithay/src/backend/drm/compositor/mod.rs
++++ b/smithay/src/backend/drm/compositor/mod.rs
+@@ -1075,6 +1075,7 @@ where
+ 
+     cursor_size: Size<i32, Physical>,
+     cursor_state: Option<CursorState<G>>,
++    overlay_cursor: bool,
+ 
+     element_states: IndexMap<Id, ElementState<<F as ExportFramebuffer<A::Buffer>>::Framebuffer>>,
+     previous_element_states: IndexMap<Id, ElementState<<F as ExportFramebuffer<A::Buffer>>::Framebuffer>>,
+@@ -1189,6 +1190,15 @@ where
+                 .to_lowercase()
+                 .contains("nvidia");
+ 
++        // apple-drm has no cursor plane, borrow the topmost overlay
++        let overlay_cursor =
++            driver.name().to_string_lossy() == "apple" && planes.cursor.is_empty() && !planes.overlay.is_empty();
++        if overlay_cursor {
++            let mut plane = planes.overlay.remove(0);
++            plane.type_ = PlaneType::Cursor;
++            planes.cursor.push(plane);
++        }
++
+         let cursor_size = Size::from((cursor_size.w as i32, cursor_size.h as i32));
+         let damage_tracker = OutputDamageTracker::from_mode_source(output_mode_source.clone());
+         let supports_fencing = !surface.is_legacy()
+@@ -1257,6 +1267,7 @@ where
+                         framebuffer_exporter,
+                         cursor_size,
+                         cursor_state,
++                        overlay_cursor,
+                         surface,
+                         damage_tracker,
+                         output_mode_source,
+@@ -1372,6 +1383,15 @@ where
+                 .to_lowercase()
+                 .contains("nvidia");
+ 
++        // apple-drm has no cursor plane, borrow the topmost overlay
++        let overlay_cursor =
++            driver.name().to_string_lossy() == "apple" && planes.cursor.is_empty() && !planes.overlay.is_empty();
++        if overlay_cursor {
++            let mut plane = planes.overlay.remove(0);
++            plane.type_ = PlaneType::Cursor;
++            planes.cursor.push(plane);
++        }
++
+         let cursor_size = Size::from((cursor_size.w as i32, cursor_size.h as i32));
+         let damage_tracker = OutputDamageTracker::from_mode_source(output_mode_source.clone());
+         let supports_fencing = !surface.is_legacy()
+@@ -1439,6 +1459,7 @@ where
+             framebuffer_exporter,
+             cursor_size,
+             cursor_state,
++            overlay_cursor,
+             surface,
+             damage_tracker,
+             output_mode_source,
+@@ -3057,7 +3078,7 @@ where
+ 
+         // if the element is greater than the cursor size we can not
+         // use the cursor plane to scan out the element
+-        if element_size.w > self.cursor_size.w || element_size.h > self.cursor_size.h {
++        if !self.overlay_cursor && (element_size.w > self.cursor_size.w || element_size.h > self.cursor_size.h) {
+             trace!("element {:?} too big for cursor plane(s), skipping", element.id(),);
+             return None;
+         }
+@@ -3116,7 +3137,13 @@ where
+             return None;
+         };
+ 
+-        let cursor_plane_size = if let Some(size_hints) = plane_info.size_hints.as_deref() {
++        // keep >=32px of the plane on-screen so moves never need a test commit
++        let pad = if self.overlay_cursor { 32 } else { 0 };
++
++        let cursor_plane_size = if self.overlay_cursor {
++            let s = (element_size.w.max(element_size.h) + 2 * pad + 63) & !63;
++            Size::from((s, s))
++        } else if let Some(size_hints) = plane_info.size_hints.as_deref() {
+             // size hints are in order of preference, so we can choose the first one
+             // that can hold the whole element
+             //
+@@ -3134,7 +3161,7 @@ where
+         // this calculates the location of the cursor plane taking the simulated transform
+         // into consideration
+         let cursor_plane_location = output_transform
+-            .transform_point_in(element.location(scale), &output_geometry.size)
++            .transform_point_in(element.location(scale) - Point::from((pad, pad)), &output_geometry.size)
+             - output_transform.transform_point_in(Point::default(), &cursor_plane_size);
+ 
+         let previous_state = self
+@@ -3264,6 +3291,7 @@ where
+             element,
+             element_size,
+             cursor_plane_size,
++            pad,
+             output_transform,
+             &mut cursor_buffer,
+         ) {
+@@ -3277,6 +3305,7 @@ where
+             element,
+             element_size,
+             cursor_plane_size,
++            pad,
+             output_transform,
+             &mut cursor_buffer,
+         ) {
+@@ -3348,7 +3377,7 @@ where
+                             pixman_renderer.render(&mut framebuffer, cursor_plane_size, output_transform)?;
+                         frame.clear(Color32F::TRANSPARENT, &[Rectangle::from_size(cursor_plane_size)])?;
+                         let src = element.src();
+-                        let dst = Rectangle::from_size(element_geometry.size);
++                        let dst = Rectangle::new((pad, pad).into(), element_geometry.size);
+                         frame.render_texture_from_to(
+                             &cursor_texture,
+                             src,
+@@ -4199,6 +4228,7 @@ fn copy_element_to_cursor_bo<R, E>(
+     element: &E,
+     element_size: Size<i32, Physical>,
+     cursor_size: Size<i32, Physical>,
++    pad: i32,
+     output_transform: Transform,
+     bo: &mut GbmBuffer,
+ ) -> bool
+@@ -4226,7 +4256,27 @@ where
+     let bo_format = bo.format().code;
+     let bo_stride = bo.stride();
+ 
+-    let mut copy_to_bo = |src, src_stride, src_height| {
++    let mut copy_to_bo = |src: &[u8], src_stride, src_height| {
++        if pad > 0 {
++            let row_len = element_size.w as usize * 4;
++            return bo
++                .map_mut(0, 0, cursor_size.w as u32, cursor_size.h as u32, |mbo| {
++                    let dst = mbo.buffer_mut();
++                    dst.fill(0);
++                    (0..element_size.h.min(src_height) as usize).all(|row| {
++                        let s = row * src_stride as usize;
++                        let d = (row + pad as usize) * bo_stride as usize + pad as usize * 4;
++                        match (src.get(s..s + row_len), dst.get_mut(d..d + row_len)) {
++                            (Some(src), Some(dst)) => {
++                                dst.copy_from_slice(src);
++                                true
++                            }
++                            _ => false,
++                        }
++                    })
++                })
++                .unwrap_or(false);
++        }
+         if src_stride == bo_stride as i32 {
+             bo.write(src).is_ok()
+         } else {
