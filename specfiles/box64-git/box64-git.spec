@@ -1,8 +1,8 @@
-%global bumpver 31
+%global bumpver 32
 %global _name box64
 %global tag 0.4.5.1
 
-%global commit bc41dacc8cd45353a5918e741170a9256afb4675
+%global commit 6ece2e87f2c4ef9bf2f759e255d36cf4730a06e3
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           %{_name}-git
@@ -158,6 +158,9 @@ fi
 %{_binfmtdir}/box64.conf
 
 %changelog
+* Thu Oct 08 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.5.1^32.git.6ece2e8-1
+ - Update to commit 6ece2e87f2c4ef9bf2f759e255d36cf4730a06e3
+
 * Tue Oct 06 2026 Lachlan Marie <lchlnm@pm.me> - 1:0.4.5.1^31.git.bc41dac-1
  - Update to commit bc41dacc8cd45353a5918e741170a9256afb4675
  - Add Epoch to fix version ordering
