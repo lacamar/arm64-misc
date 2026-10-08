@@ -1,5 +1,5 @@
 Name:           ru
-Version:        1.4.0
+Version:        1.5.0
 Release:        1%{?dist}
 Summary:        Sync and maintain many GitHub repositories at once
 
@@ -34,6 +34,9 @@ install -Dpm0755 ru %{buildroot}%{_bindir}/%{name}
 %{_bindir}/%{name}
 
 %changelog
+* Thu Oct 08 2026 Lachlan Marie <lchlnm@pm.me> - 1.5.0-1
+ - Update to 1.5.0
+
 * Tue Sep 29 2026 Lachlan Marie <lchlnm@pm.me> - 1.4.0-1
  - Update to 1.4.0
 
