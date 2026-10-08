@@ -2,7 +2,7 @@
 %global __strip /bin/true
 
 Name:           cm
-Version:        0.3.0
+Version:        0.5.0
 Release:        1%{?dist}
 Summary:        Procedural memory for AI coding agents
 
@@ -34,5 +34,8 @@ install -Dpm0755 %{name} %{buildroot}%{_bindir}/%{name}
 %{_bindir}/%{name}
 
 %changelog
+* Thu Oct 08 2026 Lachlan Marie <lchlnm@pm.me> - 0.5.0-1
+ - Update to 0.5.0
+
 * Mon Sep 28 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.0-1
 - Initial package
