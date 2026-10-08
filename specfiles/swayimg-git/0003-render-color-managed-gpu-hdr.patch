@@ -17,7 +17,7 @@ Subject: [PATCH] render: color managed GPU renderer with HDR output
  src/formats/png.cpp   | 118 +++++-
  src/formats/raw.cpp   |  25 +-
  src/formats/svg.cpp   |  17 +
- src/formats/tiff.cpp  | 165 ++++++++
+ src/formats/tiff.cpp  | 162 ++++++++
  src/formats/webp.cpp  |  10 +
  src/gpu.hpp           |  25 ++
  src/gpu_gles.cpp      | 911 ++++++++++++++++++++++++++++++++++++++++++
@@ -29,7 +29,7 @@ Subject: [PATCH] render: color managed GPU renderer with HDR output
  src/ui_wayland.cpp    | 306 +++++++++++++-
  src/ui_wayland.hpp    |  36 ++
  src/viewer.cpp        |   2 +-
- 25 files changed, 2839 insertions(+), 122 deletions(-)
+ 25 files changed, 2836 insertions(+), 122 deletions(-)
  create mode 100644 src/colorspace.cpp
  create mode 100644 src/colorspace.hpp
  create mode 100644 src/gpu.hpp
@@ -37,7 +37,7 @@ Subject: [PATCH] render: color managed GPU renderer with HDR output
  create mode 100644 src/gpu_gles.hpp
 
 diff --git a/meson.build b/meson.build
-index 0904abf..de0c205 100644
+index c26054b..caa0dfa 100644
 --- a/meson.build
 +++ b/meson.build
 @@ -33,6 +33,7 @@ endif
@@ -79,7 +79,7 @@ index 0904abf..de0c205 100644
  # DRM support
  drm = dependency('libdrm', required: get_option('drm'))
  
-@@ -151,6 +160,7 @@ conf = configuration_data()
+@@ -160,6 +169,7 @@ conf = configuration_data()
  conf.set('HAVE_COMPOSITOR', wlcln.found() and get_option('compositor').allowed())
  conf.set('HAVE_WAYLAND', wlcln.found())
  conf.set('HAVE_DRM', drm.found())
@@ -87,7 +87,7 @@ index 0904abf..de0c205 100644
  conf.set('HAVE_INOTIFY', cc.has_header('sys/inotify.h', dependencies: inotify))
  conf.set('HAVE_LIBEXIV2', exiv.found())
  conf.set('HAVE_LIBEXR', exr.found())
-@@ -296,6 +306,7 @@ endif
+@@ -306,6 +316,7 @@ endif
  sources = [
      'src/application.cpp',
      'src/appmode.cpp',
@@ -95,7 +95,7 @@ index 0904abf..de0c205 100644
      'src/defaults.cpp',
      'src/fdevent.cpp',
      'src/font.cpp',
-@@ -332,6 +343,9 @@ sources = [
+@@ -342,6 +353,9 @@ sources = [
  if wlcln.found()
      sources += 'src/ui_wayland.cpp'
  endif
@@ -105,7 +105,7 @@ index 0904abf..de0c205 100644
  if drm.found()
      sources += 'src/ui_drm.cpp'
  endif
-@@ -387,11 +401,15 @@ dependencies = [
+@@ -400,11 +414,15 @@ dependencies = [
      epoll,
      fontconfig,
      freetype,
@@ -122,10 +122,10 @@ index 0904abf..de0c205 100644
      # image support
      avif,
 diff --git a/meson.options b/meson.options
-index 85f5a29..f21bd09 100644
+index a3f9ae5..4f2938d 100644
 --- a/meson.options
 +++ b/meson.options
-@@ -108,6 +108,14 @@ option(
+@@ -114,6 +114,14 @@ option(
      description: 'Enable Wayland support',
  )
  
@@ -788,7 +788,7 @@ index 0000000..34b988a
 +    return sign | static_cast<uint16_t>(h);
 +}
 diff --git a/src/formatfactory.cpp b/src/formatfactory.cpp
-index 6eae9fa..dcf8a0d 100644
+index 5bccaa2..ded68ec 100644
 --- a/src/formatfactory.cpp
 +++ b/src/formatfactory.cpp
 @@ -269,6 +269,14 @@ ImagePtr FormatFactory::load(const ImageEntryPtr& entry) const
@@ -1104,7 +1104,7 @@ index 3179b66..59d2932 100644
      using HeifContext =
          std::unique_ptr<heif_context, decltype(&heif_context_free)>;
 diff --git a/src/formats/jpeg.cpp b/src/formats/jpeg.cpp
-index aea1a3e..f447836 100644
+index 5a0b171..cee8887 100644
 --- a/src/formats/jpeg.cpp
 +++ b/src/formats/jpeg.cpp
 @@ -6,9 +6,13 @@
@@ -1121,7 +1121,7 @@ index aea1a3e..f447836 100644
  
  namespace {
  
-@@ -38,8 +42,23 @@ public:
+@@ -39,8 +43,23 @@ public:
  
          jpeg_create_decompress(&jpg);
          jpeg_mem_src(&jpg, data.data, data.size);
@@ -1218,7 +1218,7 @@ index aea1a3e..f447836 100644
      struct Error {
          jpeg_error_mgr manager;
 diff --git a/src/formats/jxl.cpp b/src/formats/jxl.cpp
-index 7b1a6a1..21ab589 100644
+index 0250715..275b664 100644
 --- a/src/formats/jxl.cpp
 +++ b/src/formats/jxl.cpp
 @@ -8,7 +8,9 @@
@@ -1242,15 +1242,16 @@ index 7b1a6a1..21ab589 100644
          JxlDecoderSetParallelRunner(jxl_dec.get(), JxlResizableParallelRunner,
                                      jxl_prl.get());
  
-@@ -53,16 +55,17 @@ public:
+@@ -53,7 +55,7 @@ public:
          JxlDecoderCloseInput(jxl_dec.get());
  
          JxlBasicInfo jxl_inf;
--        const JxlPixelFormat jxl_fmt { .num_channels = 4, // ARBG
-+        JxlPixelFormat jxl_fmt { .num_channels = 4, // ARBG
-                                        .data_type = JXL_TYPE_UINT8,
-                                        .endianness = JXL_NATIVE_ENDIAN,
-                                        .align = 0 };
+-        const JxlPixelFormat jxl_fmt {
++        JxlPixelFormat jxl_fmt {
+             .num_channels = 4, // ARBG
+             .data_type = JXL_TYPE_UINT8,
+             .endianness = JXL_NATIVE_ENDIAN,
+@@ -62,9 +64,10 @@ public:
  
          // docode image
          ImagePtr image = std::make_shared<Image>();
@@ -1262,7 +1263,7 @@ index 7b1a6a1..21ab589 100644
              if (status == DecodeStatus::Error) {
                  return nullptr;
              }
-@@ -82,6 +85,74 @@ public:
+@@ -84,6 +87,74 @@ public:
      void fix_orientation(ImagePtr&, const int) const override {}
  
  private:
@@ -1337,7 +1338,7 @@ index 7b1a6a1..21ab589 100644
      /** Decoder status. */
      enum class DecodeStatus : uint8_t {
          InProgress,
-@@ -100,8 +171,9 @@ private:
+@@ -102,8 +173,9 @@ private:
       */
      static DecodeStatus
      decode_step(const JxlDecoderPtr& jxl_dec, JxlBasicInfo& jxl_inf,
@@ -1349,7 +1350,7 @@ index 7b1a6a1..21ab589 100644
      {
          const JxlDecoderStatus status = JxlDecoderProcessInput(jxl_dec.get());
          if (status == JXL_DEC_SUCCESS) {
-@@ -118,6 +190,33 @@ private:
+@@ -120,6 +192,33 @@ private:
                                                           jxl_inf.ysize));
              return DecodeStatus::InProgress;
          }
@@ -1383,7 +1384,7 @@ index 7b1a6a1..21ab589 100644
          if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER) {
              size_t buffer_size;
              if (JxlDecoderImageOutBufferSize(jxl_dec.get(), &jxl_fmt,
-@@ -129,7 +228,7 @@ private:
+@@ -131,7 +230,7 @@ private:
                  return DecodeStatus::Error;
              }
              if (JxlDecoderSetImageOutBuffer(jxl_dec.get(), &jxl_fmt,
@@ -1392,7 +1393,7 @@ index 7b1a6a1..21ab589 100644
                                              buffer_size) != JXL_DEC_SUCCESS) {
                  return DecodeStatus::Error;
              }
-@@ -139,8 +238,12 @@ private:
+@@ -141,8 +240,12 @@ private:
              // allocate new frame
              image.frames.resize(image.frames.size() + 1);
              Image::Frame& frame = image.frames[image.frames.size() - 1];
@@ -1407,7 +1408,7 @@ index 7b1a6a1..21ab589 100644
              // calculate frame timing
              if (jxl_inf.have_animation) {
                  JxlFrameHeader jxl_hdr;
-@@ -154,7 +257,17 @@ private:
+@@ -156,7 +259,17 @@ private:
              return DecodeStatus::InProgress;
          }
          if (status == JXL_DEC_FULL_IMAGE) {
@@ -1427,7 +1428,7 @@ index 7b1a6a1..21ab589 100644
          }
  
 diff --git a/src/formats/png.cpp b/src/formats/png.cpp
-index 1d421c7..79dc282 100644
+index 7a9f870..c9e903c 100644
 --- a/src/formats/png.cpp
 +++ b/src/formats/png.cpp
 @@ -6,6 +6,8 @@
@@ -1439,7 +1440,7 @@ index 1d421c7..79dc282 100644
  #include <csetjmp>
  #include <cstring>
  #include <format>
-@@ -60,6 +62,12 @@ public:
+@@ -62,6 +64,12 @@ public:
          // setup decoder
          const png_byte color_type = png_get_color_type(png, png);
          const png_byte bit_depth = png_get_bit_depth(png, png);
@@ -1452,7 +1453,7 @@ index 1d421c7..79dc282 100644
          if (png_get_interlace_type(png, png) != PNG_INTERLACE_NONE) {
              png_set_interlace_handling(png);
          }
-@@ -76,13 +84,18 @@ public:
+@@ -78,29 +86,35 @@ public:
          if (png_get_valid(png, png, PNG_INFO_tRNS)) {
              png_set_tRNS_to_alpha(png);
          }
@@ -1477,7 +1478,6 @@ index 1d421c7..79dc282 100644
          png_set_expand(png);
  
          png_read_update_info(png, png);
-@@ -91,16 +104,17 @@ public:
  
          // decode image
  #ifdef PNG_APNG_SUPPORTED
@@ -1687,22 +1687,10 @@ index 4ef91ea..86f9f20 100644
              const RsvgRectangle viewbox = {
                  .x = x + scale * svg_offset_x,
 diff --git a/src/formats/tiff.cpp b/src/formats/tiff.cpp
-index 0d7e6a9..a2a2aa4 100644
+index 2e6ae43..4e8bdbb 100644
 --- a/src/formats/tiff.cpp
 +++ b/src/formats/tiff.cpp
-@@ -7,8 +7,11 @@
- #include <tiffio.h>
- 
- #include <algorithm>
-+#include <cmath>
- #include <cstring>
-+#include <format>
- #include <memory>
-+#include <vector>
- 
- namespace {
- 
-@@ -52,6 +55,37 @@ public:
+@@ -55,6 +55,37 @@ public:
          ImagePtr image = std::make_shared<Image>();
          image->frames.resize(1);
          Pixmap& pm = image->frames[0].pm;
@@ -1739,18 +1727,19 @@ index 0d7e6a9..a2a2aa4 100644
 +
          pm.create(Pixmap::ARGB, width, height);
  
-         // get orientation
-@@ -68,12 +102,143 @@ public:
- 
-         pm.abgr_to_argb();
+         // firstly try to decode via the standard RGBA path, but it does not
+@@ -65,6 +96,10 @@ public:
+             return nullptr;
+         }
  
 +        if (icc) {
 +            ColorSpace::apply_icc(pm, icc, icc_size);
 +        }
 +
-         image->format = "TIFF";
- 
-         return image;
+         uint16_t bits = 0;
+         TIFFGetField(tiff.get(), TIFFTAG_BITSPERSAMPLE, &bits);
+         image->format = std::format("TIFF {}bits", bits);
+@@ -73,6 +108,133 @@ public:
      }
  
  private:
@@ -2967,10 +2956,10 @@ index 0000000..c00d65d
 +    uint64_t frame = 0;
 +};
 diff --git a/src/imageformat.cpp b/src/imageformat.cpp
-index f289450..f2fd872 100644
+index 2b62ce8..e4ee4e1 100644
 --- a/src/imageformat.cpp
 +++ b/src/imageformat.cpp
-@@ -44,6 +44,10 @@ Pixmap ImageFormat::preview(const Data& data, const size_t sz,
+@@ -43,6 +43,10 @@ Pixmap ImageFormat::preview(const Data& data, const size_t sz,
  Pixmap ImageFormat::make_thumb(const Pixmap& pm, const size_t sz,
                                 const bool fill)
  {
@@ -3226,7 +3215,7 @@ index bf08df4..d6bde78 100644
      assert(pm.format() == Format::RGB || pm.format() == Format::ARGB);
      assert(format() == Format::ARGB || pm.format() == Format::ARGB);
 diff --git a/src/pixmap.hpp b/src/pixmap.hpp
-index bac81a1..fa9b04a 100644
+index 0f9097d..4c96575 100644
 --- a/src/pixmap.hpp
 +++ b/src/pixmap.hpp
 @@ -5,7 +5,9 @@
@@ -3291,10 +3280,10 @@ index bac81a1..fa9b04a 100644
 +    ColorSpace::Ptr pm_color;
  };
 diff --git a/src/render.cpp b/src/render.cpp
-index 2ce14bc..3a88ff9 100644
+index eb4c2df..80b8c66 100644
 --- a/src/render.cpp
 +++ b/src/render.cpp
-@@ -815,6 +815,15 @@ Render::Render()
+@@ -854,6 +854,15 @@ Render::Render()
  void Render::draw(Pixmap& dst, const Pixmap& src, const Point& pos,
                    const double scale)
  {
@@ -3310,7 +3299,7 @@ index 2ce14bc..3a88ff9 100644
      if (scale == 1) { // 100% scale, draw 1:1
          if (dst.format() == Pixmap::ARGB || src.format() == Pixmap::ARGB) {
              dst.blend(src, pos);
-@@ -837,6 +846,15 @@ void Render::fill_inverse(Pixmap& pm, const Rectangle& rect,
+@@ -876,6 +885,15 @@ void Render::fill_inverse(Pixmap& pm, const Rectangle& rect,
      const Rectangle full { 0, 0, pm.width(), pm.height() };
      const auto [top, bottom, left, right] = full.cutout(rect);
  
@@ -3326,7 +3315,7 @@ index 2ce14bc..3a88ff9 100644
      std::vector<size_t> tids;
      tids.reserve(4); // one per each side
  
-@@ -866,6 +884,11 @@ void Render::fill_inverse(Pixmap& pm, const Rectangle& rect,
+@@ -905,6 +923,11 @@ void Render::fill_inverse(Pixmap& pm, const Rectangle& rect,
  
  void Render::extend_background(Pixmap& pm, const Rectangle& preserve)
  {
@@ -3338,7 +3327,7 @@ index 2ce14bc..3a88ff9 100644
      assert(preserve);
  
      // calculate areas to fill
-@@ -913,6 +936,11 @@ void Render::extend_background(Pixmap& pm, const Rectangle& preserve)
+@@ -952,6 +975,11 @@ void Render::extend_background(Pixmap& pm, const Rectangle& preserve)
  
  void Render::mirror_background(Pixmap& pm, const Rectangle& preserve)
  {
@@ -3351,11 +3340,11 @@ index 2ce14bc..3a88ff9 100644
  
      // calculate areas to fill
 diff --git a/src/ui_wayland.cpp b/src/ui_wayland.cpp
-index 5063668..6a54096 100644
+index cec163e..25169ac 100644
 --- a/src/ui_wayland.cpp
 +++ b/src/ui_wayland.cpp
-@@ -698,6 +698,187 @@ public:
-         .ping = on_xdg_ping
+@@ -712,6 +712,187 @@ public:
+         .ping = on_xdg_ping,
      };
  
 +#ifdef HAVE_GPU
@@ -3542,7 +3531,7 @@ index 5063668..6a54096 100644
      /***************************************************************************
       * Registry handlers
       **************************************************************************/
-@@ -768,6 +949,16 @@ public:
+@@ -782,6 +963,16 @@ public:
              ui->wl.decor_mgr.bind(
                  registry, name,
                  ZXDG_DECORATION_MANAGER_V1_GET_TOPLEVEL_DECORATION_SINCE_VERSION);
@@ -3559,7 +3548,7 @@ index 5063668..6a54096 100644
          }
      }
  
-@@ -790,6 +981,13 @@ bool WaylandBuffer::realloc(struct wl_shm* shm, size_t width, size_t height)
+@@ -804,6 +995,13 @@ bool WaylandBuffer::realloc(struct wl_shm* shm, size_t width, size_t height)
  
      const std::scoped_lock lock(mutex);
  
@@ -3573,7 +3562,7 @@ index 5063668..6a54096 100644
      destroy();
  
      const size_t stride = width * sizeof(argb_t);
-@@ -844,6 +1042,13 @@ Pixmap* WaylandBuffer::lock()
+@@ -858,6 +1056,13 @@ Pixmap* WaylandBuffer::lock()
      }
  
      mutex.lock();
@@ -3587,7 +3576,7 @@ index 5063668..6a54096 100644
      if (!buffer) {
          mutex.unlock();
          return nullptr; // not yet created
-@@ -855,6 +1060,13 @@ Pixmap* WaylandBuffer::lock()
+@@ -869,6 +1074,13 @@ Pixmap* WaylandBuffer::lock()
  
  void WaylandBuffer::unlock()
  {
@@ -3601,7 +3590,7 @@ index 5063668..6a54096 100644
      assert(buffer);
      mutex.unlock();
  }
-@@ -905,7 +1117,16 @@ bool UiWayland::initialize(const std::string& app_id)
+@@ -919,7 +1131,16 @@ bool UiWayland::initialize(const std::string& app_id)
      wl_callback_add_listener(wl.callback, &WaylandHandler::frame_listener,
                               this);
  
@@ -3619,7 +3608,7 @@ index 5063668..6a54096 100644
          wl.datadev =
              wl_data_device_manager_get_data_device(wl.datadev_mgr, wl.seat);
          wl_data_device_add_listener(wl.datadev,
-@@ -971,6 +1192,83 @@ bool UiWayland::initialize(const std::string& app_id)
+@@ -985,6 +1206,83 @@ bool UiWayland::initialize(const std::string& app_id)
      return true;
  }
  
@@ -3703,7 +3692,7 @@ index 5063668..6a54096 100644
  void UiWayland::run()
  {
      thread = std::thread([this] {
-@@ -1163,6 +1461,12 @@ Pixmap* UiWayland::lock_surface()
+@@ -1177,6 +1475,12 @@ Pixmap* UiWayland::lock_surface()
  
  void UiWayland::commit_surface()
  {
@@ -3717,7 +3706,7 @@ index 5063668..6a54096 100644
      wnd_buffer.unlock();
  }
 diff --git a/src/ui_wayland.hpp b/src/ui_wayland.hpp
-index a07667a..dfdb103 100644
+index 1d4fbe7..3038482 100644
 --- a/src/ui_wayland.hpp
 +++ b/src/ui_wayland.hpp
 @@ -4,6 +4,7 @@
@@ -3744,7 +3733,7 @@ index a07667a..dfdb103 100644
  #include <mutex>
  #include <thread>
  
-@@ -133,6 +141,10 @@ struct WaylandBuffer {
+@@ -135,6 +143,10 @@ struct WaylandBuffer {
       */
      wl_buffer* get() { return buffer; }
  
@@ -3755,7 +3744,7 @@ index a07667a..dfdb103 100644
  private:
      /**
       * Destroy buffers.
-@@ -213,6 +225,30 @@ private:
+@@ -215,6 +227,30 @@ private:
          WLOBJ_DECLARE(ext_idle_notification_v1) idle;
      } wl;
  
@@ -3787,10 +3776,10 @@ index a07667a..dfdb103 100644
  
      uint32_t scale = FRACTION_SCALE_DEN; ///< Window scale factor (WL format)
 diff --git a/src/viewer.cpp b/src/viewer.cpp
-index 1240e9c..1d33877 100644
+index f99d2f8..01aa6e3 100644
 --- a/src/viewer.cpp
 +++ b/src/viewer.cpp
-@@ -488,7 +488,7 @@ void Viewer::window_redraw(Pixmap& wnd)
+@@ -514,7 +514,7 @@ void Viewer::window_redraw(Pixmap& wnd)
      const Rectangle imgr = { position, static_cast<Size>(pm) * scale };
  
      // clear image background

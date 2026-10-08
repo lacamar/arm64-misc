@@ -1,8 +1,8 @@
 %global _name swayimg
 %global tag 5.6
-%global bumpver 2
+%global bumpver 3
 
-%global commit c3929089981d74014a9cb4541f188767d60529ba
+%global commit b113d3f9f1458452b3f8b2fc8286ce062f8382cb
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           %{_name}-git
@@ -108,6 +108,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/swayimg.desktop
 
 
 %changelog
+* Fri Oct 09 2026 Lachlan Marie <lchlnm@pm.me> - 5.6^3.git.b113d3f-7
+ - Update to commit b113d3f9f1458452b3f8b2fc8286ce062f8382cb
+
 * Wed Oct 07 2026 Lachlan Marie <lchlnm@pm.me> - 5.6^2.git.c392908-7
  - Exif sort: fall back to file creation time
 
