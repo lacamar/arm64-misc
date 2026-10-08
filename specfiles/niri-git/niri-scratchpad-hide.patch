@@ -1,0 +1,93 @@
+diff --git a/niri-config/src/layout.rs b/niri-config/src/layout.rs
+index 512e347..b99d731 100644
+--- a/niri-config/src/layout.rs
++++ b/niri-config/src/layout.rs
+@@ -145,6 +145,8 @@ pub struct Scratchpad {
+     pub backdrop_blur: bool,
+     #[knuffel(child)]
+     pub modal: bool,
++    #[knuffel(child)]
++    pub hide_on_workspace_switch: bool,
+ }
+ 
+ #[derive(knuffel::Decode, Debug, Clone, Copy, PartialEq)]
+diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
+index 9dab41c..f831005 100644
+--- a/niri-config/src/lib.rs
++++ b/niri-config/src/lib.rs
+@@ -1526,6 +1526,7 @@ mod tests {
+                     ),
+                     backdrop_blur: false,
+                     modal: false,
++                    hide_on_workspace_switch: false,
+                 },
+             },
+             prefer_no_csd: true,
+diff --git a/src/layout/mod.rs b/src/layout/mod.rs
+index 6372a1b..419fc6a 100644
+--- a/src/layout/mod.rs
++++ b/src/layout/mod.rs
+@@ -5151,6 +5151,7 @@ impl<W: LayoutElement> Layout<W> {
+ 
+         self.is_active = is_active;
+ 
++        let mut hide = Vec::new();
+         if let MonitorSet::Normal { monitors, .. } = &mut self.monitor_set {
+             for mon in monitors.iter_mut().filter(|_| !self.overview_open) {
+                 let active = mon.active_workspace_idx;
+@@ -5165,11 +5166,18 @@ impl<W: LayoutElement> Layout<W> {
+                             .map(|tile| tile.window().id().clone())
+                     })
+                     .collect();
++                if mon.options.layout.scratchpad.hide_on_workspace_switch {
++                    hide.extend(stray);
++                    continue;
++                }
+                 for id in stray {
+                     mon.move_to_workspace(Some(&id), mon.active_workspace_idx, ActivateWindow::No);
+                 }
+             }
+         }
++        for id in hide {
++            self.move_window_to_scratchpad(Some(&id));
++        }
+ 
+         let modal = self
+             .active_workspace()
+diff --git a/src/layout/tests.rs b/src/layout/tests.rs
+index 4f47842..0d9d050 100644
+--- a/src/layout/tests.rs
++++ b/src/layout/tests.rs
+@@ -3238,6 +3238,32 @@ fn scratchpad_toggle() {
+     layout.verify_invariants();
+ }
+ 
++#[test]
++fn scratchpad_hide_on_workspace_switch() {
++    let ops = [
++        Op::AddOutput(1),
++        Op::AddWindow {
++            params: TestWindowParams::new(1),
++        },
++        Op::AddWindow {
++            params: TestWindowParams::new(2),
++        },
++        Op::MoveWindowToScratchpad { id: None },
++    ];
++    let mut layout = check_ops(ops);
++    let mut options = Options::default();
++    options.layout.scratchpad.hide_on_workspace_switch = true;
++    layout.update_options(options);
++
++    layout.toggle_scratchpad(None);
++    assert!(layout.has_window(&2));
++    layout.switch_workspace_down();
++    layout.refresh(true);
++    assert!(!layout.has_window(&2));
++    assert!(layout.is_in_scratchpad(&2));
++    layout.verify_invariants();
++}
++
+ #[test]
+ fn scratchpad_scales_to_output() {
+     let ops = [

@@ -1,0 +1,165 @@
+diff --git a/docs/wiki/Configuration:-Miscellaneous.md b/docs/wiki/Configuration:-Miscellaneous.md
+index 7a2f42d..7a3c66c 100644
+--- a/docs/wiki/Configuration:-Miscellaneous.md
++++ b/docs/wiki/Configuration:-Miscellaneous.md
+@@ -135,6 +135,16 @@ You can also set this option to `null` to disable saving screenshots to disk.
+ screenshot-path null
+ ```
+ 
++### `frame-callback-rate-unfocused`
++
++Cap the rate, in Hz, at which visible but unfocused windows receive frame callbacks.
++Clients that draw on frame callbacks, like terminals with spinners, then render at most this often while the focused window and the output stay at full rate.
++`0`, the default, disables the cap.
++
++```kdl
++frame-callback-rate-unfocused 60
++```
++
+ ### `environment`
+ 
+ Override environment variables for processes spawned by niri.
+diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
+index e7ffd5e..9dab41c 100644
+--- a/niri-config/src/lib.rs
++++ b/niri-config/src/lib.rs
+@@ -76,6 +76,7 @@ pub struct Config {
+     pub prefer_no_csd: bool,
+     pub cursor: Cursor,
+     pub screenshot_path: ScreenshotPath,
++    pub frame_callback_rate_unfocused: FrameCallbackRateUnfocused,
+     pub clipboard: Clipboard,
+     pub hotkey_overlay: HotkeyOverlay,
+     pub config_notification: ConfigNotification,
+@@ -247,6 +248,11 @@ where
+                     config.borrow_mut().screenshot_path = part;
+                 }
+ 
++                "frame-callback-rate-unfocused" => {
++                    let part = knuffel::Decode::decode_node(node, ctx)?;
++                    config.borrow_mut().frame_callback_rate_unfocused = part;
++                }
++
+                 "layout" => {
+                     let mut part = LayoutPart::decode_node(node, ctx)?;
+ 
+@@ -852,6 +858,8 @@ mod tests {
+ 
+             screenshot-path "~/Screenshots/screenshot.png"
+ 
++            frame-callback-rate-unfocused 60
++
+             clipboard {
+                 disable-primary
+             }
+@@ -1534,6 +1542,9 @@ mod tests {
+                     "~/Screenshots/screenshot.png",
+                 ),
+             ),
++            frame_callback_rate_unfocused: FrameCallbackRateUnfocused(
++                60,
++            ),
+             clipboard: Clipboard {
+                 disable_primary: true,
+             },
+diff --git a/niri-config/src/misc.rs b/niri-config/src/misc.rs
+index 66a200c..35f93f9 100644
+--- a/niri-config/src/misc.rs
++++ b/niri-config/src/misc.rs
+@@ -64,6 +64,9 @@ impl Default for ScreenshotPath {
+     }
+ }
+ 
++#[derive(knuffel::Decode, Debug, Default, Clone, Copy, PartialEq, Eq)]
++pub struct FrameCallbackRateUnfocused(#[knuffel(argument)] pub u16);
++
+ #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+ pub struct HotkeyOverlay {
+     pub skip_at_startup: bool,
+diff --git a/src/niri.rs b/src/niri.rs
+index a37e790..6c372c6 100644
+--- a/src/niri.rs
++++ b/src/niri.rs
+@@ -520,6 +520,7 @@ pub struct OutputState {
+     ///    would occur, based on the last presentation time and output refresh interval. Sequence
+     ///    is incremented in that timer, before attempting a redraw or sending frame callbacks.
+     pub frame_callback_sequence: u32,
++    pub frame_callback_timer_pending: bool,
+     /// Solid color buffer for the backdrop that we use instead of clearing to avoid damage
+     /// tracking issues and make screenshots easier.
+     pub backdrop_buffer: SolidColorBuffer,
+@@ -3164,6 +3165,7 @@ impl Niri {
+             last_drm_sequence: None,
+             vblank_throttle: VBlankThrottle::new(self.event_loop.clone(), name.connector.clone()),
+             frame_callback_sequence: 0,
++            frame_callback_timer_pending: false,
+             backdrop_buffer: SolidColorBuffer::new(size, backdrop_color),
+             xray: Xray::new(),
+             lock_render_state,
+@@ -5423,7 +5425,21 @@ impl Niri {
+ 
+         let frame_callback_time = get_monotonic_time();
+ 
++        let rate = self.config.borrow().frame_callback_rate_unfocused.0;
++        // Slack so vblank jitter doesn't skip a whole extra cycle.
++        let min_interval = (rate > 0).then(|| Duration::from_secs_f64(0.75 / f64::from(rate)));
++        let mut wake_in: Option<Duration> = None;
++
+         for mapped in self.layout.windows_for_output_mut(output) {
++            if let Some(min_interval) = min_interval.filter(|_| !mapped.is_focused()) {
++                let due = mapped.last_frame_callback.map(|last| last + min_interval);
++                if let Some(remaining) = due.and_then(|d| d.checked_sub(frame_callback_time)) {
++                    wake_in = Some(wake_in.map_or(remaining, |w| w.min(remaining)));
++                    continue;
++                }
++                mapped.last_frame_callback = Some(frame_callback_time);
++            }
++
+             setup_force_render(&mut self.event_loop, mapped);
+             mapped.send_frame(
+                 output,
+@@ -5471,6 +5487,23 @@ impl Niri {
+                 should_send,
+             );
+         }
++
++        if let Some(wake_in) = wake_in {
++            let state = self.output_state.get_mut(output).unwrap();
++            if !mem::replace(&mut state.frame_callback_timer_pending, true) {
++                let output = output.clone();
++                let timer = Timer::from_duration(wake_in);
++                self.event_loop
++                    .insert_source(timer, move |_, _, state| {
++                        if let Some(os) = state.niri.output_state.get_mut(&output) {
++                            os.frame_callback_timer_pending = false;
++                            state.niri.send_frame_callbacks(&output);
++                        }
++                        TimeoutAction::Drop
++                    })
++                    .unwrap();
++            }
++        }
+     }
+ 
+     pub fn send_frame_callbacks_on_fallback_timer(&mut self) {
+diff --git a/src/window/mapped.rs b/src/window/mapped.rs
+index da2d114..a12e9e4 100644
+--- a/src/window/mapped.rs
++++ b/src/window/mapped.rs
+@@ -80,6 +80,8 @@ pub struct Mapped {
+     /// resizes immediately, without waiting for a 1 second throttled callback.
+     needs_frame_callback: bool,
+ 
++    pub last_frame_callback: Option<Duration>,
++
+     /// Data of the offscreen element rendered in place of this window.
+     ///
+     /// If `None`, then the window is not offscreened.
+@@ -284,6 +286,7 @@ impl Mapped {
+             need_to_recompute_rules: false,
+             needs_configure: false,
+             needs_frame_callback: false,
++            last_frame_callback: None,
+             offscreen_data: RefCell::new(None),
+             is_urgent: false,
+             is_focused: false,
