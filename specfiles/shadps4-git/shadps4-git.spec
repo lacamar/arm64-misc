@@ -1,8 +1,8 @@
-%global bumpver 10
+%global bumpver 0
 %global _name shadps4
-%global tag 0.18.0
+%global tag 0.19.0
 # Upstream shadps4-emu/shadPS4 commit the aarch64 patch series is based on
-%global commit e35735c2edfdc97c8f48f0bd10307c2818464423
+%global commit 0fe263a4760dfbfa973366890061749b4af0de97
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 # Prebuilt FFmpeg release matching externals/ffmpeg-core
 %global ffmpeg_sha 94dde08
@@ -56,7 +56,7 @@ local externals = {
  { name="pugixml", ref="caade5a28aad86b92a4b5337a9dc70c4ba73c5eb", owner="zeux", path="pugixml" },
  { name="robin-map", ref="4ec1bf19c6a96125ea22062f38c2cf5b958e448e", owner="Tessil", path="robin-map" },
  { name="sdl3", ref="d5af35e3fbb5bb6555ed00e69740d52af2a4e877", owner="shadexternals", path="sdl3" },
- { name="sirit", ref="c58f4d441cfdb6905d011a906704716833485486", owner="shadps4-emu", path="sirit" },
+ { name="sirit", ref="fc2b42d5e57ee2f638676c0c02f7fd71934b596a", owner="shadps4-emu", path="sirit" },
  { name="SPIRV-Headers", ref="2acb319af38d43be3ea76bfabf3998e5281d8d12", owner="KhronosGroup", path="sirit/externals/SPIRV-Headers" },
  { name="spdlog", ref="b8944a4bcd478ee03375c9c50dc8d6c741f43f7b", owner="gabime", path="spdlog" },
  { name="toml11", ref="a01fe3b4c14c6d7b99ee3f07c9e80058c6403097", owner="ToruNiina", path="toml11" },
@@ -169,6 +169,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/net.shadps4.shadPS4.d
 %{_datadir}/icons/hicolor/512x512/apps/net.shadps4.shadPS4.png
 
 %changelog
+* Fri Oct 09 2026 Lachlan Marie <lchlnm@pm.me> - 0.19.0^0.git.0fe263a-1
+ - Update to 0.19.0
+
 * Tue Sep 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.0^10.git.e35735c-1
  - Update to commit e35735c2edfdc97c8f48f0bd10307c2818464423
 

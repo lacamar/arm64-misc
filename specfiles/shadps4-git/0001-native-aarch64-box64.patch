@@ -1,9 +1,9 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 7087a63d..e68b899d 100644
+index 67a5c63..08ecc8b 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -964,11 +964,18 @@ set(CORE src/core/aerolib/stubs.cpp
-          src/core/user_settings.h
+@@ -998,11 +998,18 @@ set(CORE src/core/aerolib/stubs.cpp
+          ${NET_LIB}
  )
  
 +set(CORE ${CORE}
@@ -21,7 +21,7 @@ index 7087a63d..e68b899d 100644
  endif()
  
  set(SHADER_RECOMPILER src/shader_recompiler/profile.h
-@@ -1288,6 +1295,9 @@ create_target_directory_groups(shadps4)
+@@ -1322,6 +1329,9 @@ create_target_directory_groups(shadps4)
  target_link_libraries(shadps4 PRIVATE spdlog::spdlog)
  target_link_libraries(shadps4 PRIVATE magic_enum::magic_enum fmt::fmt toml11::toml11 tsl::robin_map xbyak::xbyak Tracy::TracyClient RenderDoc::API FFmpeg::ffmpeg Dear_ImGui ImGuiFileDialog gcn half::half ZLIB::ZLIB PNG::PNG minimp3)
  target_link_libraries(shadps4 PRIVATE Boost::headers GPUOpen::VulkanMemoryAllocator LibAtrac9 sirit Vulkan::Headers xxHash::xxhash Zydis::Zydis SDL3::SDL3 pugixml::pugixml)
@@ -32,10 +32,10 @@ index 7087a63d..e68b899d 100644
  target_link_libraries(shadps4 PRIVATE Freetype::Freetype)
  target_link_libraries(shadps4 PRIVATE libprotobuf)
 diff --git a/externals/CMakeLists.txt b/externals/CMakeLists.txt
-index 5d59aaa4..d3f195f0 100644
+index 5d58b9b..77af000 100644
 --- a/externals/CMakeLists.txt
 +++ b/externals/CMakeLists.txt
-@@ -423,3 +423,97 @@ if (NOT TARGET ZArchive::zarchive)
+@@ -426,3 +426,97 @@ if (NOT TARGET ZArchive::zarchive)
      target_compile_features(zarchive PRIVATE cxx_std_20)
      add_library(ZArchive::zarchive ALIAS zarchive)
  endif()
@@ -134,7 +134,7 @@ index 5d59aaa4..d3f195f0 100644
 +    target_compile_definitions(box64core INTERFACE DYNAREC ARM64)
 +endif()
 diff --git a/src/common/signal_context.cpp b/src/common/signal_context.cpp
-index 874b6a49..200f90a7 100644
+index 874b6a4..200f90a 100644
 --- a/src/common/signal_context.cpp
 +++ b/src/common/signal_context.cpp
 @@ -1,8 +1,11 @@
@@ -219,7 +219,7 @@ index 874b6a49..200f90a7 100644
  #error "Unsupported architecture"
  #endif
 diff --git a/src/core/address_space.cpp b/src/core/address_space.cpp
-index 20438e53..3cfc5339 100644
+index 4318a0c..5a3defc 100644
 --- a/src/core/address_space.cpp
 +++ b/src/core/address_space.cpp
 @@ -9,6 +9,7 @@
@@ -297,7 +297,7 @@ index 20438e53..3cfc5339 100644
  }
  
 diff --git a/src/core/aerolib/stubs.cpp b/src/core/aerolib/stubs.cpp
-index abcef8d6..3c4d7159 100644
+index abcef8d..3c4d715 100644
 --- a/src/core/aerolib/stubs.cpp
 +++ b/src/core/aerolib/stubs.cpp
 @@ -1,16 +1,22 @@
@@ -396,7 +396,7 @@ index abcef8d6..3c4d7159 100644
  } // namespace Core::AeroLib
 diff --git a/src/core/cpu/box64/box64_call.S b/src/core/cpu/box64/box64_call.S
 new file mode 100644
-index 00000000..18ab905b
+index 0000000..18ab905
 --- /dev/null
 +++ b/src/core/cpu/box64/box64_call.S
 @@ -0,0 +1,68 @@
@@ -470,7 +470,7 @@ index 00000000..18ab905b
 +.size shad_guest_call_trampoline, .-shad_guest_call_trampoline
 diff --git a/src/core/cpu/box64/box64_glue.c b/src/core/cpu/box64/box64_glue.c
 new file mode 100644
-index 00000000..de84f4c4
+index 0000000..de84f4c
 --- /dev/null
 +++ b/src/core/cpu/box64/box64_glue.c
 @@ -0,0 +1,649 @@
@@ -1125,7 +1125,7 @@ index 00000000..de84f4c4
 +}
 diff --git a/src/core/cpu/box64/box64_glue.h b/src/core/cpu/box64/box64_glue.h
 new file mode 100644
-index 00000000..a605b8f7
+index 0000000..a605b8f
 --- /dev/null
 +++ b/src/core/cpu/box64/box64_glue.h
 @@ -0,0 +1,69 @@
@@ -1200,7 +1200,7 @@ index 00000000..a605b8f7
 +#endif
 diff --git a/src/core/cpu/box64/box64_os.c b/src/core/cpu/box64/box64_os.c
 new file mode 100644
-index 00000000..5d3d7add
+index 0000000..5d3d7ad
 --- /dev/null
 +++ b/src/core/cpu/box64/box64_os.c
 @@ -0,0 +1,344 @@
@@ -1550,7 +1550,7 @@ index 00000000..5d3d7add
 +}
 diff --git a/src/core/cpu/cpu.cpp b/src/core/cpu/cpu.cpp
 new file mode 100644
-index 00000000..5d4183c7
+index 0000000..5d4183c
 --- /dev/null
 +++ b/src/core/cpu/cpu.cpp
 @@ -0,0 +1,260 @@
@@ -1816,7 +1816,7 @@ index 00000000..5d4183c7
 +} // namespace Core::Cpu
 diff --git a/src/core/cpu/cpu.h b/src/core/cpu/cpu.h
 new file mode 100644
-index 00000000..06b511f3
+index 0000000..06b511f
 --- /dev/null
 +++ b/src/core/cpu/cpu.h
 @@ -0,0 +1,90 @@
@@ -1911,7 +1911,7 @@ index 00000000..06b511f3
 +
 +} // namespace Core::Cpu
 diff --git a/src/core/libraries/kernel/threads/exception.cpp b/src/core/libraries/kernel/threads/exception.cpp
-index 37215a9e..811c5e53 100644
+index 37215a9..811c5e5 100644
 --- a/src/core/libraries/kernel/threads/exception.cpp
 +++ b/src/core/libraries/kernel/threads/exception.cpp
 @@ -3,6 +3,7 @@
@@ -1980,7 +1980,7 @@ index 37215a9e..811c5e53 100644
  }
  
 diff --git a/src/core/libraries/kernel/threads/pthread.cpp b/src/core/libraries/kernel/threads/pthread.cpp
-index ff26d408..3405d7e3 100644
+index ff26d40..3405d7e 100644
 --- a/src/core/libraries/kernel/threads/pthread.cpp
 +++ b/src/core/libraries/kernel/threads/pthread.cpp
 @@ -1,8 +1,11 @@
@@ -2010,7 +2010,7 @@ index ff26d408..3405d7e3 100644
      /* Remove thread from tracking */
      DebugState.RemoveCurrentThreadFromGuestList();
 diff --git a/src/core/linker.cpp b/src/core/linker.cpp
-index bd1dbd80..4b356560 100644
+index 8251e5b..ae6aabb 100644
 --- a/src/core/linker.cpp
 +++ b/src/core/linker.cpp
 @@ -13,6 +13,7 @@
@@ -2065,7 +2065,7 @@ index bd1dbd80..4b356560 100644
          return true;
      }
 diff --git a/src/core/module.cpp b/src/core/module.cpp
-index 839c20ed..293cf7e0 100644
+index db0a50d..dbe6aab 100644
 --- a/src/core/module.cpp
 +++ b/src/core/module.cpp
 @@ -10,6 +10,7 @@
@@ -2085,7 +2085,7 @@ index 839c20ed..293cf7e0 100644
  }
  
  void Module::LoadModuleToMemory(u32& max_tls_index) {
-@@ -207,6 +208,10 @@ void Module::LoadModuleToMemory(u32& max_tls_index) {
+@@ -212,6 +213,10 @@ void Module::LoadModuleToMemory(u32& max_tls_index) {
              LOG_INFO(Core_Linker, "segment_mode ..........: {}", segment_mode);
  
              add_segment(elf_pheader[i]);
@@ -2097,7 +2097,7 @@ index 839c20ed..293cf7e0 100644
              if (elf_pheader[i].p_flags & PF_EXEC) {
                  PrePatchInstructions(segment_addr, segment_file_size);
 diff --git a/src/core/signals.cpp b/src/core/signals.cpp
-index b750484c..11a79ef4 100644
+index b750484..11a79ef 100644
 --- a/src/core/signals.cpp
 +++ b/src/core/signals.cpp
 @@ -6,6 +6,7 @@
@@ -2187,7 +2187,7 @@ index b750484c..11a79ef4 100644
          }
  
 diff --git a/src/core/thread.cpp b/src/core/thread.cpp
-index e58f16e5..9e924bfb 100644
+index e58f16e..9e924bf 100644
 --- a/src/core/thread.cpp
 +++ b/src/core/thread.cpp
 @@ -3,6 +3,7 @@
@@ -2207,7 +2207,7 @@ index e58f16e5..9e924bfb 100644
  #endif
  }
 diff --git a/src/core/tls.cpp b/src/core/tls.cpp
-index e0d7f3f8..723b1fb2 100644
+index e0d7f3f..723b1fb 100644
 --- a/src/core/tls.cpp
 +++ b/src/core/tls.cpp
 @@ -4,6 +4,7 @@
@@ -2226,32 +2226,8 @@ index e0d7f3f8..723b1fb2 100644
  }
  
  Tcb* GetTcbBase() {
-diff --git a/src/emulator.cpp b/src/emulator.cpp
-index e802d4ad..c448f9b6 100644
---- a/src/emulator.cpp
-+++ b/src/emulator.cpp
-@@ -21,6 +21,7 @@
- #ifdef ENABLE_DISCORD_RPC
- #include "common/discord_rpc_handler.h"
- #endif
-+#include "common/arch.h"
- #include "common/elf_info.h"
- #include "common/memory_patcher.h"
- #include "common/ntapi.h"
-@@ -429,9 +430,11 @@ void Emulator::Run(std::filesystem::path file, std::vector<std::string> args,
-     }
- 
-     EmulatorSettings.Load(id);
-+#ifdef ARCH_X86_64
-     // Windows static guest red-zone protection
-     WindowsGuestRedZoneProtection::SetActiveMode(
-         EmulatorSettings.GetWindowsGuestRedZoneProtectionMode());
-+#endif
-     // Switch to configured log
-     Common::Log::Switch((!id.empty() && EmulatorSettings.IsLogSeparate()) ? id + ".log"
-                                                                           : "shad_log.txt",
 diff --git a/src/shader_recompiler/info.h b/src/shader_recompiler/info.h
-index 5d246cb8..d2070d4e 100644
+index 75dcac5..2c39dce 100644
 --- a/src/shader_recompiler/info.h
 +++ b/src/shader_recompiler/info.h
 @@ -6,6 +6,7 @@
@@ -2262,7 +2238,7 @@ index 5d246cb8..d2070d4e 100644
  #include "common/assert.h"
  #include "common/types.h"
  #include "shader_recompiler/backend/bindings.h"
-@@ -197,7 +198,11 @@ struct Info : InfoPersistent {
+@@ -169,7 +170,11 @@ struct Info : InfoPersistent {
          ASSERT(user_data.size() <= NUM_USER_DATA_REGS);
          std::memcpy(flattened_ud_buf.data(), user_data.data(), user_data.size_bytes());
          if (srt_info.walker_func) {
@@ -2275,7 +2251,7 @@ index 5d246cb8..d2070d4e 100644
      }
  
 diff --git a/src/shader_recompiler/ir/passes/flatten_extended_userdata_pass.cpp b/src/shader_recompiler/ir/passes/flatten_extended_userdata_pass.cpp
-index e80d4fef..60c0c51c 100644
+index 67d361a..bef0ac8 100644
 --- a/src/shader_recompiler/ir/passes/flatten_extended_userdata_pass.cpp
 +++ b/src/shader_recompiler/ir/passes/flatten_extended_userdata_pass.cpp
 @@ -1,17 +1,25 @@
@@ -2717,7 +2693,7 @@ index e80d4fef..60c0c51c 100644
  static bool IsReadConstSource(const IR::Value base) {
      auto* inst = base.TryInst();
      if (!inst) {
-@@ -862,22 +1207,25 @@ void FlattenExtendedUserdataPass(IR::Program& program) {
+@@ -860,22 +1205,25 @@ void FlattenExtendedUserdataPass(IR::Program& program) {
  
  } // namespace Shader::Optimization
  
@@ -2754,7 +2730,7 @@ index e80d4fef..60c0c51c 100644
 -
  #endif
 diff --git a/src/shader_recompiler/ir/passes/srt.h b/src/shader_recompiler/ir/passes/srt.h
-index 918b832e..10768b58 100644
+index 918b832..10768b5 100644
 --- a/src/shader_recompiler/ir/passes/srt.h
 +++ b/src/shader_recompiler/ir/passes/srt.h
 @@ -15,6 +15,8 @@ namespace Shader {
@@ -2767,7 +2743,7 @@ index 918b832e..10768b58 100644
  struct PersistentSrtInfo {
      // Special case when fetch shader uses step rates.
 diff --git a/src/video_core/buffer_cache/region_definitions.h b/src/video_core/buffer_cache/region_definitions.h
-index 920d507e..aa96ac42 100644
+index 203e22e..485e05d 100644
 --- a/src/video_core/buffer_cache/region_definitions.h
 +++ b/src/video_core/buffer_cache/region_definitions.h
 @@ -6,12 +6,18 @@
@@ -2791,7 +2767,7 @@ index 920d507e..aa96ac42 100644
  
  constexpr u64 HIGHER_PAGE_BITS = 24;
 diff --git a/src/video_core/page_manager.h b/src/video_core/page_manager.h
-index 6a38030d..b9260d9e 100644
+index 6a38030..b9260d9 100644
 --- a/src/video_core/page_manager.h
 +++ b/src/video_core/page_manager.h
 @@ -25,7 +25,7 @@ enum class PageOp : s8 {
