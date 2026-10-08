@@ -2,7 +2,7 @@
 %global __brp_mangle_shebangs_exclude_from ^%{_datadir}/%{name}/
 
 Name:           ubs
-Version:        5.4.15
+Version:        5.4.19
 Release:        1%{?dist}
 Summary:        Ultimate Bug Scanner, multi-language static bug finder
 
@@ -48,6 +48,9 @@ ln -s ../share/%{name}/ubs %{buildroot}%{_bindir}/%{name}
 %{_datadir}/%{name}
 
 %changelog
+* Thu Oct 08 2026 Lachlan Marie <lchlnm@pm.me> - 5.4.19-1
+ - Update to 5.4.19
+
 * Mon Sep 28 2026 Lachlan Marie <lchlnm@pm.me> - 5.4.15-1
 - Initial package
 - Disable self-update
