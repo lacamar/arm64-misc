@@ -95,7 +95,7 @@ Summary:        Mesa graphics libraries
 %global commitdate 20261003
 %global ver 26.3.0
 Version:        %{ver}~git%{commitdate}.%{shortcommit}
-Release:        2%{?dist}
+Release:        3%{?dist}
 License:        MIT AND BSD-3-Clause AND SGI-B-2.0
 URL:            https://mesa3d.org
 
@@ -110,6 +110,7 @@ Patch0:         hk-heap-overflow.patch
 Patch1:         hk-zls-load-op-none.patch
 Patch2:         hk-placed-map.patch
 Patch3:         hk-vs-attrib-limit.patch
+Patch4:         asahi-shadow-no-wb.patch
 
 # In CentOS/RHEL, Rust crates required to build NVK are vendored.
 # The minimum target versions are obtained from the .wrap files
@@ -762,6 +763,10 @@ ln -s libGLX_mesa.so.0 %{buildroot}%{_libdir}/libGLX_system.so.0
 %endif
 
 %changelog
+* Thu Oct 08 2026 lacamar <lchlnm@pm.me> - 26.3.0~git20261003.888a19e2-3
+- asahi: no writeback upgrade on copy shadows
+- Fix stale GPU-written buffers (Amnesia Rebirth DRS)
+
 * Sun Oct 04 2026 lacamar <lchlnm@pm.me> - 26.3.0~git20261003.888a19e2-2
 - Honeykrisp: load depth/stencil on LOAD_OP_NONE
 - Fix DXVK tiler-mode black frames (Dead Space 2)

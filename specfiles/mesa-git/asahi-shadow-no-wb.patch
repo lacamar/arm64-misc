@@ -1,0 +1,18 @@
+--- a/src/gallium/drivers/asahi/agx_pipe.c	2026-10-08 20:36:33.388284195 +0200
++++ b/src/gallium/drivers/asahi/agx_pipe.c	2026-10-08 21:52:40.289382525 +0200
+@@ -674,15 +674,6 @@
+ 
+    rsrc->shadowed_bytes += size;
+ 
+-   /* If we need to copy, we reallocate the resource with cached-coherent
+-    * memory. This is a heuristic: it assumes that if the app needs a shadows
+-    * (with a copy) now, it will again need to shadow-and-copy the same resource
+-    * in the future. This accelerates the later copies, since otherwise the copy
+-    * involves reading uncached memory.
+-    */
+-   if (needs_copy)
+-      flags |= AGX_BO_WRITEBACK;
+-
+    struct agx_bo *new_ = agx_bo_create(dev, size, 0, flags, old->label);
+ 
+    /* If allocation failed, we can fallback on a flush gracefully*/
