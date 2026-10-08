@@ -4,7 +4,7 @@
 %global rustflags_codegen_units 16
 
 Name:           cass
-Version:        0.9.0
+Version:        0.10.0
 Release:        1%{?dist}
 Summary:        Unified TUI search over local coding agent histories
 
@@ -49,5 +49,8 @@ target/rpm/%{name} man | install -Dm0644 /dev/stdin %{buildroot}%{_mandir}/man1/
 %{_mandir}/man1/%{name}.1*
 
 %changelog
+* Thu Oct 08 2026 Lachlan Marie <lchlnm@pm.me> - 0.10.0-1
+ - Update to 0.10.0
+
 * Mon Sep 28 2026 Lachlan Marie <lchlnm@pm.me> - 0.9.0-1
 - Initial package
