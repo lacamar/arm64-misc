@@ -24,11 +24,11 @@
 # Convince rust-srpm-macros to use Cargo.lock with the Smithay commit.
 %global __cargo_common_opts %{?_smp_mflags} -Z avoid-dev-deps --locked
 
-%global bumpver 8
+%global bumpver 9
 %global tag 26.04
-%global commit ed22699d99462f61ab171472d3ea67e844ea580d
+%global commit 2c82b77a7116a1241ea2fd41dd008ff00b609aae
 %global shortcommit %{sub %{commit} 1 8}
-%global smithay_commit 79bbed5e1199090d787115614847a79c76607181
+%global smithay_commit 19c16d3e34172fcc8fb3d293bcae563b0a19ea70
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
@@ -183,6 +183,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Fri Oct 09 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^9.git.2c82b77a-12
+ - Update to commit 2c82b77a7116a1241ea2fd41dd008ff00b609aae
+
 * Thu Oct 08 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^8.git.ed22699d-12
 - Add frame-callback-rate-unfocused option
 - Add scratchpad hide-on-workspace-switch
