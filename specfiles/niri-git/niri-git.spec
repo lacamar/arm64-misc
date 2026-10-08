@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        10%{?dist}
+Release:        11%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -73,6 +73,7 @@ Patch:          niri-smithay-opaque-overlays.patch
 Patch:          niri-commit-timers-dirty.patch
 Patch:          niri-scratchpad-backdrop.patch
 Patch:          niri-scratchpad-follow.patch
+Patch:          niri-gestures.patch
 
 BuildRequires:  cargo-rpm-macros >= 26
 BuildRequires:  pkgconfig(udev)
@@ -180,6 +181,10 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Thu Oct 08 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^8.git.ed22699d-11
+- Add configurable touchpad gestures (swipe/pinch)
+- Add workspace-swipe-forever
+
 * Thu Oct 08 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^8.git.ed22699d-10
 - Visible scratchpad follows workspace switches
 

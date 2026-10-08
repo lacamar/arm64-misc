@@ -1,0 +1,678 @@
+diff --git a/niri-config/src/gestures.rs b/niri-config/src/gestures.rs
+index dcf296a..1371406 100644
+--- a/niri-config/src/gestures.rs
++++ b/niri-config/src/gestures.rs
+@@ -1,14 +1,157 @@
+-use crate::utils::MergeWith;
++use knuffel::errors::DecodeError;
++
++use crate::binds::Action;
++use crate::utils::{Flag, MergeWith};
+ use crate::FloatOrInt;
+ 
+-#[derive(Debug, Default, Clone, Copy, PartialEq)]
++#[derive(Debug, Clone, PartialEq)]
+ pub struct Gestures {
+     pub dnd_edge_view_scroll: DndEdgeViewScroll,
+     pub dnd_edge_workspace_switch: DndEdgeWorkspaceSwitch,
+     pub hot_corners: HotCorners,
++    pub workspace_swipe_forever: bool,
++    pub binds: Vec<GestureBind>,
+ }
+ 
+-#[derive(knuffel::Decode, Debug, Default, Clone, Copy, PartialEq)]
++impl Default for Gestures {
++    fn default() -> Self {
++        let bind = |fingers, direction, action| GestureBind {
++            fingers,
++            direction,
++            action,
++        };
++        Self {
++            dnd_edge_view_scroll: Default::default(),
++            dnd_edge_workspace_switch: Default::default(),
++            hot_corners: Default::default(),
++            workspace_swipe_forever: false,
++            binds: vec![
++                bind(3, GestureDirection::Horizontal, GestureAction::ViewScroll),
++                bind(
++                    3,
++                    GestureDirection::Vertical,
++                    GestureAction::WorkspaceSwitch,
++                ),
++                bind(4, GestureDirection::Swipe, GestureAction::Overview),
++            ],
++        }
++    }
++}
++
++impl Gestures {
++    pub fn has(&self, fingers: u32, pinch: bool) -> bool {
++        self.binds
++            .iter()
++            .any(|b| u32::from(b.fingers) == fingers && b.direction.is_pinch() == pinch)
++    }
++
++    pub fn find(&self, fingers: u32, direction: GestureDirection) -> Option<&GestureAction> {
++        use GestureDirection::*;
++        let fallbacks: &[GestureDirection] = match direction {
++            Left | Right => &[Horizontal, Swipe],
++            Up | Down => &[Vertical, Swipe],
++            PinchIn | PinchOut => &[Pinch],
++            _ => &[],
++        };
++        std::iter::once(&direction)
++            .chain(fallbacks)
++            .find_map(|d| {
++                self.binds
++                    .iter()
++                    .find(|b| u32::from(b.fingers) == fingers && b.direction == *d)
++            })
++            .map(|b| &b.action)
++    }
++}
++
++#[derive(Debug, Clone, PartialEq)]
++pub struct GestureBind {
++    pub fingers: u8,
++    pub direction: GestureDirection,
++    pub action: GestureAction,
++}
++
++#[derive(knuffel::DecodeScalar, Debug, Clone, Copy, PartialEq, Eq)]
++pub enum GestureDirection {
++    Swipe,
++    Horizontal,
++    Vertical,
++    Left,
++    Right,
++    Up,
++    Down,
++    Pinch,
++    PinchIn,
++    PinchOut,
++}
++
++impl GestureDirection {
++    pub fn is_pinch(self) -> bool {
++        matches!(self, Self::Pinch | Self::PinchIn | Self::PinchOut)
++    }
++}
++
++#[derive(Debug, Clone, PartialEq)]
++pub enum GestureAction {
++    ViewScroll,
++    WorkspaceSwitch,
++    Overview,
++    Action(Action),
++}
++
++impl<S> knuffel::Decode<S> for GestureBind
++where
++    S: knuffel::traits::ErrorSpan,
++{
++    fn decode_node(
++        node: &knuffel::ast::SpannedNode<S>,
++        ctx: &mut knuffel::decode::Context<S>,
++    ) -> Result<Self, DecodeError<S>> {
++        let mut fingers = None;
++        let mut direction = None;
++        for (name, val) in &node.properties {
++            match &***name {
++                "fingers" => fingers = Some(knuffel::traits::DecodeScalar::decode(val, ctx)?),
++                "direction" => direction = Some(knuffel::traits::DecodeScalar::decode(val, ctx)?),
++                name_str => ctx.emit_error(DecodeError::unexpected(
++                    name,
++                    "property",
++                    format!("unexpected property `{}`", name_str.escape_default()),
++                )),
++            }
++        }
++        let fingers =
++            fingers.ok_or_else(|| DecodeError::missing(node, "property `fingers` is required"))?;
++        let direction = direction
++            .ok_or_else(|| DecodeError::missing(node, "property `direction` is required"))?;
++
++        let mut children = node.children();
++        let child = children
++            .next()
++            .ok_or_else(|| DecodeError::missing(node, "expected an action for this gesture"))?;
++        for unwanted_child in children {
++            ctx.emit_error(DecodeError::unexpected(
++                unwanted_child,
++                "node",
++                "only one action is allowed per gesture",
++            ));
++        }
++        let action = match &**child.node_name {
++            "view-scroll" => GestureAction::ViewScroll,
++            "workspace-switch" => GestureAction::WorkspaceSwitch,
++            "overview" => GestureAction::Overview,
++            _ => GestureAction::Action(Action::decode_node(child, ctx)?),
++        };
++
++        Ok(Self {
++            fingers,
++            direction,
++            action,
++        })
++    }
++}
++
++#[derive(knuffel::Decode, Debug, Default, Clone, PartialEq)]
+ pub struct GesturesPart {
+     #[knuffel(child)]
+     pub dnd_edge_view_scroll: Option<DndEdgeViewScrollPart>,
+@@ -16,6 +159,10 @@ pub struct GesturesPart {
+     pub dnd_edge_workspace_switch: Option<DndEdgeWorkspaceSwitchPart>,
+     #[knuffel(child)]
+     pub hot_corners: Option<HotCorners>,
++    #[knuffel(child)]
++    pub workspace_swipe_forever: Option<Flag>,
++    #[knuffel(children(name = "gesture"))]
++    pub binds: Vec<GestureBind>,
+ }
+ 
+ impl MergeWith<GesturesPart> for Gestures {
+@@ -24,8 +171,14 @@ impl MergeWith<GesturesPart> for Gestures {
+             (self, part),
+             dnd_edge_view_scroll,
+             dnd_edge_workspace_switch,
++            workspace_swipe_forever,
+         );
+         merge_clone!((self, part), hot_corners);
++        for bind in &part.binds {
++            self.binds
++                .retain(|b| (b.fingers, b.direction) != (bind.fingers, bind.direction));
++            self.binds.push(bind.clone());
++        }
+     }
+ }
+ 
+@@ -110,3 +263,24 @@ pub struct HotCorners {
+     #[knuffel(child)]
+     pub bottom_right: bool,
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn find_prefers_exact_direction() {
++        let mut g = Gestures::default();
++        let close = GestureAction::Action(Action::CloseWindow);
++        g.binds.push(GestureBind {
++            fingers: 3,
++            direction: GestureDirection::Left,
++            action: close.clone(),
++        });
++        assert_eq!(g.find(3, GestureDirection::Left), Some(&close));
++        assert_eq!(g.find(3, GestureDirection::Right), Some(&GestureAction::ViewScroll));
++        assert_eq!(g.find(4, GestureDirection::Up), Some(&GestureAction::Overview));
++        assert_eq!(g.find(4, GestureDirection::PinchIn), None);
++        assert!(!g.has(4, true));
++    }
++}
+diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
+index d0dc4f9..e7ffd5e 100644
+--- a/niri-config/src/lib.rs
++++ b/niri-config/src/lib.rs
+@@ -888,6 +888,9 @@ mod tests {
+                     trigger-width 10
+                     max-speed 50
+                 }
++                workspace-swipe-forever
++                gesture fingers=3 direction="horizontal" { workspace-switch; }
++                gesture fingers=4 direction="pinch-in" { close-window; }
+             }
+ 
+             environment {
+@@ -1706,6 +1709,31 @@ mod tests {
+                     bottom_left: false,
+                     bottom_right: false,
+                 },
++                workspace_swipe_forever: true,
++                binds: [
++                    GestureBind {
++                        fingers: 3,
++                        direction: Vertical,
++                        action: WorkspaceSwitch,
++                    },
++                    GestureBind {
++                        fingers: 4,
++                        direction: Swipe,
++                        action: Overview,
++                    },
++                    GestureBind {
++                        fingers: 3,
++                        direction: Horizontal,
++                        action: WorkspaceSwitch,
++                    },
++                    GestureBind {
++                        fingers: 4,
++                        direction: PinchIn,
++                        action: Action(
++                            CloseWindow,
++                        ),
++                    },
++                ],
+             },
+             overview: Overview {
+                 zoom: 0.5,
+diff --git a/src/input/mod.rs b/src/input/mod.rs
+index 0dd0fcd..766a8f1 100644
+--- a/src/input/mod.rs
++++ b/src/input/mod.rs
+@@ -5,6 +5,7 @@ use std::time::Duration;
+ 
+ use calloop::timer::{TimeoutAction, Timer};
+ use input::event::gesture::GestureEventCoordinates as _;
++use niri_config::gestures::{GestureAction, GestureDirection};
+ use niri_config::{
+     Action, Bind, Binds, Config, Key, ModKey, Modifiers, MruDirection, SwitchBinds, Trigger,
+ };
+@@ -3999,16 +4000,14 @@ impl State {
+             return;
+         }
+ 
+-        if event.fingers() == 3 {
+-            self.niri.gesture_swipe_3f_cumulative = Some((0., 0.));
+-
+-            // We handled this event.
+-            return;
+-        } else if event.fingers() == 4 {
+-            self.niri.layout.overview_gesture_begin();
+-            self.niri.queue_redraw_all();
+-
+-            // We handled this event.
++        if self
++            .niri
++            .config
++            .borrow()
++            .gestures
++            .has(event.fingers(), false)
++        {
++            self.niri.touchpad_gesture = Some(TouchpadGesture::new(event.fingers()));
+             return;
+         }
+ 
+@@ -4045,7 +4044,7 @@ impl State {
+             delta_y = libinput_event.dy_unaccelerated();
+         }
+ 
+-        let uninverted_delta_y = delta_y;
++        let (uninverted_delta_x, uninverted_delta_y) = (delta_x, delta_y);
+ 
+         let device = event.device();
+         if let Some(device) = (&device as &dyn Any).downcast_ref::<input::Device>() {
+@@ -4055,52 +4054,118 @@ impl State {
+             }
+         }
+ 
+-        let is_overview_open = self.niri.layout.is_overview_open();
++        let timestamp = Duration::from_micros(event.time().micros());
+ 
+-        if let Some((cx, cy)) = &mut self.niri.gesture_swipe_3f_cumulative {
+-            *cx += delta_x;
+-            *cy += delta_y;
++        if let Some(mut g) = self.niri.touchpad_gesture.take() {
++            g.cx += uninverted_delta_x;
++            g.cy += uninverted_delta_y;
++
++            // Threshold copied from GNOME Shell.
++            if !g.decided && g.cx * g.cx + g.cy * g.cy >= 16. * 16. {
++                g.decided = true;
++                g.horizontal = g.cx.abs() > g.cy.abs();
++                let direction = match (g.horizontal, g.cx > 0., g.cy > 0.) {
++                    (true, true, _) => GestureDirection::Right,
++                    (true, false, _) => GestureDirection::Left,
++                    (false, _, true) => GestureDirection::Down,
++                    (false, _, false) => GestureDirection::Up,
++                };
++                self.touchpad_gesture_decide(&mut g, direction);
++            }
+ 
+-            // Check if the gesture moved far enough to decide. Threshold copied from GNOME Shell.
+-            let (cx, cy) = (*cx, *cy);
+-            if cx * cx + cy * cy >= 16. * 16. {
+-                self.niri.gesture_swipe_3f_cumulative = None;
++            if let Some(GestureAction::Action(action)) = &g.action {
++                let along = if g.horizontal { g.cx } else { g.cy };
++                if !g.fired && along.abs() >= 100. {
++                    g.fired = true;
++                    self.do_action(action.clone(), false);
++                }
++            }
+ 
+-                if let Some(output) = self.niri.output_under_cursor() {
+-                    if cx.abs() > cy.abs() {
+-                        let output_ws = if is_overview_open {
+-                            self.niri.workspace_under_cursor(true)
+-                        } else {
+-                            // We don't want to accidentally "catch" the wrong workspace during
+-                            // animations.
+-                            self.niri.output_under_cursor().and_then(|output| {
+-                                let mon = self.niri.layout.monitor_for_output(&output)?;
+-                                Some((output, mon.active_workspace_ref()))
+-                            })
+-                        };
++            let horizontal = g.horizontal;
++            self.niri.touchpad_gesture = Some(g);
+ 
+-                        if let Some((output, ws)) = output_ws {
+-                            let ws_idx = self.niri.layout.find_workspace_by_id(ws.id()).unwrap().0;
+-                            self.niri
+-                                .layout
+-                                .view_offset_gesture_begin(&output, Some(ws_idx), true);
+-                        }
+-                    } else {
+-                        self.niri
+-                            .layout
+-                            .workspace_switch_gesture_begin(&output, true);
+-                    }
+-                }
++            if horizontal {
++                self.touchpad_gesture_update(delta_x, uninverted_delta_x, timestamp);
++            } else {
++                self.touchpad_gesture_update(delta_y, uninverted_delta_y, timestamp);
+             }
++            return;
+         }
+ 
+-        let timestamp = Duration::from_micros(event.time().micros());
++        if self.touchpad_gesture_update(delta_y, uninverted_delta_y, timestamp) {
++            return;
++        }
++
++        let pointer = self.niri.seat.get_pointer().unwrap();
++
++        if self.update_pointer_contents() {
++            pointer.frame(self);
++        }
++
++        pointer.gesture_swipe_update(
++            self,
++            &GestureSwipeUpdateEvent {
++                time: event.time(),
++                delta: event.delta(),
++            },
++        );
++    }
++
++    fn touchpad_gesture_decide(&mut self, g: &mut TouchpadGesture, direction: GestureDirection) {
++        g.action = self
++            .niri
++            .config
++            .borrow()
++            .gestures
++            .find(g.fingers, direction)
++            .cloned();
++
++        let Some(output) = self.niri.output_under_cursor() else {
++            return;
++        };
+ 
++        match g.action {
++            Some(GestureAction::ViewScroll) => {
++                let output_ws = if self.niri.layout.is_overview_open() {
++                    self.niri.workspace_under_cursor(true)
++                } else {
++                    // We don't want to accidentally "catch" the wrong workspace during
++                    // animations.
++                    let mon = self.niri.layout.monitor_for_output(&output);
++                    mon.map(|mon| (output.clone(), mon.active_workspace_ref()))
++                };
++
++                if let Some((output, ws)) = output_ws {
++                    let ws_idx = self.niri.layout.find_workspace_by_id(ws.id()).unwrap().0;
++                    self.niri
++                        .layout
++                        .view_offset_gesture_begin(&output, Some(ws_idx), true);
++                }
++            }
++            Some(GestureAction::WorkspaceSwitch) => {
++                self.niri
++                    .layout
++                    .workspace_switch_gesture_begin(&output, true);
++            }
++            Some(GestureAction::Overview) => {
++                self.niri.layout.overview_gesture_begin();
++                self.niri.queue_redraw_all();
++            }
++            _ => (),
++        }
++    }
++
++    fn touchpad_gesture_update(
++        &mut self,
++        delta: f64,
++        uninverted: f64,
++        timestamp: Duration,
++    ) -> bool {
+         let mut handled = false;
+         let res = self
+             .niri
+             .layout
+-            .workspace_switch_gesture_update(delta_y, timestamp, true);
++            .workspace_switch_gesture_update(delta, timestamp, true);
+         if let Some(output) = res {
+             if let Some(output) = output {
+                 self.niri.queue_redraw(&output);
+@@ -4111,7 +4176,7 @@ impl State {
+         let res = self
+             .niri
+             .layout
+-            .view_offset_gesture_update(delta_x, timestamp, true);
++            .view_offset_gesture_update(delta, timestamp, true);
+         if let Some(output) = res {
+             if let Some(output) = output {
+                 self.niri.queue_redraw(&output);
+@@ -4122,7 +4187,7 @@ impl State {
+         let res = self
+             .niri
+             .layout
+-            .overview_gesture_update(-uninverted_delta_y, timestamp);
++            .overview_gesture_update(-uninverted, timestamp);
+         if let Some(redraw) = res {
+             if redraw {
+                 self.niri.queue_redraw_all();
+@@ -4130,30 +4195,12 @@ impl State {
+             handled = true;
+         }
+ 
+-        if handled {
+-            // We handled this event.
+-            return;
+-        }
+-
+-        let pointer = self.niri.seat.get_pointer().unwrap();
+-
+-        if self.update_pointer_contents() {
+-            pointer.frame(self);
+-        }
+-
+-        pointer.gesture_swipe_update(
+-            self,
+-            &GestureSwipeUpdateEvent {
+-                time: event.time(),
+-                delta: event.delta(),
+-            },
+-        );
++        handled
+     }
+ 
+-    fn on_gesture_swipe_end<I: InputBackend>(&mut self, event: I::GestureSwipeEndEvent) {
+-        self.niri.gesture_swipe_3f_cumulative = None;
++    fn touchpad_gesture_end(&mut self) -> bool {
++        let mut handled = self.niri.touchpad_gesture.take().is_some();
+ 
+-        let mut handled = false;
+         let res = self.niri.layout.workspace_switch_gesture_end(Some(true));
+         if let Some(output) = res {
+             self.niri.queue_redraw(&output);
+@@ -4166,14 +4213,16 @@ impl State {
+             handled = true;
+         }
+ 
+-        let res = self.niri.layout.overview_gesture_end();
+-        if res {
++        if self.niri.layout.overview_gesture_end() {
+             self.niri.queue_redraw_all();
+             handled = true;
+         }
+ 
+-        if handled {
+-            // We handled this event.
++        handled
++    }
++
++    fn on_gesture_swipe_end<I: InputBackend>(&mut self, event: I::GestureSwipeEndEvent) {
++        if self.touchpad_gesture_end() {
+             return;
+         }
+ 
+@@ -4195,6 +4244,18 @@ impl State {
+     }
+ 
+     fn on_gesture_pinch_begin<I: InputBackend>(&mut self, event: I::GesturePinchBeginEvent) {
++        if !self.niri.window_mru_ui.is_open()
++            && self
++                .niri
++                .config
++                .borrow()
++                .gestures
++                .has(event.fingers(), true)
++        {
++            self.niri.touchpad_gesture = Some(TouchpadGesture::new(event.fingers()));
++            return;
++        }
++
+         let serial = SERIAL_COUNTER.next_serial();
+         let pointer = self.niri.seat.get_pointer().unwrap();
+ 
+@@ -4213,6 +4274,34 @@ impl State {
+     }
+ 
+     fn on_gesture_pinch_update<I: InputBackend>(&mut self, event: I::GesturePinchUpdateEvent) {
++        if let Some(mut g) = self.niri.touchpad_gesture.take() {
++            let scale = event.scale();
++            if !g.decided && !(1. / 1.15..=1.15).contains(&scale) {
++                g.decided = true;
++                let direction = if scale < 1. {
++                    GestureDirection::PinchIn
++                } else {
++                    GestureDirection::PinchOut
++                };
++                self.touchpad_gesture_decide(&mut g, direction);
++                if let Some(GestureAction::Action(action)) = &g.action {
++                    self.do_action(action.clone(), false);
++                }
++            }
++
++            let delta = if g.decided {
++                (g.scale - scale) * 300.
++            } else {
++                0.
++            };
++            g.scale = scale;
++            self.niri.touchpad_gesture = Some(g);
++
++            let timestamp = Duration::from_micros(event.time().micros());
++            self.touchpad_gesture_update(delta, -delta, timestamp);
++            return;
++        }
++
+         let pointer = self.niri.seat.get_pointer().unwrap();
+ 
+         if self.update_pointer_contents() {
+@@ -4248,6 +4337,10 @@ impl State {
+     }
+ 
+     fn on_gesture_pinch_end<I: InputBackend>(&mut self, event: I::GesturePinchEndEvent) {
++        if self.touchpad_gesture_end() {
++            return;
++        }
++
+         let serial = SERIAL_COUNTER.next_serial();
+         let pointer = self.niri.seat.get_pointer().unwrap();
+ 
+@@ -5538,3 +5631,29 @@ mod tests {
+         );
+     }
+ }
++
++pub struct TouchpadGesture {
++    fingers: u32,
++    cx: f64,
++    cy: f64,
++    scale: f64,
++    decided: bool,
++    horizontal: bool,
++    action: Option<GestureAction>,
++    fired: bool,
++}
++
++impl TouchpadGesture {
++    fn new(fingers: u32) -> Self {
++        Self {
++            fingers,
++            cx: 0.,
++            cy: 0.,
++            scale: 1.,
++            decided: false,
++            horizontal: false,
++            action: None,
++            fired: false,
++        }
++    }
++}
+diff --git a/src/layout/mod.rs b/src/layout/mod.rs
+index 00654ad..6372a1b 100644
+--- a/src/layout/mod.rs
++++ b/src/layout/mod.rs
+@@ -669,7 +669,7 @@ impl Options {
+         Self {
+             layout: config.layout.clone(),
+             animations: config.animations.clone(),
+-            gestures: config.gestures,
++            gestures: config.gestures.clone(),
+             overview: config.overview,
+             blur: config.blur,
+             disable_resize_throttling: config.debug.disable_resize_throttling,
+diff --git a/src/layout/monitor.rs b/src/layout/monitor.rs
+index 53c39e3..a1d6e45 100644
+--- a/src/layout/monitor.rs
++++ b/src/layout/monitor.rs
+@@ -1867,7 +1867,8 @@ impl<W: LayoutElement> Monitor<W> {
+             animation: None,
+             tracker: SwipeTracker::new(),
+             is_touchpad,
+-            is_clamped: !self.overview_open,
++            is_clamped: !self.overview_open
++                && !(is_touchpad && self.options.gestures.workspace_swipe_forever),
+             dnd_last_event_time: None,
+             dnd_nonzero_start_time: None,
+         };
+diff --git a/src/niri.rs b/src/niri.rs
+index 513ea22..a37e790 100644
+--- a/src/niri.rs
++++ b/src/niri.rs
+@@ -409,7 +409,7 @@ pub struct Niri {
+     pub pointer_inside_hot_corner: bool,
+     pub pointer_constraint_position_hint: Option<Point<f64, Logical>>,
+     pub tablet_cursor_location: Option<Point<f64, Logical>>,
+-    pub gesture_swipe_3f_cumulative: Option<(f64, f64)>,
++    pub touchpad_gesture: Option<crate::input::TouchpadGesture>,
+     pub overview_scroll_swipe_gesture: ScrollSwipeGesture,
+     pub vertical_wheel_tracker: ScrollTracker,
+     pub horizontal_wheel_tracker: ScrollTracker,
+@@ -2868,7 +2868,7 @@ impl Niri {
+             pointer_inside_hot_corner: false,
+             pointer_constraint_position_hint: None,
+             tablet_cursor_location: None,
+-            gesture_swipe_3f_cumulative: None,
++            touchpad_gesture: None,
+             overview_scroll_swipe_gesture: ScrollSwipeGesture::new(),
+             vertical_wheel_tracker: ScrollTracker::new(120),
+             horizontal_wheel_tracker: ScrollTracker::new(120),
