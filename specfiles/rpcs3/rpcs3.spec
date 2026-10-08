@@ -1,4 +1,4 @@
-%global tag 0.0.42
+%global tag 0.0.43
 
 Name:           rpcs3
 Version:        %{tag}
@@ -156,6 +156,9 @@ cmake -B build -G Ninja \
 
 
 %changelog
+* Thu Oct 08 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.43-1
+ - Update to 0.0.43
+
 * Fri Aug 21 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.42-1
  - Update to 0.0.42
 
