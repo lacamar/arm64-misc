@@ -1,0 +1,58 @@
+diff --git a/src/layout/mod.rs b/src/layout/mod.rs
+index 419fc6a..687745c 100644
+--- a/src/layout/mod.rs
++++ b/src/layout/mod.rs
+@@ -3561,6 +3561,16 @@ impl<W: LayoutElement> Layout<W> {
+             )));
+         }
+ 
++        if let Some(size) = tile.floating_window_size {
++            let area = mon.working_area().size;
++            let w = tile.tile_width_for_window_width(f64::from(size.w));
++            let h = tile.tile_height_for_window_height(f64::from(size.h));
++            tile.floating_pos = Some(Point::from((
++                f64::max(0., (1. - w / area.w) / 2.),
++                f64::max(0., (1. - h / area.h) / 2.),
++            )));
++        }
++
+         mon.add_tile(
+             removed.tile,
+             MonitorAddWindowTarget::Auto,
+diff --git a/src/layout/tests.rs b/src/layout/tests.rs
+index 0d9d050..a861a8f 100644
+--- a/src/layout/tests.rs
++++ b/src/layout/tests.rs
+@@ -3301,6 +3301,32 @@ fn scratchpad_scales_to_output() {
+     assert_eq!(win.requested_size(), Some(Size::from((320, 100))));
+ }
+ 
++#[test]
++fn scratchpad_centers_at_new_size() {
++    let ops = [
++        Op::AddOutput(1),
++        Op::AddWindow {
++            params: TestWindowParams::new(1),
++        },
++        Op::MoveWindowToScratchpad { id: None },
++    ];
++    let mut layout = check_ops(ops);
++    let mut options = Options::default();
++    options.layout.scratchpad.width = Some(niri_config::DefaultPresetSize(Some(
++        PresetSize::Proportion(0.5),
++    )));
++    options.layout.scratchpad.height =
++        Some(niri_config::DefaultPresetSize(Some(PresetSize::Fixed(100))));
++    layout.update_options(options);
++    layout.toggle_scratchpad(None);
++
++    let ws = layout.active_workspace().unwrap();
++    let area = ws.working_area().size;
++    let (_, l) = ws.tiles_with_ipc_layouts().next().unwrap();
++    let (x, y) = l.tile_pos_in_workspace_view.unwrap();
++    assert_eq!((x, y), (area.w / 4., (area.h - 100.) / 2.));
++}
++
+ #[test]
+ fn set_height_fixed_negative() {
+     let ops = [

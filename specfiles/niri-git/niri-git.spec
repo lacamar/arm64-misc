@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        13%{?dist}
+Release:        14%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -76,6 +76,7 @@ Patch:          niri-scratchpad-follow.patch
 Patch:          niri-gestures.patch
 Patch:          niri-scratchpad-hide.patch
 Patch:          niri-frame-callback-rate.patch
+Patch:          niri-scratchpad-center.patch
 
 BuildRequires:  cargo-rpm-macros >= 26
 BuildRequires:  pkgconfig(udev)
@@ -183,6 +184,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Fri Oct 09 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^9.git.2c82b77a-14
+- Center scratchpads at their configured size
+
 * Fri Oct 09 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^9.git.2c82b77a-13
 - Keep restored windows together on unnamed workspaces
 - Never restore unnamed-workspace windows onto named ones
