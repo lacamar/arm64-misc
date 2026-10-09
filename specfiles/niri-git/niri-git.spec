@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        15%{?dist}
+Release:        16%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -185,6 +185,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Sat Oct 10 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^9.git.2c82b77a-16
+- Add opt-in HDR output (PQ/BT.2020)
+
 * Fri Oct 09 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^9.git.2c82b77a-15
 - Add wp_color_management_v1
 - Tone-map HDR surfaces to SDR

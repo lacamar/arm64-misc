@@ -1,86 +1,438 @@
 diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
-index f831005..490b548 100644
+index f831005..3635262 100644
 --- a/niri-config/src/lib.rs
 +++ b/niri-config/src/lib.rs
-@@ -1222,6 +1222,7 @@ mod tests {
+@@ -1222,6 +1222,8 @@ mod tests {
                              },
                          ),
                          focus_at_startup: true,
 +                        wide_gamut: false,
++                        hdr: None,
                          background_color: Some(
                              Color {
                                  r: 0.09803922,
-@@ -1264,6 +1265,7 @@ mod tests {
+@@ -1264,6 +1266,8 @@ mod tests {
                          modeline: None,
                          variable_refresh_rate: None,
                          focus_at_startup: false,
 +                        wide_gamut: false,
++                        hdr: None,
                          background_color: None,
                          backdrop_color: None,
                          hot_corners: None,
-@@ -1294,6 +1296,7 @@ mod tests {
+@@ -1294,6 +1298,8 @@ mod tests {
                          ),
                          variable_refresh_rate: None,
                          focus_at_startup: false,
 +                        wide_gamut: false,
++                        hdr: None,
                          background_color: None,
                          backdrop_color: None,
                          hot_corners: None,
 diff --git a/niri-config/src/output.rs b/niri-config/src/output.rs
-index 48572f6..393ed2e 100644
+index 48572f6..4159a95 100644
 --- a/niri-config/src/output.rs
 +++ b/niri-config/src/output.rs
-@@ -69,6 +69,8 @@ pub struct Output {
+@@ -69,6 +69,10 @@ pub struct Output {
      pub variable_refresh_rate: Option<Vrr>,
      #[knuffel(child)]
      pub focus_at_startup: bool,
 +    #[knuffel(child)]
 +    pub wide_gamut: bool,
++    #[knuffel(child)]
++    pub hdr: Option<Hdr>,
      // Deprecated; use layout.background_color.
      #[knuffel(child)]
      pub background_color: Option<Color>,
-@@ -99,6 +101,7 @@ impl Default for Output {
+@@ -99,6 +103,8 @@ impl Default for Output {
          Self {
              off: false,
              focus_at_startup: false,
 +            wide_gamut: false,
++            hdr: None,
              name: String::new(),
              scale: None,
              transform: Transform::Normal,
+@@ -140,6 +146,14 @@ pub struct Vrr {
+     pub on_demand: bool,
+ }
+ 
++#[derive(knuffel::Decode, Debug, Clone, Copy, PartialEq)]
++pub struct Hdr {
++    #[knuffel(property, default = FloatOrInt(203.))]
++    pub sdr_luminance: FloatOrInt<1, 10000>,
++    #[knuffel(property, default = FloatOrInt(500.))]
++    pub max_luminance: FloatOrInt<1, 10000>,
++}
++
+ impl FromIterator<Output> for Outputs {
+     fn from_iter<T: IntoIterator<Item = Output>>(iter: T) -> Self {
+         Self(Vec::from_iter(iter))
 diff --git a/src/backend/tty.rs b/src/backend/tty.rs
-index 094f6fa..207e78e 100644
+index 094f6fa..16510ef 100644
 --- a/src/backend/tty.rs
 +++ b/src/backend/tty.rs
-@@ -67,7 +67,7 @@ use crate::frame_clock::FrameClock;
+@@ -20,15 +20,20 @@ use niri_ipc::{HSyncPolarity, VSyncPolarity};
+ use smithay::backend::allocator::dmabuf::Dmabuf;
+ use smithay::backend::allocator::format::FormatSet;
+ use smithay::backend::allocator::gbm::{GbmAllocator, GbmBufferFlags, GbmDevice};
++use smithay::backend::allocator::Buffer;
+ use smithay::backend::allocator::Fourcc;
+-use smithay::backend::drm::compositor::{DrmCompositor, FrameFlags, PrimaryPlaneElement};
++use smithay::backend::drm::compositor::{
++    DrmCompositor, FrameFlags, PrimaryPlaneElement, RenderFrameResult,
++};
+ use smithay::backend::drm::exporter::gbm::GbmFramebufferExporter;
+ use smithay::backend::drm::{
+-    DrmDevice, DrmDeviceFd, DrmEvent, DrmEventMetadata, DrmEventTime, DrmNode, NodeType, VrrSupport,
++    DrmDevice, DrmDeviceFd, DrmEvent, DrmEventMetadata, DrmEventTime, DrmNode, Framebuffer,
++    NodeType, VrrSupport,
+ };
+ use smithay::backend::egl::context::ContextPriority;
+ use smithay::backend::egl::{EGLDevice, EGLDisplay};
+ use smithay::backend::libinput::{LibinputInputBackend, LibinputSessionInterface};
++use smithay::backend::renderer::element::RenderElementStates;
+ use smithay::backend::renderer::gles::GlesRenderer;
+ use smithay::backend::renderer::multigpu::gbm::GbmGlesBackend;
+ use smithay::backend::renderer::multigpu::{GpuManager, MultiFrame, MultiRenderer};
+@@ -66,8 +71,9 @@ use crate::backend::OutputId;
+ use crate::frame_clock::FrameClock;
  use crate::niri::{Niri, RedrawState, State};
  use crate::render_helpers::debug::draw_damage;
++use crate::render_helpers::hdr_output::HdrRender;
  use crate::render_helpers::renderer::AsGlesRenderer;
 -use crate::render_helpers::{resources, shaders, RenderCtx, RenderTarget};
 +use crate::render_helpers::{color, resources, shaders, RenderCtx, RenderTarget};
  use crate::utils::{get_monotonic_time, is_laptop_panel, logical_output, PanelOrientation};
  
  // When copying from rendering Nvidia dGPU to target iGPU,
-@@ -1928,6 +1928,7 @@ impl Tty {
+@@ -383,6 +389,8 @@ struct Surface {
+     gamma_props: Option<GammaProps>,
+     /// Gamma change to apply upon session resume.
+     pending_gamma_change: Option<Option<Vec<u16>>>,
++    hdr: Option<color::Hdr>,
++    hdr_render: Option<HdrRender>,
+     /// Tracy frame that goes from vblank to vblank.
+     vblank_frame: Option<tracy_client::Frame>,
+     /// Frame name for the VBlank frame.
+@@ -707,13 +715,14 @@ impl Tty {
+                         if let Ok(mut props) =
+                             ConnectorProperties::try_new(&device.drm, surface.connector)
+                         {
+-                            let max_bpc = self
+-                                .config
+-                                .borrow()
+-                                .outputs
+-                                .find(&surface.name)
+-                                .and_then(|o| o.max_bpc);
+-                            set_connector_properties(&mut props, max_bpc, true);
++                            let config = self.config.borrow();
++                            let max_bpc =
++                                config.outputs.find(&surface.name).and_then(|o| o.max_bpc);
++                            let single_gpu = device.render_node.unwrap_or(self.primary_render_node)
++                                == self.primary_render_node;
++                            let format = surface.compositor.format();
++                            let hdr = wanted_hdr(&config, &surface.name, single_gpu, format);
++                            surface.hdr = set_connector_properties(&mut props, max_bpc, hdr);
+                         } else {
+                             warn!("failed to get connector properties");
+                         }
+@@ -1332,9 +1341,21 @@ impl Tty {
+ 
+         debug!("picking mode: {mode:?}");
+ 
++        let single_gpu =
++            device.render_node.unwrap_or(self.primary_render_node) == self.primary_render_node;
++        let mut hdr = {
++            let config = self.config.borrow();
++            let format = if config.debug.disable_10bit_output {
++                Fourcc::Argb8888
++            } else {
++                Fourcc::Abgr2101010
++            };
++            wanted_hdr(&config, &output_name, single_gpu, format)
++        };
++
+         let mut orientation = None;
+         if let Ok(mut props) = ConnectorProperties::try_new(&device.drm, connector.handle()) {
+-            set_connector_properties(&mut props, config.max_bpc, true);
++            hdr = set_connector_properties(&mut props, config.max_bpc, hdr);
+ 
+             match props.get_panel_orientation() {
+                 Ok(x) => orientation = Some(x),
+@@ -1517,6 +1538,21 @@ impl Tty {
+             compositor.set_debug_flags(DebugFlags::TINT);
+         }
+ 
++        if hdr.is_some()
++            && wanted_hdr(
++                &self.config.borrow(),
++                &output_name,
++                true,
++                compositor.format(),
++            )
++            .is_none()
++        {
++            if let Ok(mut props) = ConnectorProperties::try_new(&device.drm, connector.handle()) {
++                set_connector_properties(&mut props, config.max_bpc, None);
++            }
++            hdr = None;
++        }
++
+         let mut dmabuf_feedback = None;
+         if let Ok(primary_renderer) = self.gpu_manager.single_renderer(&self.primary_render_node) {
+             let primary_formats = primary_renderer.dmabuf_formats();
+@@ -1565,6 +1601,8 @@ impl Tty {
+             dmabuf_feedback,
+             gamma_props,
+             pending_gamma_change: None,
++            hdr,
++            hdr_render: None,
+             vblank_frame: None,
+             vblank_frame_name,
+             time_since_presentation_plot_name,
+@@ -1928,6 +1966,11 @@ impl Tty {
              target: RenderTarget::Output,
              xray: None,
          };
-+        color::set_target(niri.output_wide_gamut(output));
++        if color::output_hdr(output) != surface.hdr {
++            color::set_output_hdr(output, surface.hdr);
++            niri.color_management_state.descriptions_changed();
++        }
++        color::set_target(niri.output_wide_gamut(output), surface.hdr);
          let mut elements = niri.render_to_vec(ctx, output, true);
  
          // Visualize the damage, if enabled.
-@@ -1970,7 +1971,9 @@ impl Tty {
+@@ -1969,32 +2012,46 @@ impl Tty {
+         };
  
          // Hand them over to the DRM.
++        let force_sync = self
++            .config
++            .borrow()
++            .debug
++            .wait_for_frame_completion_before_queueing;
          let drm_compositor = &mut surface.compositor;
 -        match drm_compositor.render_frame::<_, _>(&mut renderer, &elements, [0.; 4], flags) {
-+        let res = drm_compositor.render_frame::<_, _>(&mut renderer, &elements, [0.; 4], flags);
-+        color::set_target(false);
+-            Ok(res) => {
+-                let needs_sync = res.needs_sync()
+-                    || self
+-                        .config
+-                        .borrow()
+-                        .debug
+-                        .wait_for_frame_completion_before_queueing;
+-                if needs_sync {
+-                    if let PrimaryPlaneElement::Swapchain(element) = res.primary_element {
+-                        let _span = tracy_client::span!("wait for completion");
+-                        if let Err(err) = element.sync.wait() {
+-                            warn!("error waiting for frame completion: {err:?}");
+-                        }
+-                    }
+-                }
+-
+-                niri.update_primary_scanout_output(output, &res.states);
++        let res = match surface.hdr {
++            Some(hdr) => HdrRender::render(
++                &mut surface.hdr_render,
++                &mut renderer,
++                output,
++                &elements,
++                hdr,
++            )
++            .map_err(|err| err.to_string())
++            .and_then(|(elem, states)| {
++                let elems = [elem];
++                let res = drm_compositor
++                    .render_frame(&mut renderer, &elems, [0.; 4], flags)
++                    .map_err(|err| err.to_string())?;
++                Ok((states, frame_done(res, force_sync).1))
++            }),
++            None => drm_compositor
++                .render_frame(&mut renderer, &elements, [0.; 4], flags)
++                .map(|res| frame_done(res, force_sync))
++                .map_err(|err| err.to_string()),
++        };
++        color::set_target(false, None);
++        if surface.hdr.is_none() {
++            surface.hdr_render = None;
++        }
 +        match res {
-             Ok(res) => {
-                 let needs_sync = res.needs_sync()
-                     || self
++            Ok((states, is_empty)) => {
++                niri.update_primary_scanout_output(output, &states);
+                 if let Some(dmabuf_feedback) = surface.dmabuf_feedback.as_ref() {
+-                    niri.send_dmabuf_feedbacks(output, dmabuf_feedback, &res.states);
++                    niri.send_dmabuf_feedbacks(output, dmabuf_feedback, &states);
+                 }
+ 
+-                if !res.is_empty {
+-                    let presentation_feedbacks =
+-                        niri.take_presentation_feedbacks(output, &res.states);
++                if !is_empty {
++                    let presentation_feedbacks = niri.take_presentation_feedbacks(output, &states);
+                     let data = (presentation_feedbacks, target_presentation_time);
+ 
+                     match drm_compositor.queue_frame(data) {
+@@ -2032,6 +2089,14 @@ impl Tty {
+             Err(err) => {
+                 // Can fail if we switched to a different TTY.
+                 warn!("error rendering frame: {err}");
++                if surface.hdr.take().is_some() {
++                    warn!("disabling HDR");
++                    if let Ok(mut props) =
++                        ConnectorProperties::try_new(&device.drm, surface.connector)
++                    {
++                        set_connector_properties(&mut props, None, None);
++                    }
++                }
+             }
+         }
+ 
+@@ -2473,7 +2538,11 @@ impl Tty {
+ 
+                 if let Ok(mut props) = ConnectorProperties::try_new(&device.drm, surface.connector)
+                 {
+-                    set_connector_properties(&mut props, config.max_bpc, false);
++                    let single_gpu = device.render_node.unwrap_or(self.primary_render_node)
++                        == self.primary_render_node;
++                    let format = surface.compositor.format();
++                    let hdr = wanted_hdr(&self.config.borrow(), &surface.name, single_gpu, format);
++                    surface.hdr = set_connector_properties(&mut props, config.max_bpc, hdr);
+                 } else {
+                     warn!("failed to get connector properties");
+                 }
+@@ -3480,8 +3549,57 @@ impl<'a> ConnectorProperties<'a> {
+         Ok(max_bpc)
+     }
+ 
++    fn enable_hdr(&mut self, hdr: color::Hdr) -> anyhow::Result<()> {
++        use drm_ffi::drm_sys::{hdr_metadata_infoframe, hdr_output_metadata};
++
++        let (info, _) = self.find(c"Colorspace")?;
++        let property::ValueType::Enum(values) = info.value_type() else {
++            bail!("wrong property type")
++        };
++        let bt2020 = values
++            .values()
++            .1
++            .iter()
++            .find(|v| v.name() == c"BT2020_RGB")
++            .context("no BT2020_RGB colorspace")?
++            .value();
++        let colorspace = info.handle();
++
++        let (info, _) = self.find(c"HDR_OUTPUT_METADATA")?;
++        let metadata = info.handle();
++
++        let p = color::BT2020.map(|v| (v * 50000.).round() as u16);
++        let mut infoframe = hdr_metadata_infoframe {
++            // SMPTE ST 2084
++            eotf: 2,
++            max_display_mastering_luminance: hdr.max_nits as u16,
++            min_display_mastering_luminance: 50,
++            max_cll: hdr.max_nits as u16,
++            max_fall: hdr.sdr_nits as u16,
++            ..Default::default()
++        };
++        for i in 0..3 {
++            infoframe.display_primaries[i].x = p[i * 2];
++            infoframe.display_primaries[i].y = p[i * 2 + 1];
++        }
++        infoframe.white_point.x = p[6];
++        infoframe.white_point.y = p[7];
++        let mut data = hdr_output_metadata::default();
++        data.__bindgen_anon_1.hdmi_metadata_type1 = infoframe;
++        let blob = self
++            .device
++            .create_property_blob(&data)
++            .context("error creating HDR metadata blob")?;
++
++        let conn = self.connector.into();
++        self.requests.add_raw_property(conn, colorspace, bt2020);
++        self.requests.add_raw_property(conn, metadata, blob.into());
++        self.has_change = true;
++        Ok(())
++    }
++
+     fn commit(&mut self) -> anyhow::Result<()> {
+-        if self.has_change {
++        if std::mem::take(&mut self.has_change) {
+             self.device.atomic_commit(
+                 AtomicCommitFlags::ALLOW_MODESET,
+                 std::mem::take(&mut self.requests),
+@@ -3492,26 +3610,66 @@ impl<'a> ConnectorProperties<'a> {
+     }
+ }
+ 
++fn frame_done<B: Buffer, F: Framebuffer, E>(
++    res: RenderFrameResult<'_, B, F, E>,
++    force_sync: bool,
++) -> (RenderElementStates, bool) {
++    if res.needs_sync() || force_sync {
++        if let PrimaryPlaneElement::Swapchain(element) = res.primary_element {
++            let _span = tracy_client::span!("wait for completion");
++            if let Err(err) = element.sync.wait() {
++                warn!("error waiting for frame completion: {err:?}");
++            }
++        }
++    }
++    (res.states, res.is_empty)
++}
++
+ fn set_connector_properties(
+     props: &mut ConnectorProperties,
+     max_bpc: Option<MaxBpc>,
+-    reset_hdr: bool,
+-) {
++    hdr: Option<color::Hdr>,
++) -> Option<color::Hdr> {
+     if let Some(max_bpc) = max_bpc {
+         if let Err(err) = props.set_max_bpc(max_bpc) {
+             debug!("failed to set `max bpc` property: {err}");
+         }
+     }
++    if let Err(err) = props.commit() {
++        warn!("failed to atomically commit properties: {err}");
++    }
+ 
+-    if reset_hdr {
+-        if let Err(err) = props.reset_hdr() {
+-            debug!("failed to set HDR properties: {err}");
++    if let Some(hdr) = hdr {
++        match props.enable_hdr(hdr).and_then(|()| props.commit()) {
++            Ok(()) => return Some(hdr),
++            Err(err) => warn!("failed to enable HDR: {err:?}"),
+         }
+     }
+ 
++    if let Err(err) = props.reset_hdr() {
++        debug!("failed to set HDR properties: {err}");
++    }
+     if let Err(err) = props.commit() {
+         warn!("failed to atomically commit properties: {err}");
+     }
++    None
++}
++
++fn wanted_hdr(
++    config: &Config,
++    name: &OutputName,
++    single_gpu: bool,
++    format: Fourcc,
++) -> Option<color::Hdr> {
++    let is_10bit = matches!(format, Fourcc::Abgr2101010 | Fourcc::Argb2101010);
++    if !single_gpu || !is_10bit {
++        return None;
++    }
++    let hdr = config.outputs.find(name)?.hdr.as_ref()?;
++    Some(color::Hdr {
++        sdr_nits: hdr.sdr_luminance.0 as f32,
++        max_nits: hdr.max_luminance.0 as f32,
++    })
+ }
+ 
+ fn is_vrr_capable(device: &DrmDevice, connector: connector::Handle) -> Option<bool> {
 diff --git a/src/handlers/mod.rs b/src/handlers/mod.rs
-index d836419..1550138 100644
+index d836419..db6fec6 100644
 --- a/src/handlers/mod.rs
 +++ b/src/handlers/mod.rs
 @@ -77,6 +77,7 @@ use crate::input::click_grab::ClickGrab;
@@ -95,11 +447,11 @@ index d836419..1550138 100644
      VirtualPointerInputBackend, VirtualPointerManagerState, VirtualPointerMotionAbsoluteEvent,
      VirtualPointerMotionEvent,
  };
-+use crate::render_helpers::color::ColorDesc;
++use crate::render_helpers::color::{self, ColorDesc};
  use crate::utils::{
      get_surface_size, get_surface_toplevel_coords, output_size, send_scale_transform,
  };
-@@ -836,6 +838,28 @@ impl DrmLeaseHandler for State {
+@@ -836,6 +838,30 @@ impl DrmLeaseHandler for State {
      }
  }
  
@@ -109,7 +461,10 @@ index d836419..1550138 100644
 +    }
 +
 +    fn output_color_desc(&mut self, output: &Output) -> ColorDesc {
-+        ColorDesc::output(self.niri.output_wide_gamut(output))
++        ColorDesc::output(
++            self.niri.output_wide_gamut(output),
++            color::output_hdr(output),
++        )
 +    }
 +
 +    fn preferred_color_desc(&mut self, surface: &WlSurface) -> ColorDesc {
@@ -117,11 +472,10 @@ index d836419..1550138 100644
 +        while let Some(parent) = get_parent(&root) {
 +            root = parent;
 +        }
-+        let wide = self
-+            .niri
-+            .output_for_root(&root)
-+            .is_some_and(|o| self.niri.output_wide_gamut(o));
-+        ColorDesc::output(wide)
++        match self.niri.output_for_root(&root) {
++            Some(o) => ColorDesc::output(self.niri.output_wide_gamut(o), color::output_hdr(o)),
++            None => ColorDesc::SRGB,
++        }
 +    }
 +}
 +
@@ -280,7 +634,7 @@ index 6c372c6..d32c66b 100644
          WindowMruUi = WindowMruUiRenderElement<R>,
 diff --git a/src/protocols/color_management.rs b/src/protocols/color_management.rs
 new file mode 100644
-index 0000000..cc3bed0
+index 0000000..9eba8f2
 --- /dev/null
 +++ b/src/protocols/color_management.rs
 @@ -0,0 +1,697 @@
@@ -951,7 +1305,7 @@ index 0000000..cc3bed0
 +    let min = (desc.min_lum * 10000.).round() as u32;
 +    info.luminances(min, desc.max_lum as u32, desc.ref_lum as u32);
 +    info.target_primaries(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
-+    info.target_luminance(min, desc.max_lum as u32);
++    info.target_luminance(min, desc.target_max.unwrap_or(desc.max_lum) as u32);
 +}
 +
 +impl<D> Dispatch2<WpImageDescriptionInfoV1, D> for EmptyData {
@@ -1084,14 +1438,15 @@ index fe88d47..78f36ef 100644
          Ok(())
 diff --git a/src/render_helpers/color.rs b/src/render_helpers/color.rs
 new file mode 100644
-index 0000000..901442d
+index 0000000..b1d07f1
 --- /dev/null
 +++ b/src/render_helpers/color.rs
-@@ -0,0 +1,153 @@
-+use std::sync::atomic::{AtomicBool, Ordering};
+@@ -0,0 +1,214 @@
++use std::cell::Cell;
 +
 +use glam::{Mat3, Vec3};
 +use smithay::backend::renderer::gles::Uniform;
++use smithay::output::Output;
 +
 +use super::shaders::mat3_uniform;
 +
@@ -1102,6 +1457,12 @@ index 0000000..901442d
 +pub const ADOBE_RGB: [f32; 8] = [0.64, 0.33, 0.21, 0.71, 0.15, 0.06, 0.3127, 0.3290];
 +
 +const REF_NITS: f32 = 203.;
++
++#[derive(Debug, Clone, Copy, PartialEq)]
++pub struct Hdr {
++    pub sdr_nits: f32,
++    pub max_nits: f32,
++}
 +
 +#[derive(Debug, Clone, Copy, PartialEq)]
 +pub enum Tf {
@@ -1131,10 +1492,32 @@ index 0000000..901442d
 +        target_max: None,
 +    };
 +
-+    pub fn output(wide_gamut: bool) -> Self {
-+        Self {
-+            primaries: if wide_gamut { DISPLAY_P3 } else { SRGB },
-+            ..Self::SRGB
++    pub fn output(wide_gamut: bool, hdr: Option<Hdr>) -> Self {
++        match hdr {
++            Some(hdr) => Self {
++                tf: Tf::Pq,
++                primaries: BT2020,
++                min_lum: 0.005,
++                max_lum: 10000.,
++                ref_lum: hdr.sdr_nits,
++                target_max: Some(hdr.max_nits),
++            },
++            None => Self {
++                primaries: if wide_gamut { DISPLAY_P3 } else { SRGB },
++                ..Self::SRGB
++            },
++        }
++    }
++
++    // HDR outputs render to an extended-range sRGB buffer, PQ-encoded in a final pass.
++    fn render_target(wide_gamut: bool, hdr: Option<Hdr>) -> Self {
++        match hdr {
++            Some(hdr) => Self {
++                max_lum: hdr.max_nits,
++                ref_lum: hdr.sdr_nits,
++                ..Self::SRGB
++            },
++            None => Self::output(wide_gamut, None),
 +        }
 +    }
 +
@@ -1146,14 +1529,31 @@ index 0000000..901442d
 +}
 +
 +// Rendering happens one output at a time; screenshots and screencasts stay sRGB.
-+static TARGET_WIDE_GAMUT: AtomicBool = AtomicBool::new(false);
++thread_local! {
++    static TARGET: Cell<ColorDesc> = const { Cell::new(ColorDesc::SRGB) };
++}
 +
-+pub fn set_target(wide_gamut: bool) {
-+    TARGET_WIDE_GAMUT.store(wide_gamut, Ordering::Relaxed);
++pub fn set_target(wide_gamut: bool, hdr: Option<Hdr>) {
++    TARGET.set(ColorDesc::render_target(wide_gamut, hdr));
 +}
 +
 +pub fn target() -> ColorDesc {
-+    ColorDesc::output(TARGET_WIDE_GAMUT.load(Ordering::Relaxed))
++    TARGET.get()
++}
++
++struct OutputHdr(Cell<Option<Hdr>>);
++
++pub fn output_hdr(output: &Output) -> Option<Hdr> {
++    output
++        .user_data()
++        .get::<OutputHdr>()
++        .and_then(|x| x.0.get())
++}
++
++pub fn set_output_hdr(output: &Output, hdr: Option<Hdr>) {
++    let data = output.user_data();
++    data.insert_if_missing(|| OutputHdr(Cell::new(None)));
++    data.get::<OutputHdr>().unwrap().0.set(hdr);
 +}
 +
 +fn xy_to_xyz(x: f32, y: f32) -> Vec3 {
@@ -1217,8 +1617,13 @@ index 0000000..901442d
 +            "cm_tm",
 +            (pq_oetf(src_peak * REF_NITS), pq_oetf(dst_peak * REF_NITS)),
 +        ),
-+        Uniform::new("cm_out", (out_gamma, 1. / dst_peak)),
++        Uniform::new("cm_out", (out_gamma, dst_peak)),
 +    ])
++}
++
++pub fn hdr_output_uniforms(hdr: Hdr) -> Vec<Uniform<'static>> {
++    let mat = rgb_to_xyz(&BT2020).inverse() * rgb_to_xyz(&SRGB) * (hdr.sdr_nits / 10000.);
++    vec![mat3_uniform("hdr_mat", mat)]
 +}
 +
 +#[cfg(test)]
@@ -1237,15 +1642,181 @@ index 0000000..901442d
 +        );
 +        assert!((m * Vec3::ONE - Vec3::ONE).abs().max_element() < 1e-4);
 +        assert!(conversion(&ColorDesc::SRGB, &ColorDesc::SRGB).is_none());
-+        assert!(conversion(&ColorDesc::SRGB, &ColorDesc::output(true)).is_some());
++        assert!(conversion(&ColorDesc::SRGB, &ColorDesc::output(true, None)).is_some());
++
++        let hdr = Hdr {
++            sdr_nits: 203.,
++            max_nits: 500.,
++        };
++        let target = ColorDesc::render_target(false, Some(hdr));
++        assert!(conversion(&ColorDesc::SRGB, &target).is_none());
++        assert!(conversion(&ColorDesc::output(false, Some(hdr)), &target).is_some());
++        let white = rgb_to_xyz(&BT2020).inverse() * rgb_to_xyz(&SRGB) * Vec3::ONE;
++        assert!((white - Vec3::ONE).abs().max_element() < 1e-4);
 +        assert!((pq_oetf(10000.) - 1.).abs() < 1e-4);
 +    }
 +}
+diff --git a/src/render_helpers/hdr_output.rs b/src/render_helpers/hdr_output.rs
+new file mode 100644
+index 0000000..aaa5905
+--- /dev/null
++++ b/src/render_helpers/hdr_output.rs
+@@ -0,0 +1,150 @@
++use smithay::backend::allocator::Fourcc;
++use smithay::backend::renderer::damage::OutputDamageTracker;
++use smithay::backend::renderer::element::{Element, Id, RenderElement, RenderElementStates};
++use smithay::backend::renderer::gles::GlesTexture;
++use smithay::backend::renderer::utils::CommitCounter;
++use smithay::backend::renderer::Bind;
++use smithay::output::Output;
++use smithay::utils::user_data::UserDataMap;
++use smithay::utils::{Buffer, Physical, Rectangle, Scale, Size, Transform};
++
++use super::color::{self, Hdr};
++use super::create_texture;
++use super::renderer::{AsGlesFrame, AsGlesRenderer};
++use super::shaders::Shaders;
++use crate::backend::tty::{TtyFrame, TtyRenderer, TtyRendererError};
++
++// ponytail: full-output damage and no direct scanout while HDR is on.
++pub struct HdrRender {
++    texture: GlesTexture,
++    damage_tracker: OutputDamageTracker,
++    size: Size<i32, Physical>,
++    scale: f64,
++    age: usize,
++    id: Id,
++    commit: CommitCounter,
++}
++
++#[derive(Debug)]
++pub struct HdrOutputElement {
++    texture: GlesTexture,
++    size: Size<i32, Physical>,
++    id: Id,
++    commit: CommitCounter,
++    hdr: Hdr,
++}
++
++impl HdrRender {
++    pub fn render<'r, E: RenderElement<TtyRenderer<'r>>>(
++        this: &mut Option<Self>,
++        renderer: &mut TtyRenderer<'r>,
++        output: &Output,
++        elements: &[E],
++        hdr: Hdr,
++    ) -> Result<(HdrOutputElement, RenderElementStates), TtyRendererError<'r>> {
++        let mode = output.current_mode().unwrap();
++        let size = output.current_transform().transform_size(mode.size);
++        let scale = output.current_scale().fractional_scale();
++
++        if this
++            .as_ref()
++            .is_none_or(|x| (x.size, x.scale) != (size, scale))
++        {
++            let texture = create_texture(renderer.as_gles_renderer(), size, Fourcc::Abgr16161616f)?;
++            *this = Some(Self {
++                texture,
++                damage_tracker: OutputDamageTracker::new(size, scale, Transform::Normal),
++                size,
++                scale,
++                age: 0,
++                id: Id::new(),
++                commit: CommitCounter::default(),
++            });
++        }
++        let this = this.as_mut().unwrap();
++
++        let mut texture = this.texture.clone();
++        let mut fb = renderer.bind(&mut texture)?;
++        let res = this.damage_tracker.render_output(
++            renderer,
++            &mut fb,
++            this.age,
++            elements,
++            [0., 0., 0., 1.],
++        );
++        let res = res.map_err(|err| match err {
++            smithay::backend::renderer::damage::Error::Rendering(err) => err,
++            smithay::backend::renderer::damage::Error::OutputNoMode(_) => unreachable!(),
++        })?;
++        this.age = 1;
++        if res.damage.is_some_and(|d| !d.is_empty()) {
++            this.commit.increment();
++        }
++
++        let elem = HdrOutputElement {
++            texture: this.texture.clone(),
++            size,
++            id: this.id.clone(),
++            commit: this.commit,
++            hdr,
++        };
++        Ok((elem, res.states))
++    }
++}
++
++impl Element for HdrOutputElement {
++    fn id(&self) -> &Id {
++        &self.id
++    }
++
++    fn current_commit(&self) -> CommitCounter {
++        self.commit
++    }
++
++    fn geometry(&self, _scale: Scale<f64>) -> Rectangle<i32, Physical> {
++        Rectangle::from_size(self.size)
++    }
++
++    fn src(&self) -> Rectangle<f64, Buffer> {
++        Rectangle::from_size(
++            self.size
++                .to_f64()
++                .to_logical(1.)
++                .to_buffer(1., Transform::Normal),
++        )
++    }
++
++    fn opaque_regions(
++        &self,
++        scale: Scale<f64>,
++    ) -> smithay::backend::renderer::utils::OpaqueRegions<i32, Physical> {
++        smithay::backend::renderer::utils::OpaqueRegions::from_slice(&[self.geometry(scale)])
++    }
++}
++
++impl<'render> RenderElement<TtyRenderer<'render>> for HdrOutputElement {
++    fn draw(
++        &self,
++        frame: &mut TtyFrame<'_, '_, '_>,
++        src: Rectangle<f64, Buffer>,
++        dst: Rectangle<i32, Physical>,
++        damage: &[Rectangle<i32, Physical>],
++        opaque_regions: &[Rectangle<i32, Physical>],
++        _cache: Option<&UserDataMap>,
++    ) -> Result<(), TtyRendererError<'render>> {
++        let frame = frame.as_gles_frame();
++        let program = Shaders::get_from_frame(frame).hdr_output.clone();
++        frame.render_texture_from_to(
++            &self.texture,
++            src,
++            dst,
++            damage,
++            opaque_regions,
++            Transform::Normal,
++            1.,
++            program.as_ref(),
++            &color::hdr_output_uniforms(self.hdr),
++        )?;
++        Ok(())
++    }
++}
 diff --git a/src/render_helpers/mod.rs b/src/render_helpers/mod.rs
-index 3ae027c..2bd1ef3 100644
+index 3ae027c..2efb07b 100644
 --- a/src/render_helpers/mod.rs
 +++ b/src/render_helpers/mod.rs
-@@ -30,6 +30,7 @@ pub mod background_effect;
+@@ -30,11 +30,13 @@ pub mod background_effect;
  pub mod blur;
  pub mod border;
  pub mod clipped_surface;
@@ -1253,9 +1824,15 @@ index 3ae027c..2bd1ef3 100644
  pub mod damage;
  pub mod debug;
  pub mod effect_buffer;
+ pub mod framebuffer_effect;
+ pub mod gradient_fade_texture;
++pub mod hdr_output;
+ pub mod memory;
+ pub mod offscreen;
+ pub mod primary_gpu_texture;
 diff --git a/src/render_helpers/shaders/color.frag b/src/render_helpers/shaders/color.frag
 new file mode 100644
-index 0000000..f005122
+index 0000000..0ce9761
 --- /dev/null
 +++ b/src/render_helpers/shaders/color.frag
 @@ -0,0 +1,71 @@
@@ -1325,9 +1902,9 @@ index 0000000..f005122
 +        return color;
 +
 +    vec3 c = cm_mat * cm_decode(color.rgb / color.a);
-+    // ponytail: hard gamut clip, no perceptual gamut mapping.
-+    c = cm_tone_map(max(c, 0.0));
-+    c = pow(min(c * cm_out.y, 1.0), vec3(1.0 / cm_out.x));
++    // ponytail: hard gamut clip (by the unorm target), no perceptual gamut mapping.
++    c = min(cm_tone_map(c), cm_out.y);
++    c = sign(c) * pow(abs(c), vec3(1.0 / cm_out.x));
 +    return vec4(c * color.a, color.a);
 +}
 diff --git a/src/render_helpers/shaders/color_surface.frag b/src/render_helpers/shaders/color_surface.frag
@@ -1375,20 +1952,65 @@ index 0000000..93c7e8b
 +
 +    gl_FragColor = color;
 +}
+diff --git a/src/render_helpers/shaders/hdr_output.frag b/src/render_helpers/shaders/hdr_output.frag
+new file mode 100644
+index 0000000..b2e48a0
+--- /dev/null
++++ b/src/render_helpers/shaders/hdr_output.frag
+@@ -0,0 +1,38 @@
++#version 100
++
++//_DEFINES_
++
++#if defined(EXTERNAL)
++#extension GL_OES_EGL_image_external : require
++#endif
++
++precision highp float;
++#if defined(EXTERNAL)
++uniform samplerExternalOES tex;
++#else
++uniform sampler2D tex;
++#endif
++
++uniform float alpha;
++varying vec2 v_coords;
++
++#if defined(DEBUG_FLAGS)
++uniform float tint;
++#endif
++
++uniform mat3 hdr_mat;
++
++void main() {
++    vec3 c = texture2D(tex, v_coords).rgb;
++    c = max(hdr_mat * (sign(c) * pow(abs(c), vec3(2.2))), 0.0);
++
++    vec3 p = pow(c, vec3(0.1593017578125));
++    c = pow((0.8359375 + 18.8515625 * p) / (1.0 + 18.6875 * p), vec3(78.84375));
++
++#if defined(DEBUG_FLAGS)
++    if (tint == 1.0)
++        c = vec3(0.0, 0.2, 0.0) + c * 0.8;
++#endif
++
++    gl_FragColor = vec4(c, 1.0);
++}
 diff --git a/src/render_helpers/shaders/mod.rs b/src/render_helpers/shaders/mod.rs
-index 7be9b15..815a396 100644
+index 7be9b15..ed5e06d 100644
 --- a/src/render_helpers/shaders/mod.rs
 +++ b/src/render_helpers/shaders/mod.rs
-@@ -15,6 +15,8 @@ pub struct Shaders {
+@@ -15,6 +15,9 @@ pub struct Shaders {
      pub shadow: Option<ShaderProgram>,
      pub clipped_surface: Option<GlesTexProgram>,
      pub postprocess_and_clip: Option<GlesTexProgram>,
 +    pub color_surface: Option<GlesTexProgram>,
 +    pub clipped_surface_cm: Option<GlesTexProgram>,
++    pub hdr_output: Option<GlesTexProgram>,
      pub resize: Option<ShaderProgram>,
      pub gradient_fade: Option<GlesTexProgram>,
      pub blur: Option<BlurProgram>,
-@@ -126,6 +128,50 @@ impl Shaders {
+@@ -126,6 +129,60 @@ impl Shaders {
              })
              .ok();
  
@@ -1436,15 +2058,26 @@ index 7be9b15..815a396 100644
 +            })
 +            .ok();
 +
++        let hdr_output = renderer
++            .compile_custom_texture_shader(
++                include_str!("hdr_output.frag"),
++                &[UniformName::new("hdr_mat", UniformType::Matrix3x3)],
++            )
++            .map_err(|err| {
++                warn!("error compiling HDR output shader: {err:?}");
++            })
++            .ok();
++
          let resize = compile_resize_program(renderer, include_str!("resize.frag"))
              .map_err(|err| {
                  warn!("error compiling resize shader: {err:?}");
-@@ -153,6 +199,8 @@ impl Shaders {
+@@ -153,6 +210,9 @@ impl Shaders {
              shadow,
              clipped_surface,
              postprocess_and_clip,
 +            color_surface,
 +            clipped_surface_cm,
++            hdr_output,
              resize,
              gradient_fade,
              blur,
