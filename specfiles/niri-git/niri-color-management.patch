@@ -1,0 +1,1659 @@
+diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
+index f831005..490b548 100644
+--- a/niri-config/src/lib.rs
++++ b/niri-config/src/lib.rs
+@@ -1222,6 +1222,7 @@ mod tests {
+                             },
+                         ),
+                         focus_at_startup: true,
++                        wide_gamut: false,
+                         background_color: Some(
+                             Color {
+                                 r: 0.09803922,
+@@ -1264,6 +1265,7 @@ mod tests {
+                         modeline: None,
+                         variable_refresh_rate: None,
+                         focus_at_startup: false,
++                        wide_gamut: false,
+                         background_color: None,
+                         backdrop_color: None,
+                         hot_corners: None,
+@@ -1294,6 +1296,7 @@ mod tests {
+                         ),
+                         variable_refresh_rate: None,
+                         focus_at_startup: false,
++                        wide_gamut: false,
+                         background_color: None,
+                         backdrop_color: None,
+                         hot_corners: None,
+diff --git a/niri-config/src/output.rs b/niri-config/src/output.rs
+index 48572f6..393ed2e 100644
+--- a/niri-config/src/output.rs
++++ b/niri-config/src/output.rs
+@@ -69,6 +69,8 @@ pub struct Output {
+     pub variable_refresh_rate: Option<Vrr>,
+     #[knuffel(child)]
+     pub focus_at_startup: bool,
++    #[knuffel(child)]
++    pub wide_gamut: bool,
+     // Deprecated; use layout.background_color.
+     #[knuffel(child)]
+     pub background_color: Option<Color>,
+@@ -99,6 +101,7 @@ impl Default for Output {
+         Self {
+             off: false,
+             focus_at_startup: false,
++            wide_gamut: false,
+             name: String::new(),
+             scale: None,
+             transform: Transform::Normal,
+diff --git a/src/backend/tty.rs b/src/backend/tty.rs
+index 094f6fa..207e78e 100644
+--- a/src/backend/tty.rs
++++ b/src/backend/tty.rs
+@@ -67,7 +67,7 @@ use crate::frame_clock::FrameClock;
+ use crate::niri::{Niri, RedrawState, State};
+ use crate::render_helpers::debug::draw_damage;
+ use crate::render_helpers::renderer::AsGlesRenderer;
+-use crate::render_helpers::{resources, shaders, RenderCtx, RenderTarget};
++use crate::render_helpers::{color, resources, shaders, RenderCtx, RenderTarget};
+ use crate::utils::{get_monotonic_time, is_laptop_panel, logical_output, PanelOrientation};
+ 
+ // When copying from rendering Nvidia dGPU to target iGPU,
+@@ -1928,6 +1928,7 @@ impl Tty {
+             target: RenderTarget::Output,
+             xray: None,
+         };
++        color::set_target(niri.output_wide_gamut(output));
+         let mut elements = niri.render_to_vec(ctx, output, true);
+ 
+         // Visualize the damage, if enabled.
+@@ -1970,7 +1971,9 @@ impl Tty {
+ 
+         // Hand them over to the DRM.
+         let drm_compositor = &mut surface.compositor;
+-        match drm_compositor.render_frame::<_, _>(&mut renderer, &elements, [0.; 4], flags) {
++        let res = drm_compositor.render_frame::<_, _>(&mut renderer, &elements, [0.; 4], flags);
++        color::set_target(false);
++        match res {
+             Ok(res) => {
+                 let needs_sync = res.needs_sync()
+                     || self
+diff --git a/src/handlers/mod.rs b/src/handlers/mod.rs
+index d836419..1550138 100644
+--- a/src/handlers/mod.rs
++++ b/src/handlers/mod.rs
+@@ -77,6 +77,7 @@ use crate::input::click_grab::ClickGrab;
+ use crate::layout::workspace::WorkspaceId;
+ use crate::layout::{ActivateWindow, LayoutElement};
+ use crate::niri::{DndIcon, NewClient, State};
++use crate::protocols::color_management::{ColorManagementHandler, ColorManagementState};
+ use crate::protocols::ext_workspace::{self, ExtWorkspaceHandler, ExtWorkspaceManagerState};
+ use crate::protocols::foreign_toplevel::{
+     self, ForeignToplevelHandler, ForeignToplevelManagerState,
+@@ -90,6 +91,7 @@ use crate::protocols::virtual_pointer::{
+     VirtualPointerInputBackend, VirtualPointerManagerState, VirtualPointerMotionAbsoluteEvent,
+     VirtualPointerMotionEvent,
+ };
++use crate::render_helpers::color::ColorDesc;
+ use crate::utils::{
+     get_surface_size, get_surface_toplevel_coords, output_size, send_scale_transform,
+ };
+@@ -836,6 +838,28 @@ impl DrmLeaseHandler for State {
+     }
+ }
+ 
++impl ColorManagementHandler for State {
++    fn color_management_state(&mut self) -> &mut ColorManagementState {
++        &mut self.niri.color_management_state
++    }
++
++    fn output_color_desc(&mut self, output: &Output) -> ColorDesc {
++        ColorDesc::output(self.niri.output_wide_gamut(output))
++    }
++
++    fn preferred_color_desc(&mut self, surface: &WlSurface) -> ColorDesc {
++        let mut root = surface.clone();
++        while let Some(parent) = get_parent(&root) {
++            root = parent;
++        }
++        let wide = self
++            .niri
++            .output_for_root(&root)
++            .is_some_and(|o| self.niri.output_wide_gamut(o));
++        ColorDesc::output(wide)
++    }
++}
++
+ impl GammaControlHandler for State {
+     fn gamma_control_manager_state(&mut self) -> &mut GammaControlManagerState {
+         &mut self.niri.gamma_control_manager_state
+diff --git a/src/layer/mapped.rs b/src/layer/mapped.rs
+index fbaa6fc..cb4cd60 100644
+--- a/src/layer/mapped.rs
++++ b/src/layer/mapped.rs
+@@ -1,6 +1,6 @@
++use crate::render_helpers::surface::SurfaceRenderElement;
+ use niri_config::utils::MergeWith as _;
+ use niri_config::{Config, LayerRule};
+-use smithay::backend::renderer::element::surface::WaylandSurfaceRenderElement;
+ use smithay::backend::renderer::element::Kind;
+ use smithay::desktop::{LayerSurface, PopupKind, PopupManager};
+ use smithay::utils::{Logical, Point, Rectangle, Scale, Size};
+@@ -57,7 +57,7 @@ pub struct MappedLayer {
+ 
+ niri_render_elements! {
+     LayerSurfaceRenderElement<R> => {
+-        Wayland = WaylandSurfaceRenderElement<R>,
++        Wayland = SurfaceRenderElement<R>,
+         SolidColor = SolidColorRenderElement,
+         Shadow = ShadowRenderElement,
+         BackgroundEffect = BackgroundEffectElement,
+diff --git a/src/layout/mod.rs b/src/layout/mod.rs
+index 687745c..b8d6a31 100644
+--- a/src/layout/mod.rs
++++ b/src/layout/mod.rs
+@@ -36,6 +36,7 @@ use std::mem;
+ use std::rc::Rc;
+ use std::time::Duration;
+ 
++use crate::render_helpers::surface::SurfaceRenderElement;
+ use monitor::{InsertHint, InsertPosition, InsertWorkspace, MonitorAddWindowTarget};
+ use niri_config::utils::MergeWith as _;
+ use niri_config::{
+@@ -43,7 +44,6 @@ use niri_config::{
+ };
+ use niri_ipc::{ColumnDisplay, PositionChange, SizeChange, WindowLayout};
+ use scrolling::{Column, ColumnWidth};
+-use smithay::backend::renderer::element::surface::WaylandSurfaceRenderElement;
+ use smithay::backend::renderer::element::utils::RescaleRenderElement;
+ use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
+ use smithay::output::{self, Output};
+@@ -112,7 +112,7 @@ pub struct SizeFrac;
+ 
+ niri_render_elements! {
+     LayoutElementRenderElement<R> => {
+-        Wayland = WaylandSurfaceRenderElement<R>,
++        Wayland = SurfaceRenderElement<R>,
+         SolidColor = SolidColorRenderElement,
+         BackgroundEffect = BackgroundEffectElement,
+     }
+diff --git a/src/niri.rs b/src/niri.rs
+index 6c372c6..d32c66b 100644
+--- a/src/niri.rs
++++ b/src/niri.rs
+@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
+ use std::time::{Duration, Instant};
+ use std::{env, mem, thread};
+ 
++use crate::render_helpers::surface::SurfaceRenderElement;
+ use _server_decoration::server::org_kde_kwin_server_decoration_manager::Mode as KdeDecorationsMode;
+ use anyhow::{bail, ensure, Context};
+ use calloop::futures::Scheduler;
+@@ -24,7 +25,6 @@ use smithay::backend::drm::DrmDeviceFd;
+ use smithay::backend::input::{InputTime, Keycode};
+ use smithay::backend::renderer::damage::OutputDamageTracker;
+ use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement;
+-use smithay::backend::renderer::element::surface::WaylandSurfaceRenderElement;
+ use smithay::backend::renderer::element::utils::{
+     select_dmabuf_feedback, CropRenderElement, Relocate, RelocateRenderElement,
+     RescaleRenderElement,
+@@ -163,6 +163,7 @@ use crate::layout::{
+     HitType, Layout, LayoutElement as _, LayoutElementRenderElement, MonitorRenderElement,
+ };
+ use crate::niri_render_elements;
++use crate::protocols::color_management::ColorManagementState;
+ use crate::protocols::ext_workspace::{self, ExtWorkspaceManagerState};
+ use crate::protocols::foreign_toplevel::{self, ForeignToplevelManagerState};
+ use crate::protocols::gamma_control::GammaControlManagerState;
+@@ -344,6 +345,7 @@ pub struct Niri {
+     pub presentation_state: PresentationState,
+     pub security_context_state: SecurityContextState,
+     pub gamma_control_manager_state: GammaControlManagerState,
++    pub color_management_state: ColorManagementState,
+     pub activation_state: XdgActivationState,
+     pub mutter_x11_interop_state: MutterX11InteropManagerState,
+     pub session_management_state: SessionManagementState,
+@@ -901,6 +903,7 @@ impl State {
+ 
+         {
+             let _span = tracy_client::span!("flush_clients");
++            self.niri.color_management_state.send_pending_done();
+             self.niri.display_handle.flush_clients().unwrap();
+         }
+ 
+@@ -1896,6 +1899,7 @@ impl State {
+ 
+         if output_config_changed {
+             self.reload_output_config();
++            self.niri.color_management_state.descriptions_changed();
+         }
+ 
+         if window_rules_changed {
+@@ -2608,6 +2612,8 @@ impl Niri {
+             GammaControlManagerState::new::<State, _>(&display_handle, move |client| {
+                 is_tty && !client.get_data::<ClientState>().unwrap().restricted
+             });
++        let color_management_state =
++            ColorManagementState::new::<State, _>(&display_handle, |_| true);
+         let activation_state = XdgActivationState::new::<State>(&display_handle);
+         event_loop
+             .insert_source(
+@@ -2841,6 +2847,7 @@ impl Niri {
+             presentation_state,
+             security_context_state,
+             gamma_control_manager_state,
++            color_management_state,
+             activation_state,
+             mutter_x11_interop_state,
+             session_management_state,
+@@ -3096,6 +3103,12 @@ impl Niri {
+         }
+     }
+ 
++    pub fn output_wide_gamut(&self, output: &Output) -> bool {
++        let name = output.user_data().get::<OutputName>().unwrap();
++        let config = self.config.borrow();
++        config.outputs.find(name).is_some_and(|c| c.wide_gamut)
++    }
++
+     pub fn add_output(&mut self, output: Output, refresh_interval: Option<Duration>, vrr: bool) {
+         let global = output.create_global::<State>(&self.display_handle);
+ 
+@@ -7393,7 +7406,7 @@ fn scale_relocate_crop<E: Element>(
+ 
+ niri_render_elements! {
+     PointerRenderElements<R> => {
+-        Wayland = WaylandSurfaceRenderElement<R>,
++        Wayland = SurfaceRenderElement<R>,
+         NamedPointer = MemoryRenderBufferRenderElement<R>,
+     }
+ }
+@@ -7417,7 +7430,7 @@ niri_render_elements! {
+             SolidColorRenderElement
+         >>>,
+         Pointer = PointerRenderElements<R>,
+-        Wayland = WaylandSurfaceRenderElement<R>,
++        Wayland = SurfaceRenderElement<R>,
+         SolidColor = SolidColorRenderElement,
+         ScreenshotUi = ScreenshotUiRenderElement,
+         WindowMruUi = WindowMruUiRenderElement<R>,
+diff --git a/src/protocols/color_management.rs b/src/protocols/color_management.rs
+new file mode 100644
+index 0000000..cc3bed0
+--- /dev/null
++++ b/src/protocols/color_management.rs
+@@ -0,0 +1,697 @@
++use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
++use std::sync::Mutex;
++
++use smithay::output::Output;
++use smithay::reexports::wayland_protocols::wp::color_management::v1::server::{
++    wp_color_management_output_v1, wp_color_management_surface_feedback_v1,
++    wp_color_management_surface_v1, wp_color_manager_v1, wp_image_description_creator_icc_v1,
++    wp_image_description_creator_params_v1, wp_image_description_info_v1, wp_image_description_v1,
++};
++use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
++use smithay::reexports::wayland_server::{
++    Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource, WEnum, Weak,
++};
++use smithay::wayland::compositor::{with_states, Cacheable, SurfaceData};
++use smithay::wayland::{Dispatch2, GlobalDispatch2};
++use wp_color_management_output_v1::WpColorManagementOutputV1;
++use wp_color_management_surface_feedback_v1::WpColorManagementSurfaceFeedbackV1;
++use wp_color_management_surface_v1::WpColorManagementSurfaceV1;
++use wp_color_manager_v1::{Feature, Primaries, RenderIntent, TransferFunction, WpColorManagerV1};
++use wp_image_description_creator_icc_v1::WpImageDescriptionCreatorIccV1;
++use wp_image_description_creator_params_v1::WpImageDescriptionCreatorParamsV1;
++use wp_image_description_info_v1::WpImageDescriptionInfoV1;
++use wp_image_description_v1::WpImageDescriptionV1;
++
++use crate::protocols::EmptyData;
++use crate::render_helpers::color::{self, ColorDesc, Tf};
++
++const VERSION: u32 = 3;
++
++static NEXT_IDENTITY: AtomicU64 = AtomicU64::new(1);
++
++pub struct ColorManagementState {
++    outputs: Vec<WpColorManagementOutputV1>,
++    pending_done: Vec<WpImageDescriptionInfoV1>,
++    feedbacks: Vec<WpColorManagementSurfaceFeedbackV1>,
++}
++
++pub struct ColorManagerGlobalData {
++    filter: Box<dyn for<'c> Fn(&'c Client) -> bool + Send + Sync>,
++}
++
++pub trait ColorManagementHandler {
++    fn color_management_state(&mut self) -> &mut ColorManagementState;
++    fn output_color_desc(&mut self, output: &Output) -> ColorDesc;
++    fn preferred_color_desc(&mut self, surface: &WlSurface) -> ColorDesc;
++}
++
++#[derive(Default, Clone, Copy)]
++struct CachedColorDesc(Option<ColorDesc>);
++
++impl Cacheable for CachedColorDesc {
++    fn commit(&mut self, _dh: &DisplayHandle) -> Self {
++        *self
++    }
++
++    fn merge_into(self, into: &mut Self, _dh: &DisplayHandle) {
++        *into = self;
++    }
++}
++
++#[derive(Default)]
++struct ColorSurfaceAttached(AtomicBool);
++
++pub struct ImageDescData {
++    desc: Option<ColorDesc>,
++    info: bool,
++}
++
++pub struct ColorOutputData(Option<Output>);
++
++pub struct ColorSurfaceData(Weak<WlSurface>);
++
++#[derive(Default)]
++pub struct ParamsData(Mutex<Params>);
++
++#[derive(Default)]
++struct Params {
++    tf: Option<Tf>,
++    primaries: Option<[f32; 8]>,
++    lum: Option<(f32, f32, f32)>,
++    mastering_primaries: bool,
++    mastering_max: Option<f32>,
++    max_cll: Option<f32>,
++    max_fall: Option<f32>,
++}
++
++pub fn surface_color_desc(states: &SurfaceData) -> ColorDesc {
++    states
++        .cached_state
++        .get::<CachedColorDesc>()
++        .current()
++        .0
++        .unwrap_or(ColorDesc::SRGB)
++}
++
++impl ColorManagementState {
++    pub fn new<D, F>(display: &DisplayHandle, filter: F) -> Self
++    where
++        D: GlobalDispatch<WpColorManagerV1, ColorManagerGlobalData>,
++        D: 'static,
++        F: for<'c> Fn(&'c Client) -> bool + Send + Sync + 'static,
++    {
++        let global_data = ColorManagerGlobalData {
++            filter: Box::new(filter),
++        };
++        display.create_global::<D, WpColorManagerV1, _>(VERSION, global_data);
++
++        Self {
++            outputs: Vec::new(),
++            pending_done: Vec::new(),
++            feedbacks: Vec::new(),
++        }
++    }
++
++    // Sending a destructor event on an object created in the same request is a use-after-free in
++    // wayland-backend.
++    pub fn send_pending_done(&mut self) {
++        for info in self.pending_done.drain(..) {
++            info.done();
++        }
++    }
++
++    pub fn descriptions_changed(&mut self) {
++        self.outputs.retain(|o| o.is_alive());
++        self.feedbacks.retain(|f| f.is_alive());
++        for output in &self.outputs {
++            output.image_description_changed();
++        }
++        for feedback in &self.feedbacks {
++            if feedback.version() >= 2 {
++                let id = next_identity();
++                feedback.preferred_changed2((id >> 32) as u32, id as u32);
++            } else {
++                feedback.preferred_changed(next_identity() as u32);
++            }
++        }
++    }
++}
++
++fn next_identity() -> u64 {
++    NEXT_IDENTITY.fetch_add(1, Ordering::Relaxed)
++}
++
++fn init_desc<D>(
++    data_init: &mut DataInit<'_, D>,
++    id: New<WpImageDescriptionV1>,
++    desc: Option<ColorDesc>,
++    info: bool,
++) where
++    D: Dispatch<WpImageDescriptionV1, ImageDescData> + 'static,
++{
++    let obj = data_init.init(id, ImageDescData { desc, info });
++    if desc.is_none() {
++        obj.failed(
++            wp_image_description_v1::Cause::NoOutput,
++            "output is gone".into(),
++        );
++        return;
++    }
++    let id = next_identity();
++    if obj.version() >= 2 {
++        obj.ready2((id >> 32) as u32, id as u32);
++    } else {
++        obj.ready(id as u32);
++    }
++}
++
++fn named_tf(tf: TransferFunction) -> Option<Tf> {
++    Some(match tf {
++        TransferFunction::Gamma22 | TransferFunction::Srgb | TransferFunction::CompoundPower24 => {
++            Tf::Gamma(2.2)
++        }
++        TransferFunction::Bt1886 => Tf::Gamma(2.4),
++        TransferFunction::Gamma28 => Tf::Gamma(2.8),
++        TransferFunction::ExtLinear => Tf::Linear,
++        TransferFunction::St2084Pq => Tf::Pq,
++        TransferFunction::Hlg => Tf::Hlg,
++        _ => return None,
++    })
++}
++
++const NAMED_PRIMARIES: [(Primaries, [f32; 8]); 5] = [
++    (Primaries::Srgb, color::SRGB),
++    (Primaries::Bt2020, color::BT2020),
++    (Primaries::DciP3, color::DCI_P3),
++    (Primaries::DisplayP3, color::DISPLAY_P3),
++    (Primaries::AdobeRgb, color::ADOBE_RGB),
++];
++
++impl<D> GlobalDispatch2<WpColorManagerV1, D> for ColorManagerGlobalData
++where
++    D: Dispatch<WpColorManagerV1, EmptyData>,
++    D: 'static,
++{
++    fn bind(
++        &self,
++        _state: &mut D,
++        _handle: &DisplayHandle,
++        _client: &Client,
++        manager: New<WpColorManagerV1>,
++        data_init: &mut DataInit<'_, D>,
++    ) {
++        let manager = data_init.init(manager, EmptyData);
++        manager.supported_intent(RenderIntent::Perceptual);
++        let mut features = vec![
++            Feature::Parametric,
++            Feature::SetPrimaries,
++            Feature::SetTfPower,
++            Feature::SetLuminances,
++            Feature::SetMasteringDisplayPrimaries,
++            Feature::WindowsScrgb,
++        ];
++        if manager.version() >= 3 {
++            features.push(Feature::WindowsBt2100);
++        }
++        for feature in features {
++            manager.supported_feature(feature);
++        }
++        let mut tfs = vec![
++            TransferFunction::Bt1886,
++            TransferFunction::Gamma22,
++            TransferFunction::Gamma28,
++            TransferFunction::ExtLinear,
++            TransferFunction::St2084Pq,
++            TransferFunction::Hlg,
++            TransferFunction::Srgb,
++        ];
++        if manager.version() >= 2 {
++            tfs.push(TransferFunction::CompoundPower24);
++        }
++        for tf in tfs {
++            manager.supported_tf_named(tf);
++        }
++        for (primaries, _) in NAMED_PRIMARIES {
++            manager.supported_primaries_named(primaries);
++        }
++        manager.done();
++    }
++
++    fn can_view(&self, client: &Client) -> bool {
++        (self.filter)(client)
++    }
++}
++
++impl<D> Dispatch2<WpColorManagerV1, D> for EmptyData
++where
++    D: Dispatch<WpColorManagementOutputV1, ColorOutputData>,
++    D: Dispatch<WpColorManagementSurfaceV1, ColorSurfaceData>,
++    D: Dispatch<WpColorManagementSurfaceFeedbackV1, ColorSurfaceData>,
++    D: Dispatch<WpImageDescriptionCreatorParamsV1, ParamsData>,
++    D: Dispatch<WpImageDescriptionV1, ImageDescData>,
++    D: ColorManagementHandler,
++    D: 'static,
++{
++    fn request(
++        &self,
++        state: &mut D,
++        _client: &Client,
++        resource: &WpColorManagerV1,
++        request: <WpColorManagerV1 as Resource>::Request,
++        _dhandle: &DisplayHandle,
++        data_init: &mut DataInit<'_, D>,
++    ) {
++        use wp_color_manager_v1::{Error, Request};
++
++        match request {
++            Request::GetOutput { id, output } => {
++                let obj = data_init.init(id, ColorOutputData(Output::from_resource(&output)));
++                state.color_management_state().outputs.push(obj);
++            }
++            Request::GetSurface { id, surface } => {
++                let exists = with_states(&surface, |states| {
++                    states
++                        .data_map
++                        .get_or_insert_threadsafe(ColorSurfaceAttached::default)
++                        .0
++                        .swap(true, Ordering::Relaxed)
++                });
++                if exists {
++                    resource.post_error(Error::SurfaceExists, "surface already managed");
++                }
++                data_init.init(id, ColorSurfaceData(surface.downgrade()));
++            }
++            Request::GetSurfaceFeedback { id, surface } => {
++                let obj = data_init.init(id, ColorSurfaceData(surface.downgrade()));
++                state.color_management_state().feedbacks.push(obj);
++            }
++            Request::CreateIccCreator { obj } => {
++                data_init.post_error(obj, Error::UnsupportedFeature, "ICC not supported");
++            }
++            Request::CreateParametricCreator { obj } => {
++                data_init.init(obj, ParamsData::default());
++            }
++            Request::CreateWindowsScrgb { image_description } => {
++                let desc = ColorDesc {
++                    tf: Tf::Linear,
++                    primaries: color::SRGB,
++                    min_lum: 0.,
++                    max_lum: 80.,
++                    ref_lum: 203.,
++                    target_max: Some(1000.),
++                };
++                init_desc(data_init, image_description, Some(desc), false);
++            }
++            Request::CreateWindowsBt2100 { image_description } => {
++                let desc = ColorDesc {
++                    tf: Tf::Pq,
++                    primaries: color::BT2020,
++                    min_lum: 0.005,
++                    max_lum: 10000.005,
++                    ref_lum: 203.,
++                    target_max: None,
++                };
++                init_desc(data_init, image_description, Some(desc), false);
++            }
++            Request::GetImageDescription {
++                image_description, ..
++            } => {
++                data_init.post_error(
++                    image_description,
++                    Error::UnsupportedFeature,
++                    "no references",
++                );
++            }
++            Request::Destroy => (),
++            _ => unreachable!(),
++        }
++    }
++}
++
++impl<D> Dispatch2<WpColorManagementOutputV1, D> for ColorOutputData
++where
++    D: Dispatch<WpImageDescriptionV1, ImageDescData>,
++    D: ColorManagementHandler,
++    D: 'static,
++{
++    fn request(
++        &self,
++        state: &mut D,
++        _client: &Client,
++        _resource: &WpColorManagementOutputV1,
++        request: <WpColorManagementOutputV1 as Resource>::Request,
++        _dhandle: &DisplayHandle,
++        data_init: &mut DataInit<'_, D>,
++    ) {
++        match request {
++            wp_color_management_output_v1::Request::GetImageDescription { image_description } => {
++                let desc = self.0.as_ref().map(|o| state.output_color_desc(o));
++                init_desc(data_init, image_description, desc, true);
++            }
++            wp_color_management_output_v1::Request::Destroy => (),
++            _ => unreachable!(),
++        }
++    }
++}
++
++impl<D> Dispatch2<WpColorManagementSurfaceV1, D> for ColorSurfaceData
++where
++    D: 'static,
++{
++    fn request(
++        &self,
++        _state: &mut D,
++        _client: &Client,
++        resource: &WpColorManagementSurfaceV1,
++        request: <WpColorManagementSurfaceV1 as Resource>::Request,
++        _dhandle: &DisplayHandle,
++        _data_init: &mut DataInit<'_, D>,
++    ) {
++        use wp_color_management_surface_v1::{Error, Request};
++
++        let surface = self.0.upgrade().ok();
++        let set = |desc: Option<ColorDesc>| {
++            if let Some(surface) = &surface {
++                with_states(surface, |states| {
++                    states.cached_state.get::<CachedColorDesc>().pending().0 = desc;
++                });
++            }
++        };
++
++        match request {
++            Request::SetImageDescription {
++                image_description,
++                render_intent,
++            } => {
++                if surface.is_none() {
++                    resource.post_error(Error::Inert, "surface is gone");
++                    return;
++                }
++                if render_intent != WEnum::Value(RenderIntent::Perceptual) {
++                    resource.post_error(Error::RenderIntent, "unsupported render intent");
++                    return;
++                }
++                let Some(desc) = image_description
++                    .data::<ImageDescData>()
++                    .and_then(|d| d.desc)
++                else {
++                    resource.post_error(Error::ImageDescription, "image description failed");
++                    return;
++                };
++                set(Some(desc));
++            }
++            Request::UnsetImageDescription => {
++                if surface.is_none() {
++                    resource.post_error(Error::Inert, "surface is gone");
++                    return;
++                }
++                set(None);
++            }
++            Request::Destroy => {
++                set(None);
++                if let Some(surface) = &surface {
++                    with_states(surface, |states| {
++                        if let Some(a) = states.data_map.get::<ColorSurfaceAttached>() {
++                            a.0.store(false, Ordering::Relaxed);
++                        }
++                    });
++                }
++            }
++            _ => unreachable!(),
++        }
++    }
++}
++
++impl<D> Dispatch2<WpColorManagementSurfaceFeedbackV1, D> for ColorSurfaceData
++where
++    D: Dispatch<WpImageDescriptionV1, ImageDescData>,
++    D: ColorManagementHandler,
++    D: 'static,
++{
++    fn request(
++        &self,
++        state: &mut D,
++        _client: &Client,
++        resource: &WpColorManagementSurfaceFeedbackV1,
++        request: <WpColorManagementSurfaceFeedbackV1 as Resource>::Request,
++        _dhandle: &DisplayHandle,
++        data_init: &mut DataInit<'_, D>,
++    ) {
++        use wp_color_management_surface_feedback_v1::{Error, Request};
++
++        match request {
++            Request::GetPreferred { image_description }
++            | Request::GetPreferredParametric { image_description } => {
++                let Ok(surface) = self.0.upgrade() else {
++                    resource.post_error(Error::Inert, "surface is gone");
++                    data_init.init(
++                        image_description,
++                        ImageDescData {
++                            desc: None,
++                            info: false,
++                        },
++                    );
++                    return;
++                };
++                let desc = state.preferred_color_desc(&surface);
++                init_desc(data_init, image_description, Some(desc), true);
++            }
++            Request::Destroy => (),
++            _ => unreachable!(),
++        }
++    }
++}
++
++impl<D> Dispatch2<WpImageDescriptionCreatorParamsV1, D> for ParamsData
++where
++    D: Dispatch<WpImageDescriptionV1, ImageDescData>,
++    D: 'static,
++{
++    fn request(
++        &self,
++        _state: &mut D,
++        _client: &Client,
++        resource: &WpImageDescriptionCreatorParamsV1,
++        request: <WpImageDescriptionCreatorParamsV1 as Resource>::Request,
++        _dhandle: &DisplayHandle,
++        data_init: &mut DataInit<'_, D>,
++    ) {
++        use wp_image_description_creator_params_v1::{Error, Request};
++
++        let mut p = self.0.lock().unwrap();
++        let already_set = || resource.post_error(Error::AlreadySet, "already set");
++        let xy = |v: i32| v as f32 / 1_000_000.;
++
++        match request {
++            Request::Create { image_description } => {
++                let (Some(tf), Some(primaries)) = (p.tf, p.primaries) else {
++                    resource.post_error(Error::IncompleteSet, "tf and primaries required");
++                    data_init.init(
++                        image_description,
++                        ImageDescData {
++                            desc: None,
++                            info: false,
++                        },
++                    );
++                    return;
++                };
++                if let (Some(cll), Some(fall)) = (p.max_cll, p.max_fall) {
++                    if fall > cll {
++                        resource.post_error(Error::InvalidLuminance, "max_fall > max_cll");
++                    }
++                }
++                let (min_lum, max_lum, ref_lum) = p.lum.unwrap_or(match tf {
++                    Tf::Pq => (0.005, 10000., 203.),
++                    Tf::Hlg => (0.005, 1000., 203.),
++                    Tf::Gamma(2.4) => (0.01, 100., 100.),
++                    _ => (0.2, 80., 80.),
++                });
++                let max_lum = if tf == Tf::Pq {
++                    min_lum + 10000.
++                } else {
++                    max_lum
++                };
++                let desc = ColorDesc {
++                    tf,
++                    primaries,
++                    min_lum,
++                    max_lum,
++                    ref_lum,
++                    target_max: p.max_cll.or(p.mastering_max).filter(|&m| m > 0.),
++                };
++                init_desc(data_init, image_description, Some(desc), false);
++            }
++            Request::SetTfNamed { tf } => {
++                if p.tf.is_some() {
++                    return already_set();
++                }
++                match tf.into_result().ok().and_then(named_tf) {
++                    Some(tf) => p.tf = Some(tf),
++                    None => resource.post_error(Error::InvalidTf, "unsupported tf"),
++                }
++            }
++            Request::SetTfPower { eexp } => {
++                if p.tf.is_some() {
++                    return already_set();
++                }
++                if !(10000..=100000).contains(&eexp) {
++                    resource.post_error(Error::InvalidTf, "exponent out of range");
++                    return;
++                }
++                p.tf = Some(Tf::Gamma(eexp as f32 / 10000.));
++            }
++            Request::SetPrimariesNamed { primaries } => {
++                if p.primaries.is_some() {
++                    return already_set();
++                }
++                match NAMED_PRIMARIES
++                    .iter()
++                    .find(|(n, _)| WEnum::Value(*n) == primaries)
++                {
++                    Some((_, v)) => p.primaries = Some(*v),
++                    None => resource.post_error(Error::InvalidPrimariesNamed, "unsupported"),
++                }
++            }
++            Request::SetPrimaries {
++                r_x,
++                r_y,
++                g_x,
++                g_y,
++                b_x,
++                b_y,
++                w_x,
++                w_y,
++            } => {
++                if p.primaries.is_some() {
++                    return already_set();
++                }
++                p.primaries = Some([r_x, r_y, g_x, g_y, b_x, b_y, w_x, w_y].map(xy));
++            }
++            Request::SetLuminances {
++                min_lum,
++                max_lum,
++                reference_lum,
++            } => {
++                if p.lum.is_some() {
++                    return already_set();
++                }
++                let min = min_lum as f32 / 10000.;
++                let (max, reference) = (max_lum as f32, reference_lum as f32);
++                if max <= min || reference <= min {
++                    resource.post_error(Error::InvalidLuminance, "invalid luminance");
++                    return;
++                }
++                p.lum = Some((min, max, reference));
++            }
++            Request::SetMasteringDisplayPrimaries { .. } => {
++                if p.mastering_primaries {
++                    return already_set();
++                }
++                p.mastering_primaries = true;
++            }
++            Request::SetMasteringLuminance { max_lum, .. } => {
++                if p.mastering_max.is_some() {
++                    return already_set();
++                }
++                p.mastering_max = Some(max_lum as f32);
++            }
++            Request::SetMaxCll { max_cll } => {
++                if p.max_cll.is_some() {
++                    return already_set();
++                }
++                p.max_cll = Some(max_cll as f32);
++            }
++            Request::SetMaxFall { max_fall } => {
++                if p.max_fall.is_some() {
++                    return already_set();
++                }
++                p.max_fall = Some(max_fall as f32);
++            }
++            _ => unreachable!(),
++        }
++    }
++}
++
++impl<D> Dispatch2<WpImageDescriptionV1, D> for ImageDescData
++where
++    D: Dispatch<WpImageDescriptionInfoV1, EmptyData>,
++    D: ColorManagementHandler,
++    D: 'static,
++{
++    fn request(
++        &self,
++        state: &mut D,
++        _client: &Client,
++        resource: &WpImageDescriptionV1,
++        request: <WpImageDescriptionV1 as Resource>::Request,
++        _dhandle: &DisplayHandle,
++        data_init: &mut DataInit<'_, D>,
++    ) {
++        use wp_image_description_v1::{Error, Request};
++
++        match request {
++            Request::GetInformation { information } => {
++                let info = data_init.init(information, EmptyData);
++                let Some(desc) = self.desc else {
++                    resource.post_error(Error::NotReady, "image description failed");
++                    return;
++                };
++                if !self.info {
++                    resource.post_error(Error::NoInformation, "get_information not allowed");
++                    return;
++                }
++                send_info(&info, &desc);
++                state.color_management_state().pending_done.push(info);
++            }
++            Request::Destroy => (),
++            _ => unreachable!(),
++        }
++    }
++}
++
++fn send_info(info: &WpImageDescriptionInfoV1, desc: &ColorDesc) {
++    let p = desc.primaries.map(|v| (v * 1_000_000.).round() as i32);
++    info.primaries(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
++    if let Some((named, _)) = NAMED_PRIMARIES.iter().find(|(_, v)| *v == desc.primaries) {
++        info.primaries_named(*named);
++    }
++    match desc.tf {
++        Tf::Gamma(2.2) => info.tf_named(TransferFunction::Gamma22),
++        Tf::Gamma(g) => info.tf_power((g * 10000.).round() as u32),
++        Tf::Pq => info.tf_named(TransferFunction::St2084Pq),
++        Tf::Hlg => info.tf_named(TransferFunction::Hlg),
++        Tf::Linear => info.tf_named(TransferFunction::ExtLinear),
++    }
++    let min = (desc.min_lum * 10000.).round() as u32;
++    info.luminances(min, desc.max_lum as u32, desc.ref_lum as u32);
++    info.target_primaries(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
++    info.target_luminance(min, desc.max_lum as u32);
++}
++
++impl<D> Dispatch2<WpImageDescriptionInfoV1, D> for EmptyData {
++    fn request(
++        &self,
++        _state: &mut D,
++        _client: &Client,
++        _resource: &WpImageDescriptionInfoV1,
++        _request: <WpImageDescriptionInfoV1 as Resource>::Request,
++        _dhandle: &DisplayHandle,
++        _data_init: &mut DataInit<'_, D>,
++    ) {
++        unreachable!()
++    }
++}
++
++impl<D> Dispatch2<WpImageDescriptionCreatorIccV1, D> for EmptyData {
++    fn request(
++        &self,
++        _state: &mut D,
++        _client: &Client,
++        _resource: &WpImageDescriptionCreatorIccV1,
++        _request: <WpImageDescriptionCreatorIccV1 as Resource>::Request,
++        _dhandle: &DisplayHandle,
++        _data_init: &mut DataInit<'_, D>,
++    ) {
++        unreachable!()
++    }
++}
+diff --git a/src/protocols/mod.rs b/src/protocols/mod.rs
+index 80fa017..85dc9c2 100644
+--- a/src/protocols/mod.rs
++++ b/src/protocols/mod.rs
+@@ -1,3 +1,4 @@
++pub mod color_management;
+ pub mod ext_workspace;
+ pub mod foreign_toplevel;
+ pub mod gamma_control;
+diff --git a/src/render_helpers/clipped_surface.rs b/src/render_helpers/clipped_surface.rs
+index fe88d47..78f36ef 100644
+--- a/src/render_helpers/clipped_surface.rs
++++ b/src/render_helpers/clipped_surface.rs
+@@ -10,14 +10,17 @@ use smithay::backend::renderer::utils::{CommitCounter, DamageSet, OpaqueRegions}
+ use smithay::utils::user_data::UserDataMap;
+ use smithay::utils::{Buffer, Logical, Physical, Point, Rectangle, Scale, Size, Transform};
+ 
++use super::color::{self, ColorDesc};
+ use super::damage::ExtraDamage;
+ use super::renderer::{AsGlesFrame as _, NiriRenderer};
+ use super::shaders::{mat3_uniform, Shaders};
++use super::surface::SurfaceRenderElement;
+ use crate::backend::tty::{TtyFrame, TtyRenderer, TtyRendererError};
+ 
+ #[derive(Debug)]
+ pub struct ClippedSurfaceRenderElement<R: NiriRenderer> {
+     inner: WaylandSurfaceRenderElement<R>,
++    desc: ColorDesc,
+     program: GlesTexProgram,
+     corner_radius: CornerRadius,
+     geometry: Rectangle<f64, Logical>,
+@@ -32,14 +35,15 @@ pub struct RoundedCornerDamage {
+ 
+ impl<R: NiriRenderer> ClippedSurfaceRenderElement<R> {
+     pub fn new(
+-        elem: WaylandSurfaceRenderElement<R>,
++        elem: SurfaceRenderElement<R>,
+         scale: Scale<f64>,
+         geometry: Rectangle<f64, Logical>,
+         program: GlesTexProgram,
+         corner_radius: CornerRadius,
+     ) -> Self {
+         Self {
+-            inner: elem,
++            inner: elem.inner,
++            desc: elem.desc,
+             program,
+             corner_radius,
+             geometry,
+@@ -47,6 +51,20 @@ impl<R: NiriRenderer> ClippedSurfaceRenderElement<R> {
+         }
+     }
+ 
++    fn program_and_uniforms(
++        &self,
++        frame: &mut GlesFrame,
++    ) -> (GlesTexProgram, Vec<Uniform<'static>>) {
++        let mut uniforms = self.compute_uniforms();
++        if let Some(cm) = color::conversion(&self.desc, &color::target()) {
++            if let Some(program) = Shaders::get_from_frame(frame).clipped_surface_cm.clone() {
++                uniforms.extend(cm);
++                return (program, uniforms);
++            }
++        }
++        (self.program.clone(), uniforms)
++    }
++
+     fn compute_uniforms(&self) -> Vec<Uniform<'static>> {
+         let scale = Scale::from(f64::from(self.scale));
+         let elem_geo = self.inner.geometry(scale);
+@@ -104,7 +122,7 @@ impl<R: NiriRenderer> ClippedSurfaceRenderElement<R> {
+     }
+ 
+     pub fn will_clip(
+-        elem: &WaylandSurfaceRenderElement<R>,
++        elem: &SurfaceRenderElement<R>,
+         scale: Scale<f64>,
+         geometry: Rectangle<f64, Logical>,
+         corner_radius: CornerRadius,
+@@ -238,7 +256,8 @@ impl RenderElement<GlesRenderer> for ClippedSurfaceRenderElement<GlesRenderer> {
+         opaque_regions: &[Rectangle<i32, Physical>],
+         cache: Option<&UserDataMap>,
+     ) -> Result<(), GlesError> {
+-        frame.override_default_tex_program(self.program.clone(), self.compute_uniforms());
++        let (program, uniforms) = self.program_and_uniforms(frame);
++        frame.override_default_tex_program(program, uniforms);
+         RenderElement::<GlesRenderer>::draw(
+             &self.inner,
+             frame,
+@@ -271,9 +290,10 @@ impl<'render> RenderElement<TtyRenderer<'render>>
+         opaque_regions: &[Rectangle<i32, Physical>],
+         cache: Option<&UserDataMap>,
+     ) -> Result<(), TtyRendererError<'render>> {
++        let (program, uniforms) = self.program_and_uniforms(frame.as_gles_frame());
+         frame
+             .as_gles_frame()
+-            .override_default_tex_program(self.program.clone(), self.compute_uniforms());
++            .override_default_tex_program(program, uniforms);
+         RenderElement::draw(&self.inner, frame, src, dst, damage, opaque_regions, cache)?;
+         frame.as_gles_frame().clear_tex_program_override();
+         Ok(())
+diff --git a/src/render_helpers/color.rs b/src/render_helpers/color.rs
+new file mode 100644
+index 0000000..901442d
+--- /dev/null
++++ b/src/render_helpers/color.rs
+@@ -0,0 +1,153 @@
++use std::sync::atomic::{AtomicBool, Ordering};
++
++use glam::{Mat3, Vec3};
++use smithay::backend::renderer::gles::Uniform;
++
++use super::shaders::mat3_uniform;
++
++pub const SRGB: [f32; 8] = [0.64, 0.33, 0.30, 0.60, 0.15, 0.06, 0.3127, 0.3290];
++pub const DISPLAY_P3: [f32; 8] = [0.680, 0.320, 0.265, 0.690, 0.150, 0.060, 0.3127, 0.3290];
++pub const DCI_P3: [f32; 8] = [0.680, 0.320, 0.265, 0.690, 0.150, 0.060, 0.314, 0.351];
++pub const BT2020: [f32; 8] = [0.708, 0.292, 0.170, 0.797, 0.131, 0.046, 0.3127, 0.3290];
++pub const ADOBE_RGB: [f32; 8] = [0.64, 0.33, 0.21, 0.71, 0.15, 0.06, 0.3127, 0.3290];
++
++const REF_NITS: f32 = 203.;
++
++#[derive(Debug, Clone, Copy, PartialEq)]
++pub enum Tf {
++    Gamma(f32),
++    Pq,
++    Hlg,
++    Linear,
++}
++
++#[derive(Debug, Clone, Copy, PartialEq)]
++pub struct ColorDesc {
++    pub tf: Tf,
++    pub primaries: [f32; 8],
++    pub min_lum: f32,
++    pub max_lum: f32,
++    pub ref_lum: f32,
++    pub target_max: Option<f32>,
++}
++
++impl ColorDesc {
++    pub const SRGB: Self = Self {
++        tf: Tf::Gamma(2.2),
++        primaries: SRGB,
++        min_lum: 0.2,
++        max_lum: 80.,
++        ref_lum: 80.,
++        target_max: None,
++    };
++
++    pub fn output(wide_gamut: bool) -> Self {
++        Self {
++            primaries: if wide_gamut { DISPLAY_P3 } else { SRGB },
++            ..Self::SRGB
++        }
++    }
++
++    fn peak(&self) -> f32 {
++        // ponytail: unknown HDR peak assumed 1000 nits, no dynamic peak detection.
++        let max = self.target_max.unwrap_or(self.max_lum.min(1000.));
++        max.max(self.ref_lum) / self.ref_lum
++    }
++}
++
++// Rendering happens one output at a time; screenshots and screencasts stay sRGB.
++static TARGET_WIDE_GAMUT: AtomicBool = AtomicBool::new(false);
++
++pub fn set_target(wide_gamut: bool) {
++    TARGET_WIDE_GAMUT.store(wide_gamut, Ordering::Relaxed);
++}
++
++pub fn target() -> ColorDesc {
++    ColorDesc::output(TARGET_WIDE_GAMUT.load(Ordering::Relaxed))
++}
++
++fn xy_to_xyz(x: f32, y: f32) -> Vec3 {
++    Vec3::new(x / y, 1., (1. - x - y) / y)
++}
++
++fn rgb_to_xyz(p: &[f32; 8]) -> Mat3 {
++    let m = Mat3::from_cols(
++        xy_to_xyz(p[0], p[1]),
++        xy_to_xyz(p[2], p[3]),
++        xy_to_xyz(p[4], p[5]),
++    );
++    let s = m.inverse() * xy_to_xyz(p[6], p[7]);
++    m * Mat3::from_diagonal(s)
++}
++
++fn adapt(from: Vec3, to: Vec3) -> Mat3 {
++    let bradford = Mat3::from_cols_array(&[
++        0.8951, -0.7502, 0.0389, 0.2664, 1.7135, -0.0685, -0.1614, 0.0367, 1.0296,
++    ]);
++    let scale = (bradford * to) / (bradford * from);
++    bradford.inverse() * Mat3::from_diagonal(scale) * bradford
++}
++
++fn pq_oetf(nits: f32) -> f32 {
++    let (m1, m2, c1, c2, c3) = (0.159_301_76, 78.84375, 0.8359375, 18.851_563, 18.6875);
++    let p = (nits / 10000.).max(0.).powf(m1);
++    ((c1 + c2 * p) / (1. + c3 * p)).powf(m2)
++}
++
++pub fn conversion(src: &ColorDesc, dst: &ColorDesc) -> Option<Vec<Uniform<'static>>> {
++    let gamut = src.primaries == dst.primaries;
++    let src_scale = src.max_lum / src.ref_lum;
++    let src_peak = src.peak();
++    let dst_peak = dst.max_lum / dst.ref_lum;
++    if src.tf == dst.tf && gamut && src_scale == 1. && src_peak <= dst_peak {
++        return None;
++    }
++
++    let (sp, dp) = (&src.primaries, &dst.primaries);
++    let mut mat = rgb_to_xyz(dp).inverse();
++    if (sp[6], sp[7]) != (dp[6], dp[7]) {
++        mat *= adapt(xy_to_xyz(sp[6], sp[7]), xy_to_xyz(dp[6], dp[7]));
++    }
++    mat *= rgb_to_xyz(sp) * src_scale;
++
++    let (kind, gamma) = match src.tf {
++        Tf::Gamma(g) => (0., g),
++        Tf::Pq => (1., 1.),
++        Tf::Hlg => (2., 1.),
++        Tf::Linear => (3., 1.),
++    };
++    let Tf::Gamma(out_gamma) = dst.tf else {
++        unreachable!()
++    };
++
++    Some(vec![
++        mat3_uniform("cm_mat", mat),
++        Uniform::new("cm_tf", (kind, gamma)),
++        Uniform::new(
++            "cm_tm",
++            (pq_oetf(src_peak * REF_NITS), pq_oetf(dst_peak * REF_NITS)),
++        ),
++        Uniform::new("cm_out", (out_gamma, 1. / dst_peak)),
++    ])
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn srgb_to_p3() {
++        let m = rgb_to_xyz(&DISPLAY_P3).inverse() * rgb_to_xyz(&SRGB);
++        let red = m * Vec3::X;
++        assert!(
++            (red - Vec3::new(0.8225, 0.0332, 0.0171))
++                .abs()
++                .max_element()
++                < 1e-3
++        );
++        assert!((m * Vec3::ONE - Vec3::ONE).abs().max_element() < 1e-4);
++        assert!(conversion(&ColorDesc::SRGB, &ColorDesc::SRGB).is_none());
++        assert!(conversion(&ColorDesc::SRGB, &ColorDesc::output(true)).is_some());
++        assert!((pq_oetf(10000.) - 1.).abs() < 1e-4);
++    }
++}
+diff --git a/src/render_helpers/mod.rs b/src/render_helpers/mod.rs
+index 3ae027c..2bd1ef3 100644
+--- a/src/render_helpers/mod.rs
++++ b/src/render_helpers/mod.rs
+@@ -30,6 +30,7 @@ pub mod background_effect;
+ pub mod blur;
+ pub mod border;
+ pub mod clipped_surface;
++pub mod color;
+ pub mod damage;
+ pub mod debug;
+ pub mod effect_buffer;
+diff --git a/src/render_helpers/shaders/color.frag b/src/render_helpers/shaders/color.frag
+new file mode 100644
+index 0000000..f005122
+--- /dev/null
++++ b/src/render_helpers/shaders/color.frag
+@@ -0,0 +1,71 @@
++
++uniform mat3 cm_mat;
++uniform vec2 cm_tf;
++uniform vec2 cm_tm;
++uniform vec2 cm_out;
++
++const float CM_M1 = 0.1593017578125;
++const float CM_M2 = 78.84375;
++const float CM_C1 = 0.8359375;
++const float CM_C2 = 18.8515625;
++const float CM_C3 = 18.6875;
++const float CM_REF = 203.0 / 10000.0;
++
++vec3 cm_pq_eotf(vec3 v) {
++    vec3 p = pow(max(v, 0.0), vec3(1.0 / CM_M2));
++    return pow(max(p - CM_C1, 0.0) / (CM_C2 - CM_C3 * p), vec3(1.0 / CM_M1));
++}
++
++float cm_pq_oetf(float l) {
++    float p = pow(max(l, 0.0), CM_M1);
++    return pow((CM_C1 + CM_C2 * p) / (1.0 + CM_C3 * p), CM_M2);
++}
++
++vec3 cm_hlg_eotf(vec3 v) {
++    vec3 lo = v * v / 3.0;
++    vec3 hi = (exp((v - 0.55991073) / 0.17883277) + 0.28466892) / 12.0;
++    vec3 s = mix(lo, hi, step(0.5, v));
++    float y = dot(s, vec3(0.2627, 0.6780, 0.0593));
++    return s * pow(max(y, 1e-6), 0.2);
++}
++
++vec3 cm_decode(vec3 c) {
++    if (cm_tf.x == 1.0)
++        return cm_pq_eotf(c);
++    if (cm_tf.x == 2.0)
++        return cm_hlg_eotf(max(c, 0.0));
++    if (cm_tf.x == 3.0)
++        return c;
++    return sign(c) * pow(abs(c), vec3(cm_tf.y));
++}
++
++// BT.2390 EETF on maxRGB.
++vec3 cm_tone_map(vec3 c) {
++    float m = max(max(c.r, c.g), c.b);
++    if (cm_tm.x <= cm_tm.y || m <= 0.0)
++        return c;
++
++    float e = min(cm_pq_oetf(m * CM_REF) / cm_tm.x, 1.0);
++    float max_lum = cm_tm.y / cm_tm.x;
++    float ks = 1.5 * max_lum - 0.5;
++    if (e > ks) {
++        float t = (e - ks) / (1.0 - ks);
++        float t2 = t * t;
++        float t3 = t2 * t;
++        e = (2.0 * t3 - 3.0 * t2 + 1.0) * ks + (t3 - 2.0 * t2 + t) * (1.0 - ks)
++            + (-2.0 * t3 + 3.0 * t2) * max_lum;
++    }
++    float l = cm_pq_eotf(vec3(e * cm_tm.x)).r / CM_REF;
++    return c * (l / m);
++}
++
++vec4 cm_convert(vec4 color) {
++    if (color.a <= 0.0)
++        return color;
++
++    vec3 c = cm_mat * cm_decode(color.rgb / color.a);
++    // ponytail: hard gamut clip, no perceptual gamut mapping.
++    c = cm_tone_map(max(c, 0.0));
++    c = pow(min(c * cm_out.y, 1.0), vec3(1.0 / cm_out.x));
++    return vec4(c * color.a, color.a);
++}
+diff --git a/src/render_helpers/shaders/color_surface.frag b/src/render_helpers/shaders/color_surface.frag
+new file mode 100644
+index 0000000..93c7e8b
+--- /dev/null
++++ b/src/render_helpers/shaders/color_surface.frag
+@@ -0,0 +1,39 @@
++#version 100
++
++//_DEFINES_
++
++#if defined(EXTERNAL)
++#extension GL_OES_EGL_image_external : require
++#endif
++
++precision highp float;
++#if defined(EXTERNAL)
++uniform samplerExternalOES tex;
++#else
++uniform sampler2D tex;
++#endif
++
++uniform float alpha;
++varying vec2 v_coords;
++
++#if defined(DEBUG_FLAGS)
++uniform float tint;
++#endif
++
++vec4 cm_convert(vec4 color);
++
++void main() {
++    vec4 color = texture2D(tex, v_coords);
++#if defined(NO_ALPHA)
++    color = vec4(color.rgb, 1.0);
++#endif
++
++    color = cm_convert(color) * alpha;
++
++#if defined(DEBUG_FLAGS)
++    if (tint == 1.0)
++        color = vec4(0.0, 0.2, 0.0, 0.2) + color * 0.8;
++#endif
++
++    gl_FragColor = color;
++}
+diff --git a/src/render_helpers/shaders/mod.rs b/src/render_helpers/shaders/mod.rs
+index 7be9b15..815a396 100644
+--- a/src/render_helpers/shaders/mod.rs
++++ b/src/render_helpers/shaders/mod.rs
+@@ -15,6 +15,8 @@ pub struct Shaders {
+     pub shadow: Option<ShaderProgram>,
+     pub clipped_surface: Option<GlesTexProgram>,
+     pub postprocess_and_clip: Option<GlesTexProgram>,
++    pub color_surface: Option<GlesTexProgram>,
++    pub clipped_surface_cm: Option<GlesTexProgram>,
+     pub resize: Option<ShaderProgram>,
+     pub gradient_fade: Option<GlesTexProgram>,
+     pub blur: Option<BlurProgram>,
+@@ -126,6 +128,50 @@ impl Shaders {
+             })
+             .ok();
+ 
++        let cm_uniforms = [
++            UniformName::new("cm_mat", UniformType::Matrix3x3),
++            UniformName::new("cm_tf", UniformType::_2f),
++            UniformName::new("cm_tm", UniformType::_2f),
++            UniformName::new("cm_out", UniformType::_2f),
++        ];
++
++        let color_surface = renderer
++            .compile_custom_texture_shader(
++                concat!(
++                    include_str!("color_surface.frag"),
++                    include_str!("color.frag")
++                ),
++                &cm_uniforms,
++            )
++            .map_err(|err| {
++                warn!("error compiling color surface shader: {err:?}");
++            })
++            .ok();
++
++        let clipped_surface_cm = renderer
++            .compile_custom_texture_shader(
++                concat!(
++                    include_str!("clipped_surface.frag"),
++                    include_str!("rounding_alpha.frag"),
++                    include_str!("color.frag"),
++                    "\nvec4 postprocess(vec4 color) { return cm_convert(color); }",
++                ),
++                &[
++                    UniformName::new("niri_scale", UniformType::_1f),
++                    UniformName::new("geo_size", UniformType::_2f),
++                    UniformName::new("corner_radius", UniformType::_4f),
++                    UniformName::new("input_to_geo", UniformType::Matrix3x3),
++                    UniformName::new("cm_mat", UniformType::Matrix3x3),
++                    UniformName::new("cm_tf", UniformType::_2f),
++                    UniformName::new("cm_tm", UniformType::_2f),
++                    UniformName::new("cm_out", UniformType::_2f),
++                ],
++            )
++            .map_err(|err| {
++                warn!("error compiling clipped color surface shader: {err:?}");
++            })
++            .ok();
++
+         let resize = compile_resize_program(renderer, include_str!("resize.frag"))
+             .map_err(|err| {
+                 warn!("error compiling resize shader: {err:?}");
+@@ -153,6 +199,8 @@ impl Shaders {
+             shadow,
+             clipped_surface,
+             postprocess_and_clip,
++            color_surface,
++            clipped_surface_cm,
+             resize,
+             gradient_fade,
+             blur,
+diff --git a/src/render_helpers/surface.rs b/src/render_helpers/surface.rs
+index 629a65c..946ee3a 100644
+--- a/src/render_helpers/surface.rs
++++ b/src/render_helpers/surface.rs
+@@ -1,14 +1,151 @@
+ use smithay::backend::renderer::element::surface::WaylandSurfaceRenderElement;
+-use smithay::backend::renderer::element::Kind;
+-use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
+-use smithay::backend::renderer::utils::{import_surface, RendererSurfaceStateUserData};
+-use smithay::backend::renderer::{ImportAll, Renderer};
++use smithay::backend::renderer::element::{Element, Id, Kind, RenderElement, UnderlyingStorage};
++use smithay::backend::renderer::gles::{
++    GlesError, GlesFrame, GlesRenderer, GlesTexProgram, GlesTexture, Uniform,
++};
++use smithay::backend::renderer::utils::{
++    import_surface, CommitCounter, DamageSet, OpaqueRegions, RendererSurfaceStateUserData,
++};
++use smithay::backend::renderer::Renderer;
+ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
+-use smithay::utils::{Logical, Physical, Point, Scale};
++use smithay::utils::user_data::UserDataMap;
++use smithay::utils::{Buffer, Logical, Physical, Point, Rectangle, Scale, Transform};
+ use smithay::wayland::compositor::{with_surface_tree_downward, TraversalAction};
+ 
++use super::color::{self, ColorDesc};
++use super::renderer::{AsGlesFrame as _, NiriRenderer};
++use super::shaders::Shaders;
+ use super::texture::TextureBuffer;
+ use super::BakedBuffer;
++use crate::backend::tty::{TtyFrame, TtyRenderer, TtyRendererError};
++use crate::protocols::color_management::surface_color_desc;
++
++#[derive(Debug)]
++pub struct SurfaceRenderElement<R: NiriRenderer> {
++    pub inner: WaylandSurfaceRenderElement<R>,
++    pub desc: ColorDesc,
++}
++
++impl<R: NiriRenderer> SurfaceRenderElement<R> {
++    pub fn conversion(&self) -> Option<Vec<Uniform<'static>>> {
++        color::conversion(&self.desc, &color::target())
++    }
++
++    fn program(frame: &mut GlesFrame<'_, '_>) -> Option<GlesTexProgram> {
++        Shaders::get_from_frame(frame).color_surface.clone()
++    }
++}
++
++impl<R: NiriRenderer> Element for SurfaceRenderElement<R> {
++    fn id(&self) -> &Id {
++        self.inner.id()
++    }
++
++    fn current_commit(&self) -> CommitCounter {
++        self.inner.current_commit()
++    }
++
++    fn geometry(&self, scale: Scale<f64>) -> Rectangle<i32, Physical> {
++        self.inner.geometry(scale)
++    }
++
++    fn src(&self) -> Rectangle<f64, Buffer> {
++        self.inner.src()
++    }
++
++    fn transform(&self) -> Transform {
++        self.inner.transform()
++    }
++
++    fn damage_since(
++        &self,
++        scale: Scale<f64>,
++        commit: Option<CommitCounter>,
++    ) -> DamageSet<i32, Physical> {
++        self.inner.damage_since(scale, commit)
++    }
++
++    fn opaque_regions(&self, scale: Scale<f64>) -> OpaqueRegions<i32, Physical> {
++        self.inner.opaque_regions(scale)
++    }
++
++    fn alpha(&self) -> f32 {
++        self.inner.alpha()
++    }
++
++    fn kind(&self) -> Kind {
++        self.inner.kind()
++    }
++}
++
++impl RenderElement<GlesRenderer> for SurfaceRenderElement<GlesRenderer> {
++    fn draw(
++        &self,
++        frame: &mut GlesFrame<'_, '_>,
++        src: Rectangle<f64, Buffer>,
++        dst: Rectangle<i32, Physical>,
++        damage: &[Rectangle<i32, Physical>],
++        opaque_regions: &[Rectangle<i32, Physical>],
++        cache: Option<&UserDataMap>,
++    ) -> Result<(), GlesError> {
++        let program = Self::program(frame);
++        let (Some(uniforms), Some(program)) = (self.conversion(), program) else {
++            return self
++                .inner
++                .draw(frame, src, dst, damage, opaque_regions, cache);
++        };
++        frame.override_default_tex_program(program, uniforms);
++        let res = self
++            .inner
++            .draw(frame, src, dst, damage, opaque_regions, cache);
++        frame.clear_tex_program_override();
++        res
++    }
++
++    fn underlying_storage(&self, renderer: &mut GlesRenderer) -> Option<UnderlyingStorage<'_>> {
++        if self.conversion().is_some() {
++            return None;
++        }
++        self.inner.underlying_storage(renderer)
++    }
++}
++
++impl<'render> RenderElement<TtyRenderer<'render>> for SurfaceRenderElement<TtyRenderer<'render>> {
++    fn draw(
++        &self,
++        frame: &mut TtyFrame<'render, '_, '_>,
++        src: Rectangle<f64, Buffer>,
++        dst: Rectangle<i32, Physical>,
++        damage: &[Rectangle<i32, Physical>],
++        opaque_regions: &[Rectangle<i32, Physical>],
++        cache: Option<&UserDataMap>,
++    ) -> Result<(), TtyRendererError<'render>> {
++        let program = Self::program(frame.as_gles_frame());
++        let (Some(uniforms), Some(program)) = (self.conversion(), program) else {
++            return self
++                .inner
++                .draw(frame, src, dst, damage, opaque_regions, cache);
++        };
++        frame
++            .as_gles_frame()
++            .override_default_tex_program(program, uniforms);
++        let res = self
++            .inner
++            .draw(frame, src, dst, damage, opaque_regions, cache);
++        frame.as_gles_frame().clear_tex_program_override();
++        res
++    }
++
++    fn underlying_storage(
++        &self,
++        renderer: &mut TtyRenderer<'render>,
++    ) -> Option<UnderlyingStorage<'_>> {
++        if self.conversion().is_some() {
++            return None;
++        }
++        self.inner.underlying_storage(renderer)
++    }
++}
+ 
+ /// Renders elements from a surface tree as textures into `storage`.
+ pub fn render_snapshot_from_surface_tree(
+@@ -89,10 +226,9 @@ pub fn push_elements_from_surface_tree<R>(
+     scale: Scale<f64>,
+     alpha: f32,
+     kind: Kind,
+-    push: &mut dyn FnMut(WaylandSurfaceRenderElement<R>),
++    push: &mut dyn FnMut(SurfaceRenderElement<R>),
+ ) where
+-    R: Renderer + ImportAll,
+-    R::TextureId: Clone + 'static,
++    R: NiriRenderer,
+ {
+     let _span = tracy_client::span!("push_elements_from_surface_tree");
+ 
+@@ -132,7 +268,10 @@ pub fn push_elements_from_surface_tree<R>(
+                     match WaylandSurfaceRenderElement::from_surface(
+                         renderer, surface, states, location, alpha, kind,
+                     ) {
+-                        Ok(Some(surface)) => push(surface),
++                        Ok(Some(inner)) => push(SurfaceRenderElement {
++                            inner,
++                            desc: surface_color_desc(states),
++                        }),
+                         Ok(None) => {} // surface is not mapped
+                         Err(err) => {
+                             warn!("failed to import surface: {}", err);
+diff --git a/src/window/mapped.rs b/src/window/mapped.rs
+index a12e9e4..7d4130e 100644
+--- a/src/window/mapped.rs
++++ b/src/window/mapped.rs
+@@ -1,8 +1,8 @@
+ use std::cell::{Cell, Ref, RefCell};
+ use std::time::Duration;
+ 
++use crate::render_helpers::surface::SurfaceRenderElement;
+ use niri_config::{Color, Config, CornerRadius, GradientInterpolation, WindowRule};
+-use smithay::backend::renderer::element::surface::WaylandSurfaceRenderElement;
+ use smithay::backend::renderer::element::Kind;
+ use smithay::backend::renderer::gles::GlesRenderer;
+ use smithay::desktop::space::SpaceElement as _;
+@@ -673,7 +673,7 @@ impl LayoutElement for Mapped {
+         } else {
+             let buf_pos = location - self.window.geometry().loc.to_f64();
+             let surface = self.toplevel().wl_surface();
+-            let mut push = |elem: WaylandSurfaceRenderElement<R>| push(elem.into());
++            let mut push = |elem: SurfaceRenderElement<R>| push(elem.into());
+             push_elements_from_surface_tree(
+                 ctx.renderer,
+                 surface,
