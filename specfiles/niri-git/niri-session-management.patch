@@ -608,7 +608,7 @@ index 0000000..42458d9
 +  </interface>
 +</protocol>
 diff --git a/src/handlers/compositor.rs b/src/handlers/compositor.rs
-index 53f2912..cee86fe 100644
+index 53f2912..a136ce9 100644
 --- a/src/handlers/compositor.rs
 +++ b/src/handlers/compositor.rs
 @@ -21,6 +21,7 @@ use super::xdg_shell::add_mapped_toplevel_pre_commit_hook;
@@ -619,19 +619,36 @@ index 53f2912..cee86fe 100644
  use crate::utils::transaction::Transaction;
  use crate::utils::{is_mapped, send_scale_transform};
  use crate::window::{InitialConfigureState, Mapped, ResolvedWindowRules, Unmapped};
-@@ -202,11 +203,26 @@ impl CompositorHandler for State {
+@@ -202,11 +203,43 @@ impl CompositorHandler for State {
                      };
                      let window = mapped.window.clone();
-
+ 
 +                    let saved = take_restore_state(surface);
 +                    let saved_ws = (|| {
 +                        let saved = saved.as_ref().filter(|s| s.workspace_name.is_none())?;
 +                        let output = output.as_ref()?;
-+                        let mut wss = self.niri.layout.workspaces().filter(|(mon, _, _)| {
-+                            mon.is_some_and(|mon| mon.output() == output)
-+                        });
-+                        let ws = wss.by_ref().take(saved.workspace_idx + 1).last()?.2;
-+                        Some(ws.id())
++                        let key = (output.name(), saved.workspace_idx);
++                        let restored = &mut self.niri.session_management_state.restored_ws;
++                        let wss: Vec<_> = self
++                            .niri
++                            .layout
++                            .workspaces()
++                            .filter(|(mon, _, _)| mon.is_some_and(|mon| mon.output() == output))
++                            .map(|(_, _, ws)| (ws.id(), ws.name().is_none()))
++                            .collect();
++                        if let Some(id) = restored
++                            .get(&key)
++                            .filter(|id| wss.iter().any(|w| w.0 == **id))
++                        {
++                            return Some(*id);
++                        }
++                        let id = wss
++                            .get(saved.workspace_idx)
++                            .filter(|(id, unnamed)| *unnamed && !restored.values().any(|r| r == id))
++                            .or(wss.last())?
++                            .0;
++                        restored.insert(key, id);
++                        Some(id)
 +                    })();
 +                    let workspace_id = saved_ws.or(workspace_id);
 +                    let column_idx = saved
@@ -837,10 +854,10 @@ index fac1e4d..18b1479 100644
 +}
 diff --git a/src/protocols/session_management.rs b/src/protocols/session_management.rs
 new file mode 100644
-index 0000000..73f9d3b
+index 0000000..22ee957
 --- /dev/null
 +++ b/src/protocols/session_management.rs
-@@ -0,0 +1,743 @@
+@@ -0,0 +1,746 @@
 +use std::collections::HashMap;
 +use std::hash::{BuildHasher, RandomState};
 +use std::path::PathBuf;
@@ -874,6 +891,7 @@ index 0000000..73f9d3b
 +use super::raw::xx_session_management::v1::server::xx_toplevel_session_v1::{
 +    self, XxToplevelSessionV1,
 +};
++use crate::layout::workspace::WorkspaceId;
 +use crate::layout::{LayoutElement, SizingMode};
 +use crate::niri::State;
 +use crate::window::ResolvedWindowRules;
@@ -915,6 +933,7 @@ index 0000000..73f9d3b
 +    path: Option<PathBuf>,
 +    sessions: HashMap<String, StoredSession>,
 +    active: HashMap<String, ActiveSession>,
++    pub restored_ws: HashMap<(String, usize), WorkspaceId>,
 +    dirty: bool,
 +}
 +
@@ -1018,6 +1037,7 @@ index 0000000..73f9d3b
 +            path,
 +            sessions,
 +            active: HashMap::new(),
++            restored_ws: HashMap::new(),
 +            dirty: false,
 +        }
 +    }

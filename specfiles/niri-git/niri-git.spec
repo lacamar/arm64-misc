@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        12%{?dist}
+Release:        13%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -183,6 +183,10 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Fri Oct 09 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^9.git.2c82b77a-13
+- Keep restored windows together on unnamed workspaces
+- Never restore unnamed-workspace windows onto named ones
+
 * Fri Oct 09 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^9.git.2c82b77a-12
  - Update to commit 2c82b77a7116a1241ea2fd41dd008ff00b609aae
 
