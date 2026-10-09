@@ -1,0 +1,97 @@
+diff --git a/extension/background.js b/extension/background.js
+index 227f58b..48e42bd 100644
+--- a/extension/background.js
++++ b/extension/background.js
+@@ -362,6 +362,13 @@ browser.runtime.onMessage.addListener((msg, sender) => {
+   else if (msg.type === "handoff_done") handoffs.get(sender.tab?.id)?.resolve(msg.result);
+   else if (msg.type === "prompts_query") return Promise.resolve([...prompts.keys()]);
+   else if (msg.type === "marker_query") { const id = msg.tabId ?? sender.tab?.id; if (id != null) return Promise.resolve(markerState(id)); }
++  else if (msg.type === "release_tab") {
++    const id = msg.tabId ?? sender.tab?.id;
++    if (id == null) return;
++    forget(id);
++    pushMarker(id);
++    return Promise.resolve(markerState(id));
++  }
+   else if (msg.type === "stop_tab" || msg.type === "resume_tab") {
+     const id = msg.tabId ?? sender.tab?.id;
+     if (id == null) return;
+@@ -497,12 +504,15 @@ async function handle(cmd, args, sid) {
+   }
+ }
+ 
+-browser.tabs.onRemoved.addListener((id) => {
++function forget(id) {
+   for (const [s, t] of current) if (t === id) current.delete(s);
+   for (const set of touched.values()) set.delete(id);
+-  handoffs.get(id)?.resolve("closed");
+   controlled.delete(id);
+   stopped.delete(id);
++}
++browser.tabs.onRemoved.addListener((id) => {
++  handoffs.get(id)?.resolve("closed");
++  forget(id);
+ });
+ setBadge(false);
+ browser.storage.local.get("settings").then((st) => {
+diff --git a/extension/content.js b/extension/content.js
+index f62330e..8c90396 100644
+--- a/extension/content.js
++++ b/extension/content.js
+@@ -570,12 +570,13 @@
+     </style><div class="glow"></div><div class="pill"><span></span><button class="main"></button><button class="skip">Skip</button></div>`;
+     const pill = root.querySelector(".pill"), skip = root.querySelector(".skip");
+     root.querySelector(".main").addEventListener("click", () => browser.runtime.sendMessage(marker.handoff ? { type: "handoff_done", result: "done" } : { type: marker.stopped ? "resume_tab" : "stop_tab" }));
+-    skip.addEventListener("click", () => browser.runtime.sendMessage({ type: "handoff_done", result: "skipped" }));
++    skip.addEventListener("click", () => browser.runtime.sendMessage(marker.handoff ? { type: "handoff_done", result: "skipped" } : { type: "release_tab" }));
+     host.render = () => {
+       root.querySelector(".glow").hidden = marker.stopped || !!marker.handoff;
+       pill.classList.toggle("stopped", !!marker.stopped);
+       pill.classList.toggle("handoff", !!marker.handoff);
+-      skip.hidden = !marker.handoff;
++      skip.hidden = !marker.handoff && !marker.stopped;
++      skip.textContent = marker.handoff ? "Skip" : "Remove";
+       pill.querySelector("span").textContent = marker.handoff ? `Claude needs you: ${marker.handoff}` : marker.stopped ? "Claude is stopped on this tab" : "Claude is controlling this tab";
+       pill.querySelector(".main").textContent = marker.handoff ? "Done" : marker.stopped ? "Resume" : "Stop";
+     };
+diff --git a/extension/manifest.json b/extension/manifest.json
+index 6c7c8c2..e9c5cc5 100644
+--- a/extension/manifest.json
++++ b/extension/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "manifest_version": 2,
+   "name": "Zen Control",
+-  "version": "0.1.2.9",
++  "version": "0.1.2.10",
+   "description": "Lets Claude Code drive this browser through a local MCP bridge (ws://127.0.0.1:17373).",
+   "browser_specific_settings": {
+     "gecko": {
+diff --git a/extension/popup.html b/extension/popup.html
+index fa4035a..aaeb96b 100644
+--- a/extension/popup.html
++++ b/extension/popup.html
+@@ -5,7 +5,7 @@
+   <h1>Zen Control</h1>
+   <div id="prompts"></div>
+   <div class="row"><span id="current"></span><button id="toggle" hidden></button></div>
+-  <div class="row" id="stoppedRow" hidden><span>Claude is stopped on this tab</span><button id="resume" class="primary">Resume</button></div>
++  <div class="row" id="stoppedRow" hidden><span>Claude is stopped on this tab</span><button id="resume" class="primary">Resume</button><button id="release">Remove</button></div>
+   <div class="row"><label><input type="checkbox" id="all"> Allow on all sites without asking</label></div>
+   <p class="muted">Always-allowed sites</p>
+   <ul id="sites"></ul>
+diff --git a/extension/popup.js b/extension/popup.js
+index 2002b7c..7d4f90d 100644
+--- a/extension/popup.js
++++ b/extension/popup.js
+@@ -67,6 +67,10 @@ async function renderPrompts() {
+     await browser.runtime.sendMessage({ type: "resume_tab", tabId: tab.id });
+     document.getElementById("stoppedRow").hidden = true;
+   });
++  document.getElementById("release").addEventListener("click", async () => {
++    await browser.runtime.sendMessage({ type: "release_tab", tabId: tab.id });
++    document.getElementById("stoppedRow").hidden = true;
++  });
+   try { const u = new URL(tab.url); if (/^(https?|file):$/.test(u.protocol)) host = u.host || "file"; } catch {}
+   document.getElementById("toggle").addEventListener("click", () => save({ allowedSites: settings.allowedSites.includes(host) ? settings.allowedSites.filter((x) => x !== host) : [...settings.allowedSites, host] }));
+   document.getElementById("all").addEventListener("change", (e) => save({ allSites: e.target.checked }));
