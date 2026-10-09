@@ -1,0 +1,78 @@
+diff --git a/extension/background.js b/extension/background.js
+index 48e42bd..77aaba5 100644
+--- a/extension/background.js
++++ b/extension/background.js
+@@ -217,12 +217,14 @@ async function screenshot(tab, args = {}) {
+ }
+ 
+ async function capture(tab, args) {
++  const bg = await sendToContent(tab, "canvas_color", {}).catch(() => "white");
++  const shoot = (rect, scale) => withTimeout(browser.zenControl.capture(tab.id, rect, scale, bg), 10000, "capture");
+   if (args.ref || args.selector || args.region) {
+     const rect = await pageRect(tab, args);
+     const zoom = Math.min(4, MAX_SHOT_SIDE / Math.max(rect.width, rect.height));
+-    return { dataUrl: await withTimeout(browser.tabs.captureTab(tab.id, { format: "png", rect, scale: zoom }), 10000, "captureTab"), rect, zoom };
++    return { dataUrl: await shoot({ x: rect.x, y: rect.y, width: rect.width, height: rect.height }, zoom), rect, zoom };
+   }
+-  const dataUrl = await withTimeout(browser.tabs.captureTab(tab.id, { format: "png" }), 10000, "captureTab");
++  const dataUrl = await shoot();
+   // Scale the capture to CSS pixels so coordinates match what click(x, y) expects.
+   let dpr = 1, cssW = null, cssH = null;
+   try {
+diff --git a/extension/content.js b/extension/content.js
+index 8c90396..e9f442a 100644
+--- a/extension/content.js
++++ b/extension/content.js
+@@ -597,7 +597,13 @@
+   }
+   browser.runtime.sendMessage({ type: "marker_query" }).then(applyMarker, () => {});
+ 
+-  const handlers = { ping: () => ({ pong: true, url: location.href }), read_page: readPage, find, click, hover, type, press_key: pressKey, scroll, form_input: formInput, point, focus: focusEl, validation: () => { const v = validationFor(active()); return v ? { validation: v } : {}; }, hide_marker: (a) => { if (host) host.style.display = a.hide ? "none" : ""; return {}; }, get_text: getText, wait_for: waitFor, evaluate, console_logs: consoleLogs, upload, rect, frame_offset: frameOffset, highlight, marker: applyMarker, dialog: (a) => { dialogAnswer = a; return { armed: true }; } };
++  function canvasColor() {
++    const d = document.createElement("div");
++    d.style.cssText = "display:none!important;background-color:Canvas!important";
++    document.documentElement.append(d);
++    try { return getComputedStyle(d).backgroundColor; } finally { d.remove(); }
++  }
++  const handlers = { ping: () => ({ pong: true, url: location.href }), read_page: readPage, find, click, hover, type, press_key: pressKey, scroll, form_input: formInput, point, focus: focusEl, validation: () => { const v = validationFor(active()); return v ? { validation: v } : {}; }, canvas_color: canvasColor, hide_marker: (a) => { if (host) host.style.display = a.hide ? "none" : ""; return {}; }, get_text: getText, wait_for: waitFor, evaluate, console_logs: consoleLogs, upload, rect, frame_offset: frameOffset, highlight, marker: applyMarker, dialog: (a) => { dialogAnswer = a; return { armed: true }; } };
+ 
+   browser.runtime.onMessage.addListener((msg) => {
+     const h = handlers[msg && msg.cmd];
+diff --git a/extension/privileged/api.js b/extension/privileged/api.js
+index 6ca5dd2..8f2b217 100644
+--- a/extension/privileged/api.js
++++ b/extension/privileged/api.js
+@@ -47,6 +47,26 @@ this.zenControl = class extends ExtensionAPI {
+             guard(browser);
+           }
+         },
++        // captureTab paints transparent roots onto white; Zen's transparent browser shows its backdrop
++        async capture(tabId, rect, scale, bg) {
++          try {
++            const browser = context.extension.tabManager.get(tabId).nativeTab.linkedBrowser, win = browser.documentGlobal;
++            if (!browser.getBoundingClientRect().width) throw new Error("Cannot capture invisible tab");
++            const zoom = win.ZoomManager.getZoomForBrowser(browser);
++            const image = await browser.browsingContext.currentWindowGlobal.drawSnapshot(rect && win.DOMRect.fromRect(rect), (scale || win.devicePixelRatio) * zoom, bg);
++            const canvas = new win.OffscreenCanvas(image.width, image.height);
++            canvas.getContext("bitmaprenderer", { alpha: false }).transferFromImageBitmap(image);
++            const blob = await canvas.convertToBlob({ type: "image/png" });
++            return await new Promise((resolve, reject) => {
++              const r = new win.FileReader();
++              r.onload = () => resolve(r.result);
++              r.onerror = () => reject(r.error);
++              r.readAsDataURL(blob);
++            });
++          } catch (e) {
++            throw new ExtensionUtils.ExtensionError(String(e?.message || e));
++          }
++        },
+         folder(tabId, label) {
+           try {
+             const tab = context.extension.tabManager.get(tabId).nativeTab, win = tab.documentGlobal;
+diff --git a/extension/privileged/schema.json b/extension/privileged/schema.json
+index 865cb52..f23d85e 100644
+--- a/extension/privileged/schema.json
++++ b/extension/privileged/schema.json
+@@ -1 +1 @@
+-[{ "namespace": "zenControl", "functions": [{ "name": "send", "type": "function", "async": true, "parameters": [{ "name": "tabId", "type": "integer" }, { "name": "frameId", "type": "integer" }, { "name": "name", "type": "string" }, { "name": "data", "type": "any", "optional": true }] }, { "name": "folder", "type": "function", "async": true, "parameters": [{ "name": "tabId", "type": "integer" }, { "name": "label", "type": "string" }] }] }]
++[{"namespace": "zenControl", "functions": [{"name": "send", "type": "function", "async": true, "parameters": [{"name": "tabId", "type": "integer"}, {"name": "frameId", "type": "integer"}, {"name": "name", "type": "string"}, {"name": "data", "type": "any", "optional": true}]}, {"name": "folder", "type": "function", "async": true, "parameters": [{"name": "tabId", "type": "integer"}, {"name": "label", "type": "string"}]}, {"name": "capture", "type": "function", "async": true, "parameters": [{"name": "tabId", "type": "integer"}, {"name": "rect", "type": "object", "additionalProperties": {"type": "number"}, "optional": true}, {"name": "scale", "type": "number", "optional": true}, {"name": "bg", "type": "string"}]}]}]

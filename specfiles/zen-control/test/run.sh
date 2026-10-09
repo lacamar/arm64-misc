@@ -19,6 +19,7 @@ user_pref("datareporting.policy.dataSubmissionEnabled", false);
 user_pref("toolkit.telemetry.reportingpolicy.firstRun", false);
 user_pref("browser.aboutwelcome.enabled", false);
 user_pref("zen.welcome-screen.seen", true);
+user_pref("browser.tabs.allow_transparent_browser", true);
 P
 node $H/pages.mjs > $T/pages.log 2>&1 &
 PAGES=$!
