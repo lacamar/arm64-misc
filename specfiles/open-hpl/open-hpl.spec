@@ -1,5 +1,5 @@
 Name:           open-hpl
-Version:        1.3.39
+Version:        1.3.40
 Release:        1%{?dist}
 Summary:        Native aarch64 port of Frictional Games' HPL engine
 
@@ -136,6 +136,17 @@ launcher bunker 1944430 "Amnesia The Bunker" \
 %{_datadir}/icons/hicolor/128x128/apps/open-hpl-*.png
 
 %changelog
+* Fri Oct 09 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.40-1
+- SOMA: preload next map while playing
+- SOMA: animated loading icon, boot splash
+- SOMA: live settings apply
+- SOMA: freeze world while paused
+- SOMA: keep mouse captured on screens
+- SOMA: lipsync from .anno files
+- SOMA: map bone poses fixed
+- SOMA: carry props across map transfers
+- SOMA: terrain detail textures
+- SOMA: quit on window close/SIGTERM
 * Wed Oct 07 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.39-1
 - SOMA: edge glow
 - SOMA: color grading fades, save camera state
