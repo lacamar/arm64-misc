@@ -69,7 +69,7 @@ index 48572f6..4159a95 100644
      fn from_iter<T: IntoIterator<Item = Output>>(iter: T) -> Self {
          Self(Vec::from_iter(iter))
 diff --git a/src/backend/tty.rs b/src/backend/tty.rs
-index 094f6fa..16510ef 100644
+index 094f6fa..b5bde23 100644
 --- a/src/backend/tty.rs
 +++ b/src/backend/tty.rs
 @@ -20,15 +20,20 @@ use niri_ipc::{HSyncPolarity, VSyncPolarity};
@@ -115,7 +115,15 @@ index 094f6fa..16510ef 100644
      /// Tracy frame that goes from vblank to vblank.
      vblank_frame: Option<tracy_client::Frame>,
      /// Frame name for the VBlank frame.
-@@ -707,13 +715,14 @@ impl Tty {
+@@ -433,6 +441,7 @@ struct ConnectorProperties<'a> {
+     properties: Vec<(property::Info, property::RawValue)>,
+     has_change: bool,
+     requests: AtomicModeReq,
++    blob: Option<u64>,
+ }
+ 
+ impl Tty {
+@@ -707,13 +716,17 @@ impl Tty {
                          if let Ok(mut props) =
                              ConnectorProperties::try_new(&device.drm, surface.connector)
                          {
@@ -134,10 +142,13 @@ index 094f6fa..16510ef 100644
 +                            let format = surface.compositor.format();
 +                            let hdr = wanted_hdr(&config, &surface.name, single_gpu, format);
 +                            surface.hdr = set_connector_properties(&mut props, max_bpc, hdr);
++                            if surface.hdr.is_some() {
++                                let _ = surface.compositor.reset_state();
++                            }
                          } else {
                              warn!("failed to get connector properties");
                          }
-@@ -1332,9 +1341,21 @@ impl Tty {
+@@ -1332,9 +1345,21 @@ impl Tty {
  
          debug!("picking mode: {mode:?}");
  
@@ -160,7 +171,7 @@ index 094f6fa..16510ef 100644
  
              match props.get_panel_orientation() {
                  Ok(x) => orientation = Some(x),
-@@ -1517,6 +1538,21 @@ impl Tty {
+@@ -1517,6 +1542,21 @@ impl Tty {
              compositor.set_debug_flags(DebugFlags::TINT);
          }
  
@@ -182,7 +193,7 @@ index 094f6fa..16510ef 100644
          let mut dmabuf_feedback = None;
          if let Ok(primary_renderer) = self.gpu_manager.single_renderer(&self.primary_render_node) {
              let primary_formats = primary_renderer.dmabuf_formats();
-@@ -1565,6 +1601,8 @@ impl Tty {
+@@ -1565,6 +1605,8 @@ impl Tty {
              dmabuf_feedback,
              gamma_props,
              pending_gamma_change: None,
@@ -191,7 +202,7 @@ index 094f6fa..16510ef 100644
              vblank_frame: None,
              vblank_frame_name,
              time_since_presentation_plot_name,
-@@ -1928,6 +1966,11 @@ impl Tty {
+@@ -1928,6 +1970,11 @@ impl Tty {
              target: RenderTarget::Output,
              xray: None,
          };
@@ -203,7 +214,7 @@ index 094f6fa..16510ef 100644
          let mut elements = niri.render_to_vec(ctx, output, true);
  
          // Visualize the damage, if enabled.
-@@ -1969,32 +2012,46 @@ impl Tty {
+@@ -1969,32 +2016,46 @@ impl Tty {
          };
  
          // Hand them over to the DRM.
@@ -272,7 +283,7 @@ index 094f6fa..16510ef 100644
                      let data = (presentation_feedbacks, target_presentation_time);
  
                      match drm_compositor.queue_frame(data) {
-@@ -2032,6 +2089,14 @@ impl Tty {
+@@ -2032,6 +2093,14 @@ impl Tty {
              Err(err) => {
                  // Can fail if we switched to a different TTY.
                  warn!("error rendering frame: {err}");
@@ -287,7 +298,7 @@ index 094f6fa..16510ef 100644
              }
          }
  
-@@ -2473,7 +2538,11 @@ impl Tty {
+@@ -2473,7 +2542,14 @@ impl Tty {
  
                  if let Ok(mut props) = ConnectorProperties::try_new(&device.drm, surface.connector)
                  {
@@ -297,10 +308,21 @@ index 094f6fa..16510ef 100644
 +                    let format = surface.compositor.format();
 +                    let hdr = wanted_hdr(&self.config.borrow(), &surface.name, single_gpu, format);
 +                    surface.hdr = set_connector_properties(&mut props, config.max_bpc, hdr);
++                    if surface.hdr.is_some() {
++                        let _ = surface.compositor.reset_state();
++                    }
                  } else {
                      warn!("failed to get connector properties");
                  }
-@@ -3480,8 +3549,57 @@ impl<'a> ConnectorProperties<'a> {
+@@ -3391,6 +3467,7 @@ impl<'a> ConnectorProperties<'a> {
+             properties,
+             has_change: false,
+             requests: AtomicModeReq::new(),
++            blob: None,
+         })
+     }
+ 
+@@ -3480,38 +3557,147 @@ impl<'a> ConnectorProperties<'a> {
          Ok(max_bpc)
      }
  
@@ -349,17 +371,43 @@ index 094f6fa..16510ef 100644
 +        let conn = self.connector.into();
 +        self.requests.add_raw_property(conn, colorspace, bt2020);
 +        self.requests.add_raw_property(conn, metadata, blob.into());
++        self.blob = Some(blob.into());
 +        self.has_change = true;
++
++        // PQ rejects visible 8-bit cursor and overlay planes.
++        let crtc = self
++            .find(c"CRTC_ID")
++            .ok()
++            .and_then(|(_, v)| control::from_u32(*v as u32));
++        if let Some(planes) = crtc.and_then(|crtc: crtc::Handle| self.device.planes(&crtc).ok()) {
++            for plane in planes.cursor.iter().chain(&planes.overlay) {
++                for name in ["FB_ID", "CRTC_ID"] {
++                    if let Some((prop, _, _)) = find_drm_property(self.device, plane.handle, name) {
++                        self.requests.add_raw_property(plane.handle.into(), prop, 0);
++                    }
++                }
++            }
++        }
 +        Ok(())
 +    }
 +
      fn commit(&mut self) -> anyhow::Result<()> {
 -        if self.has_change {
+-            self.device.atomic_commit(
++        let mut res = Ok(());
 +        if std::mem::take(&mut self.has_change) {
-             self.device.atomic_commit(
++            res = self.device.atomic_commit(
                  AtomicCommitFlags::ALLOW_MODESET,
                  std::mem::take(&mut self.requests),
-@@ -3492,26 +3610,66 @@ impl<'a> ConnectorProperties<'a> {
+-            )?;
++            );
++        }
++        if let Some(blob) = self.blob.take() {
++            let _ = self.device.destroy_property_blob(blob);
+         }
+ 
+-        Ok(())
++        Ok(res?)
      }
  }
  
@@ -1658,15 +1706,17 @@ index 0000000..b1d07f1
 +}
 diff --git a/src/render_helpers/hdr_output.rs b/src/render_helpers/hdr_output.rs
 new file mode 100644
-index 0000000..aaa5905
+index 0000000..4010a38
 --- /dev/null
 +++ b/src/render_helpers/hdr_output.rs
-@@ -0,0 +1,150 @@
+@@ -0,0 +1,159 @@
 +use smithay::backend::allocator::Fourcc;
 +use smithay::backend::renderer::damage::OutputDamageTracker;
 +use smithay::backend::renderer::element::{Element, Id, RenderElement, RenderElementStates};
 +use smithay::backend::renderer::gles::GlesTexture;
-+use smithay::backend::renderer::utils::CommitCounter;
++use smithay::backend::renderer::utils::{
++    CommitCounter, DamageBag, DamageSet, DamageSnapshot, OpaqueRegions,
++};
 +use smithay::backend::renderer::Bind;
 +use smithay::output::Output;
 +use smithay::utils::user_data::UserDataMap;
@@ -1678,7 +1728,7 @@ index 0000000..aaa5905
 +use super::shaders::Shaders;
 +use crate::backend::tty::{TtyFrame, TtyRenderer, TtyRendererError};
 +
-+// ponytail: full-output damage and no direct scanout while HDR is on.
++// ponytail: no direct scanout while HDR is on.
 +pub struct HdrRender {
 +    texture: GlesTexture,
 +    damage_tracker: OutputDamageTracker,
@@ -1686,7 +1736,7 @@ index 0000000..aaa5905
 +    scale: f64,
 +    age: usize,
 +    id: Id,
-+    commit: CommitCounter,
++    damage: DamageBag<i32, Physical>,
 +}
 +
 +#[derive(Debug)]
@@ -1694,7 +1744,7 @@ index 0000000..aaa5905
 +    texture: GlesTexture,
 +    size: Size<i32, Physical>,
 +    id: Id,
-+    commit: CommitCounter,
++    damage: DamageSnapshot<i32, Physical>,
 +    hdr: Hdr,
 +}
 +
@@ -1722,7 +1772,7 @@ index 0000000..aaa5905
 +                scale,
 +                age: 0,
 +                id: Id::new(),
-+                commit: CommitCounter::default(),
++                damage: DamageBag::default(),
 +            });
 +        }
 +        let this = this.as_mut().unwrap();
@@ -1741,15 +1791,15 @@ index 0000000..aaa5905
 +            smithay::backend::renderer::damage::Error::OutputNoMode(_) => unreachable!(),
 +        })?;
 +        this.age = 1;
-+        if res.damage.is_some_and(|d| !d.is_empty()) {
-+            this.commit.increment();
++        if let Some(damage) = res.damage {
++            this.damage.add(damage.iter().copied());
 +        }
 +
 +        let elem = HdrOutputElement {
 +            texture: this.texture.clone(),
 +            size,
 +            id: this.id.clone(),
-+            commit: this.commit,
++            damage: this.damage.snapshot(),
 +            hdr,
 +        };
 +        Ok((elem, res.states))
@@ -1762,7 +1812,17 @@ index 0000000..aaa5905
 +    }
 +
 +    fn current_commit(&self) -> CommitCounter {
-+        self.commit
++        self.damage.current_commit()
++    }
++
++    fn damage_since(
++        &self,
++        scale: Scale<f64>,
++        commit: Option<CommitCounter>,
++    ) -> DamageSet<i32, Physical> {
++        self.damage
++            .damage_since(commit)
++            .unwrap_or_else(|| DamageSet::from_slice(&[self.geometry(scale)]))
 +    }
 +
 +    fn geometry(&self, _scale: Scale<f64>) -> Rectangle<i32, Physical> {
@@ -1778,11 +1838,8 @@ index 0000000..aaa5905
 +        )
 +    }
 +
-+    fn opaque_regions(
-+        &self,
-+        scale: Scale<f64>,
-+    ) -> smithay::backend::renderer::utils::OpaqueRegions<i32, Physical> {
-+        smithay::backend::renderer::utils::OpaqueRegions::from_slice(&[self.geometry(scale)])
++    fn opaque_regions(&self, scale: Scale<f64>) -> OpaqueRegions<i32, Physical> {
++        OpaqueRegions::from_slice(&[self.geometry(scale)])
 +    }
 +}
 +
