@@ -1,0 +1,11 @@
+--- a/src/gallium/drivers/asahi/agx_pipe.c
++++ b/src/gallium/drivers/asahi/agx_pipe.c
+@@ -680,7 +680,7 @@
+     * in the future. This accelerates the later copies, since otherwise the copy
+     * involves reading uncached memory.
+     */
+-   if (needs_copy)
++   if (needs_copy && size >= 65536)
+       flags |= AGX_BO_WRITEBACK;
+ 
+    struct agx_bo *new_ = agx_bo_create(dev, size, 0, flags, old->label);
