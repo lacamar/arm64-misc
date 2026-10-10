@@ -1,0 +1,82 @@
+diff --git a/extension/content.js b/extension/content.js
+index d07aa24..c965a3c 100644
+--- a/extension/content.js
++++ b/extension/content.js
+@@ -457,13 +457,14 @@
+   async function waitFor(args) {
+     const timeout = args.timeout || 10000;
+     const start = Date.now();
++    if (!args.selector && !args.text) { await new Promise((r) => setTimeout(r, timeout)); return { waited: timeout }; }
++    const present = () => args.selector && (args.gone ? deepAll(args.selector).some(isVisible) : query(args.selector)) ? "selector" : args.text && (document.body?.innerText || "").includes(args.text) ? "text" : null;
+     while (Date.now() - start < timeout) {
+-      if (args.selector && query(args.selector)) return { found: "selector", elapsed: Date.now() - start };
+-      if (args.text && (document.body?.innerText || "").includes(args.text)) return { found: "text", elapsed: Date.now() - start };
+-      if (!args.selector && !args.text) { await new Promise((r) => setTimeout(r, timeout)); return { waited: timeout }; }
++      const p = present();
++      if (args.gone ? !p : p) return { [args.gone ? "gone" : "found"]: args.gone ? true : p, elapsed: Date.now() - start };
+       await new Promise((r) => setTimeout(r, 100));
+     }
+-    throw new Error(`Timed out after ${timeout}ms waiting for ${args.selector ? `selector "${args.selector}"` : `text "${args.text}"`}`);
++    throw new Error(`Timed out after ${timeout}ms waiting for ${args.selector ? `selector "${args.selector}"` : `text "${args.text}"`}${args.gone ? " to disappear" : ""}`);
+   }
+   async function evaluate(args) {
+     // Async function body with `return` support. Runs in the content-script sandbox:
+diff --git a/extension/manifest.json b/extension/manifest.json
+index 0b07c22..83882de 100644
+--- a/extension/manifest.json
++++ b/extension/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "manifest_version": 2,
+   "name": "Zen Control",
+-  "version": "0.1.2.11",
++  "version": "0.1.2.12",
+   "description": "Lets Claude Code drive this browser through a local MCP bridge (ws://127.0.0.1:17373).",
+   "browser_specific_settings": {
+     "gecko": {
+diff --git a/server/index.js b/server/index.js
+index 3bc2cc7..5d43f69 100644
+--- a/server/index.js
++++ b/server/index.js
+@@ -9,7 +9,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+ import { WebSocketServer, WebSocket } from "ws";
+ import { z } from "zod";
+-import { readFile, stat } from "node:fs/promises";
++import { readFile, stat, writeFile } from "node:fs/promises";
+ import { statSync } from "node:fs";
+ import { fileURLToPath } from "node:url";
+ import { homedir } from "node:os";
+@@ -211,8 +211,8 @@ tool("form_input", "Set a form field by ref/selector without typing: <select> op
+   { value: z.union([z.string(), z.number(), z.boolean()]), ...targetShape }, async (a) => text(await sendCommand("form_input", a)));
+ tool("scroll", "Scroll with the mouse wheel at x/y (default viewport center; scrolls whatever is under that point) by direction (default down ~80% of viewport), jump to top/bottom, or scroll an element (ref/selector) into view.",
+   { direction: z.enum(["up", "down", "left", "right", "top", "bottom"]).optional(), amount: z.number().optional().describe("pixels"), x: z.number().optional(), y: z.number().optional(), ...targetShape }, async (a) => text(await sendCommand("scroll", a)));
+-tool("wait_for", "Wait until a CSS selector exists or text appears on the page (or just sleep if neither given). timeout in ms (default 10000).",
+-  { selector: z.string().optional(), text: z.string().optional(), timeout: z.number().int().optional(), tabId }, async (a) => text(await sendCommand("wait_for", a, (a.timeout || 10000) + 2000)));
++tool("wait_for", "Wait until a CSS selector exists or text appears on the page, or with gone=true until neither is visible (e.g. a spinner); just sleeps if neither given. timeout in ms (default 10000).",
++  { selector: z.string().optional(), text: z.string().optional(), gone: z.boolean().optional(), timeout: z.number().int().optional(), tabId }, async (a) => text(await sendCommand("wait_for", a, (a.timeout || 10000) + 2000)));
+ 
+ tool("file_upload", "Upload local files, or a fresh screenshot of a tab (screenshot=true), into a page: sets an <input type=file> (ref/selector, a label/button wrapping one, or the page's only file input) or drops the files onto a drop zone (ref/selector or x/y). Max 50 MB total.",
+   { paths: z.array(z.string()).optional().describe("Absolute or ~ paths"), screenshot: z.boolean().optional(), screenshotTabId: z.number().int().optional().describe("Tab to screenshot (default: the target tab)"), ...targetShape, x: z.number().optional().describe("Drop at viewport x (with y) instead of a ref/selector"), y: z.number().optional() },
+@@ -226,11 +226,18 @@ const region = z.array(z.number()).length(4);
+ tool("screenshot", "Capture the visible viewport of the current tab as a PNG (scaled to CSS pixels so click x/y match), or zoom into one element (ref/selector, even if scrolled off-screen or inside an iframe) or a viewport region, or the whole scrollable page (fullPage). annotate draws labeled boxes on the image, e.g. numbered callouts for a walkthrough.",
+   { ...targetShape, region: region.optional().describe("[x0, y0, x1, y1] viewport CSS px to zoom into"),
+     fullPage: z.boolean().optional().describe("Whole document, scaled to fit"),
+-    annotate: z.array(z.object({ ref: z.string().optional(), selector: z.string().optional(), region: region.optional(), label: z.string().optional().describe("Default: its 1-based number; \"\" for none"), color: z.string().optional().describe("CSS color, default red") })).optional().describe("Boxes to draw, each by ref, selector or viewport region") }, async (a) => {
++    annotate: z.array(z.object({ ref: z.string().optional(), selector: z.string().optional(), region: region.optional(), label: z.string().optional().describe("Default: its 1-based number; \"\" for none"), color: z.string().optional().describe("CSS color, default red") })).optional().describe("Boxes to draw, each by ref, selector or viewport region"),
++    path: z.string().optional().describe("Save the PNG to this absolute or ~ path instead of returning it") }, async ({ path, ...a }) => {
+   const r = await sendCommand("screenshot", a);
+   const b64 = r.dataUrl.replace(/^data:image\/png;base64,/, "");
+-  if (r.rect) return { content: [{ type: "text", text: `Area ${Math.round(r.rect.width)}x${Math.round(r.rect.height)} CSS px at page (${Math.round(r.rect.x)}, ${Math.round(r.rect.y)}); image zoom ${r.zoom.toFixed(2)}x${r.marks ? `; ${r.marks} annotations` : ""}` }, { type: "image", data: b64, mimeType: "image/png" }] };
+-  return { content: [{ type: "text", text: `Viewport ${r.viewportWidth}x${r.viewportHeight} CSS px; image ${r.width}x${r.height}${r.scale < 1 ? ` (scaled ${r.scale.toFixed(2)}; divide image coords by scale for click)` : ""}${r.marks ? `; ${r.marks} annotations` : ""}` }, { type: "image", data: b64, mimeType: "image/png" }] };
++  const marks = r.marks ? `; ${r.marks} annotations` : "";
++  const info = r.rect
++    ? `Area ${Math.round(r.rect.width)}x${Math.round(r.rect.height)} CSS px at page (${Math.round(r.rect.x)}, ${Math.round(r.rect.y)}); image zoom ${r.zoom.toFixed(2)}x${marks}`
++    : `Viewport ${r.viewportWidth}x${r.viewportHeight} CSS px; image ${r.width}x${r.height}${r.scale < 1 ? ` (scaled ${r.scale.toFixed(2)}; divide image coords by scale for click)` : ""}${marks}`;
++  if (!path) return { content: [{ type: "text", text: info }, { type: "image", data: b64, mimeType: "image/png" }] };
++  const full = resolve(path.replace(/^~(?=$|\/)/, homedir()));
++  await writeFile(full, Buffer.from(b64, "base64"));
++  return text(`${info}; saved to ${full}`);
+ });
+ tool("evaluate", "Run JavaScript in the page's own context (page globals, bypasses CSP). The value of the last expression is returned (JSON for objects); top-level await and `return` work.",
+   { code: z.string(), tabId }, async (a) => text((await sendCommand("evaluate", a)).result));

@@ -17,4 +17,8 @@ export default async (call) => {
   await call("evaluate", { code: `document.body.insertAdjacentHTML("beforeend", '<div id="foot" style="position:absolute;top:2900px;left:0;width:200px;height:100px;background:#00f"></div>')` });
   const f = await expect(call("screenshot", { fullPage: true }), "Area 1086x3000 CSS px at page (0, 0); image zoom 0.52x");
   want(px(f, 50, 1540), /^srgba?\(0,0,255[,)]/);
+  const out = `${process.env.T}/saved.png`;
+  const s = await expect(call("screenshot", { region: [600, 300, 700, 400], path: out }), `saved to ${out}`);
+  await expect(Promise.resolve(s), "<image", true);
+  want(px(`<image ${out}>`, 10, 10), /^srgba?\(255,255,255[,)]/);
 };

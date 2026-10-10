@@ -9,7 +9,7 @@
 
 Name:           zen-control
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        13%{?dist}
+Release:        14%{?dist}
 Summary:        MCP bridge and WebExtension to drive the Zen browser from Claude Code
 
 License:        LicenseRef-Not-specified
@@ -28,6 +28,7 @@ Patch8:         0009-input-bypass-no-focus-steal.patch
 Patch9:         0010-release-tab.patch
 Patch10:        0011-dark-canvas-capture.patch
 Patch11:        0012-screenshot-annotate-fullpage.patch
+Patch12:        0013-screenshot-path-wait-gone.patch
 
 BuildArch:      noarch
 
@@ -89,6 +90,10 @@ chmod 0755 %{buildroot}%{_bindir}/%{name}
 %config(noreplace) %{_sysconfdir}/zen/policies/policies.json
 
 %changelog
+* Sat Oct 10 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-14
+- Add screenshot path (save to file)
+- Add wait_for gone
+
 * Sat Oct 10 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-13
 - Add screenshot annotate (labeled boxes)
 - Add fullPage screenshots

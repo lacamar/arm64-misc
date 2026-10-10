@@ -25,6 +25,10 @@ export default async (call) => {
   await call("click", { ref: "e1" }); await expect(L(), "click:b:T");
   await call("screenshot", {});
   await expect(call("screenshot", { region: [0, 0, 300, 100] }), "zoom 4.00x");
+  await call("evaluate", { code: `document.body.insertAdjacentHTML("beforeend", '<p id="spin">Loading…</p>'); setTimeout(() => spin.style.display = "none", 500); setTimeout(() => spin.remove(), 1000)` });
+  await expect(call("wait_for", { selector: "#spin", gone: true }), '"gone": true');
+  await expect(call("wait_for", { text: "Loading…", gone: true }), '"gone": true');
+  await expect(call("wait_for", { selector: "body", gone: true, timeout: 300 }), "to disappear");
   await call("navigate", { url: "https://127.0.0.1:8000/csp.html" });
   await expect(call("press_key", { key: "Tab" }), "doesn't match");
 };
