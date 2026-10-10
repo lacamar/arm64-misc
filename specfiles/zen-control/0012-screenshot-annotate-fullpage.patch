@@ -1,0 +1,132 @@
+diff --git a/extension/background.js b/extension/background.js
+index 77aaba5..1aaaae0 100644
+--- a/extension/background.js
++++ b/extension/background.js
+@@ -216,33 +216,67 @@ async function screenshot(tab, args = {}) {
+   finally { browser.tabs.sendMessage(tab.id, { cmd: "hide_marker", args: { hide: false } }).catch(() => {}); }
+ }
+ 
++function markUp(ctx, marks, ox, oy, k) {
++  ctx.lineWidth = 3;
++  ctx.font = "bold 14px sans-serif";
++  ctx.textBaseline = "top";
++  for (const m of marks) {
++    const c = (v, max) => Math.min(Math.max(v, 1.5), max - 1.5);
++    const x = c((m.x - ox) * k - 1.5, ctx.canvas.width), y = c((m.y - oy) * k - 1.5, ctx.canvas.height);
++    const w = c((m.x + m.width - ox) * k + 1.5, ctx.canvas.width) - x, h = c((m.y + m.height - oy) * k + 1.5, ctx.canvas.height) - y;
++    ctx.strokeStyle = ctx.fillStyle = m.color;
++    ctx.strokeRect(x, y, w, h);
++    if (!m.label) continue;
++    const ly = y >= 22 ? y - 22 : y + h + 22 <= ctx.canvas.height ? y + h + 2 : y + 2;
++    ctx.fillRect(x, ly, ctx.measureText(m.label).width + 10, 20);
++    ctx.fillStyle = "#fff";
++    ctx.fillText(m.label, x + 5, ly + 3);
++  }
++}
++
+ async function capture(tab, args) {
+   const bg = await sendToContent(tab, "canvas_color", {}).catch(() => "white");
+   const shoot = (rect, scale) => withTimeout(browser.zenControl.capture(tab.id, rect, scale, bg), 10000, "capture");
+-  if (args.ref || args.selector || args.region) {
++  const decode = async (dataUrl) => withTimeout(createImageBitmap(await (await fetch(dataUrl)).blob()), 10000, "decode");
++  const marks = [];
++  for (const [i, a] of (args.annotate || []).entries()) {
++    const r = await pageRect(tab, a).catch((e) => { throw new Error(`annotate[${i}]: ${e.message}`); });
++    marks.push({ ...r, label: a.label ?? String(i + 1), color: a.color || "#e11d48" });
++  }
++  if (args.ref || args.selector || args.region || args.fullPage) {
+     const rect = await pageRect(tab, args);
+-    const zoom = Math.min(4, MAX_SHOT_SIDE / Math.max(rect.width, rect.height));
+-    return { dataUrl: await shoot({ x: rect.x, y: rect.y, width: rect.width, height: rect.height }, zoom), rect, zoom };
++    const zoom = Math.min(args.fullPage ? 1 : 4, MAX_SHOT_SIDE / Math.max(rect.width, rect.height));
++    let dataUrl = await shoot({ x: rect.x, y: rect.y, width: rect.width, height: rect.height }, zoom);
++    if (marks.length) {
++      const bmp = await decode(dataUrl), canvas = document.createElement("canvas"), ctx = canvas.getContext("2d");
++      canvas.width = bmp.width; canvas.height = bmp.height;
++      ctx.drawImage(bmp, 0, 0);
++      markUp(ctx, marks, rect.x, rect.y, bmp.width / rect.width);
++      bmp.close();
++      dataUrl = canvas.toDataURL("image/png");
++    }
++    return { dataUrl, rect, zoom, marks: marks.length };
+   }
+   const dataUrl = await shoot();
+   // Scale the capture to CSS pixels so coordinates match what click(x, y) expects.
+-  let dpr = 1, cssW = null, cssH = null;
++  let dpr = 1, cssW = null, cssH = null, sx = 0, sy = 0;
+   try {
+-    const [m] = await withTimeout(browser.tabs.executeScript(tab.id, { code: "({dpr: window.devicePixelRatio, w: window.innerWidth, h: window.innerHeight})" }), 3000, "viewport probe");
+-    dpr = m.dpr || 1; cssW = m.w; cssH = m.h;
++    const [m] = await withTimeout(browser.tabs.executeScript(tab.id, { code: "({dpr: window.devicePixelRatio, w: window.innerWidth, h: window.innerHeight, sx: scrollX, sy: scrollY})" }), 3000, "viewport probe");
++    dpr = m.dpr || 1; cssW = m.w; cssH = m.h; sx = m.sx; sy = m.sy;
+   } catch { /* privileged page: keep raw */ }
+-  const blob = await (await fetch(dataUrl)).blob();
+-  const bmp = await withTimeout(createImageBitmap(blob), 10000, "decode");
++  const bmp = await decode(dataUrl);
+   let w = cssW || Math.round(bmp.width / dpr);
+   let h = cssH || Math.round(bmp.height / dpr);
+   const scale = Math.min(1, MAX_SHOT_SIDE / Math.max(w, h));
+   const outW = Math.round(w * scale), outH = Math.round(h * scale);
+   const canvas = document.createElement("canvas");
+   canvas.width = outW; canvas.height = outH;
+-  canvas.getContext("2d").drawImage(bmp, 0, 0, outW, outH);
++  const ctx = canvas.getContext("2d");
++  ctx.drawImage(bmp, 0, 0, outW, outH);
++  markUp(ctx, marks, sx, sy, scale);
++  const raw = { width: bmp.width, height: bmp.height };
+   bmp.close();
+-  const out = canvas.toDataURL("image/png");
+-  return { dataUrl: out, width: outW, height: outH, viewportWidth: w, viewportHeight: h, scale, raw: { width: bmp.width, height: bmp.height } };
++  return { dataUrl: canvas.toDataURL("image/png"), width: outW, height: outH, viewportWidth: w, viewportHeight: h, scale, marks: marks.length, raw };
+ }
+ 
+ async function pageRect(tab, args) {
+diff --git a/extension/content.js b/extension/content.js
+index e9f442a..d07aa24 100644
+--- a/extension/content.js
++++ b/extension/content.js
+@@ -506,6 +506,7 @@
+     return { uploaded: names, droppedOn: describe(target) || target.tagName.toLowerCase() };
+   }
+   function rect(args) {
++    if (args.fullPage) { const d = document.documentElement; return { x: 0, y: 0, width: Math.max(d.scrollWidth, innerWidth), height: Math.max(d.scrollHeight, innerHeight) }; }
+     if (args.region) { const [x0, y0, x1, y1] = args.region; return { x: x0 + scrollX, y: y0 + scrollY, width: x1 - x0, height: y1 - y0 }; }
+     const el = resolveTarget(args);
+     if (!FP) {
+diff --git a/extension/manifest.json b/extension/manifest.json
+index e9c5cc5..0b07c22 100644
+--- a/extension/manifest.json
++++ b/extension/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "manifest_version": 2,
+   "name": "Zen Control",
+-  "version": "0.1.2.10",
++  "version": "0.1.2.11",
+   "description": "Lets Claude Code drive this browser through a local MCP bridge (ws://127.0.0.1:17373).",
+   "browser_specific_settings": {
+     "gecko": {
+diff --git a/server/index.js b/server/index.js
+index 3a6fe9c..3bc2cc7 100644
+--- a/server/index.js
++++ b/server/index.js
+@@ -222,12 +222,15 @@ tool("file_upload", "Upload local files, or a fresh screenshot of a tab (screens
+     if (screenshot) files.push({ name: "screenshot.png", mime: "image/png", b64: (await sendCommand("screenshot", { tabId: screenshotTabId ?? a.tabId })).dataUrl.split(",")[1] });
+     return text(await sendCommand("upload", { ...a, files }, 60000));
+   });
+-tool("screenshot", "Capture the visible viewport of the current tab as a PNG (scaled to CSS pixels so click x/y match), or zoom into one element (ref/selector, even if scrolled off-screen or inside an iframe) or a viewport region.",
+-  { ...targetShape, region: z.array(z.number()).length(4).optional().describe("[x0, y0, x1, y1] viewport CSS px to zoom into") }, async (a) => {
++const region = z.array(z.number()).length(4);
++tool("screenshot", "Capture the visible viewport of the current tab as a PNG (scaled to CSS pixels so click x/y match), or zoom into one element (ref/selector, even if scrolled off-screen or inside an iframe) or a viewport region, or the whole scrollable page (fullPage). annotate draws labeled boxes on the image, e.g. numbered callouts for a walkthrough.",
++  { ...targetShape, region: region.optional().describe("[x0, y0, x1, y1] viewport CSS px to zoom into"),
++    fullPage: z.boolean().optional().describe("Whole document, scaled to fit"),
++    annotate: z.array(z.object({ ref: z.string().optional(), selector: z.string().optional(), region: region.optional(), label: z.string().optional().describe("Default: its 1-based number; \"\" for none"), color: z.string().optional().describe("CSS color, default red") })).optional().describe("Boxes to draw, each by ref, selector or viewport region") }, async (a) => {
+   const r = await sendCommand("screenshot", a);
+   const b64 = r.dataUrl.replace(/^data:image\/png;base64,/, "");
+-  if (r.rect) return { content: [{ type: "text", text: `Area ${Math.round(r.rect.width)}x${Math.round(r.rect.height)} CSS px at page (${Math.round(r.rect.x)}, ${Math.round(r.rect.y)}); image zoom ${r.zoom.toFixed(2)}x` }, { type: "image", data: b64, mimeType: "image/png" }] };
+-  return { content: [{ type: "text", text: `Viewport ${r.viewportWidth}x${r.viewportHeight} CSS px; image ${r.width}x${r.height}${r.scale < 1 ? ` (scaled ${r.scale.toFixed(2)}; divide image coords by scale for click)` : ""}` }, { type: "image", data: b64, mimeType: "image/png" }] };
++  if (r.rect) return { content: [{ type: "text", text: `Area ${Math.round(r.rect.width)}x${Math.round(r.rect.height)} CSS px at page (${Math.round(r.rect.x)}, ${Math.round(r.rect.y)}); image zoom ${r.zoom.toFixed(2)}x${r.marks ? `; ${r.marks} annotations` : ""}` }, { type: "image", data: b64, mimeType: "image/png" }] };
++  return { content: [{ type: "text", text: `Viewport ${r.viewportWidth}x${r.viewportHeight} CSS px; image ${r.width}x${r.height}${r.scale < 1 ? ` (scaled ${r.scale.toFixed(2)}; divide image coords by scale for click)` : ""}${r.marks ? `; ${r.marks} annotations` : ""}` }, { type: "image", data: b64, mimeType: "image/png" }] };
+ });
+ tool("evaluate", "Run JavaScript in the page's own context (page globals, bypasses CSP). The value of the last expression is returned (JSON for objects); top-level await and `return` work.",
+   { code: z.string(), tabId }, async (a) => text((await sendCommand("evaluate", a)).result));

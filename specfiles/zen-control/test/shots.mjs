@@ -1,0 +1,20 @@
+import { execFileSync } from "node:child_process";
+export default async (call) => {
+  const expect = async (p, want, not) => { const out = String(await p); if (out.includes(want) === !!not) console.log(`FAIL: expected ${not ? "no " : ""}${JSON.stringify(want)}`); return out; };
+  const px = (out, x, y) => { const f = out.match(/<image (\S+)>/)[1]; const p = execFileSync("magick", [f, "-format", `%[pixel:p{${x},${y}}]`, "info:"]).toString(); console.log(`pixel ${x},${y} = ${p}`); return p; };
+  const want = (p, re) => { if (!re.test(p)) console.log(`FAIL: pixel ${p} !~ ${re}`); };
+  await call("tab_new", { url: "http://127.0.0.1:8000/dark.html" });
+  want(px(await call("screenshot", {}), 600, 400), /^srgba?\([1-5]?\d,[1-5]?\d,[1-5]?\d[,)]/);
+  want(px(await call("screenshot", { region: [600, 300, 700, 400] }), 10, 10), /^srgba?\([1-5]?\d,/);
+  await call("navigate", { url: "http://127.0.0.1:8000/input.html" });
+  want(px(await call("screenshot", {}), 600, 400), /^srgba?\(255,255,255[,)]/);
+  const a = await expect(call("screenshot", { annotate: [{ selector: "#b", label: "Press" }, { region: [600, 300, 700, 400], color: "#00ff00" }] }), "2 annotations");
+  want(px(a, 598, 350), /^srgba?\(0,255,0[,)]/);
+  want(px(a, 650, 350), /^srgba?\(255,255,255[,)]/);
+  const z = await expect(call("screenshot", { selector: "#drag", annotate: [{ selector: "#drag", label: "" }] }), "1 annotations");
+  want(px(z, 1, 1), /^srgba?\(225,29,72[,)]/);
+  await expect(call("screenshot", { annotate: [{ selector: "#nope" }] }), "annotate[0]");
+  await call("evaluate", { code: `document.body.insertAdjacentHTML("beforeend", '<div id="foot" style="position:absolute;top:2900px;left:0;width:200px;height:100px;background:#00f"></div>')` });
+  const f = await expect(call("screenshot", { fullPage: true }), "Area 1086x3000 CSS px at page (0, 0); image zoom 0.52x");
+  want(px(f, 50, 1540), /^srgba?\(0,0,255[,)]/);
+};
