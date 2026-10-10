@@ -29,6 +29,10 @@ export default async (call) => {
   await expect(call("wait_for", { selector: "#spin", gone: true }), '"gone": true');
   await expect(call("wait_for", { text: "Loading…", gone: true }), '"gone": true');
   await expect(call("wait_for", { selector: "body", gone: true, timeout: 300 }), "to disappear");
+  await expect(call("evaluate", { code: `return (await (await fetch("/api", { method: "POST", body: "ping=1" })).text()) + (await (await fetch("/input.html")).text()).length` }), "nope");
+  await expect(call("network_requests", { urlPattern: "/api", bodies: true }), "> ping=1\n  < 4 bytes: nope");
+  await expect(call("network_requests", { urlPattern: "/input.html", bodies: true }), "bytes: <");
+  await expect(call("network_requests", { failed: true }), "POST 404 xmlhttprequest");
   await call("navigate", { url: "https://127.0.0.1:8000/csp.html" });
   await expect(call("press_key", { key: "Tab" }), "doesn't match");
 };

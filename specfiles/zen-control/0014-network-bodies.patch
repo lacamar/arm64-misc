@@ -1,0 +1,121 @@
+diff --git a/extension/background.js b/extension/background.js
+index 1aaaae0..819e53f 100644
+--- a/extension/background.js
++++ b/extension/background.js
+@@ -17,6 +17,7 @@ const stopped = new Set();
+ const sessionAllowed = new Set();
+ const prompts = new Map(); // host -> {promise, resolve}
+ const MAX_REQUESTS = 1000;
++const MAX_BODY = 32768;
+ const net = new Map();     // tabId -> [request]
+ const inflight = new Map(); // requestId -> request
+ const UNGATED = new Set(["ping", "tabs_list", "tab_select", "tab_close", "resize_window", "downloads"]);
+@@ -347,6 +348,7 @@ function markerState(tabId) {
+   return { on: controlled.has(tabId), stopped: stopped.has(tabId), handoff: handoffs.get(tabId)?.message };
+ }
+ function pushMarker(tabId) {
++  tapBodies(tabId);
+   browser.tabs.sendMessage(tabId, { cmd: "marker", args: markerState(tabId) }).catch(() => {});
+ }
+ function mark(tabId) {
+@@ -421,16 +423,41 @@ browser.storage.onChanged.addListener((changes) => { if (changes.settings) setti
+ 
+ /* ---------- network capture ---------- */
+ 
++const entry = (id) => inflight.get(id) || inflight.set(id, {}).get(id);
+ browser.webRequest.onBeforeRequest.addListener((d) => {
+   if (d.tabId < 0) return;
+   if (d.type === "main_frame") net.set(d.tabId, []);
+   let list = net.get(d.tabId);
+   if (!list) net.set(d.tabId, (list = []));
+-  const r = { method: d.method, url: d.url, type: d.type, start: d.timeStamp };
++  const prev = inflight.get(d.requestId), r = Object.assign(prev && !prev.start ? prev : {}, { method: d.method, url: d.url, type: d.type, start: d.timeStamp });
++  inflight.set(d.requestId, r);
+   list.push(r);
+   if (list.length > MAX_REQUESTS) list.shift();
+-  inflight.set(d.requestId, r);
+ }, { urls: ["<all_urls>"] });
++// filterResponseData only works from a blocking listener; keep that cost off tabs Claude doesn't control
++const bodyTaps = new Map(); // tabId -> listener
++function tapBodies(tabId) {
++  const on = controlled.has(tabId);
++  if (on === bodyTaps.has(tabId)) return;
++  if (!on) return void (browser.webRequest.onBeforeRequest.removeListener(bodyTaps.get(tabId)), bodyTaps.delete(tabId));
++  const tap = (d) => {
++    const r = entry(d.requestId), b = d.requestBody;
++    if (b?.formData) r.reqBody = new URLSearchParams(Object.entries(b.formData).flatMap(([k, vs]) => vs.map((v) => [k, v]))).toString();
++    else if (b?.raw?.[0]?.bytes) r.reqBody = new TextDecoder().decode(b.raw[0].bytes).slice(0, MAX_BODY);
++    const f = browser.webRequest.filterResponseData(d.requestId), dec = new TextDecoder();
++    r.body = ""; r.size = 0;
++    f.ondata = (e) => {
++      f.write(e.data);
++      r.size += e.data.byteLength;
++      if (r.truncated) return;
++      r.body += dec.decode(e.data, { stream: true });
++      if (r.body.length > MAX_BODY) { r.body = r.body.slice(0, MAX_BODY); r.truncated = true; }
++    };
++    f.onstop = () => f.close();
++  };
++  bodyTaps.set(tabId, tap);
++  browser.webRequest.onBeforeRequest.addListener(tap, { urls: ["<all_urls>"], types: ["xmlhttprequest"], tabId }, ["requestBody", "blocking"]);
++}
+ browser.webRequest.onCompleted.addListener((d) => {
+   const r = inflight.get(d.requestId);
+   if (!r) return;
+@@ -512,6 +539,7 @@ async function handle(cmd, args, sid) {
+       const t = await resolveTab(args.tabId, sid);
+       let list = net.get(t.id) || [];
+       if (args.urlPattern) list = list.filter((r) => r.url.includes(args.urlPattern));
++      if (args.failed) list = list.filter((r) => r.error || r.status >= 400);
+       const total = list.length;
+       const out = list.slice(-(args.limit || 100));
+       if (args.clear) net.set(t.id, []);
+@@ -544,6 +572,7 @@ function forget(id) {
+   for (const [s, t] of current) if (t === id) current.delete(s);
+   for (const set of touched.values()) set.delete(id);
+   controlled.delete(id);
++  tapBodies(id);
+   stopped.delete(id);
+ }
+ browser.tabs.onRemoved.addListener((id) => {
+diff --git a/extension/manifest.json b/extension/manifest.json
+index 83882de..ec43a60 100644
+--- a/extension/manifest.json
++++ b/extension/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "manifest_version": 2,
+   "name": "Zen Control",
+-  "version": "0.1.2.12",
++  "version": "0.1.2.13",
+   "description": "Lets Claude Code drive this browser through a local MCP bridge (ws://127.0.0.1:17373).",
+   "browser_specific_settings": {
+     "gecko": {
+@@ -16,6 +16,7 @@
+     "storage",
+     "<all_urls>",
+     "webRequest",
++    "webRequestBlocking",
+     "notifications",
+     "downloads"
+   ],
+diff --git a/server/index.js b/server/index.js
+index 5d43f69..6d75089 100644
+--- a/server/index.js
++++ b/server/index.js
+@@ -246,12 +246,12 @@ tool("handle_dialog", "Answer the next alert/confirm/prompt on the tab. Without
+ tool("console_logs", "Read console output and uncaught errors captured on the current page since it loaded.",
+   { level: z.enum(["log", "info", "warn", "error", "debug"]).optional(), pattern: z.string().optional().describe("Case-insensitive regex on the message"), limit: z.number().int().optional(), clear: z.boolean().optional(), tabId },
+   async (a) => { const r = await sendCommand("console_logs", a); return text(r.count ? r.logs.map((l) => `[${new Date(l.t).toISOString().slice(11, 19)}] ${l.level}: ${l.text}`).join("\n") : "No console output captured."); });
+-tool("network_requests", "List HTTP requests made by a tab since its last top-level navigation (method, status, type, duration, URL), oldest first.",
+-  { urlPattern: z.string().optional().describe("Only URLs containing this substring"), limit: z.number().int().optional().describe("default 100, most recent"), clear: z.boolean().optional(), tabId },
++tool("network_requests", "List HTTP requests made by a tab since its last top-level navigation (method, status, type, duration, URL), oldest first. bodies=true adds request/response bodies of fetch/XHR made while the tab was under control (first 32 KB).",
++  { urlPattern: z.string().optional().describe("Only URLs containing this substring"), bodies: z.boolean().optional(), failed: z.boolean().optional().describe("Only errors and HTTP >= 400"), limit: z.number().int().optional().describe("default 100, most recent"), clear: z.boolean().optional(), tabId },
+   async (a) => {
+     const r = await sendCommand("network_requests", a);
+     if (!r.count) return text("No requests captured for this tab.");
+-    return text(r.requests.map((q) => `${q.method} ${q.error ? `ERR ${q.error}` : q.status ?? "pending"} ${q.type}${q.fromCache ? " (cache)" : ""}${q.ms != null ? ` ${q.ms}ms` : ""} ${q.url}`).join("\n") + (r.total > r.count ? `\n(${r.total - r.count} earlier omitted)` : ""));
++    return text(r.requests.map((q) => `${q.method} ${q.error ? `ERR ${q.error}` : q.status ?? "pending"} ${q.type}${q.fromCache ? " (cache)" : ""}${q.ms != null ? ` ${q.ms}ms` : ""} ${q.url}${a.bodies && q.reqBody ? `\n  > ${q.reqBody}` : ""}${a.bodies && q.body != null ? `\n  < ${q.size} bytes${q.truncated ? " (truncated)" : ""}: ${q.body}` : ""}`).join("\n") + (r.total > r.count ? `\n(${r.total - r.count} earlier omitted)` : ""));
+   });
+ tool("downloads", "List recent downloads, newest first, with their local file path and state. wait=true waits (up to timeout ms, default 60000) until in-progress ones finish — call it after a click that starts a download.",
+   { wait: z.boolean().optional(), timeout: z.number().int().optional(), limit: z.number().int().optional().describe("default 5") },
