@@ -1,9 +1,9 @@
 %global bumpver 0
 %global _name faugus-launcher
 
-%global tag 2.4.3
+%global tag 2.4.4
 
-%global commit bf6c8139e1ae4f55696872bd72bf278057ceb76b
+%global commit fa85bce9caf39049f4d738b5b2cc9080a47716f5
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           faugus-launcher-git
@@ -67,6 +67,9 @@ A simple and lightweight app for running Windows games using UMU-Launcher/UMU-Pr
 %{_datadir}/licenses/faugus-launcher/LICENSE
 
 %changelog
+* Sat Oct 10 2026 Lachlan Marie <lchlnm@pm.me> - 2.4.4^0.git.fa85bce-1
+ - Update to 2.4.4
+
 * Thu Oct 08 2026 Lachlan Marie <lchlnm@pm.me> - 2.4.3^0.git.bf6c813-1
  - Update to 2.4.3
 
