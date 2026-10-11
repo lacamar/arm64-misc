@@ -1,5 +1,5 @@
 Name:           open-hpl
-Version:        1.3.40
+Version:        1.3.41
 Release:        1%{?dist}
 Summary:        Native aarch64 port of Frictional Games' HPL engine
 
@@ -136,6 +136,18 @@ launcher bunker 1944430 "Amnesia The Bunker" \
 %{_datadir}/icons/hicolor/128x128/apps/open-hpl-*.png
 
 %changelog
+* Sun Oct 11 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.41-1
+- SOMA: FMOD EQ/filter, pitch, pan envelopes
+- SOMA: FMOD reverb send
+- SOMA: water vertex waves
+- SOMA: translucent refraction blend, DoF, fog weight
+- SOMA: terrain queries, line of sight, ray casts
+- SOMA: far GUI screen caching
+- SOMA: readable dissolve fade-in
+- Hinge position reset, camera smoothing toggle
+- Save map cache to XDG
+- Fix Newton ray termination
+- Fix headless exit hang
 * Fri Oct 09 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.40-1
 - SOMA: preload next map while playing
 - SOMA: animated loading icon, boot splash
