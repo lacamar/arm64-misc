@@ -1,0 +1,21 @@
+--- a/src/gallium/drivers/asahi/agx_pipe.c
++++ b/src/gallium/drivers/asahi/agx_pipe.c
+@@ -26,6 +26,7 @@
+ #include "pipe/p_screen.h"
+ #include "pipe/p_state.h"
+ #include "util/bitscan.h"
++#include "util/cache_ops.h"
+ #include "util/format/u_format.h"
+ #include "util/format/u_formats.h"
+ #include "util/half_float.h"
+@@ -694,6 +695,10 @@
+                      (old->flags & AGX_BO_WRITEBACK) ? "cached" : "uncached");
+       agx_resource_debug(rsrc, "Shadowed: ");
+ 
++      /* GPU writes leave stale WB lines from earlier CPU access */
++      if (old->flags & AGX_BO_WRITEBACK)
++         util_flush_inval_range(agx_bo_map(old), size);
++
+       memcpy(agx_bo_map(new_), agx_bo_map(old), size);
+    }
+ 
