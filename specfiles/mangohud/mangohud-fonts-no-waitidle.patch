@@ -1,0 +1,14 @@
+--- a/src/vulkan.cpp
++++ b/src/vulkan.cpp
+@@ -736,8 +736,9 @@
+       int width, height;
+       data->font_atlas->GetTexDataAsAlpha8(&pixels, &width, &height);
+ 
+-      // wait for rendering to complete, if any
+-      device_data->vtable.DeviceWaitIdle(device_data->device);
++      // new swapchain: nothing to wait for, and the app may be submitting concurrently
++      if (data->font_image)
++         device_data->vtable.DeviceWaitIdle(device_data->device);
+       shutdown_swapchain_font(data);
+ 
+       if (desc_set)

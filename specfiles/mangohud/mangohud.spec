@@ -16,7 +16,7 @@
 Name:           mangohud
 Version:        0.8.3~rc1
 %forgemeta
-Release:        7%{?dist}
+Release:        8%{?dist}
 Summary:        Vulkan and OpenGL overlay for monitoring FPS, temperatures, CPU/GPU load
 
 License:        MIT
@@ -36,6 +36,7 @@ Source20:       README.Fedora.md
 Patch100:       mangohud-align-right.patch
 Patch101:       mangohud-hud-scale.patch
 Patch102:       mangohud-dxvk3-dx11.patch
+Patch103:       mangohud-fonts-no-waitidle.patch
 
 # MangoHud switched to bundled vulkan-headers since 0.6.9 version. This rebased
 # upstream patch which reverts this change.
@@ -179,6 +180,9 @@ rm %{buildroot}%{_libdir}/libimgui.a
 
 
 %changelog
+* Sun Oct 11 2026 Lachlan Marie <lchlnm@pm.me> - 0.8.3~rc1-8
+- Skip DeviceWaitIdle on first swapchain (DXVK d3d9 hang)
+
 * Sat Oct 03 2026 Lachlan Marie <lchlnm@pm.me> - 0.8.3~rc1-7
 - Show DX11 for DXVK 3 D3D11 games
 
