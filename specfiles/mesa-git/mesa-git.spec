@@ -95,7 +95,7 @@ Summary:        Mesa graphics libraries
 %global commitdate 20261003
 %global ver 26.3.0
 Version:        %{ver}~git%{commitdate}.%{shortcommit}
-Release:        5%{?dist}
+Release:        6%{?dist}
 License:        MIT AND BSD-3-Clause AND SGI-B-2.0
 URL:            https://mesa3d.org
 
@@ -111,6 +111,7 @@ Patch1:         hk-zls-load-op-none.patch
 Patch2:         hk-placed-map.patch
 Patch3:         hk-vs-attrib-limit.patch
 Patch4:         asahi-shadow-flush-wb.patch
+Patch5:         hk-cdm-barrier-light.patch
 
 # In CentOS/RHEL, Rust crates required to build NVK are vendored.
 # The minimum target versions are obtained from the .wrap files
@@ -763,6 +764,10 @@ ln -s libGLX_mesa.so.0 %{buildroot}%{_libdir}/libGLX_system.so.0
 %endif
 
 %changelog
+* Sun Oct 12 2026 lacamar <lchlnm@pm.me> - 26.3.0~git20261003.888a19e2-6
+- hk: lighter CDM barrier between dispatches (mesa!44041)
+- ~40% less per-dispatch overhead for compute (LLM) workloads
+
 * Sun Oct 11 2026 lacamar <lchlnm@pm.me> - 26.3.0~git20261003.888a19e2-5
 - asahi: upstream writeback copy shadows
 - Flush+invalidate WB source before shadow copy
