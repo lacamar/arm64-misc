@@ -1,5 +1,5 @@
 Name:           open-hpl
-Version:        1.3.41
+Version:        1.3.42
 Release:        1%{?dist}
 Summary:        Native aarch64 port of Frictional Games' HPL engine
 
@@ -64,7 +64,9 @@ for b in Amnesia Launcher Soma Rebirth Bunker; do
     install -Dpm0755 -t $pkgdir amnesia/src/redhat-linux-build/$b.bin.%{_target_cpu}
 done
 install -Dpm0644 -t $pkgdir/compat soma/data/compat/*.dae
-install -Dpm0644 -t %{buildroot}%{_datadir}/%{name}/soma soma/data/script_api.txt
+for g in soma rebirth bunker; do
+    install -Dpm0644 -t %{buildroot}%{_datadir}/%{name}/$g $g/data/script_api.txt
+done
 
 install -Dpm0644 /dev/stdin $pkgdir/steam-common.sh <<'EOF'
 set -eu
@@ -136,6 +138,15 @@ launcher bunker 1944430 "Amnesia The Bunker" \
 %{_datadir}/icons/hicolor/128x128/apps/open-hpl-*.png
 
 %changelog
+* Tue Oct 13 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.42-1
+- Rebirth/Bunker: boot on SOMA module
+- Rebirth: fog, box lights, terrain holes
+- Rebirth: vertexblend material, player body
+- Rebirth/Bunker: FSB5 Vorbis, DX10 DDS
+- AMFP: script API, all maps load
+- SOMA: map preload cache, image trail fix
+- Install Rebirth/Bunker script_api.txt
+
 * Sun Oct 11 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.41-1
 - SOMA: FMOD EQ/filter, pitch, pan envelopes
 - SOMA: FMOD reverb send
