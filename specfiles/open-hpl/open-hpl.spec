@@ -1,5 +1,5 @@
 Name:           open-hpl
-Version:        1.3.51
+Version:        1.3.52
 Release:        1%{?dist}
 Summary:        Native aarch64 port of Frictional Games' HPL engine
 
@@ -138,6 +138,13 @@ launcher bunker 1944430 "Amnesia The Bunker" \
 %{_datadir}/icons/hicolor/128x128/apps/open-hpl-*.png
 
 %changelog
+* Wed Oct 14 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.52-1
+- Fix water shader fallback
+- Load PathNodePatrol/InterestPoint nodes
+- Fix Newton deep tree crash
+- Fix FBX bone weight overflow
+- Rebirth allowlist entries
+
 * Wed Oct 14 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.51-1
 - Rebirth: physics mass mul applied
 - Rebirth: module line of sight callback
