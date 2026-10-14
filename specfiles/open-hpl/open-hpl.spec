@@ -1,5 +1,5 @@
 Name:           open-hpl
-Version:        1.3.53
+Version:        1.3.54
 Release:        1%{?dist}
 Summary:        Native aarch64 port of Frictional Games' HPL engine
 
@@ -138,6 +138,13 @@ launcher bunker 1944430 "Amnesia The Bunker" \
 %{_datadir}/icons/hicolor/128x128/apps/open-hpl-*.png
 
 %changelog
+* Wed Oct 14 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.54-1
+- Static map props physics
+- Liquid trickle
+- Prefer shipped .msh
+- Map pose scale fix
+- Oversized metric, material triage
+
 * Wed Oct 14 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.53-1
 - Load HPL3 .msh for old FBX
 - Posed props skip autoplay
