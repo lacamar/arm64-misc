@@ -1,5 +1,5 @@
 Name:           open-hpl
-Version:        1.3.49
+Version:        1.3.50
 Release:        1%{?dist}
 Summary:        Native aarch64 port of Frictional Games' HPL engine
 
@@ -138,6 +138,12 @@ launcher bunker 1944430 "Amnesia The Bunker" \
 %{_datadir}/icons/hicolor/128x128/apps/open-hpl-*.png
 
 %changelog
+* Wed Oct 14 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.50-1
+- Rebirth: script blur
+- Rebirth: prop collision callback
+- Rebirth: attack damage, proximity sensor
+- Rebirth: fix player always dead
+
 * Wed Oct 14 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.49-1
 - Rebirth: sRGB textures and gobos
 - Rebirth: FXAA
