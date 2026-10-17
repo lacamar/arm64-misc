@@ -12,6 +12,7 @@ URL:            https://github.com/LedgerHQ/ledger-live
 Source0:        https://github.com/LedgerHQ/ledger-live/archive/refs/tags/@ledgerhq/live-desktop@%{version}.tar.gz#/%{name}-%{version}.tar.gz
 Source1:        %{name}-%{version}-pnpm-store.tar.zst
 Source2:        pnpm-store-tarballer.sh
+Source3:        20-hw1.rules
 
 ExclusiveArch:  aarch64
 
@@ -19,6 +20,7 @@ BuildRequires:  nodejs24
 BuildRequires:  pnpm
 BuildRequires:  zstd
 BuildRequires:  desktop-file-utils
+BuildRequires:  systemd-rpm-macros
 
 Requires:       electron
 
@@ -74,11 +76,12 @@ Exec=ledger-live %U
 Icon=ledger-live
 Terminal=false
 Type=Application
-StartupWMClass=Ledger Wallet
+StartupWMClass=ledger-wallet
 MimeType=x-scheme-handler/ledgerlive;x-scheme-handler/ledgerwallet;
 Categories=Finance;
 DESKTOP
 desktop-file-install --dir=%{buildroot}%{_datadir}/applications %{name}.desktop
+install -Dm644 %{SOURCE3} %{buildroot}%{_udevrulesdir}/20-hw1.rules
 
 %check
 desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
@@ -90,6 +93,7 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{appdir}
 %{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/*/apps/%{name}.png
+%{_udevrulesdir}/20-hw1.rules
 
 %changelog
 * Sun Oct 18 2026 lacamar <lchlnm@pm.me> - 4.10.1-1
