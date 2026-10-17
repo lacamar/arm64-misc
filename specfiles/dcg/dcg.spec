@@ -4,7 +4,7 @@
 %global rustflags_codegen_units 16
 
 Name:           dcg
-Version:        0.15.1
+Version:        0.15.3
 Release:        1%{?dist}
 Summary:        Block destructive commands run by AI coding agents
 
@@ -29,6 +29,8 @@ rm rust-toolchain.toml
 %build
 %cargo_prep_online
 export CARGO_PROFILE_RPM_LTO=thin
+# aws-lc jitterentropy needs -O0 to win
+export CFLAGS="${CFLAGS//-O2/}"
 %cargo_build
 
 %install
@@ -46,6 +48,10 @@ target/rpm/%{name} completions fish | install -Dm0644 /dev/stdin %{buildroot}%{f
 %{fish_completions_dir}/%{name}.fish
 
 %changelog
+* Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 0.15.3-1
+- Update to 0.15.3
+- Fix aws-lc-sys jitterentropy build
+
 * Tue Sep 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.15.1-1
  - Update to 0.15.1
 
