@@ -2,7 +2,7 @@
 %global __brp_mangle_shebangs_exclude_from ^%{_datadir}/%{name}/
 
 Name:           ubs
-Version:        5.5.7
+Version:        5.5.8
 Release:        1%{?dist}
 Summary:        Ultimate Bug Scanner, multi-language static bug finder
 
@@ -48,11 +48,14 @@ ln -s ../share/%{name}/ubs %{buildroot}%{_bindir}/%{name}
 %{_datadir}/%{name}
 
 %changelog
+* Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 5.5.8-1
+- Update to 5.5.8
+
 * Fri Oct 16 2026 Lachlan Marie <lchlnm@pm.me> - 5.5.7-1
- - Update to 5.5.7
+- Update to 5.5.7
 
 * Thu Oct 08 2026 Lachlan Marie <lchlnm@pm.me> - 5.4.19-1
- - Update to 5.4.19
+- Update to 5.4.19
 
 * Mon Sep 28 2026 Lachlan Marie <lchlnm@pm.me> - 5.4.15-1
 - Initial package
