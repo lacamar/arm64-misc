@@ -90,12 +90,12 @@
 
 Name:           mesa
 Summary:        Mesa graphics libraries
-%global commit 888a19e27844002061f4e0b7e98b293ccc352160
+%global commit 335d5698dca1d1b9d11ef18cf5f523cc0f7f58fb
 %global shortcommit %{sub %{commit} 1 8}
-%global commitdate 20261003
-%global ver 26.3.0
+%global commitdate 20261017
+%global ver 27.0.0
 Version:        %{ver}~git%{commitdate}.%{shortcommit}
-Release:        7%{?dist}
+Release:        1%{?dist}
 License:        MIT AND BSD-3-Clause AND SGI-B-2.0
 URL:            https://mesa3d.org
 
@@ -461,7 +461,7 @@ rewrite_wrap_file rustc-hash
   -Dgallium-rusticl=true \
 %endif
   -Dvulkan-drivers=%{?vulkan_drivers} \
-  -Dvulkan-layers=device-select,anti-lag \
+  -Dvulkan-layers=device-select \
   -Dgles1=enabled \
   -Dgles2=enabled \
   -Dopengl=true \
@@ -690,6 +690,9 @@ ln -s libGLX_mesa.so.0 %{buildroot}%{_libdir}/libGLX_system.so.0
 %{_libdir}/dri/d3d12_drv_video.so
 %endif
 %{_libdir}/dri/virtio_gpu_drv_video.so
+%if 0%{?with_vulkan_hw}
+%{_libdir}/dri/zink_drv_video.so
+%endif
 %endif
 
 %if 0%{?with_d3d12}
@@ -711,8 +714,6 @@ ln -s libGLX_mesa.so.0 %{buildroot}%{_libdir}/libGLX_system.so.0
 %{_datadir}/drirc.d/00-lavapipe-defaults.conf
 %{_libdir}/libVkLayer_MESA_device_select.so
 %{_datadir}/vulkan/implicit_layer.d/VkLayer_MESA_device_select.json
-%{_libdir}/libVkLayer_MESA_anti_lag.so
-%{_datadir}/vulkan/implicit_layer.d/VkLayer_MESA_anti_lag.json
 %if 0%{?with_virtio}
 %{_libdir}/libvulkan_virtio.so
 %{_datadir}/vulkan/icd.d/virtio_icd.*.json
@@ -763,6 +764,12 @@ ln -s libGLX_mesa.so.0 %{buildroot}%{_libdir}/libGLX_system.so.0
 %endif
 
 %changelog
+* Sat Oct 17 2026 lacamar <lchlnm@pm.me> - 27.0.0~git20261017.335d5698-1
+- Update to 335d5698
+- Rebase hk-heap-overflow patch
+- Drop anti-lag layer (removed upstream)
+- Package zink VA driver
+
 * Mon Oct 12 2026 lacamar <lchlnm@pm.me> - 26.3.0~git20261003.888a19e2-7
 - Drop lighter CDM barrier (mesa!44041)
 - Fix GPU timeouts in Lightroom
