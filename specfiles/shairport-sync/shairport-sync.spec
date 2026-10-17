@@ -1,7 +1,7 @@
-%global tag 5.5.2
+%global tag 5.6
 Name:           shairport-sync
 Version:        %{tag}
-Release:        7%{?dist}
+Release:        1%{?dist}
 Summary:        AirTunes emulator. Multi-Room with Audio Synchronisation
 # MIT licensed except for tinysvcmdns under BSD,
 # FFTConvolver/ under GPLv3+ and audio_sndio.c
@@ -118,40 +118,43 @@ install -m0644 -D shairport-sync.sysusers.conf %{buildroot}%{_sysusersdir}/shair
 %{_sysusersdir}/shairport-sync.conf
 
 %changelog
+* Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 5.6-1
+- Update to 5.6
+
 * Sat Oct 03 2026 Lachlan Marie <lchlnm@pm.me> - 5.5.2-7
- - Enable AirPlay 2
+- Enable AirPlay 2
 
 * Tue Sep 15 2026 Lachlan Marie <lchlnm@pm.me> - 5.5.2-6
- - Update to 5.5.2
+- Update to 5.5.2
 
 * Wed Sep 09 2026 Lachlan Marie <lchlnm@pm.me> - 5.5.1-6
- - Update to 5.5.1
+- Update to 5.5.1
 
 * Fri Sep 04 2026 Lachlan Marie <lchlnm@pm.me> - 5.5-6
- - Update to 5.5
+- Update to 5.5
 
 * Tue Aug 25 2026 Lachlan Marie <lchlnm@pm.me> - 5.2.3-6
- - Update to 5.2.3
+- Update to 5.2.3
 
 * Tue Aug 25 2026 Lachlan Marie <lchlnm@pm.me> - 5.2.2.2-6
- - Update to 5.2.2.2
+- Update to 5.2.2.2
 
 * Thu Jul 30 2026 Lachlan Marie <lchlnm@pm.me> - 5.2.1-6
- - Update to 5.2.1
+- Update to 5.2.1
 
 * Thu Jul 09 2026 Lachlan Marie <lchlnm@pm.me> - 5.2-6
- - Update to 5.2
+- Update to 5.2
 
 * Tue Jun 09 2026 Lachlan Marie <lchlnm@pm.me> - 5.1-6
- - Update to 5.1
+- Update to 5.1
 
 * Sun Apr 12 2026 Lachlan Marie <lchlnm@pm.me> - 5.0.3-6
- - Update to 5.0.3
+- Update to 5.0.3
 
 * Tue Apr 07 2026 Lachlan Marie <lchlnm@pm.me> - 5.0.2-5
- - Update to 5.0.2
- - Fixed erroneous group creation in build
- - Set default backend to pipewire
+- Update to 5.0.2
+- Fixed erroneous group creation in build
+- Set default backend to pipewire
 
 * Mon Apr 06 2026 Lachlan Marie <lchlnm@pm.me> - 4.3.7-4
 - Modified build flags
