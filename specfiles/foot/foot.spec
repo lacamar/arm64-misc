@@ -3,7 +3,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        9%{?dist}
+Release:        10%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -17,6 +17,7 @@ Source2:        gpgkey-5BBD4992C116573F.asc
 
 # Session save/restore for --server (downstream)
 Patch0:         foot-session-restore.patch
+Patch1:         foot-vulkan.patch
 
 BuildRequires:  gcc
 BuildRequires:  gnupg2
@@ -33,6 +34,8 @@ BuildRequires:  pkgconfig(pixman-1)
 BuildRequires:  pkgconfig(scdoc)
 BuildRequires:  pkgconfig(systemd)
 BuildRequires:  pkgconfig(tllist) >= 1.1.0
+BuildRequires:  pkgconfig(vulkan)
+BuildRequires:  glslang
 BuildRequires:  pkgconfig(wayland-client)
 BuildRequires:  pkgconfig(wayland-cursor)
 BuildRequires:  pkgconfig(wayland-protocols) >= 1.49
@@ -91,7 +94,8 @@ Requires:       ncurses-base
 %build
 %meson \
     -Dterminfo-base-name=%{foot_terminfo} \
-    -Ddefault-terminfo=foot
+    -Ddefault-terminfo=foot \
+    -Dvulkan=enabled
 %meson_build
 
 
@@ -144,6 +148,9 @@ desktop-file-validate \
 
 
 %changelog
+* Sun Oct 18 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-10
+- Add optional Vulkan renderer ([tweak] renderer=vulkan)
+
 * Wed Oct 07 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-9
 - Restore window placement via xdg-session-management
 

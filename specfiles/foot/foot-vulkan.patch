@@ -1,0 +1,1556 @@
+diff --git a/config.c b/config.c
+index 0f53be0..76dd7d9 100644
+--- a/config.c
++++ b/config.c
+@@ -3049,6 +3049,14 @@ parse_section_tweak(struct context *ctx)
+     else if (streq(key, "pre-apply-damage"))
+         return value_to_bool(ctx, &conf->tweak.preapply_damage);
+ 
++    else if (streq(key, "renderer")) {
++        _Static_assert(sizeof(conf->tweak.renderer) == sizeof(int),
++                       "enum is not 32-bit");
++        return value_to_enum(
++            ctx, (const char *[]){"pixman", "vulkan", NULL},
++            (int *)&conf->tweak.renderer);
++    }
++
+     else {
+         LOG_CONTEXTUAL_ERR("not a valid option: %s", key);
+         return false;
+diff --git a/config.h b/config.h
+index 73761f1..27715d4 100644
+--- a/config.h
++++ b/config.h
+@@ -472,6 +472,7 @@ struct config {
+         enum shm_bit_depth surface_bit_depth;
+         uint32_t min_stride_alignment;
+         bool preapply_damage;
++        enum { RENDERER_PIXMAN, RENDERER_VULKAN } renderer;
+     } tweak;
+ 
+     struct {
+diff --git a/doc/foot.ini.5.scd b/doc/foot.ini.5.scd
+index d6107d2..e65729b 100644
+--- a/doc/foot.ini.5.scd
++++ b/doc/foot.ini.5.scd
+@@ -2218,6 +2218,13 @@ any of these options.
+ 	
+ 	Default: _auto_
+ 
++*renderer*
++	Renderer for the main grid, one of *pixman* or *vulkan*. *vulkan*
++	renders on the GPU into linux-dmabuf buffers, always repaints the
++	whole frame and disables render worker threads. Falls back to
++	*pixman* if Vulkan or linux-dmabuf is unavailable. Default:
++	_pixman_.
++
+ *pre-apply-damage*
+ 	Boolean. When enabled, foot will attempt to "pre-apply" the damage
+ 	from the last frame when foot is forced to double-buffer
+diff --git a/main.c b/main.c
+index c3c7971..48e33bc 100644
+--- a/main.c
++++ b/main.c
+@@ -31,6 +31,7 @@
+ #include "shm.h"
+ #include "terminal.h"
+ #include "util.h"
++#include "vulkan.h"
+ #include "xmalloc.h"
+ #include "xsnprintf.h"
+ #include "uri.h"
+@@ -645,6 +646,9 @@ main(int argc, char *const *argv)
+         goto out;
+     }
+ 
++    if (conf.tweak.renderer == RENDERER_VULKAN && !vkr_init(wayl))
++        LOG_WARN("Vulkan renderer unavailable, using pixman");
++
+     if ((renderer = render_init(fdm, wayl)) == NULL)
+         goto out;
+ 
+@@ -710,6 +714,7 @@ out:
+     term_destroy(term);
+ 
+     shm_fini();
++    vkr_destroy();
+     render_destroy(renderer);
+     wayl_destroy(wayl);
+     key_binding_manager_destroy(key_binding_manager);
+diff --git a/meson.build b/meson.build
+index 6093b22..a0ae012 100644
+--- a/meson.build
++++ b/meson.build
+@@ -165,6 +165,20 @@ endif
+ 
+ tllist = dependency('tllist', version: '>=1.1.0', fallback: 'tllist')
+ fcft = dependency('fcft', version: ['>=3.3.1', '<4.0.0'], fallback: 'fcft')
++vulkan = dependency('vulkan', required: get_option('vulkan'))
++glslang = find_program('glslangValidator', required: get_option('vulkan'))
++vulkan_src = []
++if vulkan.found() and glslang.found()
++  add_project_arguments('-DFOOT_VULKAN=1', language: 'c')
++  foreach sh : ['quad.vert', 'quad.frag']
++    vulkan_src += custom_target(
++      sh.underscorify(),
++      input: 'shaders' / sh,
++      output: sh.underscorify() + '.h',
++      command: [glslang, '-V', '--vn', sh.underscorify(), '-o', '@OUTPUT@', '@INPUT@'])
++  endforeach
++  vulkan_src += files('vulkan.c')
++endif
+ 
+ wayland_protocols_datadir = wayland_protocols.get_variable('pkgdatadir')
+ 
+@@ -187,6 +201,7 @@ wl_proto_xml = [
+   wayland_protocols_datadir / 'unstable/tablet/tablet-unstable-v2.xml',  # required by cursor-shape-v1
+   wayland_protocols_datadir / 'staging/cursor-shape/cursor-shape-v1.xml',
+   wayland_protocols_datadir / 'staging/single-pixel-buffer/single-pixel-buffer-v1.xml',
++  wayland_protocols_datadir / 'stable/linux-dmabuf/linux-dmabuf-v1.xml',
+   wayland_protocols_datadir / 'staging/xdg-toplevel-icon/xdg-toplevel-icon-v1.xml',
+   wayland_protocols_datadir / 'staging/xdg-system-bell/xdg-system-bell-v1.xml',
+   wayland_protocols_datadir / 'staging/color-management/color-management-v1.xml',
+@@ -345,9 +360,9 @@ executable(
+   'user-notification.c', 'user-notification.h',
+   'wayland.c', 'wayland.h', 'shm-formats.h',
+   'xkbcommon-vmod.h',
+-  srgb_funcs, wl_proto_src + wl_proto_headers, version,
++  srgb_funcs, wl_proto_src + wl_proto_headers, version, vulkan_src,
+   dependencies: [math, threads, libepoll, pixman, wayland_client, wayland_cursor, xkb, fontconfig, utf8proc,
+-                 tllist, fcft],
++                 tllist, fcft, vulkan],
+   link_with: pgolib,
+   install: true)
+ 
+@@ -445,6 +460,7 @@ summary(
+     'Documentation': scdoc.found(),
+     'Themes': get_option('themes'),
+     'IME': get_option('ime'),
++    'Vulkan renderer': vulkan.found() and glslang.found(),
+     'Grapheme clustering': utf8proc.found(),
+     'utmp backend': utmp_backend,
+     'utmp helper default path': utmp_default_helper_path,
+diff --git a/meson_options.txt b/meson_options.txt
+index e335607..89dba0d 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -29,3 +29,4 @@ option('utmp-default-helper-path', type: 'string', value: 'auto',
+        description: 'Default path to the utmp helper binary. Default: auto-detect')
+ 
+ option('fanalyzer', type: 'boolean', value: false, description: 'enable GCC static analyzer')
++option('vulkan', type: 'feature', value: 'auto', description: 'optional Vulkan renderer ([tweak] renderer=vulkan)')
+diff --git a/render.c b/render.c
+index 2bc4414..72b68e1 100644
+--- a/render.c
++++ b/render.c
+@@ -44,8 +44,56 @@
+ #include "srgb.h"
+ #include "url-mode.h"
+ #include "util.h"
++#include "vulkan.h"
+ #include "xmalloc.h"
+ 
++static pixman_bool_t
++r_fill(pixman_op_t op, pixman_image_t *img, const pixman_color_t *color,
++       int n, const pixman_rectangle16_t *rects)
++{
++    if (!vkr_owns(img))
++        return pixman_image_fill_rectangles(op, img, color, n, rects);
++    vkr_fill(op, color, n, rects);
++    return true;
++}
++
++static void
++r_composite(pixman_op_t op, pixman_image_t *src, pixman_image_t *mask,
++            pixman_image_t *dst, int32_t sx, int32_t sy, int32_t mx, int32_t my,
++            int32_t dx, int32_t dy, int32_t w, int32_t h)
++{
++    if (!vkr_owns(dst))
++        pixman_image_composite32(op, src, mask, dst, sx, sy, mx, my, dx, dy, w, h);
++    else
++        vkr_composite(op, src, mask, sx, sy, mx, my, dx, dy, w, h);
++}
++
++static pixman_bool_t
++r_clip(pixman_image_t *img, const pixman_region32_t *region)
++{
++    if (!vkr_owns(img))
++        return pixman_image_set_clip_region32(img, (pixman_region32_t *)region);
++    vkr_set_clip(region);
++    return true;
++}
++
++static void
++r_traps(pixman_op_t op, pixman_image_t *src, pixman_image_t *dst,
++        pixman_format_code_t fmt, int xs, int ys, int xd, int yd,
++        int n, const pixman_trapezoid_t *traps)
++{
++    if (!vkr_owns(dst))
++        pixman_composite_trapezoids(op, src, dst, fmt, xs, ys, xd, yd, n, traps);
++    else
++        vkr_trapezoids(op, src, xd, yd, n, traps);
++}
++
++#define pixman_image_fill_rectangles r_fill
++#define pixman_image_composite32 r_composite
++#define pixman_image_set_clip_region32 r_clip
++#define pixman_composite_trapezoids r_traps
++#define pixman_image_create_solid_fill vkr_solid
++
+ #define TIME_SCROLL_DAMAGE 0
+ 
+ struct renderer {
+@@ -3348,6 +3396,8 @@ grid_render(struct terminal *term)
+ 
+     struct buffer_chain *chain = term->render.chains.grid;
+     struct buffer *buf = shm_get_buffer(chain, term->width, term->height);
++    if (buf->vk != NULL)
++        vkr_begin(buf);
+ 
+     /* Dirty old and current cursor cell, to ensure they're repainted */
+     dirty_old_cursor(term);
+@@ -3358,7 +3408,7 @@ grid_render(struct terminal *term)
+     if (term->render.last_buf == NULL ||
+         term->render.last_buf->width != buf->width ||
+         term->render.last_buf->height != buf->height ||
+-        term->render.margins)
++        term->render.margins || buf->vk != NULL)
+     {
+         force_full_repaint(term, buf);
+     }
+@@ -3708,6 +3758,9 @@ grid_render(struct terminal *term)
+         }
+     }
+ 
++    if (buf->vk != NULL)
++        vkr_end();
++
+     if (term->conf->tweak.damage_whole_window) {
+         wl_surface_damage_buffer(
+             term->window->surface.surf, 0, 0, INT32_MAX, INT32_MAX);
+diff --git a/shaders/quad.frag b/shaders/quad.frag
+new file mode 100644
+index 0000000..5ea17e6
+--- /dev/null
++++ b/shaders/quad.frag
+@@ -0,0 +1,19 @@
++#version 450
++layout(set = 0, binding = 0) uniform sampler2D atlas;
++layout(location = 0) in vec2 uv;
++layout(location = 1) flat in vec4 col;
++layout(location = 2) flat in uint md;
++layout(location = 0, index = 0) out vec4 o;
++layout(location = 0, index = 1) out vec4 k;
++void main() {
++    uint m = md & 15u;
++    vec4 c = col, cov = vec4(1.0);
++    if (m != 0u) {
++        vec4 t = texelFetch(atlas, ivec2(uv), 0);
++        if (m == 1u) cov = vec4(t.a);
++        else if (m == 2u) c = t;
++        else cov = t;
++    }
++    o = c * cov;
++    k = (md & 16u) != 0u ? vec4(1.0) : c.a * cov;
++}
+diff --git a/shaders/quad.vert b/shaders/quad.vert
+new file mode 100644
+index 0000000..fbe1c25
+--- /dev/null
++++ b/shaders/quad.vert
+@@ -0,0 +1,17 @@
++#version 450
++layout(location = 0) in vec4 rect;
++layout(location = 1) in vec2 uv0;
++layout(location = 2) in vec4 color;
++layout(location = 3) in uint mode;
++layout(push_constant) uniform PC { vec2 vp; } pc;
++layout(location = 0) out vec2 uv;
++layout(location = 1) flat out vec4 col;
++layout(location = 2) flat out uint md;
++void main() {
++    vec2 c = vec2(gl_VertexIndex & 1, gl_VertexIndex >> 1);
++    vec2 p = rect.xy + c * rect.zw;
++    gl_Position = vec4(p / pc.vp * 2.0 - 1.0, 0.0, 1.0);
++    uv = uv0 + c * rect.zw;
++    col = color;
++    md = mode;
++}
+diff --git a/shm.c b/shm.c
+index 5c1573a..25677f9 100644
+--- a/shm.c
++++ b/shm.c
+@@ -21,6 +21,7 @@
+ #include "debug.h"
+ #include "macros.h"
+ #include "stride.h"
++#include "vulkan.h"
+ #include "xmalloc.h"
+ 
+ #if !defined(MAP_UNINITIALIZED)
+@@ -96,6 +97,7 @@ struct buffer_chain {
+     struct wl_shm *shm;
+     size_t pix_instances;
+     bool scrollable;
++    bool vk;
+ 
+     pixman_format_code_t pixman_fmt;
+     enum wl_shm_format shm_format;
+@@ -170,6 +172,7 @@ static void
+ buffer_destroy(struct buffer_private *buf)
+ {
+     buffer_destroy_dont_close(&buf->public);
++    vkr_image_destroy(buf->public.vk);
+     pool_unref(buf->pool);
+     buf->pool = NULL;
+ 
+@@ -329,6 +332,42 @@ get_new_buffers(struct buffer_chain *chain, size_t count,
+                 struct buffer *bufs[static count], bool immediate_purge)
+ {
+     xassert(count == 1 || !chain->scrollable);
++
++    if (chain->vk) {
++        for (size_t i = 0; i < count; i++) {
++            struct buffer_private *buf = xmalloc(sizeof(*buf));
++            *buf = (struct buffer_private){
++                .public = {
++                    .width = widths[i],
++                    .height = heights[i],
++                    .stride = widths[i] * 4,
++                    .pix_instances = 1,
++                    .age = 1234,
++                },
++                .chain = chain,
++                .ref_count = immediate_purge ? 0 : 1,
++                .busy = true,
++                .release_cb = chain->release_cb,
++                .cb_data = chain->cb_data,
++            };
++            buf->public.pix = xmalloc(sizeof(buf->public.pix[0]));
++            buf->public.pix[0] = pixman_image_create_bits(PIXMAN_a8r8g8b8, 1, 1, NULL, 0);
++            buf->public.vk = vkr_image_new(widths[i], heights[i], &buf->public.wl_buf);
++            if (buf->public.vk == NULL)
++                abort();
++            wl_buffer_add_listener(buf->public.wl_buf, &buffer_listener, buf);
++
++            if (immediate_purge)
++                tll_push_front(deferred, buf);
++            else
++                tll_push_front(chain->bufs, buf);
++
++            buf->public.dirty = xmalloc(sizeof(buf->public.dirty[0]));
++            pixman_region32_init(&buf->public.dirty[0]);
++            bufs[i] = &buf->public;
++        }
++        return;
++    }
+     /*
+      * No existing buffer available. Create a new one by:
+      *
+@@ -1107,3 +1146,12 @@ shm_chain_bit_depth(const struct buffer_chain *chain)
+ #endif
+         : SHM_BITS_10;
+ }
++
++void
++shm_chain_set_vulkan(struct buffer_chain *chain)
++{
++    chain->vk = true;
++    chain->scrollable = false;
++    chain->pix_instances = 1;
++    chain->pixman_fmt = PIXMAN_a8r8g8b8;
++}
+diff --git a/shm.h b/shm.h
+index c58a853..87448ff 100644
+--- a/shm.h
++++ b/shm.h
+@@ -39,6 +39,7 @@ struct buffer {
+      * which is then used in calls to wl_surface_damage_buffer().
+      */
+     pixman_region32_t *dirty;
++    struct vkr_image *vk;
+ };
+ 
+ void shm_fini(void);
+@@ -53,6 +54,7 @@ struct buffer_chain *shm_chain_new(
+     enum shm_bit_depth desired_bit_depth,
+     void (*release_cb)(struct buffer *buf, void *data), void *cb_data);
+ void shm_chain_free(struct buffer_chain *chain);
++void shm_chain_set_vulkan(struct buffer_chain *chain);
+ 
+ enum shm_bit_depth shm_chain_bit_depth(const struct buffer_chain *chain);
+  
+diff --git a/terminal.c b/terminal.c
+index db21173..555b88f 100644
+--- a/terminal.c
++++ b/terminal.c
+@@ -45,6 +45,7 @@
+ #include "url-mode.h"
+ #include "util.h"
+ #include "vt.h"
++#include "vulkan.h"
+ #include "xmalloc.h"
+ #include "xsnprintf.h"
+ 
+@@ -1282,6 +1283,7 @@ term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
+     }
+ 
+     /* Initialize configure-based terminal attributes */
++    const bool vk = vkr_enabled();
+     *term = (struct terminal) {
+         .fdm = fdm,
+         .reaper = reaper,
+@@ -1364,7 +1366,7 @@ term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
+         .wl = wayl,
+         .render = {
+             .chains = {
+-                .grid = shm_chain_new(wayl, true, 1 + conf->render_worker_count,
++                .grid = shm_chain_new(wayl, !vk, vk ? 1 : 1 + conf->render_worker_count,
+                                       desired_bit_depth, &render_buffer_release_callback, term),
+                 .search = shm_chain_new(wayl, false, 1 ,desired_bit_depth, NULL, NULL),
+                 .scrollback_indicator = shm_chain_new(wayl, false, 1, desired_bit_depth, NULL, NULL),
+@@ -1385,7 +1387,7 @@ term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
+                 .timer_fd = app_id_update_fd,
+             },
+             .workers = {
+-                .count = conf->render_worker_count,
++                .count = vk ? 0 : conf->render_worker_count,
+                 .queue = tll_init(),
+             },
+         },
+@@ -1414,6 +1416,8 @@ term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
+ #endif
+         .active_notifications = tll_init(),
+     };
++    if (vk)
++        shm_chain_set_vulkan(term->render.chains.grid);
+ 
+     pixman_region32_init(&term->render.last_overlay_clip);
+ 
+diff --git a/vulkan.c b/vulkan.c
+new file mode 100644
+index 0000000..1d8edd4
+--- /dev/null
++++ b/vulkan.c
+@@ -0,0 +1,994 @@
++#include "vulkan.h"
++
++#include <stddef.h>
++#include <stdint.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++
++#include <vulkan/vulkan.h>
++
++#define LOG_MODULE "vulkan"
++#define LOG_ENABLE_DBG 0
++#include "log.h"
++#include "macros.h"
++#include "shm.h"
++#include "util.h"
++#include "wayland.h"
++#include "xmalloc.h"
++
++#include "quad_vert.h"
++#include "quad_frag.h"
++
++#define DRM_FORMAT_ARGB8888 0x34325241
++#define TAG_MAGIC 0x766b7274u
++#define MODE_SRC 16u
++
++struct quad {
++    float x, y, w, h;
++    float u, v;
++    float r, g, b, a;
++    uint32_t mode;
++};
++
++struct vkr_tag {
++    uint32_t magic;
++    bool solid;
++    pixman_color_t color;
++    int x, y;
++    unsigned gen;
++};
++
++struct vkr_image {
++    VkImage img;
++    VkDeviceMemory mem;
++    VkImageView view;
++    int width, height;
++};
++
++static struct {
++    bool on;
++    struct wayland *wayl;
++
++    VkInstance inst;
++    VkPhysicalDevice pdev;
++    VkDevice dev;
++    VkQueue queue;
++    uint32_t qfam;
++    PFN_vkGetMemoryFdKHR get_memory_fd;
++
++    VkCommandPool cmd_pool;
++    VkCommandBuffer cmd;
++    VkFence fence;
++
++    VkSampler sampler;
++    VkDescriptorSetLayout dsl;
++    VkDescriptorPool dpool;
++    VkDescriptorSet ds;
++    VkPipelineLayout layout;
++    VkPipeline pipe;
++
++    VkImage atlas;
++    VkDeviceMemory atlas_mem;
++    VkImageView atlas_view;
++    pixman_image_t *atlas_pix;
++    int atlas_size;
++    int shelf_x, shelf_y, shelf_h;
++    unsigned gen;
++    bool atlas_fresh;
++
++    VkBuffer vbuf;
++    VkDeviceMemory vmem;
++    struct quad *quads;
++    size_t cap, count;
++
++    struct vkr_image *tgt;
++    const pixman_image_t *tgt_pix;
++    bool first_pass;
++    bool clipping;
++    pixman_region32_t clip;
++} vk;
++
++static int
++find_mem(uint32_t bits, VkMemoryPropertyFlags props)
++{
++    VkPhysicalDeviceMemoryProperties mp;
++    vkGetPhysicalDeviceMemoryProperties(vk.pdev, &mp);
++    for (uint32_t i = 0; i < mp.memoryTypeCount; i++) {
++        if ((bits & (1u << i)) && (mp.memoryTypes[i].propertyFlags & props) == props)
++            return i;
++    }
++    return -1;
++}
++
++static bool
++alloc_mem(VkMemoryRequirements *req, VkMemoryPropertyFlags props,
++          const void *next, VkDeviceMemory *mem)
++{
++    int type = find_mem(req->memoryTypeBits, props);
++    if (type < 0)
++        return false;
++    VkMemoryAllocateInfo ai = {
++        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
++        .pNext = next,
++        .allocationSize = req->size,
++        .memoryTypeIndex = type,
++    };
++    return vkAllocateMemory(vk.dev, &ai, NULL, mem) == VK_SUCCESS;
++}
++
++static VkImageView
++make_view(VkImage img)
++{
++    VkImageViewCreateInfo ci = {
++        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
++        .image = img,
++        .viewType = VK_IMAGE_VIEW_TYPE_2D,
++        .format = VK_FORMAT_B8G8R8A8_UNORM,
++        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
++    };
++    VkImageView view = VK_NULL_HANDLE;
++    vkCreateImageView(vk.dev, &ci, NULL, &view);
++    return view;
++}
++
++static void
++atlas_free(void)
++{
++    if (vk.atlas_pix != NULL)
++        pixman_image_unref(vk.atlas_pix);
++    vkDestroyImageView(vk.dev, vk.atlas_view, NULL);
++    vkDestroyImage(vk.dev, vk.atlas, NULL);
++    vkFreeMemory(vk.dev, vk.atlas_mem, NULL);
++    vk.atlas_pix = NULL;
++    vk.atlas_view = VK_NULL_HANDLE;
++    vk.atlas = VK_NULL_HANDLE;
++    vk.atlas_mem = VK_NULL_HANDLE;
++}
++
++static bool
++atlas_new(int size)
++{
++    VkImageCreateInfo ci = {
++        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
++        .imageType = VK_IMAGE_TYPE_2D,
++        .format = VK_FORMAT_B8G8R8A8_UNORM,
++        .extent = {size, size, 1},
++        .mipLevels = 1,
++        .arrayLayers = 1,
++        .samples = VK_SAMPLE_COUNT_1_BIT,
++        .tiling = VK_IMAGE_TILING_LINEAR,
++        .usage = VK_IMAGE_USAGE_SAMPLED_BIT,
++        .initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED,
++    };
++    if (vkCreateImage(vk.dev, &ci, NULL, &vk.atlas) != VK_SUCCESS)
++        return false;
++
++    VkMemoryRequirements req;
++    vkGetImageMemoryRequirements(vk.dev, vk.atlas, &req);
++    if (!alloc_mem(&req, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
++                   VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, NULL, &vk.atlas_mem))
++        goto err;
++    vkBindImageMemory(vk.dev, vk.atlas, vk.atlas_mem, 0);
++
++    VkSubresourceLayout lay;
++    vkGetImageSubresourceLayout(
++        vk.dev, vk.atlas,
++        &(VkImageSubresource){.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT}, &lay);
++
++    void *map;
++    if (vkMapMemory(vk.dev, vk.atlas_mem, 0, VK_WHOLE_SIZE, 0, &map) != VK_SUCCESS)
++        goto err;
++
++    vk.atlas_pix = pixman_image_create_bits_no_clear(
++        PIXMAN_a8r8g8b8, size, size,
++        (uint32_t *)((uint8_t *)map + lay.offset), lay.rowPitch);
++    vk.atlas_view = make_view(vk.atlas);
++    if (vk.atlas_pix == NULL || vk.atlas_view == VK_NULL_HANDLE)
++        goto err;
++
++    vkUpdateDescriptorSets(vk.dev, 1, &(VkWriteDescriptorSet){
++        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
++        .dstSet = vk.ds,
++        .descriptorCount = 1,
++        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
++        .pImageInfo = &(VkDescriptorImageInfo){
++            .sampler = vk.sampler,
++            .imageView = vk.atlas_view,
++            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
++        },
++    }, 0, NULL);
++
++    vk.atlas_size = size;
++    vk.shelf_x = vk.shelf_y = vk.shelf_h = 0;
++    vk.gen++;
++    vk.atlas_fresh = true;
++    return true;
++
++err:
++    atlas_free();
++    return false;
++}
++
++static bool
++vbuf_new(size_t cap)
++{
++    VkBuffer buf;
++    VkDeviceMemory mem;
++    VkBufferCreateInfo ci = {
++        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
++        .size = cap * sizeof(struct quad),
++        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
++    };
++    if (vkCreateBuffer(vk.dev, &ci, NULL, &buf) != VK_SUCCESS)
++        return false;
++
++    VkMemoryRequirements req;
++    vkGetBufferMemoryRequirements(vk.dev, buf, &req);
++    void *map;
++    if (!alloc_mem(&req, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
++                   VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, NULL, &mem)) {
++        vkDestroyBuffer(vk.dev, buf, NULL);
++        return false;
++    }
++    vkBindBufferMemory(vk.dev, buf, mem, 0);
++    vkMapMemory(vk.dev, mem, 0, VK_WHOLE_SIZE, 0, &map);
++
++    if (vk.quads != NULL)
++        memcpy(map, vk.quads, vk.count * sizeof(struct quad));
++    vkDestroyBuffer(vk.dev, vk.vbuf, NULL);
++    vkFreeMemory(vk.dev, vk.vmem, NULL);
++
++    vk.vbuf = buf;
++    vk.vmem = mem;
++    vk.quads = map;
++    vk.cap = cap;
++    return true;
++}
++
++static void
++barrier(VkImage img, VkImageLayout from, VkImageLayout to,
++        VkAccessFlags src_access, VkAccessFlags dst_access,
++        VkPipelineStageFlags src_stage, VkPipelineStageFlags dst_stage,
++        uint32_t src_fam, uint32_t dst_fam)
++{
++    vkCmdPipelineBarrier(
++        vk.cmd, src_stage, dst_stage, 0, 0, NULL, 0, NULL, 1,
++        &(VkImageMemoryBarrier){
++            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
++            .srcAccessMask = src_access,
++            .dstAccessMask = dst_access,
++            .oldLayout = from,
++            .newLayout = to,
++            .srcQueueFamilyIndex = src_fam,
++            .dstQueueFamilyIndex = dst_fam,
++            .image = img,
++            .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
++        });
++}
++
++/* ponytail: synchronous submit+wait; export a sync_file for explicit sync if latency matters */
++static void
++flush(bool final)
++{
++    struct vkr_image *t = vk.tgt;
++    if (t == NULL || (!final && vk.count == 0))
++        return;
++
++    vkBeginCommandBuffer(vk.cmd, &(VkCommandBufferBeginInfo){
++        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
++        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
++    });
++
++    if (vk.atlas_fresh) {
++        barrier(vk.atlas, VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_GENERAL,
++                VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
++                VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
++                VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED);
++        vk.atlas_fresh = false;
++    }
++
++    const VkAccessFlags rw = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
++                             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
++    const VkPipelineStageFlags out = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
++
++    barrier(t->img,
++            vk.first_pass ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
++            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
++            vk.first_pass ? 0 : VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, rw,
++            vk.first_pass ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT : out, out,
++            VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED);
++
++    vkCmdBeginRendering(vk.cmd, &(VkRenderingInfo){
++        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
++        .renderArea = {{0, 0}, {t->width, t->height}},
++        .layerCount = 1,
++        .colorAttachmentCount = 1,
++        .pColorAttachments = &(VkRenderingAttachmentInfo){
++            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
++            .imageView = t->view,
++            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
++            .loadOp = vk.first_pass ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD,
++            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
++        },
++    });
++
++    if (vk.count > 0) {
++        float vp[2] = {t->width, t->height};
++        vkCmdSetViewport(vk.cmd, 0, 1, &(VkViewport){0, 0, vp[0], vp[1], 0, 1});
++        vkCmdSetScissor(vk.cmd, 0, 1, &(VkRect2D){{0, 0}, {t->width, t->height}});
++        vkCmdBindPipeline(vk.cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.pipe);
++        vkCmdBindDescriptorSets(vk.cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
++                                vk.layout, 0, 1, &vk.ds, 0, NULL);
++        vkCmdBindVertexBuffers(vk.cmd, 0, 1, &vk.vbuf, &(VkDeviceSize){0});
++        vkCmdPushConstants(vk.cmd, vk.layout, VK_SHADER_STAGE_VERTEX_BIT,
++                           0, sizeof(vp), vp);
++        vkCmdDraw(vk.cmd, 4, vk.count, 0, 0);
++    }
++
++    vkCmdEndRendering(vk.cmd);
++
++    if (final) {
++        barrier(t->img, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL,
++                VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, 0,
++                out, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
++                vk.qfam, VK_QUEUE_FAMILY_FOREIGN_EXT);
++    }
++
++    vkEndCommandBuffer(vk.cmd);
++    vkQueueSubmit(vk.queue, 1, &(VkSubmitInfo){
++        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
++        .commandBufferCount = 1,
++        .pCommandBuffers = &vk.cmd,
++    }, vk.fence);
++    vkWaitForFences(vk.dev, 1, &vk.fence, VK_TRUE, UINT64_MAX);
++    vkResetFences(vk.dev, 1, &vk.fence);
++    vkResetCommandBuffer(vk.cmd, 0);
++
++    vk.count = 0;
++    vk.first_pass = false;
++}
++
++static void
++push(int x, int y, int w, int h, int u, int v,
++     const pixman_color_t *c, uint32_t mode)
++{
++    int nrects = 1;
++    const pixman_box32_t whole = {0, 0, vk.tgt->width, vk.tgt->height};
++    const pixman_box32_t *rects = vk.clipping
++        ? pixman_region32_rectangles(&vk.clip, &nrects) : &whole;
++
++    for (int i = 0; i < nrects; i++) {
++        int x0 = max(x, max(rects[i].x1, 0));
++        int y0 = max(y, max(rects[i].y1, 0));
++        int x1 = min(x + w, min(rects[i].x2, vk.tgt->width));
++        int y1 = min(y + h, min(rects[i].y2, vk.tgt->height));
++        if (x0 >= x1 || y0 >= y1)
++            continue;
++
++        if (vk.count == vk.cap && !vbuf_new(vk.cap * 2)) {
++            LOG_ERR("failed to grow vertex buffer");
++            return;
++        }
++
++        vk.quads[vk.count++] = (struct quad){
++            x0, y0, x1 - x0, y1 - y0,
++            u + x0 - x, v + y0 - y,
++            c->red / 65535., c->green / 65535., c->blue / 65535., c->alpha / 65535.,
++            mode,
++        };
++    }
++}
++
++static void
++tag_free(pixman_image_t *img, void *data)
++{
++    free(data);
++}
++
++static struct vkr_tag *
++tag_of(pixman_image_t *img)
++{
++    struct vkr_tag *tag = pixman_image_get_destroy_data(img);
++    if (tag != NULL && tag->magic == TAG_MAGIC)
++        return tag;
++    if (tag != NULL)
++        return NULL;
++    tag = xcalloc(1, sizeof(*tag));
++    tag->magic = TAG_MAGIC;
++    pixman_image_set_destroy_function(img, &tag_free, tag);
++    return tag;
++}
++
++static bool
++atlas_alloc(int w, int h, int *x, int *y)
++{
++    if (vk.shelf_x + w > vk.atlas_size) {
++        vk.shelf_y += vk.shelf_h;
++        vk.shelf_x = vk.shelf_h = 0;
++    }
++    if (w > vk.atlas_size || vk.shelf_y + h > vk.atlas_size)
++        return false;
++    *x = vk.shelf_x;
++    *y = vk.shelf_y;
++    vk.shelf_x += w;
++    vk.shelf_h = max(vk.shelf_h, h);
++    return true;
++}
++
++static bool
++upload(pixman_image_t *img, int *u, int *v)
++{
++    struct vkr_tag *tag = tag_of(img);
++    if (tag == NULL)
++        return false;
++
++    if (tag->gen != vk.gen) {
++        int w = pixman_image_get_width(img);
++        int h = pixman_image_get_height(img);
++
++        /* ponytail: images larger than the max atlas are dropped; tile them if huge sixels matter */
++        if (!atlas_alloc(w, h, &tag->x, &tag->y)) {
++            flush(false);
++            if (vk.atlas_size < 4096) {
++                int size = vk.atlas_size * 2;
++                atlas_free();
++                if (!atlas_new(size)) {
++                    LOG_ERR("failed to grow glyph atlas");
++                    abort();
++                }
++            } else {
++                vk.shelf_x = vk.shelf_y = vk.shelf_h = 0;
++                vk.gen++;
++            }
++            if (!atlas_alloc(w, h, &tag->x, &tag->y))
++                return false;
++        }
++
++        pixman_image_composite32(PIXMAN_OP_SRC, img, NULL, vk.atlas_pix,
++                                 0, 0, 0, 0, tag->x, tag->y, w, h);
++        tag->gen = vk.gen;
++    }
++
++    *u = tag->x;
++    *v = tag->y;
++    return true;
++}
++
++static const pixman_color_t white = {0xffff, 0xffff, 0xffff, 0xffff};
++
++static uint32_t
++op_mode(pixman_op_t op)
++{
++    return op == PIXMAN_OP_SRC ? MODE_SRC : 0;
++}
++
++void
++vkr_fill(pixman_op_t op, const pixman_color_t *color,
++         int n, const pixman_rectangle16_t *rects)
++{
++    for (int i = 0; i < n; i++) {
++        push(rects[i].x, rects[i].y, rects[i].width, rects[i].height,
++             0, 0, color, op_mode(op));
++    }
++}
++
++void
++vkr_composite(pixman_op_t op, pixman_image_t *src, pixman_image_t *mask,
++              int sx, int sy, int mx, int my, int dx, int dy, int w, int h)
++{
++    pixman_image_t *tex = mask != NULL ? mask : src;
++    int tx = mask != NULL ? mx : sx;
++    int ty = mask != NULL ? my : sy;
++    const pixman_color_t *color = &white;
++    uint32_t mode = 0;
++
++    if (pixman_image_get_data(src) == NULL) {
++        struct vkr_tag *tag = pixman_image_get_destroy_data(src);
++        if (tag == NULL || tag->magic != TAG_MAGIC || !tag->solid)
++            return;
++        color = &tag->color;
++        if (mask != NULL)
++            mode = pixman_image_get_component_alpha(mask) ? 3 : 1;
++    } else {
++        tex = src;
++        tx = sx;
++        ty = sy;
++        mode = 2;
++    }
++
++    if (mode != 0) {
++        int u, v;
++        if (!upload(tex, &u, &v))
++            return;
++
++        int iw = pixman_image_get_width(tex);
++        int ih = pixman_image_get_height(tex);
++        int x0 = max(0, -tx), y0 = max(0, -ty);
++        w = min(w, iw - tx);
++        h = min(h, ih - ty);
++        push(dx + x0, dy + y0, w - x0, h - y0,
++             u + tx + x0, v + ty + y0, color, mode | op_mode(op));
++    } else
++        push(dx, dy, w, h, 0, 0, color, op_mode(op));
++}
++
++void
++vkr_set_clip(const pixman_region32_t *region)
++{
++    vk.clipping = region != NULL;
++    if (region != NULL)
++        pixman_region32_copy(&vk.clip, (pixman_region32_t *)region);
++}
++
++void
++vkr_trapezoids(pixman_op_t op, pixman_image_t *src, int dx, int dy,
++               int n, const pixman_trapezoid_t *traps)
++{
++    if (n <= 0)
++        return;
++
++    pixman_fixed_t x0 = INT32_MAX, y0 = INT32_MAX, x1 = INT32_MIN, y1 = INT32_MIN;
++    for (int i = 0; i < n; i++) {
++        const pixman_trapezoid_t *t = &traps[i];
++        pixman_fixed_t xs[] = {t->left.p1.x, t->left.p2.x, t->right.p1.x, t->right.p2.x};
++        for (size_t j = 0; j < ALEN(xs); j++) {
++            x0 = min(x0, xs[j]);
++            x1 = max(x1, xs[j]);
++        }
++        y0 = min(y0, t->top);
++        y1 = max(y1, t->bottom);
++    }
++
++    int bx = pixman_fixed_to_int(x0), by = pixman_fixed_to_int(y0);
++    int bw = pixman_fixed_to_int(x1 + pixman_fixed_1 - 1) - bx;
++    int bh = pixman_fixed_to_int(y1 + pixman_fixed_1 - 1) - by;
++    if (bw <= 0 || bh <= 0)
++        return;
++
++    pixman_image_t *m = pixman_image_create_bits(PIXMAN_a8, bw, bh, NULL, 0);
++    if (m == NULL)
++        return;
++    pixman_add_trapezoids(m, -bx, -by, n, traps);
++    vkr_composite(op, src, m, 0, 0, 0, 0, dx + bx, dy + by, bw, bh);
++    pixman_image_unref(m);
++}
++
++pixman_image_t *
++vkr_solid(const pixman_color_t *color)
++{
++    pixman_image_t *img = pixman_image_create_solid_fill(color);
++    if (vk.on && img != NULL) {
++        struct vkr_tag *tag = tag_of(img);
++        tag->solid = true;
++        tag->color = *color;
++    }
++    return img;
++}
++
++bool
++vkr_owns(const pixman_image_t *pix)
++{
++    return vk.tgt_pix != NULL && pix == vk.tgt_pix;
++}
++
++void
++vkr_begin(struct buffer *buf)
++{
++    vk.tgt = buf->vk;
++    vk.tgt_pix = buf->pix[0];
++    vk.first_pass = true;
++    vk.clipping = false;
++    vk.count = 0;
++}
++
++void
++vkr_end(void)
++{
++    flush(true);
++    vk.tgt = NULL;
++    vk.tgt_pix = NULL;
++}
++
++bool
++vkr_enabled(void)
++{
++    return vk.on;
++}
++
++void
++vkr_image_destroy(struct vkr_image *img)
++{
++    if (img == NULL)
++        return;
++    vkDestroyImageView(vk.dev, img->view, NULL);
++    vkDestroyImage(vk.dev, img->img, NULL);
++    vkFreeMemory(vk.dev, img->mem, NULL);
++    free(img);
++}
++
++/* ponytail: LINEAR only; use dmabuf feedback + modifier negotiation for tiled scanout */
++struct vkr_image *
++vkr_image_new(int width, int height, struct wl_buffer **wl_buf)
++{
++    struct vkr_image *img = xcalloc(1, sizeof(*img));
++    img->width = width;
++    img->height = height;
++
++    const uint64_t modifier = 0;
++    VkImageCreateInfo ci = {
++        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
++        .pNext = &(VkExternalMemoryImageCreateInfo){
++            .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO,
++            .pNext = &(VkImageDrmFormatModifierListCreateInfoEXT){
++                .sType = VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT,
++                .drmFormatModifierCount = 1,
++                .pDrmFormatModifiers = &modifier,
++            },
++            .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
++        },
++        .imageType = VK_IMAGE_TYPE_2D,
++        .format = VK_FORMAT_B8G8R8A8_UNORM,
++        .extent = {width, height, 1},
++        .mipLevels = 1,
++        .arrayLayers = 1,
++        .samples = VK_SAMPLE_COUNT_1_BIT,
++        .tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT,
++        .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
++        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
++    };
++    if (vkCreateImage(vk.dev, &ci, NULL, &img->img) != VK_SUCCESS)
++        goto err;
++
++    VkMemoryRequirements req;
++    vkGetImageMemoryRequirements(vk.dev, img->img, &req);
++    VkMemoryDedicatedAllocateInfo dedicated = {
++        .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO,
++        .image = img->img,
++    };
++    VkExportMemoryAllocateInfo export = {
++        .sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO,
++        .pNext = &dedicated,
++        .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
++    };
++    if (!alloc_mem(&req, 0, &export, &img->mem) ||
++        vkBindImageMemory(vk.dev, img->img, img->mem, 0) != VK_SUCCESS)
++        goto err;
++
++    int fd = -1;
++    if (vk.get_memory_fd(vk.dev, &(VkMemoryGetFdInfoKHR){
++            .sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR,
++            .memory = img->mem,
++            .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
++        }, &fd) != VK_SUCCESS)
++        goto err;
++
++    VkSubresourceLayout lay;
++    vkGetImageSubresourceLayout(
++        vk.dev, img->img,
++        &(VkImageSubresource){.aspectMask = VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT},
++        &lay);
++
++    struct zwp_linux_buffer_params_v1 *params =
++        zwp_linux_dmabuf_v1_create_params(vk.wayl->linux_dmabuf);
++    zwp_linux_buffer_params_v1_add(params, fd, 0, lay.offset, lay.rowPitch, 0, 0);
++    *wl_buf = zwp_linux_buffer_params_v1_create_immed(
++        params, width, height, DRM_FORMAT_ARGB8888, 0);
++    zwp_linux_buffer_params_v1_destroy(params);
++    close(fd);
++
++    img->view = make_view(img->img);
++    if (*wl_buf == NULL || img->view == VK_NULL_HANDLE)
++        goto err;
++    return img;
++
++err:
++    LOG_ERR("failed to create %dx%d dmabuf image", width, height);
++    vkr_image_destroy(img);
++    return NULL;
++}
++
++static const char *const dev_exts[] = {
++    VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
++    VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
++    VK_EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
++    VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME,
++};
++
++static bool
++has_exts(VkPhysicalDevice pdev)
++{
++    uint32_t n = 0;
++    vkEnumerateDeviceExtensionProperties(pdev, NULL, &n, NULL);
++    VkExtensionProperties props[n];
++    vkEnumerateDeviceExtensionProperties(pdev, NULL, &n, props);
++
++    for (size_t i = 0; i < ALEN(dev_exts); i++) {
++        bool found = false;
++        for (uint32_t j = 0; j < n && !found; j++)
++            found = streq(props[j].extensionName, dev_exts[i]);
++        if (!found)
++            return false;
++    }
++    return true;
++}
++
++/* ponytail: first capable non-CPU GPU; match dmabuf feedback main_device on multi-GPU */
++static bool
++pick_device(void)
++{
++    uint32_t n = 0;
++    vkEnumeratePhysicalDevices(vk.inst, &n, NULL);
++    VkPhysicalDevice devs[n > 0 ? n : 1];
++    vkEnumeratePhysicalDevices(vk.inst, &n, devs);
++
++    for (uint32_t i = 0; i < n; i++) {
++        VkPhysicalDeviceProperties p;
++        VkPhysicalDeviceFeatures f;
++        vkGetPhysicalDeviceProperties(devs[i], &p);
++        vkGetPhysicalDeviceFeatures(devs[i], &f);
++        if (p.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU ||
++            p.apiVersion < VK_API_VERSION_1_3 || !f.dualSrcBlend ||
++            !has_exts(devs[i]))
++            continue;
++
++        uint32_t nq = 0;
++        vkGetPhysicalDeviceQueueFamilyProperties(devs[i], &nq, NULL);
++        VkQueueFamilyProperties qp[nq];
++        vkGetPhysicalDeviceQueueFamilyProperties(devs[i], &nq, qp);
++        for (uint32_t q = 0; q < nq; q++) {
++            if (qp[q].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
++                vk.pdev = devs[i];
++                vk.qfam = q;
++                LOG_INFO("using %s", p.deviceName);
++                return true;
++            }
++        }
++    }
++    return false;
++}
++
++static VkShaderModule
++shader(const uint32_t *code, size_t size)
++{
++    VkShaderModule mod = VK_NULL_HANDLE;
++    vkCreateShaderModule(vk.dev, &(VkShaderModuleCreateInfo){
++        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
++        .codeSize = size,
++        .pCode = code,
++    }, NULL, &mod);
++    return mod;
++}
++
++static bool
++create_pipeline(void)
++{
++    VkShaderModule vs = shader(quad_vert, sizeof(quad_vert));
++    VkShaderModule fs = shader(quad_frag, sizeof(quad_frag));
++
++    const VkVertexInputAttributeDescription attrs[] = {
++        {0, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(struct quad, x)},
++        {1, 0, VK_FORMAT_R32G32_SFLOAT, offsetof(struct quad, u)},
++        {2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(struct quad, r)},
++        {3, 0, VK_FORMAT_R32_UINT, offsetof(struct quad, mode)},
++    };
++    const VkDynamicState dyn[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
++    const VkFormat fmt = VK_FORMAT_B8G8R8A8_UNORM;
++
++    VkGraphicsPipelineCreateInfo ci = {
++        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
++        .pNext = &(VkPipelineRenderingCreateInfo){
++            .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
++            .colorAttachmentCount = 1,
++            .pColorAttachmentFormats = &fmt,
++        },
++        .stageCount = 2,
++        .pStages = (VkPipelineShaderStageCreateInfo[]){
++            {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
++             .stage = VK_SHADER_STAGE_VERTEX_BIT, .module = vs, .pName = "main"},
++            {.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
++             .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = fs, .pName = "main"},
++        },
++        .pVertexInputState = &(VkPipelineVertexInputStateCreateInfo){
++            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
++            .vertexBindingDescriptionCount = 1,
++            .pVertexBindingDescriptions = &(VkVertexInputBindingDescription){
++                0, sizeof(struct quad), VK_VERTEX_INPUT_RATE_INSTANCE},
++            .vertexAttributeDescriptionCount = ALEN(attrs),
++            .pVertexAttributeDescriptions = attrs,
++        },
++        .pInputAssemblyState = &(VkPipelineInputAssemblyStateCreateInfo){
++            .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
++            .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
++        },
++        .pViewportState = &(VkPipelineViewportStateCreateInfo){
++            .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
++            .viewportCount = 1,
++            .scissorCount = 1,
++        },
++        .pRasterizationState = &(VkPipelineRasterizationStateCreateInfo){
++            .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
++            .polygonMode = VK_POLYGON_MODE_FILL,
++            .cullMode = VK_CULL_MODE_NONE,
++            .lineWidth = 1,
++        },
++        .pMultisampleState = &(VkPipelineMultisampleStateCreateInfo){
++            .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
++            .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
++        },
++        .pColorBlendState = &(VkPipelineColorBlendStateCreateInfo){
++            .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
++            .attachmentCount = 1,
++            .pAttachments = &(VkPipelineColorBlendAttachmentState){
++                .blendEnable = VK_TRUE,
++                .srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
++                .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR,
++                .colorBlendOp = VK_BLEND_OP_ADD,
++                .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
++                .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA,
++                .alphaBlendOp = VK_BLEND_OP_ADD,
++                .colorWriteMask = 0xf,
++            },
++        },
++        .pDynamicState = &(VkPipelineDynamicStateCreateInfo){
++            .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
++            .dynamicStateCount = ALEN(dyn),
++            .pDynamicStates = dyn,
++        },
++        .layout = vk.layout,
++    };
++
++    bool ok = vs != VK_NULL_HANDLE && fs != VK_NULL_HANDLE &&
++        vkCreateGraphicsPipelines(vk.dev, VK_NULL_HANDLE, 1, &ci, NULL, &vk.pipe) == VK_SUCCESS;
++    vkDestroyShaderModule(vk.dev, vs, NULL);
++    vkDestroyShaderModule(vk.dev, fs, NULL);
++    return ok;
++}
++
++static bool
++setup(void)
++{
++    if (vkCreateInstance(&(VkInstanceCreateInfo){
++            .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
++            .pApplicationInfo = &(VkApplicationInfo){
++                .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
++                .pApplicationName = "foot",
++                .apiVersion = VK_API_VERSION_1_3,
++            },
++        }, NULL, &vk.inst) != VK_SUCCESS)
++        return false;
++
++    if (!pick_device())
++        return false;
++
++    if (vkCreateDevice(vk.pdev, &(VkDeviceCreateInfo){
++            .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
++            .pNext = &(VkPhysicalDeviceVulkan13Features){
++                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
++                .dynamicRendering = VK_TRUE,
++            },
++            .queueCreateInfoCount = 1,
++            .pQueueCreateInfos = &(VkDeviceQueueCreateInfo){
++                .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
++                .queueFamilyIndex = vk.qfam,
++                .queueCount = 1,
++                .pQueuePriorities = &(float){1},
++            },
++            .enabledExtensionCount = ALEN(dev_exts),
++            .ppEnabledExtensionNames = dev_exts,
++            .pEnabledFeatures = &(VkPhysicalDeviceFeatures){.dualSrcBlend = VK_TRUE},
++        }, NULL, &vk.dev) != VK_SUCCESS)
++        return false;
++
++    vkGetDeviceQueue(vk.dev, vk.qfam, 0, &vk.queue);
++    vk.get_memory_fd = (PFN_vkGetMemoryFdKHR)vkGetDeviceProcAddr(vk.dev, "vkGetMemoryFdKHR");
++    if (vk.get_memory_fd == NULL)
++        return false;
++
++    if (vkCreateCommandPool(vk.dev, &(VkCommandPoolCreateInfo){
++            .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
++            .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
++            .queueFamilyIndex = vk.qfam,
++        }, NULL, &vk.cmd_pool) != VK_SUCCESS ||
++        vkAllocateCommandBuffers(vk.dev, &(VkCommandBufferAllocateInfo){
++            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
++            .commandPool = vk.cmd_pool,
++            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
++            .commandBufferCount = 1,
++        }, &vk.cmd) != VK_SUCCESS ||
++        vkCreateFence(vk.dev, &(VkFenceCreateInfo){
++            .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
++        }, NULL, &vk.fence) != VK_SUCCESS ||
++        vkCreateSampler(vk.dev, &(VkSamplerCreateInfo){
++            .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
++            .magFilter = VK_FILTER_NEAREST,
++            .minFilter = VK_FILTER_NEAREST,
++        }, NULL, &vk.sampler) != VK_SUCCESS ||
++        vkCreateDescriptorSetLayout(vk.dev, &(VkDescriptorSetLayoutCreateInfo){
++            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
++            .bindingCount = 1,
++            .pBindings = &(VkDescriptorSetLayoutBinding){
++                .binding = 0,
++                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
++                .descriptorCount = 1,
++                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
++            },
++        }, NULL, &vk.dsl) != VK_SUCCESS ||
++        vkCreateDescriptorPool(vk.dev, &(VkDescriptorPoolCreateInfo){
++            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
++            .maxSets = 1,
++            .poolSizeCount = 1,
++            .pPoolSizes = &(VkDescriptorPoolSize){
++                VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1},
++        }, NULL, &vk.dpool) != VK_SUCCESS ||
++        vkAllocateDescriptorSets(vk.dev, &(VkDescriptorSetAllocateInfo){
++            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
++            .descriptorPool = vk.dpool,
++            .descriptorSetCount = 1,
++            .pSetLayouts = &vk.dsl,
++        }, &vk.ds) != VK_SUCCESS ||
++        vkCreatePipelineLayout(vk.dev, &(VkPipelineLayoutCreateInfo){
++            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
++            .setLayoutCount = 1,
++            .pSetLayouts = &vk.dsl,
++            .pushConstantRangeCount = 1,
++            .pPushConstantRanges = &(VkPushConstantRange){
++                VK_SHADER_STAGE_VERTEX_BIT, 0, 2 * sizeof(float)},
++        }, NULL, &vk.layout) != VK_SUCCESS)
++        return false;
++
++    if (!create_pipeline() || !atlas_new(1024) || !vbuf_new(4096))
++        return false;
++
++    struct wl_buffer *probe = NULL;
++    struct vkr_image *img = vkr_image_new(16, 16, &probe);
++    if (img == NULL)
++        return false;
++    wl_buffer_destroy(probe);
++    vkr_image_destroy(img);
++    return true;
++}
++
++bool
++vkr_init(struct wayland *wayl)
++{
++    if (wayl->linux_dmabuf == NULL || !wayl->dmabuf_argb8888_linear) {
++        LOG_WARN("compositor lacks linux-dmabuf ARGB8888/LINEAR");
++        return false;
++    }
++
++    vk.wayl = wayl;
++    pixman_region32_init(&vk.clip);
++    if (!setup()) {
++        LOG_WARN("Vulkan setup failed");
++        vkr_destroy();
++        return false;
++    }
++
++    vk.on = true;
++    LOG_INFO("Vulkan renderer enabled");
++    return true;
++}
++
++void
++vkr_destroy(void)
++{
++    if (vk.dev != VK_NULL_HANDLE) {
++        vkDeviceWaitIdle(vk.dev);
++        atlas_free();
++        vkDestroyBuffer(vk.dev, vk.vbuf, NULL);
++        vkFreeMemory(vk.dev, vk.vmem, NULL);
++        vkDestroyPipeline(vk.dev, vk.pipe, NULL);
++        vkDestroyPipelineLayout(vk.dev, vk.layout, NULL);
++        vkDestroyDescriptorPool(vk.dev, vk.dpool, NULL);
++        vkDestroyDescriptorSetLayout(vk.dev, vk.dsl, NULL);
++        vkDestroySampler(vk.dev, vk.sampler, NULL);
++        vkDestroyFence(vk.dev, vk.fence, NULL);
++        vkDestroyCommandPool(vk.dev, vk.cmd_pool, NULL);
++        vkDestroyDevice(vk.dev, NULL);
++    }
++    if (vk.inst != VK_NULL_HANDLE)
++        vkDestroyInstance(vk.inst, NULL);
++    pixman_region32_fini(&vk.clip);
++    memset(&vk, 0, sizeof(vk));
++}
+diff --git a/vulkan.h b/vulkan.h
+new file mode 100644
+index 0000000..0f7524d
+--- /dev/null
++++ b/vulkan.h
+@@ -0,0 +1,44 @@
++#pragma once
++
++#include <stdbool.h>
++#include <pixman.h>
++#include <wayland-client.h>
++
++struct wayland;
++struct buffer;
++struct vkr_image;
++
++#if defined(FOOT_VULKAN)
++bool vkr_init(struct wayland *wayl);
++void vkr_destroy(void);
++bool vkr_enabled(void);
++struct vkr_image *vkr_image_new(int width, int height, struct wl_buffer **wl_buf);
++void vkr_image_destroy(struct vkr_image *img);
++void vkr_begin(struct buffer *buf);
++void vkr_end(void);
++bool vkr_owns(const pixman_image_t *pix);
++void vkr_fill(pixman_op_t op, const pixman_color_t *color,
++              int n, const pixman_rectangle16_t *rects);
++void vkr_composite(pixman_op_t op, pixman_image_t *src, pixman_image_t *mask,
++                   int sx, int sy, int mx, int my, int dx, int dy, int w, int h);
++void vkr_set_clip(const pixman_region32_t *region);
++void vkr_trapezoids(pixman_op_t op, pixman_image_t *src, int dx, int dy,
++                    int n, const pixman_trapezoid_t *traps);
++pixman_image_t *vkr_solid(const pixman_color_t *color);
++#else
++static inline bool vkr_init(struct wayland *wayl) { return false; }
++static inline void vkr_destroy(void) {}
++static inline bool vkr_enabled(void) { return false; }
++static inline struct vkr_image *vkr_image_new(int w, int h, struct wl_buffer **b) { return NULL; }
++static inline void vkr_image_destroy(struct vkr_image *img) {}
++static inline void vkr_begin(struct buffer *buf) {}
++static inline void vkr_end(void) {}
++static inline bool vkr_owns(const pixman_image_t *pix) { return false; }
++static inline void vkr_fill(pixman_op_t op, const pixman_color_t *c, int n, const pixman_rectangle16_t *r) {}
++static inline void vkr_composite(pixman_op_t op, pixman_image_t *s, pixman_image_t *m,
++                                 int sx, int sy, int mx, int my, int dx, int dy, int w, int h) {}
++static inline void vkr_set_clip(const pixman_region32_t *r) {}
++static inline void vkr_trapezoids(pixman_op_t op, pixman_image_t *s, int dx, int dy,
++                                  int n, const pixman_trapezoid_t *t) {}
++static inline pixman_image_t *vkr_solid(const pixman_color_t *c) { return pixman_image_create_solid_fill(c); }
++#endif
+diff --git a/wayland.c b/wayland.c
+index bedc205..a2c255a 100644
+--- a/wayland.c
++++ b/wayland.c
+@@ -1262,6 +1262,25 @@ fdm_repeat(struct fdm *fdm, int fd, int events, void *data)
+     return true;
+ }
+ 
++static void
++dmabuf_format(void *data, struct zwp_linux_dmabuf_v1 *dmabuf, uint32_t format)
++{
++}
++
++static void
++dmabuf_modifier(void *data, struct zwp_linux_dmabuf_v1 *dmabuf,
++                uint32_t format, uint32_t mod_hi, uint32_t mod_lo)
++{
++    struct wayland *wayl = data;
++    if (format == 0x34325241 /* ARGB8888 */ && mod_hi == 0 && mod_lo == 0)
++        wayl->dmabuf_argb8888_linear = true;
++}
++
++static const struct zwp_linux_dmabuf_v1_listener dmabuf_listener = {
++    .format = &dmabuf_format,
++    .modifier = &dmabuf_modifier,
++};
++
+ static void
+ handle_global(void *data, struct wl_registry *registry,
+               uint32_t name, const char *interface, uint32_t version)
+@@ -1548,6 +1567,16 @@ handle_global(void *data, struct wl_registry *registry,
+             wayl->shape_manager_version);
+     }
+ 
++    else if (streq(interface, zwp_linux_dmabuf_v1_interface.name)) {
++        const uint32_t required = 3;
++        if (!verify_iface_version(interface, version, required))
++            return;
++
++        wayl->linux_dmabuf = wl_registry_bind(
++            wayl->registry, name, &zwp_linux_dmabuf_v1_interface, required);
++        zwp_linux_dmabuf_v1_add_listener(wayl->linux_dmabuf, &dmabuf_listener, wayl);
++    }
++
+     else if (streq(interface, wp_single_pixel_buffer_manager_v1_interface.name)) {
+         const uint32_t required = 1;
+         if (!verify_iface_version(interface, version, required))
+@@ -1994,6 +2023,8 @@ wayl_destroy(struct wayland *wayl)
+         xdg_session_manager_v1_destroy(wayl->session_manager);
+     if (wayl->single_pixel_manager != NULL)
+         wp_single_pixel_buffer_manager_v1_destroy(wayl->single_pixel_manager);
++    if (wayl->linux_dmabuf != NULL)
++        zwp_linux_dmabuf_v1_destroy(wayl->linux_dmabuf);
+     if (wayl->fractional_scale_manager != NULL)
+         wp_fractional_scale_manager_v1_destroy(wayl->fractional_scale_manager);
+     if (wayl->viewporter != NULL)
+diff --git a/wayland.h b/wayland.h
+index 0a6f3d4..3ed68b2 100644
+--- a/wayland.h
++++ b/wayland.h
+@@ -11,6 +11,7 @@
+ /* Wayland protocols */
+ #include <color-management-v1.h>
+ #include <fractional-scale-v1.h>
++#include <linux-dmabuf-v1.h>
+ #include <presentation-time.h>
+ #include <primary-selection-unstable-v1.h>
+ #include <single-pixel-buffer-v1.h>
+@@ -484,6 +485,8 @@ struct wayland {
+     int shape_manager_version;
+ 
+     struct wp_single_pixel_buffer_manager_v1 *single_pixel_manager;
++    struct zwp_linux_dmabuf_v1 *linux_dmabuf;
++    bool dmabuf_argb8888_linear;
+ 
+     struct xdg_toplevel_icon_manager_v1 *toplevel_icon_manager;
+ 
