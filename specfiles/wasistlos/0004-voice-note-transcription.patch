@@ -20,10 +20,10 @@ index 3ae6f68..7a4c24a 100644
  
  install(TARGETS ${CMAKE_PROJECT_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
 diff --git a/src/ui/WebView.cpp b/src/ui/WebView.cpp
-index faf6d3a..640e254 100644
+index faf6d3a..674707d 100644
 --- a/src/ui/WebView.cpp
 +++ b/src/ui/WebView.cpp
-@@ -9,16 +9,26 @@
+@@ -9,16 +9,29 @@
  #include <sstream>
  #include <vector>
  #include <algorithm>
@@ -34,6 +34,9 @@ index faf6d3a..640e254 100644
 +#include <thread>
 +#include <mutex>
 +#include <condition_variable>
++#include <chrono>
++#include <sys/resource.h>
++#include <unistd.h>
  #include <jsc/jsc.h>
 +#include <whisper.h>
  #include <glibmm/i18n.h>
@@ -50,12 +53,27 @@ index faf6d3a..640e254 100644
  #include "../util/Settings.hpp"
  #include "Config.hpp"
  
-@@ -103,25 +113,137 @@ namespace wil::ui
+@@ -103,25 +116,152 @@ namespace wil::ui
                      return spans.length ? spans[spans.length - 1] : node;
                  }
  
++                // Rows carry bare message ids (no chat prefix), which Msg.get() cannot resolve.
++                var msgIndex = {}, msgIndexAt = 0;
 +                function storeMessage(id) {
-+                    try { return (id && window.require('WAWebCollections').Msg.get(id)) || null; } catch (e) { return null; }
++                    if (!id) { return null; }
++                    try {
++                        var Msg = window.require('WAWebCollections').Msg;
++                        var msg = Msg.get(id) || msgIndex[id];
++                        if (!msg && Date.now() - msgIndexAt > 2000) {
++                            msgIndex   = {};
++                            msgIndexAt = Date.now();
++                            (Msg.getModelsArray ? Msg.getModelsArray() : Msg._models || []).forEach(function(m) {
++                                if (m.id) { msgIndex[m.id.id] = m; msgIndex[m.id._serialized] = m; }
++                            });
++                            msg = msgIndex[id];
++                        }
++                        return msg || null;
++                    } catch (e) { return null; }
 +                }
 +
 +                var VOICE_SELECTOR = '[data-icon="audio-play"], [data-icon="audio-pause"], [data-icon^="ptt"], [aria-label*="voice message" i]';
@@ -85,7 +103,7 @@ index faf6d3a..640e254 100644
 +                        duration: duration,
 +                        clock:    clocks.length ? clocks[clocks.length - 1] : '',
 +                        t:        msg ? msg.t : 0,
-+                        out:      msg ? msg.id.fromMe : id.indexOf('true_') === 0,
++                        out:      msg ? msg.id.fromMe : (id.indexOf('true_') === 0 || !!row.closest('.message-out')),
 +                        sender:   group ? sender : ''
 +                    };
 +                }
@@ -190,25 +208,28 @@ index faf6d3a..640e254 100644
                      if (entries.length === 0) { return; }
  
                      var records = entries.map(function(entry) {
-@@ -135,6 +257,64 @@ namespace wil::ui
+@@ -135,6 +275,68 @@ namespace wil::ui
  
                  window.__wilForceContinuousExportScrape = scrapeAndNotify;
  
-+                function postVoiceNote(id, bytes) {
++                function postVoiceNote(id, bytes, error) {
 +                    var binary = '';
 +                    for (var i = 0; bytes && i < bytes.length; i += 0x8000) {
 +                        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
 +                    }
 +                    try {
-+                        window.webkit.messageHandlers.wilVoiceNote.postMessage(id + '\x01' + btoa(binary));
++                        window.webkit.messageHandlers.wilVoiceNote.postMessage(id + '\x01' + (bytes ? btoa(binary) : '\x01' + (error || 'unknown')));
 +                    } catch (e) { /* handler not registered yet */ }
 +                }
 +
 +                async function downloadVoiceNote(id) {
 +                    var msg = storeMessage(id);
-+                    if (!msg) { return null; }
++                    if (!msg) { throw new Error('message not in store'); }
 +                    if (msg.mediaData && msg.mediaData.mediaStage !== 'RESOLVED') {
 +                        await msg.downloadMedia({downloadEvenIfExpensive: true, rmrReason: 1});
++                    }
++                    if (msg.mediaData && /ERROR|FETCHING/.test(msg.mediaData.mediaStage)) {
++                        throw new Error('mediaStage ' + msg.mediaData.mediaStage);
 +                    }
 +                    var buffer = await window.require('WAWebDownloadManager').downloadManager.downloadAndMaybeDecrypt({
 +                        directPath:        msg.directPath,
@@ -244,18 +265,19 @@ index faf6d3a..640e254 100644
 +                };
 +
 +                window.__wilFetchVoiceNote = function(id) {
-+                    downloadVoiceNote(id).catch(function() { return null; }).then(function(bytes) {
++                    var error = '';
++                    downloadVoiceNote(id).catch(function(e) { error = String(e && e.message || e); return null; }).then(function(bytes) {
 +                        if (!bytes && capturedAudio[id]) {
 +                            return capturedAudio[id].arrayBuffer().then(function(buffer) { return new Uint8Array(buffer); });
 +                        }
 +                        return bytes;
-+                    }).then(function(bytes) { postVoiceNote(id, bytes); });
++                    }).then(function(bytes) { postVoiceNote(id, bytes, error); });
 +                };
 +
                  function messageScroller() {
                      var message = document.querySelector('#main div.copyable-text[data-pre-plain-text]');
                      for (var el = message && message.parentElement; el && el !== document.body; el = el.parentElement) {
-@@ -735,11 +915,449 @@ namespace wil::ui
+@@ -735,11 +937,496 @@ namespace wil::ui
              entries = std::move(sorted);
          }
  
@@ -325,16 +347,21 @@ index faf6d3a..640e254 100644
 +            bool                                    modelPrompted = false;
 +            bool                                    errorShown    = false;
 +
-+            std::mutex                   mutex;
-+            std::condition_variable      wake;
-+            std::deque<TranscriptionJob> jobs;
-+            bool                         workerStarted = false;
++            std::mutex                       mutex;
++            std::condition_variable          wake;
++            std::deque<TranscriptionJob>     jobs;
++            unsigned                         workers = 0;
++            unsigned                         busy    = 0;
++            std::shared_ptr<whisper_context> model;
++            std::string                      modelPath;
++            std::mutex                       loadMutex;
 +        };
 +
 +        VoiceNoteState& voiceNotes()
 +        {
-+            static auto state = VoiceNoteState{};
-+            return state;
++            // Leaked on purpose: detached workers outlive static destruction.
++            static auto* const state = new VoiceNoteState{};
++            return *state;
 +        }
 +
 +        std::string voiceModelPath()
@@ -428,24 +455,36 @@ index faf6d3a..640e254 100644
 +            return samples;
 +        }
 +
-+        TranscriptionResult transcribe(TranscriptionJob const& job, whisper_context*& context, std::string& loadedModel)
++        std::shared_ptr<whisper_context> loadModel(std::string const& path, std::string& error)
 +        {
-+            auto result = TranscriptionResult{job.id, std::nullopt, {}};
-+
-+            if (!context || (loadedModel != job.modelPath))
++            auto&      state = voiceNotes();
++            auto const lock  = std::lock_guard{state.loadMutex};
 +            {
-+                if (context)
++                auto const inner = std::lock_guard{state.mutex};
++                if (state.model && (state.modelPath == path))
 +                {
-+                    whisper_free(context);
-+                }
-+                context     = whisper_init_from_file_with_params(job.modelPath.c_str(), whisper_context_default_params());
-+                loadedModel = context ? job.modelPath : std::string{};
-+                if (!context)
-+                {
-+                    result.error = "failed to load model " + job.modelPath;
-+                    return result;
++                    return state.model;
 +                }
 +            }
++
++            auto params       = whisper_context_default_params();
++            params.flash_attn = true;
++            auto* const raw   = whisper_init_from_file_with_params(path.c_str(), params);
++            if (!raw)
++            {
++                error = "failed to load model " + path;
++                return nullptr;
++            }
++
++            auto const inner = std::lock_guard{state.mutex};
++            state.model      = std::shared_ptr<whisper_context>{raw, whisper_free};
++            state.modelPath  = path;
++            return state.model;
++        }
++
++        TranscriptionResult transcribe(TranscriptionJob const& job, int threads)
++        {
++            auto result = TranscriptionResult{job.id, std::nullopt, {}};
 +
 +            auto const samples = decodeAudio(job.audio, result.error);
 +            if (!samples)
@@ -453,24 +492,37 @@ index faf6d3a..640e254 100644
 +                return result;
 +            }
 +
++            auto const model = loadModel(job.modelPath, result.error);
++            if (!model)
++            {
++                return result;
++            }
++
++            auto const state = std::unique_ptr<whisper_state, decltype(&whisper_free_state)>{whisper_init_state(model.get()), whisper_free_state};
++            if (!state)
++            {
++                result.error = "whisper_init_state failed";
++                return result;
++            }
++
 +            auto params             = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
 +            params.language         = job.language.c_str();
-+            params.n_threads        = static_cast<int>(std::clamp(std::thread::hardware_concurrency(), 1u, 8u));
++            params.n_threads        = threads;
 +            params.print_progress   = false;
 +            params.print_realtime   = false;
 +            params.print_special    = false;
 +            params.print_timestamps = false;
 +
-+            if (whisper_full(context, params, samples->data(), static_cast<int>(samples->size())) != 0)
++            if (whisper_full_with_state(model.get(), state.get(), params, samples->data(), static_cast<int>(samples->size())) != 0)
 +            {
 +                result.error = "whisper_full failed";
 +                return result;
 +            }
 +
 +            std::string transcript;
-+            for (int i = 0; i < whisper_full_n_segments(context); ++i)
++            for (int i = 0; i < whisper_full_n_segments_from_state(state.get()); ++i)
 +            {
-+                std::string segment = whisper_full_get_segment_text(context, i);
++                std::string segment = whisper_full_get_segment_text_from_state(state.get(), i);
 +                auto const  first   = segment.find_first_not_of(" \t\n");
 +                if (first == std::string::npos)
 +                {
@@ -534,25 +586,36 @@ index faf6d3a..640e254 100644
 +            return G_SOURCE_REMOVE;
 +        }
 +
-+        void transcriptionWorker()
++        void transcriptionWorker(int threads)
 +        {
-+            auto&            state   = voiceNotes();
-+            whisper_context* context = nullptr;
-+            std::string      loadedModel;
-+
-+            whisper_log_set([](ggml_log_level, char const*, void*) {}, nullptr);
++            auto& state = voiceNotes();
++            // Inherited by ggml's compute threads and the ffmpeg child, so the UI keeps priority.
++            setpriority(PRIO_PROCESS, static_cast<id_t>(gettid()), 10);
 +
 +            while (true)
 +            {
 +                auto job = TranscriptionJob{};
 +                {
 +                    auto lock = std::unique_lock{state.mutex};
-+                    state.wake.wait(lock, [&state] { return !state.jobs.empty(); });
++                    if (!state.wake.wait_for(lock, std::chrono::minutes{10}, [&state] { return !state.jobs.empty(); }))
++                    {
++                        if (state.busy == 0)
++                        {
++                            state.model.reset();
++                        }
++                        continue;
++                    }
 +                    job = std::move(state.jobs.front());
 +                    state.jobs.pop_front();
++                    ++state.busy;
 +                }
 +
-+                g_idle_add(voiceNoteTranscribed, new TranscriptionResult{transcribe(job, context, loadedModel)});
++                auto* const result = new TranscriptionResult{transcribe(job, threads)};
++                {
++                    auto const lock = std::lock_guard{state.mutex};
++                    --state.busy;
++                }
++                g_idle_add(voiceNoteTranscribed, result);
 +            }
 +        }
 +
@@ -564,13 +627,19 @@ index faf6d3a..640e254 100644
 +                state.jobs.push_back(TranscriptionJob{id, std::move(audio), voiceModelPath(),
 +                    util::Settings::getInstance().getValue<Glib::ustring>(VOICE_NOTES_GROUP, "language", "auto").raw()});
 +            }
-+            state.wake.notify_one();
 +
-+            if (!state.workerStarted)
++            if (state.workers == 0)
 +            {
-+                state.workerStarted = true;
-+                std::thread{transcriptionWorker}.detach();
++                whisper_log_set([](ggml_log_level, char const*, void*) {}, nullptr);
++                // Workers share one loaded model via per-job whisper states; a third of the cores stay free for the UI.
++                auto const threads = std::max(1u, std::thread::hardware_concurrency() * 2 / 3);
++                state.workers      = std::clamp(threads / 4, 1u, 3u);
++                for (auto i = 0u; i < state.workers; ++i)
++                {
++                    std::thread{transcriptionWorker, static_cast<int>(threads / state.workers)}.detach();
++                }
 +            }
++            state.wake.notify_one();
 +        }
 +
 +        void voiceModelDownloaded(GObject* sourceObject, GAsyncResult* result, gpointer userData)
@@ -709,7 +778,7 @@ index faf6d3a..640e254 100644
              g_free(resultString);
  
              auto const delimiterPos = raw.find('\x01');
-@@ -748,39 +1366,65 @@ namespace wil::ui
+@@ -748,39 +1435,65 @@ namespace wil::ui
                  return;
              }
  
@@ -721,11 +790,11 @@ index faf6d3a..640e254 100644
 +            auto const data  = raw.substr(delimiterPos + 1);
  
 -            if (!util::Settings::getInstance().hasKey(CONTINUOUS_EXPORT_GROUP, key))
-+            if (data.empty())
++            if (data.empty() || (data[0] == '\x01'))
              {
 +                state.requested.erase(id);
 +                state.failed.insert(id);
-+                std::cerr << "WebView: Could not fetch audio for voice note " << id << std::endl;
++                std::cerr << "WebView: Could not fetch audio for voice note " << id << ": " << (data.empty() ? "" : data.substr(1)) << std::endl;
                  return;
              }
  
@@ -791,7 +860,18 @@ index faf6d3a..640e254 100644
          }
  
          std::optional<std::string> getSystemLanguage()
-@@ -1288,6 +1932,10 @@ namespace wil::ui
+@@ -1031,6 +1744,10 @@ namespace wil::ui
+         g_signal_connect(*this, "permission-request", G_CALLBACK(permissionRequest), nullptr);
+         g_signal_connect(*this, "decide-policy", G_CALLBACK(decidePolicy), nullptr);
+         g_signal_connect(*this, "show-notification", G_CALLBACK(showNotification), this);
++        g_signal_connect(*this, "web-process-terminated", G_CALLBACK(+[](WebKitWebView* view, WebKitWebProcessTerminationReason reason, gpointer) {
++            std::cerr << "WebView: Web process terminated (reason " << reason << "), reloading" << std::endl;
++            Glib::signal_idle().connect_once([view] { webkit_web_view_reload(view); });
++        }), nullptr);
+         g_signal_connect(webContext, "download-started", G_CALLBACK(downloadStarted), nullptr);
+         g_signal_connect(webContext, "initialize-notification-permissions", G_CALLBACK(initializeNotificationPermission), nullptr);
+         Glib::signal_timeout().connect(sigc::mem_fun(*this, &WebView::onTimeout), 5000);
+@@ -1288,6 +2005,10 @@ namespace wil::ui
          g_signal_connect(manager, "script-message-received::wilContinuousExport", G_CALLBACK(continuousExportMessageReceived), nullptr);
          webkit_user_content_manager_register_script_message_handler(manager, "wilContinuousExport");
  

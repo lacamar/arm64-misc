@@ -1,7 +1,7 @@
 %global tag 1.7.0
 Name: wasistlos
 Version: %{tag}
-Release: 7%{?dist}
+Release: 8%{?dist}
 Summary: An unofficial WhatsApp desktop application for Linux.
 
 License: GNU GPL v3
@@ -60,6 +60,14 @@ An unofficial WhatsApp desktop application for Linux.
 
 
 %changelog
+* Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-8
+ - Fix voice note lookup (rows carry bare message ids)
+ - Transcribe in parallel whisper states at low priority
+ - Unload whisper model after 10 min idle
+ - Reload page when WebKit web process crashes
+ - Report JS fetch errors in log
+ - Fix own voice notes exported as contact's
+
 * Thu Sep 24 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-7
  - Transcribe voice notes into continuous export
 
