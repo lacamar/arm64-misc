@@ -20,7 +20,7 @@ index 3ae6f68..7a4c24a 100644
  
  install(TARGETS ${CMAKE_PROJECT_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
 diff --git a/src/ui/WebView.cpp b/src/ui/WebView.cpp
-index faf6d3a..674707d 100644
+index faf6d3a..f4c5ff0 100644
 --- a/src/ui/WebView.cpp
 +++ b/src/ui/WebView.cpp
 @@ -9,16 +9,29 @@
@@ -208,7 +208,7 @@ index faf6d3a..674707d 100644
                      if (entries.length === 0) { return; }
  
                      var records = entries.map(function(entry) {
-@@ -135,6 +275,68 @@ namespace wil::ui
+@@ -135,6 +275,63 @@ namespace wil::ui
  
                  window.__wilForceContinuousExportScrape = scrapeAndNotify;
  
@@ -225,22 +225,17 @@ index faf6d3a..674707d 100644
 +                async function downloadVoiceNote(id) {
 +                    var msg = storeMessage(id);
 +                    if (!msg) { throw new Error('message not in store'); }
-+                    if (msg.mediaData && msg.mediaData.mediaStage !== 'RESOLVED') {
-+                        await msg.downloadMedia({downloadEvenIfExpensive: true, rmrReason: 1});
-+                    }
-+                    if (msg.mediaData && /ERROR|FETCHING/.test(msg.mediaData.mediaStage)) {
++                    if (!msg.mediaData || msg.mediaData.mediaStage === 'REUPLOADING') { throw new Error('no mediaData'); }
++                    // Always download: a RESOLVED stage can outlive the evicted blob cache.
++                    await msg.downloadMedia({downloadEvenIfExpensive: true, rmrReason: 1, isUserInitiated: true});
++                    if (/ERROR|FETCHING/.test(msg.mediaData.mediaStage)) {
 +                        throw new Error('mediaStage ' + msg.mediaData.mediaStage);
 +                    }
-+                    var buffer = await window.require('WAWebDownloadManager').downloadManager.downloadAndMaybeDecrypt({
-+                        directPath:        msg.directPath,
-+                        encFilehash:       msg.encFilehash,
-+                        filehash:          msg.filehash,
-+                        mediaKey:          msg.mediaKey,
-+                        mediaKeyTimestamp: msg.mediaKeyTimestamp,
-+                        type:              msg.type,
-+                        signal:            new AbortController().signal
-+                    });
-+                    return new Uint8Array(buffer);
++                    var media = msg.mediaObject;
++                    var blob  = (media && window.require('WAWebMediaInMemoryBlobCache').InMemoryMediaBlobCache.get(media.filehash))
++                             || (media && media.mediaBlob && media.mediaBlob.forceToBlob());
++                    if (!blob) { throw new Error('no media blob'); }
++                    return new Uint8Array(await blob.arrayBuffer());
 +                }
 +
 +                // Fallback when WhatsApp's internal modules move: grab the decrypted blob when the user plays it.
@@ -277,7 +272,7 @@ index faf6d3a..674707d 100644
                  function messageScroller() {
                      var message = document.querySelector('#main div.copyable-text[data-pre-plain-text]');
                      for (var el = message && message.parentElement; el && el !== document.body; el = el.parentElement) {
-@@ -735,11 +937,496 @@ namespace wil::ui
+@@ -735,11 +932,496 @@ namespace wil::ui
              entries = std::move(sorted);
          }
  
@@ -778,7 +773,7 @@ index faf6d3a..674707d 100644
              g_free(resultString);
  
              auto const delimiterPos = raw.find('\x01');
-@@ -748,39 +1435,65 @@ namespace wil::ui
+@@ -748,39 +1430,65 @@ namespace wil::ui
                  return;
              }
  
@@ -801,14 +796,14 @@ index faf6d3a..674707d 100644
 -            auto const path = util::Settings::getInstance().getValue<Glib::ustring>(CONTINUOUS_EXPORT_GROUP, key, Glib::ustring{});
 -            if (path.empty())
 +            if (state.transcribing.count(id))
-             {
-                 return;
-             }
-+            if (cachedTranscript(id) || (!state.requested.count(id) && !ensureVoiceModel()))
 +            {
-+                state.requested.erase(id);
 +                return;
 +            }
++            if (cachedTranscript(id) || (!state.requested.count(id) && !ensureVoiceModel()))
+             {
++                state.requested.erase(id);
+                 return;
+             }
  
 -            auto const windowEntries = parseIncomingRecords(records);
 -            if (windowEntries.empty())
@@ -860,7 +855,7 @@ index faf6d3a..674707d 100644
          }
  
          std::optional<std::string> getSystemLanguage()
-@@ -1031,6 +1744,10 @@ namespace wil::ui
+@@ -1031,6 +1739,10 @@ namespace wil::ui
          g_signal_connect(*this, "permission-request", G_CALLBACK(permissionRequest), nullptr);
          g_signal_connect(*this, "decide-policy", G_CALLBACK(decidePolicy), nullptr);
          g_signal_connect(*this, "show-notification", G_CALLBACK(showNotification), this);
@@ -871,7 +866,7 @@ index faf6d3a..674707d 100644
          g_signal_connect(webContext, "download-started", G_CALLBACK(downloadStarted), nullptr);
          g_signal_connect(webContext, "initialize-notification-permissions", G_CALLBACK(initializeNotificationPermission), nullptr);
          Glib::signal_timeout().connect(sigc::mem_fun(*this, &WebView::onTimeout), 5000);
-@@ -1288,6 +2005,10 @@ namespace wil::ui
+@@ -1288,6 +2000,10 @@ namespace wil::ui
          g_signal_connect(manager, "script-message-received::wilContinuousExport", G_CALLBACK(continuousExportMessageReceived), nullptr);
          webkit_user_content_manager_register_script_message_handler(manager, "wilContinuousExport");
  
