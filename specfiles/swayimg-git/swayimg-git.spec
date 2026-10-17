@@ -1,8 +1,8 @@
 %global _name swayimg
 %global tag 5.6
-%global bumpver 3
+%global bumpver 4
 
-%global commit b113d3f9f1458452b3f8b2fc8286ce062f8382cb
+%global commit 38e68a5aa7457d07ce415b6007cf70003ae37ff8
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           %{_name}-git
@@ -108,208 +108,212 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/swayimg.desktop
 
 
 %changelog
+* Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 5.6^4.git.38e68a5-7
+- Update to commit 38e68a5aa7457d07ce415b6007cf70003ae37ff8
+- Rebase color-managed GPU HDR patch
+
 * Fri Oct 09 2026 Lachlan Marie <lchlnm@pm.me> - 5.6^3.git.b113d3f-7
- - Update to commit b113d3f9f1458452b3f8b2fc8286ce062f8382cb
+- Update to commit b113d3f9f1458452b3f8b2fc8286ce062f8382cb
 
 * Wed Oct 07 2026 Lachlan Marie <lchlnm@pm.me> - 5.6^2.git.c392908-7
- - Exif sort: fall back to file creation time
+- Exif sort: fall back to file creation time
 
 * Wed Sep 30 2026 Lachlan Marie <lchlnm@pm.me> - 5.6^2.git.c392908-6
- - Decode 16-bit and float TIFF in high precision
+- Decode 16-bit and float TIFF in high precision
 
 * Tue Sep 29 2026 Lachlan Marie <lchlnm@pm.me> - 5.6^2.git.c392908-5
- - Update to commit c3929089981d74014a9cb4541f188767d60529ba
+- Update to commit c3929089981d74014a9cb4541f188767d60529ba
 
 * Sat Sep 26 2026 Lachlan Marie <lchlnm@pm.me> - 5.6^1.git.d7d42b4-5
- - Update to commit d7d42b47524904d91165b52e639f83a00d7ae990
+- Update to commit d7d42b47524904d91165b52e639f83a00d7ae990
 
 * Sat Sep 26 2026 Lachlan Marie <lchlnm@pm.me> - 5.6^0.git.60158bf-5
- - Add color managed GPU renderer
- - Add ICC/CICP color space support
- - Add HDR and wide gamut output
+- Add color managed GPU renderer
+- Add ICC/CICP color space support
+- Add HDR and wide gamut output
 
 * Sun Sep 20 2026 Lachlan Marie <lchlnm@pm.me> - 5.6^0.git.60158bf-4
- - Update to 5.6
+- Update to 5.6
 
 * Mon Aug 31 2026 Lachlan Marie <lchlnm@pm.me> - 5.5^9.git.aafed37-4
- - Add a patch fixing upside-down/sideways display of portrait DNGs whose
+- Add a patch fixing upside-down/sideways display of portrait DNGs whose
    raw layer libraw can't decode (confirmed live: an iPhone 17 Pro Max
    ProRAW DNG using JPEG XL, falling back to the tiff format handler). See
    0002-tiff-fix-dng-orientation-double-apply.patch for the root cause.
 
 * Mon Aug 31 2026 Lachlan Marie <lchlnm@pm.me> - 5.5^9.git.aafed37-3
- - Add missing pkgconfig(libopenjp2) BuildRequires (fixes fc45/rawhide builds)
+- Add missing pkgconfig(libopenjp2) BuildRequires (fixes fc45/rawhide builds)
 
 * Mon Aug 31 2026 Lachlan Marie <lchlnm@pm.me> - 5.5^9.git.aafed37-2
- - Add exif imagelist.order sort mode (EXIF capture time)
+- Add exif imagelist.order sort mode (EXIF capture time)
 
 * Sun Aug 23 2026 Lachlan Marie <lchlnm@pm.me> - 5.5^9.git.aafed37-1
- - Update to commit aafed37a14c13dba61f5d4e88068dab457e8e0b4
+- Update to commit aafed37a14c13dba61f5d4e88068dab457e8e0b4
 
 * Mon Aug 17 2026 Lachlan Marie <lchlnm@pm.me> - 5.5^8.git.8117541-1
- - Update to commit 811754178a68ea1f8cf4c26387d17c878b8946de
+- Update to commit 811754178a68ea1f8cf4c26387d17c878b8946de
 
 * Fri Aug 14 2026 Lachlan Marie <lchlnm@pm.me> - 5.5^7.git.10418da-1
- - Update to commit 10418da0b45c9a281bd143a9e4d47bea7d274569
+- Update to commit 10418da0b45c9a281bd143a9e4d47bea7d274569
 
 * Sat Aug 08 2026 Lachlan Marie <lchlnm@pm.me> - 5.5^6.git.de606fd-1
- - Update to commit de606fd59ede345a1817035ecb26a421a3b18c2f
+- Update to commit de606fd59ede345a1817035ecb26a421a3b18c2f
 
 * Mon Aug 03 2026 Lachlan Marie <lchlnm@pm.me> - 5.5^5.git.de3dbf1-1
- - Update to commit de3dbf159c01de6bdb3371de3d7f008be67f8726
+- Update to commit de3dbf159c01de6bdb3371de3d7f008be67f8726
 
 * Fri Jul 31 2026 Lachlan Marie <lchlnm@pm.me> - 5.5^4.git.4aa3085-1
- - Update to commit 4aa3085288c87398c5c767286e03dba3b93cc890
+- Update to commit 4aa3085288c87398c5c767286e03dba3b93cc890
 
 * Thu Jul 30 2026 Lachlan Marie <lchlnm@pm.me> - 5.5^3.git.d99aec1-1
- - Update to commit d99aec1d949d2c3aa9a9fca336b2d3fbc28a739b
+- Update to commit d99aec1d949d2c3aa9a9fca336b2d3fbc28a739b
 
 * Thu Jul 30 2026 Lachlan Marie <lchlnm@pm.me> - 5.5^2.git.8814418-1
- - Update to commit 8814418cf39438a6ea7816fb29f7d3aa3945448a
+- Update to commit 8814418cf39438a6ea7816fb29f7d3aa3945448a
 
 * Tue Jul 28 2026 Lachlan Marie <lchlnm@pm.me> - 5.5^1.git.c99591f-1
- - Update to commit c99591f5cab8d49c29959a9f136a90c1d45e77ac
+- Update to commit c99591f5cab8d49c29959a9f136a90c1d45e77ac
 
 * Mon Jul 27 2026 Lachlan Marie <lchlnm@pm.me> - 5.5^0.git.682fecf-1
- - Update to 5.5
+- Update to 5.5
 
 * Sun Jul 26 2026 Lachlan Marie <lchlnm@pm.me> - 5.4^11.git.682fecf-1
- - Update to commit 682fecf358c0a2da1f98422b6a013dc822c74c5b
+- Update to commit 682fecf358c0a2da1f98422b6a013dc822c74c5b
 
 * Sun Jul 26 2026 Lachlan Marie <lchlnm@pm.me> - 5.4^10.git.c310192-1
- - Update to commit c310192f3238702d3c76e64fe2843a8b288ed620
+- Update to commit c310192f3238702d3c76e64fe2843a8b288ed620
 
 * Fri Jul 24 2026 Lachlan Marie <lchlnm@pm.me> - 5.4^9.git.409d521-1
- - Update to commit 409d521ff03e76fbfb568e15a7e38b4dd60624ff
+- Update to commit 409d521ff03e76fbfb568e15a7e38b4dd60624ff
 
 * Sun Jul 19 2026 Lachlan Marie <lchlnm@pm.me> - 5.4^8.git.55402c0-1
- - Update to commit 55402c0d0849cc1ce0b97c46e5ed80b7cbabfe9a
+- Update to commit 55402c0d0849cc1ce0b97c46e5ed80b7cbabfe9a
 
 * Sun Jul 19 2026 Lachlan Marie <lchlnm@pm.me> - 5.4^7.git.37c10b1-1
- - Update to commit 37c10b1873245be33c706e6ed31a9c1cd29e287a
+- Update to commit 37c10b1873245be33c706e6ed31a9c1cd29e287a
 
 * Sun Jul 19 2026 Lachlan Marie <lchlnm@pm.me> - 5.4^6.git.f4c5ce7-1
- - Update to commit f4c5ce7131758d504c7696f61e94bd40ed9b7805
+- Update to commit f4c5ce7131758d504c7696f61e94bd40ed9b7805
 
 * Fri Jul 17 2026 Lachlan Marie <lchlnm@pm.me> - 5.4^5.git.133455f-1
- - Update to commit 133455f08147fcc9349f52d071058f4277190610
+- Update to commit 133455f08147fcc9349f52d071058f4277190610
 
 * Thu Jul 16 2026 Lachlan Marie <lchlnm@pm.me> - 5.4^4.git.c071ad6-1
- - Update to commit c071ad65f0424ee3acfeb3c36842afeeafdde7f0
+- Update to commit c071ad65f0424ee3acfeb3c36842afeeafdde7f0
 
 * Fri Jul 10 2026 Lachlan Marie <lchlnm@pm.me> - 5.4^3.git.0ab573f-1
- - Update to commit 0ab573ff325bf1b39bf82d66d7e1c2a9685a0c7f
+- Update to commit 0ab573ff325bf1b39bf82d66d7e1c2a9685a0c7f
 
 * Mon Jul 06 2026 Lachlan Marie <lchlnm@pm.me> - 5.4^2.git.44cc0f3-1
- - Update to commit 44cc0f33b89dd21a0605e064ab2764771ba5d178
+- Update to commit 44cc0f33b89dd21a0605e064ab2764771ba5d178
 
 * Sat Jun 27 2026 Lachlan Marie <lchlnm@pm.me> - 5.4^1.git.b248414-1
- - Update to commit b2484145c78e41d6dcbb862d7b1f58f60a70e583
+- Update to commit b2484145c78e41d6dcbb862d7b1f58f60a70e583
 
 * Sun Jun 21 2026 Lachlan Marie <lchlnm@pm.me> - 5.4^0.git.1d76a11-1
- - Update to 5.4
+- Update to 5.4
 
 * Fri Jun 19 2026 Lachlan Marie <lchlnm@pm.me> - 5.3^1.git.a7c7ef8-1
- - Update to commit a7c7ef8c0c02407cfc2af343edf67026888e44f6
+- Update to commit a7c7ef8c0c02407cfc2af343edf67026888e44f6
 
 * Fri Jun 19 2026 Lachlan Marie <lchlnm@pm.me> - 5.3^0.git.f1aa000-1
- - Update to 5.3
+- Update to 5.3
 
 * Wed Jun 17 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^30.git.f1aa000-1
- - Update to commit f1aa0005cf90ac40b4d89d4ee189dadfb631a048
+- Update to commit f1aa0005cf90ac40b4d89d4ee189dadfb631a048
 
 * Tue Jun 16 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^29.git.daa1815-1
- - Update to commit daa1815b79d97bb434332449eb427a3c4227a43f
+- Update to commit daa1815b79d97bb434332449eb427a3c4227a43f
 
 * Mon Jun 15 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^28.git.2b2f953-1
- - Update to commit 2b2f953014fe8529cbd43c78353cbb4b4d5bde46
+- Update to commit 2b2f953014fe8529cbd43c78353cbb4b4d5bde46
 
 * Mon Jun 15 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^27.git.e58f50f-1
- - Update to commit e58f50f56cf2c44b2ad27e4d9f108d80f6da63ce
+- Update to commit e58f50f56cf2c44b2ad27e4d9f108d80f6da63ce
 
 * Sat Jun 13 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^26.git.c3bff68-1
- - Update to commit c3bff680aa8a9b916563960b266b8e0594ac7f25
+- Update to commit c3bff680aa8a9b916563960b266b8e0594ac7f25
 
 * Fri Jun 12 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^25.git.20960c5-1
- - Update to commit 20960c531c30cefe65f34f86e67e23cf57f4d264
+- Update to commit 20960c531c30cefe65f34f86e67e23cf57f4d264
 
 * Fri Jun 12 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^24.git.35f47b4-1
- - Update to commit 35f47b45d30cbb31cad98f6971a049100306c344
+- Update to commit 35f47b45d30cbb31cad98f6971a049100306c344
 
 * Thu Jun 11 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^23.git.977ed0f-1
- - Update to commit 977ed0fefb605f48cdd392e1f405fb844994d972
+- Update to commit 977ed0fefb605f48cdd392e1f405fb844994d972
 
 * Wed Jun 10 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^22.git.65bed89-1
- - Update to commit 65bed89a84d35365a69cdc0d7aee95212c25c04c
+- Update to commit 65bed89a84d35365a69cdc0d7aee95212c25c04c
 
 * Mon Jun 08 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^21.git.a1eee74-1
- - Update to commit a1eee744ace797f7a03269d1b75688de8a120a4f
+- Update to commit a1eee744ace797f7a03269d1b75688de8a120a4f
 
 * Sat Jun 06 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^20.git.f75c080-1
- - Update to commit f75c080863587a0ffbce3dee4da51307c002520a
+- Update to commit f75c080863587a0ffbce3dee4da51307c002520a
 
 * Fri Jun 05 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^19.git.808217d-1
- - Update to commit 808217da92709fb3d4c896688e729130d6fe3115
+- Update to commit 808217da92709fb3d4c896688e729130d6fe3115
 
 * Fri Jun 05 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^18.git.9f83e2b-1
- - Update to commit 9f83e2b74ebad85af695dd0badd60b3c35050ab6
+- Update to commit 9f83e2b74ebad85af695dd0badd60b3c35050ab6
 
 * Wed Jun 03 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^17.git.7ba2540-1
- - Update to commit 7ba2540879e56fddfebae3afe3875d9f2e093bfe
+- Update to commit 7ba2540879e56fddfebae3afe3875d9f2e093bfe
 
 * Tue Jun 02 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^16.git.ecc930d-1
- - Update to commit ecc930d3a1eadf6c0ed623188620e4b367dd39ef
+- Update to commit ecc930d3a1eadf6c0ed623188620e4b367dd39ef
 
 * Tue Jun 02 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^15.git.c9f5d75-1
- - Update to commit c9f5d759365f6bca4687c161d1421d78abf8e9ef
+- Update to commit c9f5d759365f6bca4687c161d1421d78abf8e9ef
 
 * Mon Jun 01 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^14.git.bd9a9fb-1
- - Update to commit bd9a9fb69cecb9dd29f889691a77c93a03175ca3
+- Update to commit bd9a9fb69cecb9dd29f889691a77c93a03175ca3
 
 * Sun May 31 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^13.git.8c9bb52-1
- - Update to commit 8c9bb52f1ad8a28c5315fa8eea2358cf5a23775f
+- Update to commit 8c9bb52f1ad8a28c5315fa8eea2358cf5a23775f
 
 * Sat May 30 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^12.git.efcee16-1
- - Update to commit efcee169bcc8179899a1d55d05e94c4f99c44f67
+- Update to commit efcee169bcc8179899a1d55d05e94c4f99c44f67
 
 * Fri May 29 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^11.git.8e7b13f-1
- - Update to commit 8e7b13f79855f775fb09779eb830e0bd52a40e97
+- Update to commit 8e7b13f79855f775fb09779eb830e0bd52a40e97
 
 * Thu May 28 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^10.git.2e14662-1
- - Update to commit 2e14662aa7f20e0dc03ac74e36da268790f0afae
+- Update to commit 2e14662aa7f20e0dc03ac74e36da268790f0afae
 
 * Wed May 27 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^9.git.bdd4312-1
- - Update to commit bdd4312760a315fc0a4d7b210bad6187fa2292ac
+- Update to commit bdd4312760a315fc0a4d7b210bad6187fa2292ac
 
 * Tue May 26 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^8.git.58375f7-1
- - Update to commit 58375f7513c1280f146b606a19e0d3cbc3b481c1
+- Update to commit 58375f7513c1280f146b606a19e0d3cbc3b481c1
 
 * Mon May 25 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^7.git.7dbcb8c-1
- - Update to commit 7dbcb8c975ca9de7a5fdaaad6b9a3b89030d4d1e
+- Update to commit 7dbcb8c975ca9de7a5fdaaad6b9a3b89030d4d1e
 
 * Sun May 24 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^6.git.7c491d4-1
- - Update to commit 7c491d4c716fa4dde614e8be58d6cb308802da48
+- Update to commit 7c491d4c716fa4dde614e8be58d6cb308802da48
 
 * Thu May 21 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^5.git.da9870a-1
- - Update to commit da9870a08a4a145542cf803eeb7779758136a186
+- Update to commit da9870a08a4a145542cf803eeb7779758136a186
 
 * Sat May 09 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^4.git.225d378-1
- - Update to commit 225d37833c1bfdeb67e8729f72b360f32f87c5f1
+- Update to commit 225d37833c1bfdeb67e8729f72b360f32f87c5f1
 
 * Mon May 04 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^3.git.b67a587-1
- - Update to commit b67a587fbad8d07c3cf9150575b4b4b06b8a3031
+- Update to commit b67a587fbad8d07c3cf9150575b4b4b06b8a3031
 
 * Sun May 03 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^2.git.f8564b0-1
- - Update to commit f8564b06a19b2e8ee03b8cf3b592bf0f15253cff
+- Update to commit f8564b06a19b2e8ee03b8cf3b592bf0f15253cff
 
 * Thu Apr 30 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^1.git.164e22e-1
- - Update to commit 164e22ee920411617d890078b51402a08220e975
+- Update to commit 164e22ee920411617d890078b51402a08220e975
 
 * Thu Apr 30 2026 Lachlan Marie <lchlnm@pm.me> - 5.2^2.git.164e22e-1
- - Update to commit 164e22ee920411617d890078b51402a08220e975
+- Update to commit 164e22ee920411617d890078b51402a08220e975
 
 * Thu Apr 09 2026 Lachlan Marie <lchlnm@pm.me> - 5.2-1
- - Update to 5.2
+- Update to 5.2
 
 * Wed Mar 25 2026 Lachlan Marie <lchlnm@pm.me> - 5.1-1
- - Update to 5.1
+- Update to 5.1

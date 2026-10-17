@@ -1,4 +1,4 @@
-From d9aff6f8f7b208f9c3d7930bed35c9ae9fcb09c6 Mon Sep 17 00:00:00 2001
+From 4cf057d6ae74cd97bddb4eb88593028d7ea93fd0 Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Sat, 26 Sep 2026 13:35:23 +0200
 Subject: [PATCH] render: color managed GPU renderer with HDR output
@@ -23,13 +23,13 @@ Subject: [PATCH] render: color managed GPU renderer with HDR output
  src/gpu_gles.cpp      | 911 ++++++++++++++++++++++++++++++++++++++++++
  src/gpu_gles.hpp      | 107 +++++
  src/imageformat.cpp   |   4 +
- src/pixmap.cpp        | 121 ++++--
+ src/pixmap.cpp        | 131 ++++--
  src/pixmap.hpp        |  20 +-
  src/render.cpp        |  28 ++
  src/ui_wayland.cpp    | 306 +++++++++++++-
  src/ui_wayland.hpp    |  36 ++
  src/viewer.cpp        |   2 +-
- 25 files changed, 2836 insertions(+), 122 deletions(-)
+ 25 files changed, 2842 insertions(+), 126 deletions(-)
  create mode 100644 src/colorspace.cpp
  create mode 100644 src/colorspace.hpp
  create mode 100644 src/gpu.hpp
@@ -2971,7 +2971,7 @@ index 2b62ce8..e4ee4e1 100644
      const double scale_w = static_cast<double>(sz) / pm.width();
      const double scale_h = static_cast<double>(sz) / pm.height();
 diff --git a/src/pixmap.cpp b/src/pixmap.cpp
-index bf08df4..d6bde78 100644
+index 537ba07..4f0e9cf 100644
 --- a/src/pixmap.cpp
 +++ b/src/pixmap.cpp
 @@ -4,6 +4,8 @@
@@ -3069,19 +3069,30 @@ index bf08df4..d6bde78 100644
      const size_t line_sz = pm_width * pm_bpp;
      std::vector<uint8_t> buffer(line_sz);
  
-@@ -100,10 +134,8 @@ void Pixmap::flip_vertical()
+@@ -100,67 +134,62 @@ void Pixmap::flip_vertical()
  
  void Pixmap::flip_horizontal()
  {
 -    assert(format() == Format::RGB || format() == Format::ARGB);
 -
-     const size_t x_end = pm_width / 2;
--    uint8_t swap[sizeof(argb_t)];
+-    argb_t* pixdata = reinterpret_cast<argb_t*>(ptr(0, 0));
+-    const size_t stride = pm_stride / sizeof(argb_t);
++    const size_t x_end = pm_width / 2;
 +    uint8_t swap[4 * sizeof(uint16_t)];
  
      for (size_t y = 0; y < pm_height; ++y) {
+-        argb_t* row = pixdata + y * stride;
+-        const size_t x_end = pm_width / 2;
          for (size_t x = 0; x < x_end; ++x) {
-@@ -118,51 +150,46 @@ void Pixmap::flip_horizontal()
+-            std::swap(row[x], row[pm_width - x - 1]);
++            void* left = ptr(x, y);
++            void* right = ptr(pm_width - x - 1, y);
++            std::memcpy(&swap, left, pm_bpp);
++            std::memcpy(left, right, pm_bpp);
++            std::memcpy(right, &swap, pm_bpp);
+         }
+     }
+ }
  
  void Pixmap::rotate(const size_t angle)
  {
@@ -3159,7 +3170,7 @@ index bf08df4..d6bde78 100644
      assert(format() == Format::RGB || format() == Format::ARGB);
  
      const Rectangle visible = rect.intersect({ 0, 0, pm_width, pm_height });
-@@ -186,6 +213,10 @@ void Pixmap::fill(const Rectangle& rect, const argb_t& color)
+@@ -184,6 +213,10 @@ void Pixmap::fill(const Rectangle& rect, const argb_t& color)
  
  void Pixmap::fill_blend(const Rectangle& rect, const argb_t& color)
  {
@@ -3170,7 +3181,7 @@ index bf08df4..d6bde78 100644
      assert(format() == Format::ARGB);
  
      const Rectangle visible = rect.intersect({ 0, 0, pm_width, pm_height });
-@@ -205,6 +236,10 @@ void Pixmap::fill_blend(const Rectangle& rect, const argb_t& color)
+@@ -223,6 +256,10 @@ void Pixmap::fill_blend(const Rectangle& rect, const argb_t& color)
  void Pixmap::grid(const Rectangle& rect, const size_t size, const argb_t& clr0,
                    const argb_t& clr1)
  {
@@ -3181,7 +3192,7 @@ index bf08df4..d6bde78 100644
      assert(format() == Format::ARGB);
  
      const Rectangle visible = rect.intersect({ 0, 0, pm_width, pm_height });
-@@ -265,6 +300,10 @@ void Pixmap::rectangle(const Rectangle& rect, const argb_t& color,
+@@ -283,6 +320,10 @@ void Pixmap::rectangle(const Rectangle& rect, const argb_t& color,
  
  void Pixmap::mask(const Pixmap& pm, const Point& pos, const argb_t& color)
  {
@@ -3192,7 +3203,7 @@ index bf08df4..d6bde78 100644
      assert(format() == Format::RGB || format() == Format::ARGB);
      assert(pm.format() == Format::GS);
  
-@@ -295,6 +334,10 @@ void Pixmap::mask(const Pixmap& pm, const Point& pos, const argb_t& color)
+@@ -315,6 +356,10 @@ void Pixmap::mask(const Pixmap& pm, const Point& pos, const argb_t& color)
  
  void Pixmap::copy(const Pixmap& pm, const Point& pos)
  {
@@ -3203,7 +3214,7 @@ index bf08df4..d6bde78 100644
      assert(format() == Format::RGB || format() == Format::ARGB);
      assert(pm.format() == Format::RGB || pm.format() == Format::ARGB);
  
-@@ -317,6 +360,10 @@ void Pixmap::copy(const Pixmap& pm, const Point& pos)
+@@ -337,6 +382,10 @@ void Pixmap::copy(const Pixmap& pm, const Point& pos)
  
  void Pixmap::blend(const Pixmap& pm, const Point& pos)
  {
@@ -3215,7 +3226,7 @@ index bf08df4..d6bde78 100644
      assert(pm.format() == Format::RGB || pm.format() == Format::ARGB);
      assert(format() == Format::ARGB || pm.format() == Format::ARGB);
 diff --git a/src/pixmap.hpp b/src/pixmap.hpp
-index 0f9097d..4c96575 100644
+index f9376b0..3dca018 100644
 --- a/src/pixmap.hpp
 +++ b/src/pixmap.hpp
 @@ -5,7 +5,9 @@
@@ -3228,7 +3239,7 @@ index 0f9097d..4c96575 100644
  
  #include <cassert>
  #include <cstring>
-@@ -15,7 +17,7 @@
+@@ -14,7 +16,7 @@
  class Pixmap {
  public:
      /** Pixmap formats. */
@@ -3237,7 +3248,7 @@ index 0f9097d..4c96575 100644
  
      /** Default constructor. */
      Pixmap() = default;
-@@ -46,6 +48,8 @@ public:
+@@ -45,6 +47,8 @@ public:
      void attach(const Format format, const size_t width, const size_t height,
                  void* data, const size_t stride = 0);
  
@@ -3246,7 +3257,7 @@ index 0f9097d..4c96575 100644
      /**
       * Free pixmap.
       */
-@@ -75,6 +79,15 @@ public:
+@@ -74,6 +78,15 @@ public:
       */
      [[nodiscard]] Format format() const { return pm_format; }
  
@@ -3262,7 +3273,7 @@ index 0f9097d..4c96575 100644
      /**
       * Check if there is data in the pixmap.
       */
-@@ -103,6 +116,7 @@ public:
+@@ -102,6 +115,7 @@ public:
          assert(x < pm_width);
          assert(y < pm_height);
          assert(pm_ext || !pm_data.empty());
@@ -3270,7 +3281,7 @@ index 0f9097d..4c96575 100644
          const size_t offset = y * pm_stride + x * pm_bpp;
          return pm_ext ? &pm_ext[offset] : &pm_data[offset];
      }
-@@ -232,4 +246,8 @@ private:
+@@ -247,4 +261,8 @@ private:
      size_t pm_stride = 0;         ///< Row size in bytes
      std::vector<uint8_t> pm_data; ///< Pixel data (owned)
      uint8_t* pm_ext = nullptr;    ///< Pixel data (attached)
@@ -3280,10 +3291,10 @@ index 0f9097d..4c96575 100644
 +    ColorSpace::Ptr pm_color;
  };
 diff --git a/src/render.cpp b/src/render.cpp
-index eb4c2df..80b8c66 100644
+index d64c31b..e46209f 100644
 --- a/src/render.cpp
 +++ b/src/render.cpp
-@@ -854,6 +854,15 @@ Render::Render()
+@@ -979,6 +979,15 @@ Render::Render()
  void Render::draw(Pixmap& dst, const Pixmap& src, const Point& pos,
                    const double scale)
  {
@@ -3299,7 +3310,7 @@ index eb4c2df..80b8c66 100644
      if (scale == 1) { // 100% scale, draw 1:1
          if (dst.format() == Pixmap::ARGB || src.format() == Pixmap::ARGB) {
              dst.blend(src, pos);
-@@ -876,6 +885,15 @@ void Render::fill_inverse(Pixmap& pm, const Rectangle& rect,
+@@ -1001,6 +1010,15 @@ void Render::fill_inverse(Pixmap& pm, const Rectangle& rect,
      const Rectangle full { 0, 0, pm.width(), pm.height() };
      const auto [top, bottom, left, right] = full.cutout(rect);
  
@@ -3315,7 +3326,7 @@ index eb4c2df..80b8c66 100644
      std::vector<size_t> tids;
      tids.reserve(4); // one per each side
  
-@@ -905,6 +923,11 @@ void Render::fill_inverse(Pixmap& pm, const Rectangle& rect,
+@@ -1030,6 +1048,11 @@ void Render::fill_inverse(Pixmap& pm, const Rectangle& rect,
  
  void Render::extend_background(Pixmap& pm, const Rectangle& preserve)
  {
@@ -3327,7 +3338,7 @@ index eb4c2df..80b8c66 100644
      assert(preserve);
  
      // calculate areas to fill
-@@ -952,6 +975,11 @@ void Render::extend_background(Pixmap& pm, const Rectangle& preserve)
+@@ -1077,6 +1100,11 @@ void Render::extend_background(Pixmap& pm, const Rectangle& preserve)
  
  void Render::mirror_background(Pixmap& pm, const Rectangle& preserve)
  {
@@ -3776,7 +3787,7 @@ index 1d4fbe7..3038482 100644
  
      uint32_t scale = FRACTION_SCALE_DEN; ///< Window scale factor (WL format)
 diff --git a/src/viewer.cpp b/src/viewer.cpp
-index f99d2f8..01aa6e3 100644
+index b9b8e31..5a93a03 100644
 --- a/src/viewer.cpp
 +++ b/src/viewer.cpp
 @@ -514,7 +514,7 @@ void Viewer::window_redraw(Pixmap& wnd)
