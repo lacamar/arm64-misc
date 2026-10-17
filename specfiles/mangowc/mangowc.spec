@@ -1,4 +1,4 @@
-%global tag 0.17.5
+%global tag 0.18.1
 Name:           mangowc
 Version:        %{tag}
 Release:        1%?dist
@@ -44,13 +44,20 @@ MangoWC is a lightweight, high-performance Wayland compositor built on dwl, desi
 %license LICENSE
 %{_bindir}/mango
 %{_bindir}/mmsg
+%{_bindir}/mangonag
 %{_sysconfdir}/mango/config.conf
+%{_sysconfdir}/mango/config.toml
 %{_datadir}/wayland-sessions/mango.desktop
 %{_datadir}/xdg-desktop-portal/mango-portals.conf
 %{_userunitdir}/mango-session.target
 %{_mandir}/man1/mmsg.1.gz
+%{_mandir}/man1/mangonag.1.gz
 
 %changelog
+* Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.1-1
+- Update to 0.18.1
+- Package mangonag, config.toml
+
 * Thu Oct 08 2026 Lachlan Marie <lchlnm@pm.me> - 0.17.5-1
  - Update to 0.17.5
 
