@@ -1,6 +1,6 @@
-%global tag 0.3.8
-%global bumpver 3
-%global commit efb21c3e8c5a40a74f2e86510f915da55eaeba34
+%global tag 0.3.9
+%global bumpver 0
+%global commit 32c3cf73970f885c0a588623208232db72a74a58
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 %global toolchain clang
@@ -72,6 +72,9 @@ echo v%{tag} > %{buildroot}%{_libdir}/%{name}/VERSION
 %{_libdir}/%{name}
 
 %changelog
+* Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.9^0.git.32c3cf7-1
+- Update to 0.3.9
+
 * Mon Oct 05 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.8^3.git.efb21c3-1
 - Initial package
 - Native Linux aarch64 build
