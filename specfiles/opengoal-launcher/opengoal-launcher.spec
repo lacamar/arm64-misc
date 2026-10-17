@@ -1,6 +1,6 @@
-%global tag 2.11.1
-%global bumpver 1
-%global commit 7e1c23b495f2e15dbe61e4c0ef938be4ca47b4bf
+%global tag 2.11.2
+%global bumpver 0
+%global commit a32643d9676e0cc4d61df930c27bdf6c83fc14d1
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 %global debug_package %{nil}
@@ -10,7 +10,7 @@
 
 Name:           opengoal-launcher
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        4%{?dist}
+Release:        1%{?dist}
 Summary:        Launcher for OpenGOAL (Jak and Daxter trilogy PC port)
 License:        ISC
 URL:            https://github.com/open-goal/launcher
@@ -54,6 +54,7 @@ tooling version.
 npm install --no-save --prefix .yarnbin yarn@1
 export PATH=$PWD/.yarnbin/node_modules/.bin:$PATH YARN_CACHE_FOLDER=$PWD/.yarn-cache
 yarn install --frozen-lockfile
+export CFLAGS="${CFLAGS//-O2/}"
 yarn tauri build --no-bundle
 
 %install
@@ -105,6 +106,10 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/*.desktop
 %{_datadir}/icons/hicolor/*/apps/*.png
 
 %changelog
+* Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 2.11.2^0.git.a32643d-1
+- Update to 2.11.2
+- Drop -O2 from CFLAGS for aws-lc-sys jitterentropy
+
 * Mon Oct 05 2026 Lachlan Marie <lchlnm@pm.me> - 2.11.1^1.git.7e1c23b-4
 - Match launcher desktop file to app_id
 
