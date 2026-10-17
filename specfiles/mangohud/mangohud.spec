@@ -2,9 +2,7 @@
 %global forgeurl https://github.com/flightlessmango/MangoHud
 
 %global imgui_ver 1.91.6
-%global imgui_wrap_ver 2
-%global vulkan_headers_ver 1.3.283
-%global vulkan_headers_wrap_ver 2
+%global vulkan_headers_ver 1.4.346
 %global implot_ver 0.16
 %global implot_wrap_ver 2
 
@@ -14,9 +12,9 @@
 %bcond_with tests
 
 Name:           mangohud
-Version:        0.8.3~rc1
+Version:        0.8.4
 %forgemeta
-Release:        8%{?dist}
+Release:        1%{?dist}
 Summary:        Vulkan and OpenGL overlay for monitoring FPS, temperatures, CPU/GPU load
 
 License:        MIT
@@ -24,19 +22,17 @@ URL:            %{forgeurl}
 Source0:        %{url}/archive/v%{tarball_version}/%{name}-%{tarball_version}.tar.gz
 # imgui
 Source1:        https://github.com/ocornut/imgui/archive/v%{imgui_ver}/imgui-%{imgui_ver}.tar.gz
-Source2:        https://wrapdb.mesonbuild.com/v%{imgui_wrap_ver}/imgui_%{imgui_ver}-1/get_patch#/imgui-%{imgui_ver}-wrap.zip
 # Vulkan-Headers
 Source3:        https://github.com/KhronosGroup/Vulkan-Headers/archive/v%{vulkan_headers_ver}/Vulkan-Headers-%{vulkan_headers_ver}.tar.gz
-Source4:        https://wrapdb.mesonbuild.com/v%{vulkan_headers_wrap_ver}/vulkan-headers_%{vulkan_headers_ver}-1/get_patch#/vulkan-headers-%{vulkan_headers_ver}-wrap.zip
 # implot
 Source5:        https://github.com/epezent/implot/archive/v%{implot_ver}/implot-%{implot_ver}.tar.gz
 Source6:        https://wrapdb.mesonbuild.com/v%{implot_wrap_ver}/implot_%{implot_ver}-1/get_patch#/implot-%{implot_ver}-wrap.zip
+Source7:        https://github.com/KhronosGroup/Vulkan-Utility-Libraries/archive/v%{vulkan_headers_ver}/Vulkan-Utility-Libraries-%{vulkan_headers_ver}.tar.gz
 Source20:       README.Fedora.md
 
 Patch100:       mangohud-align-right.patch
 Patch101:       mangohud-hud-scale.patch
-Patch102:       mangohud-dxvk3-dx11.patch
-Patch103:       mangohud-fonts-no-waitidle.patch
+Patch102:       mangohud-fonts-no-waitidle.patch
 
 # MangoHud switched to bundled vulkan-headers since 0.6.9 version. This rebased
 # upstream patch which reverts this change.
@@ -101,11 +97,10 @@ Local visualization "mangoplot" for %{name}.
 %prep
 %autosetup -n %{appname}-%{tarball_version} -p1
 %setup -qn %{appname}-%{tarball_version} -D -T -a1
-%setup -qn %{appname}-%{tarball_version} -D -T -a2
 %setup -qn %{appname}-%{tarball_version} -D -T -a3
-%setup -qn %{appname}-%{tarball_version} -D -T -a4
 %setup -qn %{appname}-%{tarball_version} -D -T -a5
 %setup -qn %{appname}-%{tarball_version} -D -T -a6
+%setup -qn %{appname}-%{tarball_version} -D -T -a7
 
 # imgui
 mv imgui-%{imgui_ver} subprojects/
@@ -113,6 +108,10 @@ mv imgui-%{imgui_ver} subprojects/
 mv Vulkan-Headers-%{vulkan_headers_ver} subprojects/
 # implot
 mv implot-%{implot_ver} subprojects/
+mv Vulkan-Utility-Libraries-%{vulkan_headers_ver} subprojects/
+cp -r subprojects/packagefiles/imgui-%{imgui_ver}/. subprojects/imgui-%{imgui_ver}/
+cp -r subprojects/packagefiles/vulkan-headers/. subprojects/Vulkan-Headers-%{vulkan_headers_ver}/
+cp -r subprojects/packagefiles/vulkan-utility-libraries/. subprojects/Vulkan-Utility-Libraries-%{vulkan_headers_ver}/
 
 %if %{with tests}
 # Use system cmocka instead of subproject
@@ -149,7 +148,6 @@ sed -i "s@#!/usr/bin/env python@#!/usr/bin/python3@" \
 # Install Fedora docs
 install -D -p -m 0644 %{SOURCE20} %{buildroot}%{_docdir}/%{name}/README.Fedora.md
 
-rm %{buildroot}%{_libdir}/libimgui.a
 
 
 %check
@@ -163,13 +161,13 @@ rm %{buildroot}%{_libdir}/libimgui.a
 
 %files
 %license LICENSE
-%doc README.md presets.conf.example README.Fedora.md
+%doc README.md
 %{_bindir}/mangoapp
 %{_bindir}/mangohud
 %{_bindir}/mangohudctl
 %{_datadir}/icons/hicolor/scalable/*/*.svg
 %{_datadir}/vulkan/implicit_layer.d/*Mango*.json
-%{_docdir}/%{name}/%{appname}.conf.example
+%{_docdir}/%{name}/
 %{_libdir}/%{name}/
 %{_mandir}/man1/%{name}.1*
 %{_mandir}/man1/mangoapp.1*
@@ -180,6 +178,11 @@ rm %{buildroot}%{_libdir}/libimgui.a
 
 
 %changelog
+* Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 0.8.4-1
+- Update to 0.8.4
+- Rebase patches
+- Drop dxvk3-dx11 patch (upstream)
+
 * Sun Oct 11 2026 Lachlan Marie <lchlnm@pm.me> - 0.8.3~rc1-8
 - Skip DeviceWaitIdle on first swapchain (DXVK d3d9 hang)
 

@@ -1,6 +1,6 @@
 --- a/src/vulkan.cpp
 +++ b/src/vulkan.cpp
-@@ -736,8 +736,9 @@
+@@ -753,8 +753,9 @@ static void check_fonts(struct swapchain_data* data)
        int width, height;
        data->font_atlas->GetTexDataAsAlpha8(&pixels, &width, &height);
  
