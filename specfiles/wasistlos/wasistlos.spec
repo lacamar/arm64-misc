@@ -1,7 +1,7 @@
 %global tag 1.7.0
 Name: wasistlos
 Version: %{tag}
-Release: 8%{?dist}
+Release: 9%{?dist}
 Summary: An unofficial WhatsApp desktop application for Linux.
 
 License: GNU GPL v3
@@ -21,7 +21,7 @@ BuildRequires: gtkmm3.0-devel
 BuildRequires: webkit2gtk4.1-devel
 BuildRequires: libayatana-appindicator-gtk3-devel
 BuildRequires: libcanberra-devel
-BuildRequires: whisper-cpp-devel
+BuildRequires: whisper-cpp-devel >= 1.9.5
 
 Requires: /usr/bin/ffmpeg
 Requires: /usr/bin/curl
@@ -60,6 +60,9 @@ An unofficial WhatsApp desktop application for Linux.
 
 
 %changelog
+* Sat Oct 18 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-9
+ - Rebuild against Vulkan whisper-cpp 1.9.5
+
 * Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-8
  - Fix voice note lookup (rows carry bare message ids)
  - Transcribe in parallel whisper states at low priority
