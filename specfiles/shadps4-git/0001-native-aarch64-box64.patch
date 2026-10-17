@@ -23,7 +23,7 @@ index 67a5c63..08ecc8b 100644
  set(SHADER_RECOMPILER src/shader_recompiler/profile.h
 @@ -1322,6 +1329,9 @@ create_target_directory_groups(shadps4)
  target_link_libraries(shadps4 PRIVATE spdlog::spdlog)
- target_link_libraries(shadps4 PRIVATE magic_enum::magic_enum fmt::fmt toml11::toml11 tsl::robin_map xbyak::xbyak Tracy::TracyClient RenderDoc::API FFmpeg::ffmpeg Dear_ImGui ImGuiFileDialog gcn half::half ZLIB::ZLIB PNG::PNG minimp3)
+ target_link_libraries(shadps4 PRIVATE magic_enum::magic_enum fmt::fmt toml11::toml11 tsl::robin_map xbyak::xbyak Tracy::TracyClient RenderDoc::API FFmpeg::ffmpeg Dear_ImGui ImGuiFileDialog gcn half::half ZLIB::ZLIB PNG::PNG minimp3 dr_flac)
  target_link_libraries(shadps4 PRIVATE Boost::headers GPUOpen::VulkanMemoryAllocator LibAtrac9 sirit Vulkan::Headers xxHash::xxhash Zydis::Zydis SDL3::SDL3 pugixml::pugixml)
 +if (TARGET box64core)
 +    target_link_libraries(shadps4 PRIVATE box64core)
@@ -2145,7 +2145,7 @@ index b750484..11a79ef 100644
  
      Ucontext context{info, reinterpret_cast<ucontext_t*>(raw_context)};
      Siginfo guest_info{};
-@@ -270,27 +301,27 @@ void SignalHandler(int sig, siginfo_t* info, void* raw_context) {
+@@ -270,28 +301,28 @@ void SignalHandler(int sig, siginfo_t* info, void* raw_context) {
      case SIGBUS: {
          const bool is_write = Common::IsWriteError(raw_context);
          const bool is_exec = Common::IsExecuteError(raw_context);
@@ -2178,6 +2178,7 @@ index b750484..11a79ef 100644
 -        }
      case SIGFPE:
      case SIGTRAP:
+     case SIGABRT:
      case SIGSYS: {
          if (thread && thread->DispatchSignal(NativeToOrbisSignal(sig), info_p, context_p)) {
 +            if (in_jit) {

@@ -1,8 +1,8 @@
-%global bumpver 2
+%global bumpver 1
 %global _name shadps4
-%global tag 0.19.0
+%global tag 0.20.0
 # Upstream shadps4-emu/shadPS4 commit the aarch64 patch series is based on
-%global commit 443f022450f6857256e780daa3d5a14029a748f7
+%global commit e6c79a5fe0ea2f3d03fcb9c5c50cf61af063f3f5
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 # Prebuilt FFmpeg release matching externals/ffmpeg-core
 %global ffmpeg_sha 94dde08
@@ -169,47 +169,54 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/net.shadps4.shadPS4.d
 %{_datadir}/icons/hicolor/512x512/apps/net.shadps4.shadPS4.png
 
 %changelog
+* Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 0.20.0^1.git.e6c79a5-1
+ - Update to commit e6c79a5fe0ea2f3d03fcb9c5c50cf61af063f3f5
+
+* Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 0.20.0^0.git.626f3ac-1
+- Update to 0.20.0
+- Rebase native-aarch64-box64 patch
+
 * Sun Oct 11 2026 Lachlan Marie <lchlnm@pm.me> - 0.19.0^2.git.443f022-1
- - Update to commit 443f022450f6857256e780daa3d5a14029a748f7
+- Update to commit 443f022450f6857256e780daa3d5a14029a748f7
 
 * Sat Oct 10 2026 Lachlan Marie <lchlnm@pm.me> - 0.19.0^1.git.06e813f-1
- - Update to commit 06e813ff8c8e2a6d81b02cabfcc9543c3debf78e
+- Update to commit 06e813ff8c8e2a6d81b02cabfcc9543c3debf78e
 
 * Fri Oct 09 2026 Lachlan Marie <lchlnm@pm.me> - 0.19.0^0.git.0fe263a-1
- - Update to 0.19.0
+- Update to 0.19.0
 
 * Tue Sep 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.0^10.git.e35735c-1
- - Update to commit e35735c2edfdc97c8f48f0bd10307c2818464423
+- Update to commit e35735c2edfdc97c8f48f0bd10307c2818464423
 
 * Mon Sep 28 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.0^9.git.4cbd23e-1
- - Update to commit 4cbd23ef6d7990badeef5668462b00e874b9ade4
+- Update to commit 4cbd23ef6d7990badeef5668462b00e874b9ade4
 
 * Sun Sep 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.0^8.git.bcf083f-1
- - Update to commit bcf083f04429a133d88c9555ee6d5c5653199732
+- Update to commit bcf083f04429a133d88c9555ee6d5c5653199732
 
 * Sun Sep 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.0^7.git.e518a65-1
- - Update to commit e518a65157b04d0cefec9930e31a86c5685af28e
+- Update to commit e518a65157b04d0cefec9930e31a86c5685af28e
 
 * Sun Sep 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.0^6.git.282f644-1
- - Update to commit 282f64454bc60faa6af633145d58bba9acc549e0
+- Update to commit 282f64454bc60faa6af633145d58bba9acc549e0
 
 * Sat Sep 26 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.0^5.git.41c0fca-1
- - Update to commit 41c0fca5e7f33a3e7f94757572da022030788ae3
+- Update to commit 41c0fca5e7f33a3e7f94757572da022030788ae3
 
 * Wed Sep 23 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.0^4.git.ca89b01-1
- - Update to commit ca89b01791b4cab862514bbcf86e6422070c240a
+- Update to commit ca89b01791b4cab862514bbcf86e6422070c240a
 
 * Wed Sep 23 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.0^3.git.eeecd10-1
- - Update to commit eeecd103f648572b249b422e759e76799274b34c
+- Update to commit eeecd103f648572b249b422e759e76799274b34c
 
 * Tue Sep 22 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.0^2.git.00b0aca-1
- - Update to commit 00b0acaa561e1a694c1ad6f79276ac774461cb49
+- Update to commit 00b0acaa561e1a694c1ad6f79276ac774461cb49
 
 * Mon Sep 21 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.0^1.git.4621b6a-1
- - Update to commit 4621b6a1f486dc1f982d525a2fcec0f68f01c30b
+- Update to commit 4621b6a1f486dc1f982d525a2fcec0f68f01c30b
 
 * Sun Sep 20 2026 Lachlan Marie <lchlnm@pm.me> - 4.2026.09.20.277.671.9.2357.392.9339.89.8.8^0.git.4a151b8-1
- - Update to 4.2026.09.20.277.671.9.2357.392.9339.89.8.8
+- Update to 4.2026.09.20.277.671.9.2357.392.9339.89.8.8
 
 * Sat Sep 19 2026 lm <lchlnm@pm.me> - 1
 - Skip block re-validation for immutable text segments
@@ -217,7 +224,7 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/net.shadps4.shadPS4.d
 - Rebase on upstream 42c555b
 
 * Fri Sep 18 2026 Lachlan Marie <lchlnm@pm.me> - 4.2026.09.18.42.555.7.5.0678.531.7.4.505560.0.8^0.git.42c555b-1
- - Update to 4.2026.09.18.42.555.7.5.0678.531.7.4.505560.0.8
+- Update to 4.2026.09.18.42.555.7.5.0678.531.7.4.505560.0.8
 
 * Fri Sep 18 2026 lm <lchlnm@pm.me> - 0.18.0^1.git.ba74702-1
 - Initial package
