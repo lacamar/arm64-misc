@@ -1,7 +1,7 @@
-%global bumpver 5
+%global bumpver 6
 
 %global tag 0.0.43
-%global commit a710aba42f6c5b323d507a4818c1837ce6d5dc35
+%global commit 3beb6504de8d81b1d3cb6291cdd35dccea077907
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       rpcs3-git
@@ -163,35 +163,38 @@ cmake -B build -G Ninja \
 
 
 %changelog
+* Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.43^6.git.3beb650-1
+- Update to commit 3beb6504de8d81b1d3cb6291cdd35dccea077907
+
 * Fri Oct 16 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.43^5.git.a710aba-1
- - Update to commit a710aba42f6c5b323d507a4818c1837ce6d5dc35
+- Update to commit a710aba42f6c5b323d507a4818c1837ce6d5dc35
 
 * Fri Oct 16 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.43^4.git.f94e9f8-1
- - Update to commit f94e9f8647aeae07ea064dbafe407a41a922f485
+- Update to commit f94e9f8647aeae07ea064dbafe407a41a922f485
 
 * Fri Oct 16 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.43^3.git.17543d2-1
- - Update to commit 17543d27371d0c4fb20b14ef671bd31c213d406b
+- Update to commit 17543d27371d0c4fb20b14ef671bd31c213d406b
 
 * Sun Oct 11 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.43^2.git.2ba2f75-1
- - Update to commit 2ba2f75bcea7ef6bdd687046c7fcfb790faf9853
+- Update to commit 2ba2f75bcea7ef6bdd687046c7fcfb790faf9853
 
 * Sat Oct 10 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.43^1.git.8f2fe1a-1
- - Update to commit 8f2fe1a99caef5d6e1eb9e4579f1d6169cf4b771
+- Update to commit 8f2fe1a99caef5d6e1eb9e4579f1d6169cf4b771
 
 * Thu Oct 08 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.43^0.git.304d544-1
- - Update to 0.0.43
+- Update to 0.0.43
 
 * Tue Sep 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.42^36.git.3e9d881-1
- - Update to commit 3e9d881aa681f4ade80f86e9ff7fba73d5098a9b
+- Update to commit 3e9d881aa681f4ade80f86e9ff7fba73d5098a9b
 
 * Tue Sep 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.42^35.git.1707d7f-1
- - Update to commit 1707d7fc883ef48ff21bdcbb0141a3211ae09cb2
+- Update to commit 1707d7fc883ef48ff21bdcbb0141a3211ae09cb2
 
 * Mon Sep 28 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.42^34.git.1f08048-1
- - Update to commit 1f080485b95db2700c5cf244b1314f73b6cf564e
+- Update to commit 1f080485b95db2700c5cf244b1314f73b6cf564e
 
 * Sun Sep 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.42^33.git.3fa07db-1
- - Update to commit 3fa07db78b44f8705d1ee8cd3f41b42bad725bf7
+- Update to commit 3fa07db78b44f8705d1ee8cd3f41b42bad725bf7
 
 * Sat Sep 26 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.42^32.git.77cb942-1
- - Update to commit 77cb9423dbf3406c0b7ecf0ca73f773d7185f9a0
+- Update to commit 77cb9423dbf3406c0b7ecf0ca73f773d7185f9a0
