@@ -3,12 +3,12 @@
 %global __provides_exclude_from ^%{_libexecdir}/%{name}/.*$
 
 %global appid app.bluebubbles.BlueBubbles
-%global flutter_version 3.44.6
+%global flutter_version 3.47.4
 
-%global tag 2.1.1.91
+%global tag 2.1.3.93
 %global appver %(echo %{tag} | sed -E 's/\\.[0-9]+$//')
 %global build_num %(echo %{tag} | sed -E 's/^.*\\.//')
-%global dirtag %(echo %{tag} | sed -E 's/\\.([0-9]+)$/-\\1/')
+%global dirtag %(echo %{tag} | sed -E 's/\\.([0-9]+)$/-desktop.\\1/')
 
 Name:       bluebubbles
 Version:    %{tag}
@@ -17,7 +17,7 @@ Summary:    iMessage client for Linux, part of the BlueBubbles ecosystem
 
 License:    Apache-2.0
 URL:        https://bluebubbles.app
-Source0:    https://github.com/BlueBubblesApp/bluebubbles-app/archive/refs/tags/v%{appver}+%{build_num}.tar.gz
+Source0:    https://github.com/BlueBubblesApp/bluebubbles-app/archive/refs/tags/v%{appver}+desktop.%{build_num}.tar.gz
 
 ExclusiveArch:  aarch64
 
@@ -111,6 +111,11 @@ install -Dpm0644 flatpak/%{appid}.metainfo.xml \
 %{_metainfodir}/%{appid}.metainfo.xml
 
 %changelog
+* Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 2.1.3.93-1
+- Update to 2.1.3.93
+- Follow +desktop tag scheme
+- Flutter 3.47.4
+
 * Fri Aug 14 2026 Lachlan Marie <lchlnm@pm.me> - 2.1.1.91-1
  - Update to 2.1.1.91
 
