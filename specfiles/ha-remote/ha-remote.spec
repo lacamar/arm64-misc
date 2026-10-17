@@ -1,4 +1,4 @@
-%global tag 0.2.13
+%global tag 0.3.1
 
 Name:     ha-remote
 Version:  %{tag}
@@ -87,6 +87,9 @@ fi
 %{_datadir}/%{name}
 
 %changelog
+* Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.1-1
+ - Update to 0.3.1
+
 * Wed Oct 07 2026 Lachlan Marie <lchlnm@pm.me> - 0.2.13-1
 - Approve polkit text prompts
 - Show the polkit caller's command
