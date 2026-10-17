@@ -50,7 +50,9 @@
 %ifarch aarch64 x86_64 %{ix86}
 %if !0%{?rhel}
 %global with_asahi     1
+%if 0%{?fedora} >= 44
 %global with_d3d12     1
+%endif
 %global with_etnaviv   1
 %global with_lima      1
 %global with_tegra     1
@@ -95,7 +97,7 @@ Summary:        Mesa graphics libraries
 %global commitdate 20261017
 %global ver 27.0.0
 Version:        %{ver}~git%{commitdate}.%{shortcommit}
-Release:        1%{?dist}
+Release:        2%{?dist}
 License:        MIT AND BSD-3-Clause AND SGI-B-2.0
 URL:            https://mesa3d.org
 
@@ -764,6 +766,9 @@ ln -s libGLX_mesa.so.0 %{buildroot}%{_libdir}/libGLX_system.so.0
 %endif
 
 %changelog
+* Sat Oct 17 2026 lacamar <lchlnm@pm.me> - 27.0.0~git20261017.335d5698-2
+- Disable d3d12 on f43
+
 * Sat Oct 17 2026 lacamar <lchlnm@pm.me> - 27.0.0~git20261017.335d5698-1
 - Update to 335d5698
 - Rebase hk-heap-overflow patch
