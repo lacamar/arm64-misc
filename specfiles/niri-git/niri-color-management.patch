@@ -581,7 +581,7 @@ index 687745c..b8d6a31 100644
          BackgroundEffect = BackgroundEffectElement,
      }
 diff --git a/src/niri.rs b/src/niri.rs
-index 6c372c6..d32c66b 100644
+index 6c372c6..df80b48 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
@@ -604,7 +604,7 @@ index 6c372c6..d32c66b 100644
      HitType, Layout, LayoutElement as _, LayoutElementRenderElement, MonitorRenderElement,
  };
  use crate::niri_render_elements;
-+use crate::protocols::color_management::ColorManagementState;
++use crate::protocols::color_management::{self, ColorManagementState};
  use crate::protocols::ext_workspace::{self, ExtWorkspaceManagerState};
  use crate::protocols::foreign_toplevel::{self, ForeignToplevelManagerState};
  use crate::protocols::gamma_control::GammaControlManagerState;
@@ -624,7 +624,15 @@ index 6c372c6..d32c66b 100644
              self.niri.display_handle.flush_clients().unwrap();
          }
  
-@@ -1896,6 +1899,7 @@ impl State {
+@@ -965,6 +968,7 @@ impl State {
+         self.ipc_refresh_casts();
+ 
+         self.niri.refresh_window_rules();
++        color_management::refresh_feedbacks(self);
+         self.refresh_ipc_outputs();
+         self.ipc_refresh_layout();
+         self.ipc_refresh_keyboard_layout_index();
+@@ -1896,6 +1900,7 @@ impl State {
  
          if output_config_changed {
              self.reload_output_config();
@@ -632,7 +640,7 @@ index 6c372c6..d32c66b 100644
          }
  
          if window_rules_changed {
-@@ -2608,6 +2612,8 @@ impl Niri {
+@@ -2608,6 +2613,8 @@ impl Niri {
              GammaControlManagerState::new::<State, _>(&display_handle, move |client| {
                  is_tty && !client.get_data::<ClientState>().unwrap().restricted
              });
@@ -641,7 +649,7 @@ index 6c372c6..d32c66b 100644
          let activation_state = XdgActivationState::new::<State>(&display_handle);
          event_loop
              .insert_source(
-@@ -2841,6 +2847,7 @@ impl Niri {
+@@ -2841,6 +2848,7 @@ impl Niri {
              presentation_state,
              security_context_state,
              gamma_control_manager_state,
@@ -649,7 +657,7 @@ index 6c372c6..d32c66b 100644
              activation_state,
              mutter_x11_interop_state,
              session_management_state,
-@@ -3096,6 +3103,12 @@ impl Niri {
+@@ -3096,6 +3104,12 @@ impl Niri {
          }
      }
  
@@ -662,7 +670,7 @@ index 6c372c6..d32c66b 100644
      pub fn add_output(&mut self, output: Output, refresh_interval: Option<Duration>, vrr: bool) {
          let global = output.create_global::<State>(&self.display_handle);
  
-@@ -7393,7 +7406,7 @@ fn scale_relocate_crop<E: Element>(
+@@ -7393,7 +7407,7 @@ fn scale_relocate_crop<E: Element>(
  
  niri_render_elements! {
      PointerRenderElements<R> => {
@@ -671,7 +679,7 @@ index 6c372c6..d32c66b 100644
          NamedPointer = MemoryRenderBufferRenderElement<R>,
      }
  }
-@@ -7417,7 +7430,7 @@ niri_render_elements! {
+@@ -7417,7 +7431,7 @@ niri_render_elements! {
              SolidColorRenderElement
          >>>,
          Pointer = PointerRenderElements<R>,
@@ -682,10 +690,10 @@ index 6c372c6..d32c66b 100644
          WindowMruUi = WindowMruUiRenderElement<R>,
 diff --git a/src/protocols/color_management.rs b/src/protocols/color_management.rs
 new file mode 100644
-index 0000000..9eba8f2
+index 0000000..6b5c150
 --- /dev/null
 +++ b/src/protocols/color_management.rs
-@@ -0,0 +1,697 @@
+@@ -0,0 +1,717 @@
 +use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 +use std::sync::Mutex;
 +
@@ -720,7 +728,7 @@ index 0000000..9eba8f2
 +pub struct ColorManagementState {
 +    outputs: Vec<WpColorManagementOutputV1>,
 +    pending_done: Vec<WpImageDescriptionInfoV1>,
-+    feedbacks: Vec<WpColorManagementSurfaceFeedbackV1>,
++    feedbacks: Vec<(WpColorManagementSurfaceFeedbackV1, ColorDesc)>,
 +}
 +
 +pub struct ColorManagerGlobalData {
@@ -810,19 +818,38 @@ index 0000000..9eba8f2
 +
 +    pub fn descriptions_changed(&mut self) {
 +        self.outputs.retain(|o| o.is_alive());
-+        self.feedbacks.retain(|f| f.is_alive());
 +        for output in &self.outputs {
 +            output.image_description_changed();
 +        }
-+        for feedback in &self.feedbacks {
++    }
++}
++
++// ponytail: rechecks every feedback each refresh; hook output enter/leave if this shows in profiles.
++pub fn refresh_feedbacks<D: ColorManagementHandler>(state: &mut D) {
++    let mut feedbacks = std::mem::take(&mut state.color_management_state().feedbacks);
++    feedbacks.retain_mut(|(feedback, last)| {
++        if !feedback.is_alive() {
++            return false;
++        }
++        let Some(surface) = feedback
++            .data::<ColorSurfaceData>()
++            .and_then(|d| d.0.upgrade().ok())
++        else {
++            return false;
++        };
++        let desc = state.preferred_color_desc(&surface);
++        if desc != *last {
++            *last = desc;
++            let id = next_identity();
 +            if feedback.version() >= 2 {
-+                let id = next_identity();
 +                feedback.preferred_changed2((id >> 32) as u32, id as u32);
 +            } else {
-+                feedback.preferred_changed(next_identity() as u32);
++                feedback.preferred_changed(id as u32);
 +            }
 +        }
-+    }
++        true
++    });
++    state.color_management_state().feedbacks = feedbacks;
 +}
 +
 +fn next_identity() -> u64 {
@@ -970,8 +997,9 @@ index 0000000..9eba8f2
 +                data_init.init(id, ColorSurfaceData(surface.downgrade()));
 +            }
 +            Request::GetSurfaceFeedback { id, surface } => {
++                let desc = state.preferred_color_desc(&surface);
 +                let obj = data_init.init(id, ColorSurfaceData(surface.downgrade()));
-+                state.color_management_state().feedbacks.push(obj);
++                state.color_management_state().feedbacks.push((obj, desc));
 +            }
 +            Request::CreateIccCreator { obj } => {
 +                data_init.post_error(obj, Error::UnsupportedFeature, "ICC not supported");

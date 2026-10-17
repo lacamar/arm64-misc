@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        17%{?dist}
+Release:        18%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -185,6 +185,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^9.git.2c82b77a-18
+- Resend preferred description on output change
+
 * Sat Oct 10 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^9.git.2c82b77a-17
 - Fix HDR enable on reload with cursor plane
 - Track damage in HDR output pass
