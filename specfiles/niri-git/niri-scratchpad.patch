@@ -1,8 +1,8 @@
 diff --git a/niri-config/src/binds.rs b/niri-config/src/binds.rs
-index d02aa595..3c0f11eb 100644
+index 2266d87704..c1c9cc6c16 100644
 --- a/niri-config/src/binds.rs
 +++ b/niri-config/src/binds.rs
-@@ -346,6 +346,12 @@ pub enum Action {
+@@ -347,6 +347,12 @@ pub enum Action {
      FocusFloating,
      FocusTiling,
      SwitchFocusBetweenFloatingAndTiling,
@@ -15,7 +15,7 @@ index d02aa595..3c0f11eb 100644
      #[knuffel(skip)]
      MoveFloatingWindowById {
          id: Option<u64>,
-@@ -685,6 +691,12 @@ impl From<niri_ipc::Action> for Action {
+@@ -687,6 +693,12 @@ impl From<niri_ipc::Action> for Action {
              niri_ipc::Action::SwitchFocusBetweenFloatingAndTiling {} => {
                  Self::SwitchFocusBetweenFloatingAndTiling
              }
@@ -29,10 +29,10 @@ index d02aa595..3c0f11eb 100644
                  Self::MoveFloatingWindowById { id, x, y }
              }
 diff --git a/niri-ipc/src/lib.rs b/niri-ipc/src/lib.rs
-index dfbe59a0..4a19fa28 100644
+index ec85134976..9c7b992d9c 100644
 --- a/niri-ipc/src/lib.rs
 +++ b/niri-ipc/src/lib.rs
-@@ -837,6 +837,25 @@ pub enum Action {
+@@ -839,6 +839,25 @@ pub enum Action {
      FocusTiling {},
      /// Toggles the focus between the floating and the tiling layout.
      SwitchFocusBetweenFloatingAndTiling {},
@@ -58,7 +58,7 @@ index dfbe59a0..4a19fa28 100644
      /// Move a floating window on screen.
      #[cfg_attr(feature = "clap", clap(about = "Move the floating window on screen"))]
      MoveFloatingWindow {
-@@ -1358,6 +1377,8 @@ pub struct Window {
+@@ -1360,6 +1379,8 @@ pub struct Window {
      pub is_floating: bool,
      /// Whether this window requests your attention.
      pub is_urgent: bool,
@@ -68,10 +68,10 @@ index dfbe59a0..4a19fa28 100644
      pub layout: WindowLayout,
      /// Timestamp when the window was most recently focused.
 diff --git a/src/input/mod.rs b/src/input/mod.rs
-index e0f47c88..0dd0fcd4 100644
+index 10c1d02c2d..03c3ddc33f 100644
 --- a/src/input/mod.rs
 +++ b/src/input/mod.rs
-@@ -2213,6 +2213,40 @@ impl State {
+@@ -2265,6 +2265,40 @@ impl State {
                  // FIXME: granular
                  self.niri.queue_redraw_all();
              }
@@ -113,10 +113,10 @@ index e0f47c88..0dd0fcd4 100644
                  let window = if let Some(id) = id {
                      let window = self.niri.layout.windows().find(|(_, m)| m.id().get() == id);
 diff --git a/src/ipc/client.rs b/src/ipc/client.rs
-index 78022ed9..fa3e2e69 100644
+index 878949cb28..8010734f77 100644
 --- a/src/ipc/client.rs
 +++ b/src/ipc/client.rs
-@@ -706,7 +706,12 @@ fn print_output(output: Output) -> anyhow::Result<()> {
+@@ -709,7 +709,12 @@ fn print_output(output: Output) -> anyhow::Result<()> {
  fn print_window(window: &Window) {
      let focused = if window.is_focused { " (focused)" } else { "" };
      let urgent = if window.is_urgent { " (urgent)" } else { "" };
@@ -131,7 +131,7 @@ index 78022ed9..fa3e2e69 100644
      if let Some(title) = &window.title {
          println!("  Title: \"{title}\"");
 diff --git a/src/ipc/server.rs b/src/ipc/server.rs
-index 374216c2..7af59859 100644
+index ab26f0ef36..9a16f9c4eb 100644
 --- a/src/ipc/server.rs
 +++ b/src/ipc/server.rs
 @@ -516,6 +516,7 @@ async fn handle_event_stream_client(client: EventStreamClient) -> anyhow::Result
@@ -179,7 +179,7 @@ index 374216c2..7af59859 100644
                  return;
              }
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index 5480c431..8c79d078 100644
+index c924b5c789..7d8cd1ba5e 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
 @@ -360,6 +360,8 @@ pub struct Layout<W: LayoutElement> {
@@ -300,7 +300,7 @@ index 5480c431..8c79d078 100644
          match &mut self.monitor_set {
              MonitorSet::Normal { monitors, .. } => {
                  for mon in monitors {
-@@ -1635,6 +1683,11 @@ impl<W: LayoutElement> Layout<W> {
+@@ -1650,6 +1698,11 @@ impl<W: LayoutElement> Layout<W> {
              }
          }
  
@@ -312,7 +312,7 @@ index 5480c431..8c79d078 100644
          let MonitorSet::Normal {
              monitors,
              active_monitor_idx,
-@@ -1792,6 +1845,15 @@ impl<W: LayoutElement> Layout<W> {
+@@ -1807,6 +1860,15 @@ impl<W: LayoutElement> Layout<W> {
              f(move_.tile.window(), Some(&move_.output), None, layout);
          }
  
@@ -328,7 +328,7 @@ index 5480c431..8c79d078 100644
          match &self.monitor_set {
              MonitorSet::Normal { monitors, .. } => {
                  for mon in monitors {
-@@ -1817,6 +1879,10 @@ impl<W: LayoutElement> Layout<W> {
+@@ -1832,6 +1894,10 @@ impl<W: LayoutElement> Layout<W> {
              f(move_.tile.window_mut(), Some(&move_.output));
          }
  
@@ -339,7 +339,7 @@ index 5480c431..8c79d078 100644
          match &mut self.monitor_set {
              MonitorSet::Normal { monitors, .. } => {
                  for mon in monitors {
-@@ -2502,6 +2568,10 @@ impl<W: LayoutElement> Layout<W> {
+@@ -2517,6 +2583,10 @@ impl<W: LayoutElement> Layout<W> {
  
          let zoom = self.overview_zoom();
  
@@ -350,7 +350,7 @@ index 5480c431..8c79d078 100644
          let mut move_win_id = None;
          if let Some(state) = &self.interactive_move {
              match state {
-@@ -3373,6 +3443,88 @@ impl<W: LayoutElement> Layout<W> {
+@@ -3388,6 +3458,88 @@ impl<W: LayoutElement> Layout<W> {
          workspace.move_floating_window(id, x, y, animate);
      }
  
@@ -439,7 +439,7 @@ index 5480c431..8c79d078 100644
      pub fn focus_output(&mut self, output: &Output) {
          if let MonitorSet::Normal {
              monitors,
-@@ -4950,6 +5102,12 @@ impl<W: LayoutElement> Layout<W> {
+@@ -4965,6 +5117,12 @@ impl<W: LayoutElement> Layout<W> {
  
          self.is_active = is_active;
  
@@ -453,7 +453,7 @@ index 5480c431..8c79d078 100644
  
          if let Some(InteractiveMoveState::Moving(move_)) = &mut self.interactive_move {
 diff --git a/src/layout/tests.rs b/src/layout/tests.rs
-index a2da4ce5..76df3d7d 100644
+index a2da4ce54d..76df3d7dec 100644
 --- a/src/layout/tests.rs
 +++ b/src/layout/tests.rs
 @@ -625,6 +625,14 @@ enum Op {
@@ -567,7 +567,7 @@ index a2da4ce5..76df3d7d 100644
  fn set_height_fixed_negative() {
      let ops = [
 diff --git a/src/layout/tile.rs b/src/layout/tile.rs
-index db8ce678..5b9860cf 100644
+index db8ce678a4..5b9860cf98 100644
 --- a/src/layout/tile.rs
 +++ b/src/layout/tile.rs
 @@ -62,6 +62,9 @@ pub struct Tile<W: LayoutElement> {

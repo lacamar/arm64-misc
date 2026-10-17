@@ -25,10 +25,10 @@ index 5fe1d29a21..c1935394fa 100644
      }
  
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index 5df3959a78..0744659400 100644
+index 8575a1afcf..231a914637 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
-@@ -4875,7 +4875,6 @@ impl<W: LayoutElement> Layout<W> {
+@@ -4901,7 +4901,6 @@ impl<W: LayoutElement> Layout<W> {
              win.set_bounds(output_size(&move_.output).to_i32_round());
  
              win.send_pending_configure();
@@ -37,10 +37,10 @@ index 5df3959a78..0744659400 100644
              ongoing_scrolling_dnd.get_or_insert(!move_.is_floating);
          } else if let Some(InteractiveMoveState::Starting { window_id, .. }) =
 diff --git a/src/layout/scrolling.rs b/src/layout/scrolling.rs
-index c7d94c548d..da261fca63 100644
+index ed85342e57..cea3160bc5 100644
 --- a/src/layout/scrolling.rs
 +++ b/src/layout/scrolling.rs
-@@ -3749,8 +3749,6 @@ impl<W: LayoutElement> ScrollingSpace<W> {
+@@ -3764,8 +3764,6 @@ impl<W: LayoutElement> ScrollingSpace<W> {
                  ) {
                      win.send_pending_configure();
                  }
@@ -50,10 +50,10 @@ index c7d94c548d..da261fca63 100644
          }
      }
 diff --git a/src/niri.rs b/src/niri.rs
-index fa44b5cbf4..3dbead5437 100644
+index c7baf9b453..5f57d1effd 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
-@@ -253,6 +253,9 @@ pub struct Niri {
+@@ -270,6 +270,9 @@ pub struct Niri {
      // Dmabuf readiness pre-commit hook for a surface.
      pub dmabuf_pre_commit_hook: HashMap<WlSurface, HookId>,
  
@@ -63,7 +63,7 @@ index fa44b5cbf4..3dbead5437 100644
      /// Clients to notify about their blockers being cleared.
      pub blocker_cleared_tx: Sender<Client>,
      pub blocker_cleared_rx: Receiver<Client>,
-@@ -2538,6 +2541,7 @@ impl Niri {
+@@ -2764,6 +2767,7 @@ impl Niri {
              mapped_layer_surfaces: HashMap::new(),
              root_surface: HashMap::new(),
              dmabuf_pre_commit_hook: HashMap::new(),
@@ -71,7 +71,7 @@ index fa44b5cbf4..3dbead5437 100644
              blocker_cleared_tx,
              blocker_cleared_rx,
              monitors_active: true,
-@@ -4022,6 +4026,10 @@ impl Niri {
+@@ -4280,6 +4284,10 @@ impl Niri {
          };
  
          self.layout.refresh(layout_is_active);

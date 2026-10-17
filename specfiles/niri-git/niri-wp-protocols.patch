@@ -1,5 +1,5 @@
 diff --git a/src/niri.rs b/src/niri.rs
-index f871a4c0..b93cedd2 100644
+index ba9ea9918f..031fb0f382 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -61,6 +61,7 @@ use smithay::reexports::calloop::{
@@ -34,17 +34,17 @@ index f871a4c0..b93cedd2 100644
  use smithay::wayland::fractional_scale::FractionalScaleManagerState;
  use smithay::wayland::idle_inhibit::IdleInhibitManagerState;
  use smithay::wayland::idle_notify::IdleNotifierState;
-@@ -160,8 +166,8 @@ use crate::protocols::foreign_toplevel::{self, ForeignToplevelManagerState};
+@@ -163,8 +169,8 @@ use crate::protocols::foreign_toplevel::{self, ForeignToplevelManagerState};
  use crate::protocols::gamma_control::GammaControlManagerState;
  use crate::protocols::mutter_x11_interop::MutterX11InteropManagerState;
  use crate::protocols::output_management::OutputManagementManagerState;
 -use crate::protocols::session_management::{self, SessionManagementState};
  use crate::protocols::screencopy::{Screencopy, ScreencopyBuffer, ScreencopyManagerState};
 +use crate::protocols::session_management::{self, SessionManagementState};
- use crate::protocols::virtual_pointer::VirtualPointerManagerState;
  use crate::render_helpers::blur::BlurOptions;
  use crate::render_helpers::debug::push_opaque_regions;
-@@ -384,6 +390,7 @@ pub struct Niri {
+ use crate::render_helpers::primary_gpu_texture::PrimaryGpuTextureRenderElement;
+@@ -412,6 +418,7 @@ pub struct Niri {
      pub pointer_contents: PointContents,
      pub pointer_visibility: PointerVisibility,
      pub pointer_inactivity_timer: Option<RegistrationToken>,
@@ -52,7 +52,7 @@ index f871a4c0..b93cedd2 100644
      /// Whether the pointer inactivity timer got reset this event loop iteration.
      ///
      /// Used for limiting the reset to once per iteration, so that it's not spammed with high
-@@ -915,6 +922,8 @@ impl State {
+@@ -946,6 +953,8 @@ impl State {
      fn refresh(&mut self) {
          let _span = tracy_client::span!("State::refresh");
  
@@ -61,7 +61,7 @@ index f871a4c0..b93cedd2 100644
          // Handle commits for surfaces whose blockers cleared this cycle. This should happen before
          // layout.refresh() since this is where these surfaces handle commits.
          self.notify_blocker_cleared();
-@@ -2605,6 +2614,11 @@ impl Niri {
+@@ -2713,6 +2722,11 @@ impl Niri {
              )
              .unwrap();
  
@@ -73,7 +73,7 @@ index f871a4c0..b93cedd2 100644
          let mutter_x11_interop_state =
              MutterX11InteropManagerState::new::<State, _>(&display_handle, move |_| true);
  
-@@ -2838,6 +2852,7 @@ impl Niri {
+@@ -2952,6 +2966,7 @@ impl Niri {
              pointer_contents: PointContents::default(),
              pointer_visibility: PointerVisibility::Visible,
              pointer_inactivity_timer: None,
@@ -81,7 +81,7 @@ index f871a4c0..b93cedd2 100644
              pointer_inactivity_timer_got_reset: false,
              notified_activity_this_iteration: false,
              pointer_inside_hot_corner: false,
-@@ -5007,7 +5022,20 @@ impl Niri {
+@@ -5127,7 +5142,20 @@ impl Niri {
          }
  
          let current = self.layout.windows_for_output(output).any(|mapped| {
@@ -103,7 +103,7 @@ index f871a4c0..b93cedd2 100644
                  let mut visible = false;
                  mapped.window.with_surfaces(|surface, states| {
                      if !visible
-@@ -5347,6 +5375,7 @@ impl Niri {
+@@ -5467,6 +5495,7 @@ impl Niri {
  
          let state = self.output_state.get(output).unwrap();
          let sequence = state.frame_callback_sequence;
@@ -111,7 +111,7 @@ index f871a4c0..b93cedd2 100644
  
          let should_send = |surface: &WlSurface, states: &SurfaceData| {
              // Do the standard primary scanout output check. For pointer surfaces it deduplicates
-@@ -5375,6 +5404,7 @@ impl Niri {
+@@ -5495,6 +5524,7 @@ impl Niri {
  
              if send {
                  *last_sent_at = Some((output.clone(), sequence));
@@ -119,7 +119,7 @@ index f871a4c0..b93cedd2 100644
                  Some(output.clone())
              } else {
                  None
-@@ -5450,24 +5480,19 @@ impl Niri {
+@@ -5574,24 +5604,19 @@ impl Niri {
          let output = &output;
  
          let frame_callback_time = get_monotonic_time();
@@ -151,7 +151,7 @@ index f871a4c0..b93cedd2 100644
              }
  
              if let Some(surface) = &state.lock_surface {
-@@ -5476,7 +5501,7 @@ impl Niri {
+@@ -5600,7 +5625,7 @@ impl Niri {
                      output,
                      frame_callback_time,
                      FRAME_CALLBACK_THROTTLE,
@@ -160,7 +160,7 @@ index f871a4c0..b93cedd2 100644
                  );
              }
          }
-@@ -5487,7 +5512,7 @@ impl Niri {
+@@ -5611,7 +5636,7 @@ impl Niri {
                  output,
                  frame_callback_time,
                  FRAME_CALLBACK_THROTTLE,
@@ -169,7 +169,7 @@ index f871a4c0..b93cedd2 100644
              );
          }
  
-@@ -5497,11 +5522,54 @@ impl Niri {
+@@ -5621,11 +5646,54 @@ impl Niri {
                  output,
                  frame_callback_time,
                  FRAME_CALLBACK_THROTTLE,
@@ -225,7 +225,7 @@ index f871a4c0..b93cedd2 100644
      pub fn take_presentation_feedbacks(
          &mut self,
          output: &Output,
-@@ -7311,3 +7379,18 @@ niri_render_elements! {
+@@ -7438,3 +7506,18 @@ niri_render_elements! {
          RelocatedMemoryBuffer = RelocateRenderElement<MemoryRenderBufferRenderElement<R>>,
      }
  }

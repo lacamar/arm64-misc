@@ -1,8 +1,8 @@
 diff --git a/src/niri.rs b/src/niri.rs
-index fa44b5cbf4..76d830bb71 100644
+index 449d2b0f1c..c7baf9b453 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
-@@ -2932,9 +2932,20 @@ impl Niri {
+@@ -3174,9 +3174,20 @@ impl Niri {
      }
  
      pub fn remove_output(&mut self, output: &Output) {
@@ -25,10 +25,10 @@ index fa44b5cbf4..76d830bb71 100644
          self.layout.remove_output(output);
          self.global_space.unmap_output(output);
 diff --git a/src/tests/client.rs b/src/tests/client.rs
-index 7776b6a204..e317bd7f05 100644
+index e6203cf3a6..18666a4f10 100644
 --- a/src/tests/client.rs
 +++ b/src/tests/client.rs
-@@ -392,6 +392,12 @@ impl Window {
+@@ -503,6 +503,12 @@ impl Window {
  }
  
  impl LayerSurface {

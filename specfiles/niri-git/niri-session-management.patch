@@ -1,6 +1,6 @@
 diff --git a/resources/xdg-session-management-v1.xml b/resources/xdg-session-management-v1.xml
 new file mode 100644
-index 0000000..9cfe5f8
+index 0000000000..9cfe5f8792
 --- /dev/null
 +++ b/resources/xdg-session-management-v1.xml
 @@ -0,0 +1,333 @@
@@ -339,7 +339,7 @@ index 0000000..9cfe5f8
 +</protocol>
 diff --git a/resources/xx-session-management-v1.xml b/resources/xx-session-management-v1.xml
 new file mode 100644
-index 0000000..42458d9
+index 0000000000..42458d9291
 --- /dev/null
 +++ b/resources/xx-session-management-v1.xml
 @@ -0,0 +1,264 @@
@@ -608,7 +608,7 @@ index 0000000..42458d9
 +  </interface>
 +</protocol>
 diff --git a/src/handlers/compositor.rs b/src/handlers/compositor.rs
-index 53f2912..a136ce9 100644
+index 53f2912f6f..a136ce9b13 100644
 --- a/src/handlers/compositor.rs
 +++ b/src/handlers/compositor.rs
 @@ -21,6 +21,7 @@ use super::xdg_shell::add_mapped_toplevel_pre_commit_hook;
@@ -665,7 +665,7 @@ index 53f2912..a136ce9 100644
                          AddWindowTarget::Output(output)
                      } else {
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index 8c79d07..cd7b542 100644
+index 7d8cd1ba5e..4ca4f210be 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
 @@ -529,8 +529,8 @@ pub enum AddWindowTarget<'a, W: LayoutElement> {
@@ -714,7 +714,7 @@ index 8c79d07..cd7b542 100644
                          (ws_idx, WorkspaceAddWindowTarget::Auto)
                      }
 diff --git a/src/layout/tests.rs b/src/layout/tests.rs
-index 76df3d7..5a9726d 100644
+index 76df3d7dec..5a9726dba7 100644
 --- a/src/layout/tests.rs
 +++ b/src/layout/tests.rs
 @@ -1069,7 +1069,7 @@ impl Op {
@@ -727,18 +727,18 @@ index 76df3d7..5a9726d 100644
                      None,
                      false,
 diff --git a/src/niri.rs b/src/niri.rs
-index 6f528d2..cbfdd33 100644
+index d89744806d..885bc99e02 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
-@@ -158,6 +158,7 @@ use crate::protocols::foreign_toplevel::{self, ForeignToplevelManagerState};
+@@ -161,6 +161,7 @@ use crate::protocols::foreign_toplevel::{self, ForeignToplevelManagerState};
  use crate::protocols::gamma_control::GammaControlManagerState;
  use crate::protocols::mutter_x11_interop::MutterX11InteropManagerState;
  use crate::protocols::output_management::OutputManagementManagerState;
 +use crate::protocols::session_management::{self, SessionManagementState};
  use crate::protocols::screencopy::{Screencopy, ScreencopyBuffer, ScreencopyManagerState};
- use crate::protocols::virtual_pointer::VirtualPointerManagerState;
  use crate::render_helpers::blur::BlurOptions;
-@@ -333,6 +334,7 @@ pub struct Niri {
+ use crate::render_helpers::debug::push_opaque_regions;
+@@ -346,6 +347,7 @@ pub struct Niri {
      pub gamma_control_manager_state: GammaControlManagerState,
      pub activation_state: XdgActivationState,
      pub mutter_x11_interop_state: MutterX11InteropManagerState,
@@ -746,7 +746,7 @@ index 6f528d2..cbfdd33 100644
  
      // This will not work as is outside of tests, so it is gated with #[cfg(test)] for now. In
      // particular, shaders will need to learn about the single pixel buffer. Also, it must be
-@@ -2603,6 +2605,17 @@ impl Niri {
+@@ -2711,6 +2713,17 @@ impl Niri {
          let mutter_x11_interop_state =
              MutterX11InteropManagerState::new::<State, _>(&display_handle, move |_| true);
  
@@ -764,7 +764,7 @@ index 6f528d2..cbfdd33 100644
          #[cfg(test)]
          let single_pixel_buffer_state = SinglePixelBufferState::new::<State>(&display_handle);
  
-@@ -2803,6 +2816,7 @@ impl Niri {
+@@ -2915,6 +2928,7 @@ impl Niri {
              gamma_control_manager_state,
              activation_state,
              mutter_x11_interop_state,
@@ -773,7 +773,7 @@ index 6f528d2..cbfdd33 100644
              single_pixel_buffer_state,
  
 diff --git a/src/protocols/mod.rs b/src/protocols/mod.rs
-index 9a6b25a..80fa017 100644
+index 9ec4c76083..319becbbe7 100644
 --- a/src/protocols/mod.rs
 +++ b/src/protocols/mod.rs
 @@ -4,6 +4,7 @@ pub mod gamma_control;
@@ -781,11 +781,11 @@ index 9a6b25a..80fa017 100644
  pub mod output_management;
  pub mod screencopy;
 +pub mod session_management;
- pub mod virtual_pointer;
  
  pub mod raw;
+ 
 diff --git a/src/protocols/raw.rs b/src/protocols/raw.rs
-index fac1e4d..18b1479 100644
+index fac1e4dfe0..18b1479c3e 100644
 --- a/src/protocols/raw.rs
 +++ b/src/protocols/raw.rs
 @@ -23,3 +23,63 @@ pub mod mutter_x11_interop {
@@ -854,7 +854,7 @@ index fac1e4d..18b1479 100644
 +}
 diff --git a/src/protocols/session_management.rs b/src/protocols/session_management.rs
 new file mode 100644
-index 0000000..22ee957
+index 0000000000..22ee957df3
 --- /dev/null
 +++ b/src/protocols/session_management.rs
 @@ -0,0 +1,746 @@
@@ -1605,7 +1605,7 @@ index 0000000..22ee957
 +    }
 +}
 diff --git a/src/window/mod.rs b/src/window/mod.rs
-index 7fc4826..b448a3f 100644
+index 7fc4826081..b448a3fed3 100644
 --- a/src/window/mod.rs
 +++ b/src/window/mod.rs
 @@ -14,6 +14,7 @@ use smithay::wayland::shell::xdg::{

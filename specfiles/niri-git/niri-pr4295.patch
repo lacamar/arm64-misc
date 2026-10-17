@@ -1,8 +1,8 @@
 diff --git a/src/layout/workspace.rs b/src/layout/workspace.rs
-index 7448779722..3498169380 100644
+index 4da404de62..a6d66b9b71 100644
 --- a/src/layout/workspace.rs
 +++ b/src/layout/workspace.rs
-@@ -2063,7 +2063,33 @@ impl<W: LayoutElement> Workspace<W> {
+@@ -2105,7 +2105,33 @@ impl<W: LayoutElement> Workspace<W> {
  }
  
  pub(super) fn compute_working_area(output: &Output) -> Rectangle<f64, Logical> {

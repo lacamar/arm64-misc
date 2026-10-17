@@ -1,6 +1,8 @@
+diff --git a/src/backend/tty.rs b/src/backend/tty.rs
+index 88768904be..08502e45e9 100644
 --- a/src/backend/tty.rs
 +++ b/src/backend/tty.rs
-@@ -2766,7 +2766,13 @@
+@@ -2770,7 +2770,13 @@ impl GammaProps {
              } else {
                  /// Transforms a u16 gamma value into a S31.32 value for the CTM matrix.
                  fn from_u16_to_s31_32(value: u16) -> u64 {

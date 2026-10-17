@@ -26,13 +26,13 @@
 
 %global bumpver 9
 %global tag 26.04
-%global commit 2c82b77a7116a1241ea2fd41dd008ff00b609aae
+%global commit 45739bc072f9875a674d335ae724f10d3b35c665
 %global shortcommit %{sub %{commit} 1 8}
-%global smithay_commit 19c16d3e34172fcc8fb3d293bcae563b0a19ea70
+%global smithay_commit 8a270232f1bfc416c781273c98a3f52a812a0bba
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        18%{?dist}
+Release:        19%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -185,6 +185,11 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^9.git.45739bc0-19
+- Update to 45739bc0
+- Update Smithay to 8a270232
+- Rebase patches
+
 * Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^9.git.2c82b77a-18
 - Resend preferred description on output change
 

@@ -1,8 +1,8 @@
 diff --git a/src/handlers/mod.rs b/src/handlers/mod.rs
-index b3b9f5fc..3573eaf5 100644
+index 2186450067..04f76a819c 100644
 --- a/src/handlers/mod.rs
 +++ b/src/handlers/mod.rs
-@@ -25,6 +25,7 @@ use smithay::reexports::rustix::fs::{fcntl_setfl, OFlags};
+@@ -26,6 +26,7 @@ use smithay::reexports::rustix::fs::{fcntl_setfl, OFlags};
  use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::XdgToplevel;
  use smithay::reexports::wayland_protocols_wlr::screencopy::v1::server::zwlr_screencopy_manager_v1::ZwlrScreencopyManagerV1;
  use smithay::reexports::wayland_server::protocol::wl_output::WlOutput;
@@ -10,7 +10,7 @@ index b3b9f5fc..3573eaf5 100644
  use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
  use smithay::reexports::wayland_server::Resource;
  use smithay::utils::{Logical, Point, Rectangle, Serial};
-@@ -43,8 +44,9 @@ use smithay::wayland::keyboard_shortcuts_inhibit::{
+@@ -44,8 +45,9 @@ use smithay::wayland::keyboard_shortcuts_inhibit::{
  };
  use smithay::wayland::output::OutputHandler;
  use smithay::wayland::pointer_constraints::{
@@ -21,10 +21,10 @@ index b3b9f5fc..3573eaf5 100644
  use smithay::wayland::security_context::{
      SecurityContext, SecurityContextHandler, SecurityContextListenerSource,
  };
-@@ -87,7 +89,9 @@ use crate::protocols::virtual_pointer::{
-     VirtualPointerInputBackend, VirtualPointerManagerState, VirtualPointerMotionAbsoluteEvent,
-     VirtualPointerMotionEvent,
- };
+@@ -85,7 +87,9 @@ use crate::protocols::gamma_control::{GammaControlHandler, GammaControlManagerSt
+ use crate::protocols::mutter_x11_interop::MutterX11InteropHandler;
+ use crate::protocols::output_management::{OutputManagementHandler, OutputManagementManagerState};
+ use crate::protocols::screencopy::{Screencopy, ScreencopyHandler, ScreencopyManagerState};
 -use crate::utils::{output_size, send_scale_transform};
 +use crate::utils::{
 +    get_surface_size, get_surface_toplevel_coords, output_size, send_scale_transform,
@@ -32,7 +32,7 @@ index b3b9f5fc..3573eaf5 100644
  
  pub const XDG_ACTIVATION_TOKEN_TIMEOUT: Duration = Duration::from_secs(10);
  
-@@ -238,6 +242,99 @@ impl PointerConstraintsHandler for State {
+@@ -236,6 +240,99 @@ impl PointerConstraintsHandler for State {
      }
  }
  
@@ -133,7 +133,7 @@ index b3b9f5fc..3573eaf5 100644
      fn new_popup(&mut self, surface: PopupSurface) {
          let popup = PopupKind::InputMethod(surface);
 diff --git a/src/layout/floating.rs b/src/layout/floating.rs
-index c1935394..c7198338 100644
+index c1935394fa..c7198338ba 100644
 --- a/src/layout/floating.rs
 +++ b/src/layout/floating.rs
 @@ -372,6 +372,22 @@ impl<W: LayoutElement> FloatingSpace<W> {
@@ -160,7 +160,7 @@ index c1935394..c7198338 100644
          for (tile, pos) in self.tiles_with_offsets() {
              if tile.window().id() == id {
 diff --git a/src/layout/monitor.rs b/src/layout/monitor.rs
-index 761d226b..53c39e32 100644
+index 761d226b28..53c39e3216 100644
 --- a/src/layout/monitor.rs
 +++ b/src/layout/monitor.rs
 @@ -1354,6 +1354,19 @@ impl<W: LayoutElement> Monitor<W> {
@@ -184,7 +184,7 @@ index 761d226b..53c39e32 100644
          let ws_size = self.view_size.upscale(zoom);
          let scale = self.scale.fractional_scale();
 diff --git a/src/layout/scrolling.rs b/src/layout/scrolling.rs
-index da261fca..0d3759c6 100644
+index cea3160bc5..be24ab39b9 100644
 --- a/src/layout/scrolling.rs
 +++ b/src/layout/scrolling.rs
 @@ -2604,6 +2604,29 @@ impl<W: LayoutElement> ScrollingSpace<W> {
@@ -214,11 +214,11 @@ index da261fca..0d3759c6 100644
 +        None
 +    }
 +
-     pub fn popup_target_rect(&self, id: &W::Id) -> Option<Rectangle<f64, Logical>> {
-         for col in &self.columns {
-             for (tile, pos) in col.tiles() {
+     pub fn popup_target_rect(&self, id: &W::Id, overflow: bool) -> Option<Rectangle<f64, Logical>> {
+         let view_pos = self.target_view_pos();
+         let col_xs = self.column_xs(self.data.iter().copied());
 diff --git a/src/layout/workspace.rs b/src/layout/workspace.rs
-index a7cab024..62dd4a00 100644
+index a6d66b9b71..487eedfbd0 100644
 --- a/src/layout/workspace.rs
 +++ b/src/layout/workspace.rs
 @@ -1647,6 +1647,14 @@ impl<W: LayoutElement> Workspace<W> {
@@ -233,11 +233,11 @@ index a7cab024..62dd4a00 100644
 +        }
 +    }
 +
-     pub fn popup_target_rect(&self, window: &W::Id) -> Option<Rectangle<f64, Logical>> {
-         if self.floating.has_window(window) {
-             self.floating.popup_target_rect(window)
+     pub fn popup_target_rect(
+         &self,
+         window: &W::Id,
 diff --git a/src/niri.rs b/src/niri.rs
-index 0488eae6..45baa2bc 100644
+index c0c496056c..c94e7cf460 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -102,6 +102,7 @@ use smithay::wayland::keyboard_shortcuts_inhibit::{
@@ -248,7 +248,7 @@ index 0488eae6..45baa2bc 100644
  use smithay::wayland::presentation::PresentationState;
  use smithay::wayland::relative_pointer::RelativePointerManagerState;
  use smithay::wayland::security_context::SecurityContextState;
-@@ -331,6 +332,7 @@ pub struct Niri {
+@@ -344,6 +345,7 @@ pub struct Niri {
      pub pointer_gestures_state: PointerGesturesState,
      pub relative_pointer_state: RelativePointerManagerState,
      pub pointer_constraints_state: PointerConstraintsState,
@@ -256,7 +256,7 @@ index 0488eae6..45baa2bc 100644
      pub idle_notifier_state: IdleNotifierState<State>,
      pub idle_inhibit_manager_state: IdleInhibitManagerState,
      pub data_device_state: DataDeviceState,
-@@ -2542,6 +2544,7 @@ impl Niri {
+@@ -2650,6 +2652,7 @@ impl Niri {
          let pointer_gestures_state = PointerGesturesState::new::<State>(&display_handle);
          let relative_pointer_state = RelativePointerManagerState::new::<State>(&display_handle);
          let pointer_constraints_state = PointerConstraintsState::new::<State>(&display_handle);
@@ -264,7 +264,7 @@ index 0488eae6..45baa2bc 100644
          let idle_notifier_state = IdleNotifierState::new(&display_handle, event_loop.clone());
          let idle_inhibit_manager_state = IdleInhibitManagerState::new::<State>(&display_handle);
          let data_device_state = DataDeviceState::new::<State>(&display_handle);
-@@ -2820,6 +2823,7 @@ impl Niri {
+@@ -2932,6 +2935,7 @@ impl Niri {
              pointer_gestures_state,
              relative_pointer_state,
              pointer_constraints_state,
@@ -273,7 +273,7 @@ index 0488eae6..45baa2bc 100644
              idle_inhibit_manager_state,
              data_device_state,
 diff --git a/src/utils/mod.rs b/src/utils/mod.rs
-index 6f3684cd..f337f9d0 100644
+index 6f3684cd4c..f337f9d08b 100644
 --- a/src/utils/mod.rs
 +++ b/src/utils/mod.rs
 @@ -26,7 +26,9 @@ use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;

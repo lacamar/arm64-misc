@@ -1,5 +1,5 @@
 diff --git a/niri-config/src/layout.rs b/niri-config/src/layout.rs
-index f84528b..512e347 100644
+index f84528bd33..512e347546 100644
 --- a/niri-config/src/layout.rs
 +++ b/niri-config/src/layout.rs
 @@ -24,6 +24,7 @@ pub struct Layout {
@@ -50,7 +50,7 @@ index f84528b..512e347 100644
  
  #[derive(knuffel::Decode, Debug, Clone, Copy, PartialEq)]
 diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
-index 544dca1..d0dc4f9 100644
+index 544dca17ba..d0dc4f9104 100644
 --- a/niri-config/src/lib.rs
 +++ b/niri-config/src/lib.rs
 @@ -1507,6 +1507,15 @@ mod tests {
@@ -70,7 +70,7 @@ index 544dca1..d0dc4f9 100644
              prefer_no_csd: true,
              cursor: Cursor {
 diff --git a/src/layout/floating.rs b/src/layout/floating.rs
-index c719833..7cf6b47 100644
+index c7198338ba..7cf6b47267 100644
 --- a/src/layout/floating.rs
 +++ b/src/layout/floating.rs
 @@ -3,8 +3,9 @@ use std::iter::zip;
@@ -177,10 +177,10 @@ index c719833..7cf6b47 100644
      }
  
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index cd7b542..afbc952 100644
+index 4ca4f210be..799b670503 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
-@@ -3461,6 +3461,12 @@ impl<W: LayoutElement> Layout<W> {
+@@ -3476,6 +3476,12 @@ impl<W: LayoutElement> Layout<W> {
          self.scratchpad_idx(window).is_some()
      }
  
@@ -193,7 +193,7 @@ index cd7b542..afbc952 100644
      pub fn move_window_to_scratchpad(&mut self, window: Option<&W::Id>) {
          let Some(id) = window.or_else(|| self.focus().map(|win| win.id())).cloned() else {
              return;
-@@ -3468,8 +3474,10 @@ impl<W: LayoutElement> Layout<W> {
+@@ -3483,8 +3489,10 @@ impl<W: LayoutElement> Layout<W> {
          if self.is_in_scratchpad(&id) {
              return;
          }
@@ -204,7 +204,7 @@ index cd7b542..afbc952 100644
              self.scratchpad.push(removed);
          }
      }
-@@ -3515,12 +3523,45 @@ impl<W: LayoutElement> Layout<W> {
+@@ -3530,12 +3538,45 @@ impl<W: LayoutElement> Layout<W> {
              }
          };
  
@@ -252,7 +252,7 @@ index cd7b542..afbc952 100644
              removed.tile,
              MonitorAddWindowTarget::Auto,
              ActivateWindow::Yes,
-@@ -5110,6 +5151,18 @@ impl<W: LayoutElement> Layout<W> {
+@@ -5125,6 +5166,18 @@ impl<W: LayoutElement> Layout<W> {
  
          self.is_active = is_active;
  
@@ -272,7 +272,7 @@ index cd7b542..afbc952 100644
              let win = removed.tile.window_mut();
              win.set_activated(false);
 diff --git a/src/layout/tests.rs b/src/layout/tests.rs
-index 5a9726d..50a6765 100644
+index 5a9726dba7..50a6765f50 100644
 --- a/src/layout/tests.rs
 +++ b/src/layout/tests.rs
 @@ -3233,6 +3233,43 @@ fn scratchpad_toggle() {
@@ -320,7 +320,7 @@ index 5a9726d..50a6765 100644
  fn set_height_fixed_negative() {
      let ops = [
 diff --git a/src/layout/tile.rs b/src/layout/tile.rs
-index 5b9860c..1979f21 100644
+index 5b9860cf98..1979f21f1a 100644
 --- a/src/layout/tile.rs
 +++ b/src/layout/tile.rs
 @@ -65,6 +65,9 @@ pub struct Tile<W: LayoutElement> {
@@ -342,10 +342,10 @@ index 5b9860c..1979f21 100644
              floating_pos: None,
              floating_preset_width_idx: None,
 diff --git a/src/layout/workspace.rs b/src/layout/workspace.rs
-index 62dd4a0..ee447d0 100644
+index 487eedfbd0..2cc4dde3e0 100644
 --- a/src/layout/workspace.rs
 +++ b/src/layout/workspace.rs
-@@ -1800,18 +1800,30 @@ impl<W: LayoutElement> Workspace<W> {
+@@ -1804,18 +1804,30 @@ impl<W: LayoutElement> Workspace<W> {
      pub fn window_under(&self, pos: Point<f64, Logical>) -> Option<(&W, HitType)> {
          // This logic is consistent with tiles_with_render_positions().
          if self.is_floating_visible() {

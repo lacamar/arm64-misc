@@ -1,5 +1,5 @@
 diff --git a/docs/wiki/Configuration:-Miscellaneous.md b/docs/wiki/Configuration:-Miscellaneous.md
-index 7a2f42d..7a3c66c 100644
+index 7a2f42dd26..7a3c66c020 100644
 --- a/docs/wiki/Configuration:-Miscellaneous.md
 +++ b/docs/wiki/Configuration:-Miscellaneous.md
 @@ -135,6 +135,16 @@ You can also set this option to `null` to disable saving screenshots to disk.
@@ -20,7 +20,7 @@ index 7a2f42d..7a3c66c 100644
  
  Override environment variables for processes spawned by niri.
 diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
-index e7ffd5e..9dab41c 100644
+index b5a6de53d1..f83100545b 100644
 --- a/niri-config/src/lib.rs
 +++ b/niri-config/src/lib.rs
 @@ -76,6 +76,7 @@ pub struct Config {
@@ -52,7 +52,7 @@ index e7ffd5e..9dab41c 100644
              clipboard {
                  disable-primary
              }
-@@ -1534,6 +1542,9 @@ mod tests {
+@@ -1535,6 +1543,9 @@ mod tests {
                      "~/Screenshots/screenshot.png",
                  ),
              ),
@@ -63,7 +63,7 @@ index e7ffd5e..9dab41c 100644
                  disable_primary: true,
              },
 diff --git a/niri-config/src/misc.rs b/niri-config/src/misc.rs
-index 66a200c..35f93f9 100644
+index 66a200ca35..35f93f94b3 100644
 --- a/niri-config/src/misc.rs
 +++ b/niri-config/src/misc.rs
 @@ -64,6 +64,9 @@ impl Default for ScreenshotPath {
@@ -77,10 +77,10 @@ index 66a200c..35f93f9 100644
  pub struct HotkeyOverlay {
      pub skip_at_startup: bool,
 diff --git a/src/niri.rs b/src/niri.rs
-index a37e790..6c372c6 100644
+index f4ff4f6e60..790015f4f1 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
-@@ -520,6 +520,7 @@ pub struct OutputState {
+@@ -549,6 +549,7 @@ pub struct OutputState {
      ///    would occur, based on the last presentation time and output refresh interval. Sequence
      ///    is incremented in that timer, before attempting a redraw or sending frame callbacks.
      pub frame_callback_sequence: u32,
@@ -88,7 +88,7 @@ index a37e790..6c372c6 100644
      /// Solid color buffer for the backdrop that we use instead of clearing to avoid damage
      /// tracking issues and make screenshots easier.
      pub backdrop_buffer: SolidColorBuffer,
-@@ -3164,6 +3165,7 @@ impl Niri {
+@@ -3279,6 +3280,7 @@ impl Niri {
              last_drm_sequence: None,
              vblank_throttle: VBlankThrottle::new(self.event_loop.clone(), name.connector.clone()),
              frame_callback_sequence: 0,
@@ -96,7 +96,7 @@ index a37e790..6c372c6 100644
              backdrop_buffer: SolidColorBuffer::new(size, backdrop_color),
              xray: Xray::new(),
              lock_render_state,
-@@ -5423,7 +5425,21 @@ impl Niri {
+@@ -5543,7 +5545,21 @@ impl Niri {
  
          let frame_callback_time = get_monotonic_time();
  
@@ -118,7 +118,7 @@ index a37e790..6c372c6 100644
              setup_force_render(&mut self.event_loop, mapped);
              mapped.send_frame(
                  output,
-@@ -5471,6 +5487,23 @@ impl Niri {
+@@ -5591,6 +5607,23 @@ impl Niri {
                  should_send,
              );
          }
@@ -143,7 +143,7 @@ index a37e790..6c372c6 100644
  
      pub fn send_frame_callbacks_on_fallback_timer(&mut self) {
 diff --git a/src/window/mapped.rs b/src/window/mapped.rs
-index da2d114..a12e9e4 100644
+index da2d114cd0..a12e9e4ea5 100644
 --- a/src/window/mapped.rs
 +++ b/src/window/mapped.rs
 @@ -80,6 +80,8 @@ pub struct Mapped {

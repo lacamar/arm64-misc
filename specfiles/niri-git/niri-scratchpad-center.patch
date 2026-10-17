@@ -1,8 +1,8 @@
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index 419fc6a..687745c 100644
+index b127c51ef2..be7221eb23 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
-@@ -3561,6 +3561,16 @@ impl<W: LayoutElement> Layout<W> {
+@@ -3576,6 +3576,16 @@ impl<W: LayoutElement> Layout<W> {
              )));
          }
  
@@ -20,7 +20,7 @@ index 419fc6a..687745c 100644
              removed.tile,
              MonitorAddWindowTarget::Auto,
 diff --git a/src/layout/tests.rs b/src/layout/tests.rs
-index 0d9d050..a861a8f 100644
+index 0d9d05057e..a861a8f9b8 100644
 --- a/src/layout/tests.rs
 +++ b/src/layout/tests.rs
 @@ -3301,6 +3301,32 @@ fn scratchpad_scales_to_output() {

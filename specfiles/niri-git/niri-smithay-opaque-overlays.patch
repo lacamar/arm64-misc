@@ -1,5 +1,5 @@
 diff --git a/smithay/src/backend/drm/compositor/mod.rs b/smithay/src/backend/drm/compositor/mod.rs
-index e0f4da20..04a86c69 100644
+index e0f4da20b3..04a86c69d4 100644
 --- a/smithay/src/backend/drm/compositor/mod.rs
 +++ b/smithay/src/backend/drm/compositor/mod.rs
 @@ -1076,6 +1076,7 @@ where
