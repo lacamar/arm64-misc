@@ -1,4 +1,4 @@
-%global tag 0.18.5.2
+%global tag 0.18.5.4
 
 Name: monero-gui
 Version: %{tag}
@@ -13,10 +13,9 @@ Patch0: net_ssl-openssl-const.patch
 
 %{lua:
 local externals = {
-  { name="monero",        ref="4f92268", owner="monero-project", path="", version="0.18.5.1", license="BSD-3-Clause" },
+  { name="monero",        ref="85f036b", owner="monero-project", path="", version="0.18.5.4", license="BSD-3-Clause" },
   { name="quirc",         ref="927d680", owner="dlbeer", path="../external/quirc", license="ISC License" },
-  { name="miniupnp",      ref="544e6fc", owner="miniupnp", path="external/miniupnp", version="2.2.1", license="BSD-3-Clause" },
-  { name="RandomX",       ref="6c4340b", owner="tevador", path="external/randomx", version="1.2.2", license="BSD-3-Clause" },
+  { name="RandomX",       ref="12f2c2f", owner="tevador", path="external/randomx", version="1.2.3", license="BSD-3-Clause" },
   { name="rapidjson",     ref="129d19b", owner="Tencent", path="external/rapidjson", version="1.1.0", license="MIT" },
   { name="supercop",      ref="633500a", owner="monero-project", path="external/supercop" },
   { name="trezor-common", ref="bff7fdf", owner="trezor", path="external/trezor-common", license="LGPLv3" },
@@ -89,7 +88,8 @@ cmake -B %{__cmake_builddir} \
   -Wno-dev \
   -D CMAKE_POLICY_DEFAULT_CMP0077=NEW \
   -D CMAKE_POLICY_DEFAULT_CMP0148=OLD \
-  -D CMAKE_POLICY_DEFAULT_CMP0167=NEW
+  -D CMAKE_POLICY_DEFAULT_CMP0167=NEW \
+  -D SKIP_OPTIONAL_MONERO_BINARIES=OFF
 %cmake_build
 
 
@@ -114,19 +114,26 @@ install -Dpm0644 -t %{buildroot}%{_datadir}/applications share/org.getmonero.Mon
 
 
 %changelog
+* Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.5.4-1
+- Update to 0.18.5.4
+- Bump bundled monero, RandomX
+- Drop bundled miniupnp
+- Rebase openssl patch
+- Build optional monero binaries
+
 * Fri Jul 17 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.5.2-1
- - Update to 0.18.5.2
+- Update to 0.18.5.2
 
 * Thu Jul 09 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.5.1-1
- - Update to 0.18.5.1
+- Update to 0.18.5.1
 
- - Added a patch to fix a build error related to OpenSSL
+- Added a patch to fix a build error related to OpenSSL
 
 * Mon Jun 22 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.5.0-1
- - Update to 0.18.5.0
+- Update to 0.18.5.0
 
 * Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.4.6-1
- - Update to 0.18.4.7
+- Update to 0.18.4.7
 
 * Wed Nov 19 2025 Lachlan Marie <lchlnm@pm.me> - 0.18.4.4-1
 - Increased version to 0.18.4.4.
