@@ -3,11 +3,10 @@
 %global __provides_exclude_from ^%{_libexecdir}/%{name}/.*$
 
 %global flutter_version 3.41.9
-%global rust_toolchain 1.97.1
 
 Name:       localsend
-Version:    1.18.1
-Release:    2%{?dist}
+Version:    1.18.2
+Release:    1%{?dist}
 Summary:    An open source cross-platform alternative to AirDrop
 
 License:    Apache-2.0
@@ -33,8 +32,8 @@ BuildRequires:  patchelf
 BuildRequires:  gtk3-devel
 BuildRequires:  libayatana-appindicator-gtk3-devel
 BuildRequires:  xdg-user-dirs
-BuildRequires:  cargo = %{rust_toolchain}
-BuildRequires:  rust = %{rust_toolchain}
+BuildRequires:  cargo
+BuildRequires:  rust
 BuildRequires:  mesa-libGL-devel
 BuildRequires:  systemd-rpm-macros
 
@@ -118,6 +117,10 @@ install -Dpm0644 app/assets/img/logo-512.png \
 %{_datadir}/icons/hicolor/512x512/apps/localsend.png
 
 %changelog
+* Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 1.18.2-1
+- Update to 1.18.2
+- Drop exact rust version pin
+
 * Fri Aug 21 2026 Lachlan Marie <lchlnm@pm.me> - 1.18.1-2
 - Fix the desktop icon not showing in the window titlebar: the compiled
   binary advertises GTK application-id "org.localsend.localsend_app"
