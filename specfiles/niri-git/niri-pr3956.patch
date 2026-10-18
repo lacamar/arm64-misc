@@ -1,5 +1,5 @@
 diff --git a/src/backend/tty.rs b/src/backend/tty.rs
-index 08502e45e9..094f6fa222 100644
+index 8876890..8572718 100644
 --- a/src/backend/tty.rs
 +++ b/src/backend/tty.rs
 @@ -886,6 +886,10 @@ impl Tty {
@@ -23,7 +23,7 @@ index 08502e45e9..094f6fa222 100644
                          .disable_global::<State>(&niri.display_handle, &global);
                      niri.event_loop
 diff --git a/src/handlers/compositor.rs b/src/handlers/compositor.rs
-index a136ce9b13..88158cdc1a 100644
+index a136ce9..88158cd 100644
 --- a/src/handlers/compositor.rs
 +++ b/src/handlers/compositor.rs
 @@ -3,20 +3,19 @@ use std::collections::hash_map::Entry;
@@ -81,7 +81,7 @@ index a136ce9b13..88158cdc1a 100644
          let s = surface.clone();
 diff --git a/src/handlers/dmabuf_readiness.rs b/src/handlers/dmabuf_readiness.rs
 new file mode 100644
-index 0000000000..f5512f6c52
+index 0000000..f5512f6
 --- /dev/null
 +++ b/src/handlers/dmabuf_readiness.rs
 @@ -0,0 +1,103 @@
@@ -189,7 +189,7 @@ index 0000000000..f5512f6c52
 +    true
 +}
 diff --git a/src/handlers/mod.rs b/src/handlers/mod.rs
-index 8ad784edcc..2ec8a86c86 100644
+index 8ad784e..2ec8a86 100644
 --- a/src/handlers/mod.rs
 +++ b/src/handlers/mod.rs
 @@ -1,5 +1,6 @@
@@ -221,7 +221,7 @@ index 8ad784edcc..2ec8a86c86 100644
      fn lock_state(&mut self) -> &mut SessionLockManagerState {
          &mut self.niri.session_lock_state
 diff --git a/src/handlers/xdg_shell.rs b/src/handlers/xdg_shell.rs
-index 6477d65a6b..68e22ad6de 100644
+index 6477d65..68e22ad 100644
 --- a/src/handlers/xdg_shell.rs
 +++ b/src/handlers/xdg_shell.rs
 @@ -1,6 +1,5 @@
@@ -324,7 +324,7 @@ index 6477d65a6b..68e22ad6de 100644
          let window = mapped.window.clone();
          if got_unmapped {
 diff --git a/src/niri.rs b/src/niri.rs
-index 885bc99e02..ba9ea9918f 100644
+index 4c57767..3591e00 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -20,6 +20,7 @@ use niri_config::{
@@ -351,7 +351,7 @@ index 885bc99e02..ba9ea9918f 100644
      pub fractional_scale_manager_state: FractionalScaleManagerState,
      pub seat_state: SeatState<State>,
      pub tablet_state: TabletManagerState,
-@@ -2905,6 +2908,7 @@ impl Niri {
+@@ -2903,6 +2906,7 @@ impl Niri {
              shm_state,
              output_manager_state,
              dmabuf_state,
@@ -359,7 +359,7 @@ index 885bc99e02..ba9ea9918f 100644
              fractional_scale_manager_state,
              seat_state,
              tablet_state,
-@@ -5326,6 +5330,48 @@ impl Niri {
+@@ -5324,6 +5328,48 @@ impl Niri {
          }
      }
  

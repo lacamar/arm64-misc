@@ -1,5 +1,5 @@
 diff --git a/src/handlers/compositor.rs b/src/handlers/compositor.rs
-index aba1509e27..53f2912f6f 100644
+index aba1509..53f2912 100644
 --- a/src/handlers/compositor.rs
 +++ b/src/handlers/compositor.rs
 @@ -61,6 +61,8 @@ impl CompositorHandler for State {
@@ -12,7 +12,7 @@ index aba1509e27..53f2912f6f 100644
          while let Some(parent) = get_parent(&root_surface) {
              root_surface = parent;
 diff --git a/src/layout/floating.rs b/src/layout/floating.rs
-index 5fe1d29a21..c1935394fa 100644
+index 5fe1d29..c193539 100644
 --- a/src/layout/floating.rs
 +++ b/src/layout/floating.rs
 @@ -1218,8 +1218,6 @@ impl<W: LayoutElement> FloatingSpace<W> {
@@ -25,7 +25,7 @@ index 5fe1d29a21..c1935394fa 100644
      }
  
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index 8575a1afcf..231a914637 100644
+index 8575a1a..231a914 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
 @@ -4901,7 +4901,6 @@ impl<W: LayoutElement> Layout<W> {
@@ -37,7 +37,7 @@ index 8575a1afcf..231a914637 100644
              ongoing_scrolling_dnd.get_or_insert(!move_.is_floating);
          } else if let Some(InteractiveMoveState::Starting { window_id, .. }) =
 diff --git a/src/layout/scrolling.rs b/src/layout/scrolling.rs
-index ed85342e57..cea3160bc5 100644
+index ed85342..cea3160 100644
 --- a/src/layout/scrolling.rs
 +++ b/src/layout/scrolling.rs
 @@ -3764,8 +3764,6 @@ impl<W: LayoutElement> ScrollingSpace<W> {
@@ -50,7 +50,7 @@ index ed85342e57..cea3160bc5 100644
          }
      }
 diff --git a/src/niri.rs b/src/niri.rs
-index c7baf9b453..5f57d1effd 100644
+index 1f60b4c..5bd758c 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -270,6 +270,9 @@ pub struct Niri {
@@ -63,7 +63,7 @@ index c7baf9b453..5f57d1effd 100644
      /// Clients to notify about their blockers being cleared.
      pub blocker_cleared_tx: Sender<Client>,
      pub blocker_cleared_rx: Receiver<Client>,
-@@ -2764,6 +2767,7 @@ impl Niri {
+@@ -2762,6 +2765,7 @@ impl Niri {
              mapped_layer_surfaces: HashMap::new(),
              root_surface: HashMap::new(),
              dmabuf_pre_commit_hook: HashMap::new(),
@@ -71,7 +71,7 @@ index c7baf9b453..5f57d1effd 100644
              blocker_cleared_tx,
              blocker_cleared_rx,
              monitors_active: true,
-@@ -4280,6 +4284,10 @@ impl Niri {
+@@ -4278,6 +4282,10 @@ impl Niri {
          };
  
          self.layout.refresh(layout_is_active);

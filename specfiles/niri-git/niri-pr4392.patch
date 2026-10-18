@@ -1,5 +1,5 @@
 diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
-index 22e0d3db81..4a13386e1c 100644
+index 22e0d3d..4a13386 100644
 --- a/niri-config/src/lib.rs
 +++ b/niri-config/src/lib.rs
 @@ -1916,6 +1916,7 @@ mod tests {
@@ -11,7 +11,7 @@ index 22e0d3db81..4a13386e1c 100644
                          xray: None,
                          blur: None,
 diff --git a/niri-config/src/window_rule.rs b/niri-config/src/window_rule.rs
-index acc9e2e53c..e8e0c2f6ca 100644
+index acc9e2e..e8e0c2f 100644
 --- a/niri-config/src/window_rule.rs
 +++ b/niri-config/src/window_rule.rs
 @@ -79,6 +79,8 @@ pub struct WindowRule {
@@ -24,7 +24,7 @@ index acc9e2e53c..e8e0c2f6ca 100644
      pub background_effect: BackgroundEffectRule,
      #[knuffel(child, default)]
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index 231a914637..c924b5c789 100644
+index 231a914..c924b5c 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
 @@ -1462,6 +1462,84 @@ impl<W: LayoutElement> Layout<W> {
@@ -113,7 +113,7 @@ index 231a914637..c924b5c789 100644
      ///
      /// We will try to fit popups inside this rect.
 diff --git a/src/niri.rs b/src/niri.rs
-index 5f57d1effd..d89744806d 100644
+index 5bd758c..5a15409 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -188,9 +188,9 @@ use crate::utils::vblank_throttle::VBlankThrottle;
@@ -231,7 +231,7 @@ index 5f57d1effd..d89744806d 100644
  
  impl KeyboardFocus {
      pub fn surface(&self) -> Option<&WlSurface> {
-@@ -5356,6 +5444,7 @@ impl Niri {
+@@ -5354,6 +5442,7 @@ impl Niri {
          let frame_callback_time = get_monotonic_time();
  
          for mapped in self.layout.windows_for_output_mut(output) {
@@ -240,7 +240,7 @@ index 5f57d1effd..d89744806d 100644
                  output,
                  frame_callback_time,
 diff --git a/src/utils/mod.rs b/src/utils/mod.rs
-index 6d513eb653..6f3684cd4c 100644
+index 6d513eb..6f3684c 100644
 --- a/src/utils/mod.rs
 +++ b/src/utils/mod.rs
 @@ -165,6 +165,16 @@ pub fn get_monotonic_time() -> Duration {
@@ -261,7 +261,7 @@ index 6d513eb653..6f3684cd4c 100644
      rect.loc + rect.size.downscale(2).to_point()
  }
 diff --git a/src/window/mapped.rs b/src/window/mapped.rs
-index 3db1f66cad..da2d114cd0 100644
+index 3db1f66..da2d114 100644
 --- a/src/window/mapped.rs
 +++ b/src/window/mapped.rs
 @@ -611,6 +611,16 @@ impl Mapped {
@@ -282,7 +282,7 @@ index 3db1f66cad..da2d114cd0 100644
  
  impl Drop for Mapped {
 diff --git a/src/window/mod.rs b/src/window/mod.rs
-index 771f0d9596..7fc4826081 100644
+index 771f0d9..7fc4826 100644
 --- a/src/window/mod.rs
 +++ b/src/window/mod.rs
 @@ -126,6 +126,9 @@ pub struct ResolvedWindowRules {
