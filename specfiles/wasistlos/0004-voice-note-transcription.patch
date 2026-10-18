@@ -272,7 +272,7 @@ index faf6d3a..f4c5ff0 100644
                  function messageScroller() {
                      var message = document.querySelector('#main div.copyable-text[data-pre-plain-text]');
                      for (var el = message && message.parentElement; el && el !== document.body; el = el.parentElement) {
-@@ -735,11 +932,496 @@ namespace wil::ui
+@@ -735,11 +932,503 @@ namespace wil::ui
              entries = std::move(sorted);
          }
  
@@ -507,6 +507,7 @@ index faf6d3a..f4c5ff0 100644
 +            params.print_realtime   = false;
 +            params.print_special    = false;
 +            params.print_timestamps = false;
++            params.no_context       = true;
 +
 +            if (whisper_full_with_state(model.get(), state.get(), params, samples->data(), static_cast<int>(samples->size())) != 0)
 +            {
@@ -515,6 +516,7 @@ index faf6d3a..f4c5ff0 100644
 +            }
 +
 +            std::string transcript;
++            std::string previous;
 +            for (int i = 0; i < whisper_full_n_segments_from_state(state.get()); ++i)
 +            {
 +                std::string segment = whisper_full_get_segment_text_from_state(state.get(), i);
@@ -524,6 +526,11 @@ index faf6d3a..f4c5ff0 100644
 +                    continue;
 +                }
 +                segment = segment.substr(first, segment.find_last_not_of(" \t\n") - first + 1);
++                if (segment == previous)
++                {
++                    continue;
++                }
++                previous = segment;
 +                transcript += (transcript.empty() ? "" : " ") + segment;
 +            }
 +
@@ -773,7 +780,7 @@ index faf6d3a..f4c5ff0 100644
              g_free(resultString);
  
              auto const delimiterPos = raw.find('\x01');
-@@ -748,39 +1430,65 @@ namespace wil::ui
+@@ -748,39 +1437,65 @@ namespace wil::ui
                  return;
              }
  
@@ -855,7 +862,7 @@ index faf6d3a..f4c5ff0 100644
          }
  
          std::optional<std::string> getSystemLanguage()
-@@ -1031,6 +1739,10 @@ namespace wil::ui
+@@ -1031,6 +1746,10 @@ namespace wil::ui
          g_signal_connect(*this, "permission-request", G_CALLBACK(permissionRequest), nullptr);
          g_signal_connect(*this, "decide-policy", G_CALLBACK(decidePolicy), nullptr);
          g_signal_connect(*this, "show-notification", G_CALLBACK(showNotification), this);
@@ -866,7 +873,7 @@ index faf6d3a..f4c5ff0 100644
          g_signal_connect(webContext, "download-started", G_CALLBACK(downloadStarted), nullptr);
          g_signal_connect(webContext, "initialize-notification-permissions", G_CALLBACK(initializeNotificationPermission), nullptr);
          Glib::signal_timeout().connect(sigc::mem_fun(*this, &WebView::onTimeout), 5000);
-@@ -1288,6 +2000,10 @@ namespace wil::ui
+@@ -1288,6 +2007,10 @@ namespace wil::ui
          g_signal_connect(manager, "script-message-received::wilContinuousExport", G_CALLBACK(continuousExportMessageReceived), nullptr);
          webkit_user_content_manager_register_script_message_handler(manager, "wilContinuousExport");
  

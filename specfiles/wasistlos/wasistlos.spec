@@ -1,7 +1,7 @@
 %global tag 1.7.0
 Name: wasistlos
 Version: %{tag}
-Release: 10%{?dist}
+Release: 11%{?dist}
 Summary: An unofficial WhatsApp desktop application for Linux.
 
 License: GNU GPL v3
@@ -60,6 +60,9 @@ An unofficial WhatsApp desktop application for Linux.
 
 
 %changelog
+* Sun Oct 18 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-11
+- Stop whisper repetition loops (no_context, drop repeated segments)
+
 * Sun Oct 18 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-10
  - Fetch voice note blobs via downloadMedia + blob cache (downloadAndMaybeDecrypt now needs a QPL)
 
