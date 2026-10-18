@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        20%{?dist}
+Release:        21%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -79,6 +79,7 @@ Patch:          niri-frame-callback-rate.patch
 Patch:          niri-scratchpad-center.patch
 Patch:          niri-color-management.patch
 Patch:          niri-xdg-toplevel-icon.patch
+Patch:          niri-vulkan.patch
 
 BuildRequires:  cargo-rpm-macros >= 26
 BuildRequires:  pkgconfig(udev)
@@ -92,6 +93,7 @@ BuildRequires:  pkgconfig(libseat)
 BuildRequires:  pkgconfig(libdisplay-info)
 BuildRequires:  pipewire-devel
 BuildRequires:  pango-devel
+BuildRequires:  libshaderc-devel
 BuildRequires:  cairo-gobject-devel
 # Needed for pipewire-rs
 BuildRequires:  clang
@@ -186,6 +188,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Sun Oct 18 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^9.git.45739bc0-21
+- Add optional native Vulkan renderer (debug renderer "vulkan")
+
 * Sun Oct 18 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^9.git.45739bc0-20
 - Add xdg-toplevel-icon global
 
