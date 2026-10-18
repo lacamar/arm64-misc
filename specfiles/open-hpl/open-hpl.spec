@@ -1,5 +1,5 @@
 Name:           open-hpl
-Version:        1.3.54
+Version:        1.3.55
 Release:        1%{?dist}
 Summary:        Native aarch64 port of Frictional Games' HPL engine
 
@@ -53,14 +53,14 @@ cd amnesia/src
     -DOPENHPL_VERSION=%{version} \
     -DUSE_GAMEPAD=ON \
     -DAMNESIA_WITH_SERIAL=OFF
-%cmake_build --target Amnesia --target Launcher --target Soma --target Rebirth --target Bunker
+%cmake_build --target Amnesia --target Launcher --target Soma
 cd -
 
 magick 'amnesia/src/game/Lux.ico[0]' %{name}.png
 
 %install
 pkgdir=%{buildroot}%{_libexecdir}/%{name}
-for b in Amnesia Launcher Soma Rebirth Bunker; do
+for b in Amnesia Launcher Soma; do
     install -Dpm0755 -t $pkgdir amnesia/src/redhat-linux-build/$b.bin.%{_target_cpu}
 done
 install -Dpm0644 -t $pkgdir/compat soma/data/compat/*.dae
@@ -124,9 +124,9 @@ launcher machine-for-pigs 239200 "Machine for Pigs" \
 launcher soma 282140 "SOMA" \
     Soma.bin.aarch64 "Open HPL experimental native aarch64 port" "SOMA"
 launcher rebirth 999220 "Amnesia Rebirth" \
-    Rebirth.bin.aarch64 "Open HPL tech preview: free camera on one map" "Amnesia: Rebirth"
+    Soma.bin.aarch64 "Open HPL experimental native aarch64 port" "Amnesia: Rebirth"
 launcher bunker 1944430 "Amnesia The Bunker" \
-    Bunker.bin.aarch64 "Open HPL tech preview: free camera on one map" "Amnesia: The Bunker"
+    Soma.bin.aarch64 "Open HPL experimental native aarch64 port" "Amnesia: The Bunker"
 
 %files
 %license LICENSE THIRD_PARTY_LICENSES.md
@@ -138,6 +138,17 @@ launcher bunker 1944430 "Amnesia The Bunker" \
 %{_datadir}/icons/hicolor/128x128/apps/open-hpl-*.png
 
 %changelog
+* Sun Oct 18 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.55-1
+- Rebirth/Bunker launchers run Soma engine
+- Drop scaffold binaries
+- Bunker: tagged start map
+- Fix new game crash
+- Fix text frame alignment
+- Fix NaN black squares from zero mesh tangents
+- Fix map timestamp rate
+- Fix pause for sounds and voices
+- Rebirth/Bunker spot light shadows
+
 * Wed Oct 14 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.54-1
 - Static map props physics
 - Liquid trickle
