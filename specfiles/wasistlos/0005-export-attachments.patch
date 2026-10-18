@@ -1,0 +1,224 @@
+diff --git a/src/ui/WebView.cpp b/src/ui/WebView.cpp
+index 0485e0b..35ab1dd 100644
+--- a/src/ui/WebView.cpp
++++ b/src/ui/WebView.cpp
+@@ -143,7 +143,8 @@ namespace wil::ui
+                     if (!id || seen[id] || row.querySelector('div.copyable-text[data-pre-plain-text]')) { return null; }
+ 
+                     var msg = storeMessage(id);
+-                    if (msg ? !/^(ptt|audio)$/.test(msg.type) : !row.querySelector(VOICE_SELECTOR)) { return null; }
++                    var media = isAttachment(msg);
++                    if (!media && (msg ? !/^(ptt|audio)$/.test(msg.type) : !row.querySelector(VOICE_SELECTOR))) { return null; }
+                     seen[id] = true;
+ 
+                     var clocks = Array.prototype.map.call(row.querySelectorAll('span'), function(span) {
+@@ -158,6 +159,7 @@ namespace wil::ui
+ 
+                     return {
+                         voice:    true,
++                        media:    media ? attachmentMarker(id, msg) : '',
+                         id:       id,
+                         duration: duration,
+                         clock:    clocks.length ? clocks[clocks.length - 1] : '',
+@@ -167,6 +169,17 @@ namespace wil::ui
+                     };
+                 }
+ 
++                function isAttachment(msg) {
++                    return !!(msg && msg.mediaData && /^(image|video|document|sticker|ptv)$/.test(msg.type));
++                }
++
++                // "\x05id\x05type\x05name\x05" prefixes the caption; native code turns it into a link.
++                function attachmentMarker(id, msg) {
++                    var mime = (msg.mimetype || '').split(';')[0];
++                    var name = msg.filename || (mime.indexOf('/') !== -1 ? '.' + mime.split('/')[1] : '');
++                    return '\x05' + id + '\x05' + msg.type + '\x05' + name.replace(/[\x01-\x05\n]/g, '') + '\x05';
++                }
++
+                 function sameDay(a, b) {
+                     return new Date(a * 1000).toDateString() === new Date(b * 1000).toDateString();
+                 }
+@@ -226,7 +239,7 @@ namespace wil::ui
+                         }
+ 
+                         entry.sender = entry.out ? (ownName || 'You') : (entry.id.indexOf('@g.us') !== -1 ? (entry.sender || 'Unknown') : title);
+-                        entry.text   = '\x04' + entry.id + '\x04' + entry.duration;
++                        entry.text   = entry.media || ('\x04' + entry.id + '\x04' + entry.duration);
+                         return true;
+                     });
+                 }
+@@ -255,7 +268,7 @@ namespace wil::ui
+                         entries.push({
+                             time:   match ? match[1] : '',
+                             sender: match ? match[2] : '',
+-                            text:   text,
++                            text:   (isAttachment(msg) ? attachmentMarker(row.getAttribute('data-id'), msg) : '') + text,
+                             t:      msg ? msg.t : 0,
+                             out:    !!node.closest('.message-out')
+                         });
+@@ -285,7 +298,7 @@ namespace wil::ui
+                     } catch (e) { /* handler not registered yet */ }
+                 }
+ 
+-                async function downloadVoiceNote(id) {
++                async function downloadMedia(id) {
+                     var msg = storeMessage(id);
+                     if (!msg) { throw new Error('message not in store'); }
+                     if (!msg.mediaData || msg.mediaData.mediaStage === 'REUPLOADING') { throw new Error('no mediaData'); }
+@@ -324,7 +337,7 @@ namespace wil::ui
+ 
+                 window.__wilFetchVoiceNote = function(id) {
+                     var error = '';
+-                    downloadVoiceNote(id).catch(function(e) { error = String(e && e.message || e); return null; }).then(function(bytes) {
++                    downloadMedia(id).catch(function(e) { error = String(e && e.message || e); return null; }).then(function(bytes) {
+                         if (!bytes && capturedAudio[id]) {
+                             return capturedAudio[id].arrayBuffer().then(function(buffer) { return new Uint8Array(buffer); });
+                         }
+@@ -332,6 +345,19 @@ namespace wil::ui
+                     }).then(function(bytes) { postVoiceNote(id, bytes, error); });
+                 };
+ 
++                var mediaQueue = Promise.resolve();
++                window.__wilFetchAttachment = function(id) {
++                    mediaQueue = mediaQueue.then(function() { return downloadMedia(id); }).then(function(bytes) {
++                        var binary = '';
++                        for (var i = 0; i < bytes.length; i += 0x8000) {
++                            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
++                        }
++                        window.webkit.messageHandlers.wilAttachment.postMessage(id + '\x01' + btoa(binary));
++                    }).catch(function(e) {
++                        try { window.webkit.messageHandlers.wilAttachment.postMessage(id + '\x01\x01' + String(e && e.message || e)); } catch (ignored) {}
++                    });
++                };
++
+                 function messageScroller() {
+                     var message = document.querySelector('#main div.copyable-text[data-pre-plain-text]');
+                     for (var el = message && message.parentElement; el && el !== document.body; el = el.parentElement) {
+@@ -1468,6 +1494,108 @@ namespace wil::ui
+             g_free(decoded);
+         }
+ 
++        struct AttachmentState
++        {
++            std::map<std::string, std::string> pending;
++            std::set<std::string>              failed;
++        };
++
++        AttachmentState& attachments()
++        {
++            static AttachmentState state;
++            return state;
++        }
++
++        std::string attachmentLink(std::string const& exportPath, std::string const& id, std::string const& type, std::string const& name)
++        {
++            auto const  base     = Glib::path_get_basename(exportPath);
++            auto const  dirName  = base.substr(0, base.rfind('.')) + "_attachments";
++            // fromMe_chat_key[_participant]
++            auto const  keyStart = id.find('_', id.find('_') + 1);
++            auto const  keyId    = (keyStart == std::string::npos) ? id : id.substr(keyStart + 1, id.find('_', keyStart + 1) - keyStart - 1);
++            auto const  fileName = sanitizeFilename(name.empty() || name[0] == '.' ? keyId + name : keyId + "_" + name);
++            auto const  file     = Glib::build_filename(Glib::path_get_dirname(exportPath), dirName, fileName);
++
++            auto& state = attachments();
++            if (!Glib::file_test(file, Glib::FILE_TEST_EXISTS) && !state.pending.count(id) && !state.failed.count(id)
++                && (id.find_first_of("'\\\n") == std::string::npos) && voiceNotes().view)
++            {
++                state.pending[id] = file;
++                auto const script = "if (window.__wilFetchAttachment) { window.__wilFetchAttachment('" + id + "'); }";
++                webkit_web_view_evaluate_javascript(voiceNotes().view, script.c_str(), -1, nullptr, nullptr, nullptr, nullptr, nullptr);
++            }
++
++            auto* const escaped = g_uri_escape_string((dirName + "/" + fileName).c_str(), "/", TRUE);
++            auto const  target  = std::string{escaped};
++            g_free(escaped);
++
++            auto const embed = (type == "image") || (type == "sticker");
++            return std::string{embed ? "![" : "[📎 "} + (name.empty() || name[0] == '.' ? type : name) + "](" + target + ")";
++        }
++
++        // Attachments arrive as "\x05id\x05type\x05name\x05caption"; the link is stable, the file lands asynchronously.
++        std::vector<ChatEntry> resolveAttachments(std::string const& exportPath, std::vector<ChatEntry> entries)
++        {
++            for (auto& entry : entries)
++            {
++                if (entry.text.empty() || (entry.text[0] != '\x05'))
++                {
++                    continue;
++                }
++
++                auto const s1 = entry.text.find('\x05', 1);
++                auto const s2 = (s1 == std::string::npos) ? s1 : entry.text.find('\x05', s1 + 1);
++                auto const s3 = (s2 == std::string::npos) ? s2 : entry.text.find('\x05', s2 + 1);
++                if (s3 == std::string::npos)
++                {
++                    continue;
++                }
++
++                auto const caption = entry.text.substr(s3 + 1);
++                auto const link    = attachmentLink(exportPath, entry.text.substr(1, s1 - 1), entry.text.substr(s1 + 1, s2 - s1 - 1), entry.text.substr(s2 + 1, s3 - s2 - 1));
++                entry.text         = caption.empty() ? link : link + "\n" + caption;
++            }
++            return entries;
++        }
++
++        void attachmentReceived(WebKitUserContentManager*, WebKitJavascriptResult* jsResult, gpointer)
++        {
++            auto* const resultString = jsc_value_to_string(webkit_javascript_result_get_js_value(jsResult));
++            auto const  raw          = std::string{resultString ? resultString : ""};
++            g_free(resultString);
++
++            auto&      state = attachments();
++            auto const sep   = raw.find('\x01');
++            auto const it    = state.pending.find(raw.substr(0, sep));
++            if ((sep == std::string::npos) || (it == state.pending.end()))
++            {
++                return;
++            }
++
++            auto const id   = it->first;
++            auto const file = it->second;
++            state.pending.erase(it);
++
++            auto const data = raw.substr(sep + 1);
++            if (data.empty() || (data[0] == '\x01'))
++            {
++                state.failed.insert(id);
++                std::cerr << "WebView: Could not fetch attachment " << id << ": " << (data.empty() ? "" : data.substr(1)) << std::endl;
++                return;
++            }
++
++            gsize       size    = 0;
++            auto* const decoded = g_base64_decode(data.c_str(), &size);
++            g_mkdir_with_parents(Glib::path_get_dirname(file).c_str(), 0755);
++            auto const tmp = file + ".part";
++            {
++                auto outFile = std::ofstream{tmp, std::ios::binary};
++                outFile.write(reinterpret_cast<char const*>(decoded), static_cast<std::streamsize>(size));
++            }
++            g_free(decoded);
++            g_rename(tmp.c_str(), file.c_str());
++        }
++
+         void continuousExportMessageReceived(WebKitUserContentManager*, WebKitJavascriptResult* jsResult, gpointer)
+         {
+             auto* const value         = webkit_javascript_result_get_js_value(jsResult);
+@@ -1489,7 +1617,7 @@ namespace wil::ui
+                 return;
+             }
+ 
+-            auto const windowEntries = resolveVoiceNotes(title, parseIncomingRecords(records));
++            auto const windowEntries = resolveAttachments(path, resolveVoiceNotes(title, parseIncomingRecords(records)));
+             if (windowEntries.empty())
+             {
+                 return;
+@@ -2011,6 +2139,9 @@ namespace wil::ui
+         g_signal_connect(manager, "script-message-received::wilVoiceNote", G_CALLBACK(voiceNoteReceived), nullptr);
+         webkit_user_content_manager_register_script_message_handler(manager, "wilVoiceNote");
+ 
++        g_signal_connect(manager, "script-message-received::wilAttachment", G_CALLBACK(attachmentReceived), nullptr);
++        webkit_user_content_manager_register_script_message_handler(manager, "wilAttachment");
++
+         auto* const script = webkit_user_script_new(
+             CONTINUOUS_EXPORT_INIT_SCRIPT, WEBKIT_USER_CONTENT_INJECT_TOP_FRAME, WEBKIT_USER_SCRIPT_INJECT_AT_DOCUMENT_END, nullptr, nullptr);
+         webkit_user_content_manager_add_script(manager, script);

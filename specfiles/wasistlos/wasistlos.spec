@@ -1,7 +1,7 @@
 %global tag 1.7.0
 Name: wasistlos
 Version: %{tag}
-Release: 11%{?dist}
+Release: 12%{?dist}
 Summary: An unofficial WhatsApp desktop application for Linux.
 
 License: GNU GPL v3
@@ -11,6 +11,7 @@ Patch0:  0001-export-chat-transcript.patch
 Patch1:  0002-continuous-chat-export.patch
 Patch2:  0003-paste-image-clipboard.patch
 Patch3:  0004-voice-note-transcription.patch
+Patch4:  0005-export-attachments.patch
 
 BuildRequires: cmake
 BuildRequires: pkgconfig
@@ -60,6 +61,9 @@ An unofficial WhatsApp desktop application for Linux.
 
 
 %changelog
+* Sun Oct 18 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-12
+- Continuous export: save attachments to <chat>_attachments, link them
+
 * Sun Oct 18 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-11
 - Stop whisper repetition loops (no_context, drop repeated segments)
 
