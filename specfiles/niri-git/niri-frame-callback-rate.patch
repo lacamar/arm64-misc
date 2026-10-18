@@ -1,21 +1,33 @@
+diff --git a/docs/wiki/Configuration:-Miscellaneous.md b/docs/wiki/Configuration:-Miscellaneous.md
+index 7a2f42dd26..7a3c66c020 100644
+--- a/docs/wiki/Configuration:-Miscellaneous.md
++++ b/docs/wiki/Configuration:-Miscellaneous.md
+@@ -135,6 +135,16 @@ You can also set this option to `null` to disable saving screenshots to disk.
+ screenshot-path null
+ ```
+ 
++### `frame-callback-rate-unfocused`
++
++Cap the rate, in Hz, at which visible but unfocused windows receive frame callbacks.
++Clients that draw on frame callbacks, like terminals with spinners, then render at most this often while the focused window and the output stay at full rate.
++`0`, the default, disables the cap.
++
++```kdl
++frame-callback-rate-unfocused 60
++```
++
+ ### `environment`
+ 
+ Override environment variables for processes spawned by niri.
 diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
-index b74d778..241a99d 100644
+index b5a6de53d1..f83100545b 100644
 --- a/niri-config/src/lib.rs
 +++ b/niri-config/src/lib.rs
-@@ -58,7 +58,7 @@ pub use crate::output::{Output, OutputName, Outputs, Position, Vrr};
- use crate::recent_windows::RecentWindowsPart;
- pub use crate::recent_windows::{MruDirection, MruFilter, MruPreviews, MruScope, RecentWindows};
- pub use crate::utils::FloatOrInt;
--use crate::utils::{expand_home_path, Flag, MergeWith as _};
-+use crate::utils::{expand_home_path, parse_arg_node, Flag, MergeWith as _};
- pub use crate::window_rule::{
-     FloatingPosition, OnXdgActivate, PopupsRule, RelativeTo, ResolvedPopupsRules, WindowRule,
- };
 @@ -76,6 +76,7 @@ pub struct Config {
      pub prefer_no_csd: bool,
      pub cursor: Cursor,
      pub screenshot_path: ScreenshotPath,
-+    pub frame_callback_rate_unfocused: u16,
++    pub frame_callback_rate_unfocused: FrameCallbackRateUnfocused,
      pub clipboard: Clipboard,
      pub hotkey_overlay: HotkeyOverlay,
      pub config_notification: ConfigNotification,
@@ -24,8 +36,8 @@ index b74d778..241a99d 100644
                  }
  
 +                "frame-callback-rate-unfocused" => {
-+                    config.borrow_mut().frame_callback_rate_unfocused =
-+                        parse_arg_node("frame-callback-rate-unfocused", node, ctx)?;
++                    let part = knuffel::Decode::decode_node(node, ctx)?;
++                    config.borrow_mut().frame_callback_rate_unfocused = part;
 +                }
 +
                  "layout" => {
@@ -40,16 +52,32 @@ index b74d778..241a99d 100644
              clipboard {
                  disable-primary
              }
-@@ -1530,6 +1538,7 @@ mod tests {
+@@ -1535,6 +1543,9 @@ mod tests {
                      "~/Screenshots/screenshot.png",
                  ),
              ),
-+            frame_callback_rate_unfocused: 60,
++            frame_callback_rate_unfocused: FrameCallbackRateUnfocused(
++                60,
++            ),
              clipboard: Clipboard {
                  disable_primary: true,
              },
+diff --git a/niri-config/src/misc.rs b/niri-config/src/misc.rs
+index 66a200ca35..35f93f94b3 100644
+--- a/niri-config/src/misc.rs
++++ b/niri-config/src/misc.rs
+@@ -64,6 +64,9 @@ impl Default for ScreenshotPath {
+     }
+ }
+ 
++#[derive(knuffel::Decode, Debug, Default, Clone, Copy, PartialEq, Eq)]
++pub struct FrameCallbackRateUnfocused(#[knuffel(argument)] pub u16);
++
+ #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+ pub struct HotkeyOverlay {
+     pub skip_at_startup: bool,
 diff --git a/src/niri.rs b/src/niri.rs
-index 7c19dcc..4b49189 100644
+index f4ff4f6e60..790015f4f1 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -549,6 +549,7 @@ pub struct OutputState {
@@ -60,7 +88,7 @@ index 7c19dcc..4b49189 100644
      /// Solid color buffer for the backdrop that we use instead of clearing to avoid damage
      /// tracking issues and make screenshots easier.
      pub backdrop_buffer: SolidColorBuffer,
-@@ -3277,6 +3278,7 @@ impl Niri {
+@@ -3279,6 +3280,7 @@ impl Niri {
              last_drm_sequence: None,
              vblank_throttle: VBlankThrottle::new(self.event_loop.clone(), name.connector.clone()),
              frame_callback_sequence: 0,
@@ -68,11 +96,11 @@ index 7c19dcc..4b49189 100644
              backdrop_buffer: SolidColorBuffer::new(size, backdrop_color),
              xray: Xray::new(),
              lock_render_state,
-@@ -5541,7 +5543,21 @@ impl Niri {
+@@ -5543,7 +5545,21 @@ impl Niri {
  
          let frame_callback_time = get_monotonic_time();
  
-+        let rate = self.config.borrow().frame_callback_rate_unfocused;
++        let rate = self.config.borrow().frame_callback_rate_unfocused.0;
 +        // Slack so vblank jitter doesn't skip a whole extra cycle.
 +        let min_interval = (rate > 0).then(|| Duration::from_secs_f64(0.75 / f64::from(rate)));
 +        let mut wake_in: Option<Duration> = None;
@@ -90,7 +118,7 @@ index 7c19dcc..4b49189 100644
              setup_force_render(&mut self.event_loop, mapped);
              mapped.send_frame(
                  output,
-@@ -5589,6 +5605,23 @@ impl Niri {
+@@ -5591,6 +5607,23 @@ impl Niri {
                  should_send,
              );
          }
@@ -115,7 +143,7 @@ index 7c19dcc..4b49189 100644
  
      pub fn send_frame_callbacks_on_fallback_timer(&mut self) {
 diff --git a/src/window/mapped.rs b/src/window/mapped.rs
-index da2d114..a12e9e4 100644
+index da2d114cd0..a12e9e4ea5 100644
 --- a/src/window/mapped.rs
 +++ b/src/window/mapped.rs
 @@ -80,6 +80,8 @@ pub struct Mapped {

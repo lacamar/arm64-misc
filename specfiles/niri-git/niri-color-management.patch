@@ -1,5 +1,5 @@
 diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
-index 241a99d..9971b01 100644
+index f83100545b..3635262e2e 100644
 --- a/niri-config/src/lib.rs
 +++ b/niri-config/src/lib.rs
 @@ -1222,6 +1222,8 @@ mod tests {
@@ -30,7 +30,7 @@ index 241a99d..9971b01 100644
                          backdrop_color: None,
                          hot_corners: None,
 diff --git a/niri-config/src/output.rs b/niri-config/src/output.rs
-index 48572f6..4159a95 100644
+index 48572f6e37..4159a95876 100644
 --- a/niri-config/src/output.rs
 +++ b/niri-config/src/output.rs
 @@ -69,6 +69,10 @@ pub struct Output {
@@ -69,7 +69,7 @@ index 48572f6..4159a95 100644
      fn from_iter<T: IntoIterator<Item = Output>>(iter: T) -> Self {
          Self(Vec::from_iter(iter))
 diff --git a/src/backend/tty.rs b/src/backend/tty.rs
-index 8572718..2d952b3 100644
+index 094f6fa222..b5bde235b7 100644
 --- a/src/backend/tty.rs
 +++ b/src/backend/tty.rs
 @@ -20,15 +20,20 @@ use niri_ipc::{HSyncPolarity, VSyncPolarity};
@@ -314,7 +314,7 @@ index 8572718..2d952b3 100644
                  } else {
                      warn!("failed to get connector properties");
                  }
-@@ -3385,6 +3461,7 @@ impl<'a> ConnectorProperties<'a> {
+@@ -3391,6 +3467,7 @@ impl<'a> ConnectorProperties<'a> {
              properties,
              has_change: false,
              requests: AtomicModeReq::new(),
@@ -322,7 +322,7 @@ index 8572718..2d952b3 100644
          })
      }
  
-@@ -3474,38 +3551,143 @@ impl<'a> ConnectorProperties<'a> {
+@@ -3480,38 +3557,147 @@ impl<'a> ConnectorProperties<'a> {
          Ok(max_bpc)
      }
  
@@ -349,10 +349,10 @@ index 8572718..2d952b3 100644
 +        let mut infoframe = hdr_metadata_infoframe {
 +            // SMPTE ST 2084
 +            eotf: 2,
-+            max_display_mastering_luminance: hdr.max_luminance.0 as u16,
++            max_display_mastering_luminance: hdr.max_nits as u16,
 +            min_display_mastering_luminance: 50,
-+            max_cll: hdr.max_luminance.0 as u16,
-+            max_fall: hdr.sdr_luminance.0 as u16,
++            max_cll: hdr.max_nits as u16,
++            max_fall: hdr.sdr_nits as u16,
 +            ..Default::default()
 +        };
 +        for i in 0..3 {
@@ -471,12 +471,16 @@ index 8572718..2d952b3 100644
 +    if !single_gpu || !is_10bit {
 +        return None;
 +    }
-+    config.outputs.find(name)?.hdr
++    let hdr = config.outputs.find(name)?.hdr.as_ref()?;
++    Some(color::Hdr {
++        sdr_nits: hdr.sdr_luminance.0 as f32,
++        max_nits: hdr.max_luminance.0 as f32,
++    })
  }
  
  fn is_vrr_capable(device: &DrmDevice, connector: connector::Handle) -> Option<bool> {
 diff --git a/src/handlers/mod.rs b/src/handlers/mod.rs
-index 04f76a8..6b4f1a5 100644
+index 04f76a819c..6b4f1a5ddb 100644
 --- a/src/handlers/mod.rs
 +++ b/src/handlers/mod.rs
 @@ -79,6 +79,7 @@ use crate::input::click_grab::ClickGrab;
@@ -527,7 +531,7 @@ index 04f76a8..6b4f1a5 100644
      fn gamma_control_manager_state(&mut self) -> &mut GammaControlManagerState {
          &mut self.niri.gamma_control_manager_state
 diff --git a/src/layer/mapped.rs b/src/layer/mapped.rs
-index fbaa6fc..cb4cd60 100644
+index fbaa6fc61f..cb4cd6010b 100644
 --- a/src/layer/mapped.rs
 +++ b/src/layer/mapped.rs
 @@ -1,6 +1,6 @@
@@ -548,7 +552,7 @@ index fbaa6fc..cb4cd60 100644
          Shadow = ShadowRenderElement,
          BackgroundEffect = BackgroundEffectElement,
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index e695d2b..4b588a1 100644
+index be7221eb23..ff93becac7 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
 @@ -36,6 +36,7 @@ use std::mem;
@@ -577,7 +581,7 @@ index e695d2b..4b588a1 100644
          BackgroundEffect = BackgroundEffectElement,
      }
 diff --git a/src/niri.rs b/src/niri.rs
-index 4b49189..5f51f04 100644
+index 790015f4f1..2fa0a79001 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
@@ -628,7 +632,7 @@ index 4b49189..5f51f04 100644
          self.refresh_ipc_outputs();
          self.ipc_refresh_layout();
          self.ipc_refresh_keyboard_layout_index();
-@@ -1997,6 +2001,7 @@ impl State {
+@@ -1999,6 +2003,7 @@ impl State {
  
          if output_config_changed {
              self.reload_output_config();
@@ -636,7 +640,7 @@ index 4b49189..5f51f04 100644
          }
  
          if window_rules_changed {
-@@ -2714,6 +2719,8 @@ impl Niri {
+@@ -2716,6 +2721,8 @@ impl Niri {
              GammaControlManagerState::new::<State, _>(&display_handle, move |client| {
                  is_tty && !client.get_data::<ClientState>().unwrap().restricted
              });
@@ -645,7 +649,7 @@ index 4b49189..5f51f04 100644
          let activation_state = XdgActivationState::new::<State>(&display_handle);
          event_loop
              .insert_source(
-@@ -2951,6 +2958,7 @@ impl Niri {
+@@ -2953,6 +2960,7 @@ impl Niri {
              presentation_state,
              security_context_state,
              gamma_control_manager_state,
@@ -653,7 +657,7 @@ index 4b49189..5f51f04 100644
              activation_state,
              mutter_x11_interop_state,
              session_management_state,
-@@ -3209,6 +3217,12 @@ impl Niri {
+@@ -3211,6 +3219,12 @@ impl Niri {
          }
      }
  
@@ -666,7 +670,7 @@ index 4b49189..5f51f04 100644
      pub fn add_output(&mut self, output: Output, refresh_interval: Option<Duration>, vrr: bool) {
          let global = output.create_global::<State>(&self.display_handle);
  
-@@ -7518,7 +7532,7 @@ fn scale_relocate_crop<E: Element>(
+@@ -7520,7 +7534,7 @@ fn scale_relocate_crop<E: Element>(
  
  niri_render_elements! {
      PointerRenderElements<R> => {
@@ -675,7 +679,7 @@ index 4b49189..5f51f04 100644
          NamedPointer = MemoryRenderBufferRenderElement<R>,
      }
  }
-@@ -7542,7 +7556,7 @@ niri_render_elements! {
+@@ -7544,7 +7558,7 @@ niri_render_elements! {
              SolidColorRenderElement
          >>>,
          Pointer = PointerRenderElements<R>,
@@ -686,10 +690,10 @@ index 4b49189..5f51f04 100644
          WindowMruUi = WindowMruUiRenderElement<R>,
 diff --git a/src/protocols/color_management.rs b/src/protocols/color_management.rs
 new file mode 100644
-index 0000000..bbaabfd
+index 0000000000..6b5c150828
 --- /dev/null
 +++ b/src/protocols/color_management.rs
-@@ -0,0 +1,706 @@
+@@ -0,0 +1,717 @@
 +use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 +use std::sync::Mutex;
 +
@@ -753,7 +757,6 @@ index 0000000..bbaabfd
 +#[derive(Default)]
 +struct ColorSurfaceAttached(AtomicBool);
 +
-+#[derive(Default)]
 +pub struct ImageDescData {
 +    desc: Option<ColorDesc>,
 +    info: bool,
@@ -1157,7 +1160,13 @@ index 0000000..bbaabfd
 +            | Request::GetPreferredParametric { image_description } => {
 +                let Ok(surface) = self.0.upgrade() else {
 +                    resource.post_error(Error::Inert, "surface is gone");
-+                    data_init.init(image_description, ImageDescData::default());
++                    data_init.init(
++                        image_description,
++                        ImageDescData {
++                            desc: None,
++                            info: false,
++                        },
++                    );
 +                    return;
 +                };
 +                let desc = state.preferred_color_desc(&surface);
@@ -1193,7 +1202,13 @@ index 0000000..bbaabfd
 +            Request::Create { image_description } => {
 +                let (Some(tf), Some(primaries)) = (p.tf, p.primaries) else {
 +                    resource.post_error(Error::IncompleteSet, "tf and primaries required");
-+                    data_init.init(image_description, ImageDescData::default());
++                    data_init.init(
++                        image_description,
++                        ImageDescData {
++                            desc: None,
++                            info: false,
++                        },
++                    );
 +                    return;
 +                };
 +                if let (Some(cll), Some(fall)) = (p.max_cll, p.max_fall) {
@@ -1397,7 +1412,7 @@ index 0000000..bbaabfd
 +    }
 +}
 diff --git a/src/protocols/mod.rs b/src/protocols/mod.rs
-index 319becb..bd1dad5 100644
+index 319becbbe7..bd1dad5d50 100644
 --- a/src/protocols/mod.rs
 +++ b/src/protocols/mod.rs
 @@ -1,3 +1,4 @@
@@ -1406,7 +1421,7 @@ index 319becb..bd1dad5 100644
  pub mod foreign_toplevel;
  pub mod gamma_control;
 diff --git a/src/render_helpers/clipped_surface.rs b/src/render_helpers/clipped_surface.rs
-index fe88d47..78f36ef 100644
+index fe88d47e74..78f36ef113 100644
 --- a/src/render_helpers/clipped_surface.rs
 +++ b/src/render_helpers/clipped_surface.rs
 @@ -10,14 +10,17 @@ use smithay::backend::renderer::utils::{CommitCounter, DamageSet, OpaqueRegions}
@@ -1499,10 +1514,10 @@ index fe88d47..78f36ef 100644
          Ok(())
 diff --git a/src/render_helpers/color.rs b/src/render_helpers/color.rs
 new file mode 100644
-index 0000000..b8098c4
+index 0000000000..b1d07f1173
 --- /dev/null
 +++ b/src/render_helpers/color.rs
-@@ -0,0 +1,210 @@
+@@ -0,0 +1,214 @@
 +use std::cell::Cell;
 +
 +use glam::{Mat3, Vec3};
@@ -1519,7 +1534,11 @@ index 0000000..b8098c4
 +
 +const REF_NITS: f32 = 203.;
 +
-+pub use niri_config::output::Hdr;
++#[derive(Debug, Clone, Copy, PartialEq)]
++pub struct Hdr {
++    pub sdr_nits: f32,
++    pub max_nits: f32,
++}
 +
 +#[derive(Debug, Clone, Copy, PartialEq)]
 +pub enum Tf {
@@ -1556,8 +1575,8 @@ index 0000000..b8098c4
 +                primaries: BT2020,
 +                min_lum: 0.005,
 +                max_lum: 10000.,
-+                ref_lum: hdr.sdr_luminance.0 as f32,
-+                target_max: Some(hdr.max_luminance.0 as f32),
++                ref_lum: hdr.sdr_nits,
++                target_max: Some(hdr.max_nits),
 +            },
 +            None => Self {
 +                primaries: if wide_gamut { DISPLAY_P3 } else { SRGB },
@@ -1570,8 +1589,8 @@ index 0000000..b8098c4
 +    fn render_target(wide_gamut: bool, hdr: Option<Hdr>) -> Self {
 +        match hdr {
 +            Some(hdr) => Self {
-+                max_lum: hdr.max_luminance.0 as f32,
-+                ref_lum: hdr.sdr_luminance.0 as f32,
++                max_lum: hdr.max_nits,
++                ref_lum: hdr.sdr_nits,
 +                ..Self::SRGB
 +            },
 +            None => Self::output(wide_gamut, None),
@@ -1679,7 +1698,7 @@ index 0000000..b8098c4
 +}
 +
 +pub fn hdr_output_uniforms(hdr: Hdr) -> Vec<Uniform<'static>> {
-+    let mat = rgb_to_xyz(&BT2020).inverse() * rgb_to_xyz(&SRGB) * (hdr.sdr_luminance.0 as f32 / 10000.);
++    let mat = rgb_to_xyz(&BT2020).inverse() * rgb_to_xyz(&SRGB) * (hdr.sdr_nits / 10000.);
 +    vec![mat3_uniform("hdr_mat", mat)]
 +}
 +
@@ -1702,8 +1721,8 @@ index 0000000..b8098c4
 +        assert!(conversion(&ColorDesc::SRGB, &ColorDesc::output(true, None)).is_some());
 +
 +        let hdr = Hdr {
-+            sdr_luminance: niri_config::FloatOrInt(203.),
-+            max_luminance: niri_config::FloatOrInt(500.),
++            sdr_nits: 203.,
++            max_nits: 500.,
 +        };
 +        let target = ColorDesc::render_target(false, Some(hdr));
 +        assert!(conversion(&ColorDesc::SRGB, &target).is_none());
@@ -1715,7 +1734,7 @@ index 0000000..b8098c4
 +}
 diff --git a/src/render_helpers/hdr_output.rs b/src/render_helpers/hdr_output.rs
 new file mode 100644
-index 0000000..4010a38
+index 0000000000..4010a381a1
 --- /dev/null
 +++ b/src/render_helpers/hdr_output.rs
 @@ -0,0 +1,159 @@
@@ -1879,7 +1898,7 @@ index 0000000..4010a38
 +    }
 +}
 diff --git a/src/render_helpers/mod.rs b/src/render_helpers/mod.rs
-index 3ae027c..2efb07b 100644
+index 3ae027c8fa..2efb07b3d5 100644
 --- a/src/render_helpers/mod.rs
 +++ b/src/render_helpers/mod.rs
 @@ -30,11 +30,13 @@ pub mod background_effect;
@@ -1898,7 +1917,7 @@ index 3ae027c..2efb07b 100644
  pub mod primary_gpu_texture;
 diff --git a/src/render_helpers/shaders/color.frag b/src/render_helpers/shaders/color.frag
 new file mode 100644
-index 0000000..0ce9761
+index 0000000000..0ce97610b9
 --- /dev/null
 +++ b/src/render_helpers/shaders/color.frag
 @@ -0,0 +1,71 @@
@@ -1975,7 +1994,7 @@ index 0000000..0ce9761
 +}
 diff --git a/src/render_helpers/shaders/color_surface.frag b/src/render_helpers/shaders/color_surface.frag
 new file mode 100644
-index 0000000..93c7e8b
+index 0000000000..93c7e8bbc6
 --- /dev/null
 +++ b/src/render_helpers/shaders/color_surface.frag
 @@ -0,0 +1,39 @@
@@ -2020,7 +2039,7 @@ index 0000000..93c7e8b
 +}
 diff --git a/src/render_helpers/shaders/hdr_output.frag b/src/render_helpers/shaders/hdr_output.frag
 new file mode 100644
-index 0000000..b2e48a0
+index 0000000000..b2e48a0fe2
 --- /dev/null
 +++ b/src/render_helpers/shaders/hdr_output.frag
 @@ -0,0 +1,38 @@
@@ -2063,7 +2082,7 @@ index 0000000..b2e48a0
 +    gl_FragColor = vec4(c, 1.0);
 +}
 diff --git a/src/render_helpers/shaders/mod.rs b/src/render_helpers/shaders/mod.rs
-index 7be9b15..ed5e06d 100644
+index 7be9b159fd..ed5e06dc4a 100644
 --- a/src/render_helpers/shaders/mod.rs
 +++ b/src/render_helpers/shaders/mod.rs
 @@ -15,6 +15,9 @@ pub struct Shaders {
@@ -2148,7 +2167,7 @@ index 7be9b15..ed5e06d 100644
              gradient_fade,
              blur,
 diff --git a/src/render_helpers/surface.rs b/src/render_helpers/surface.rs
-index 629a65c..946ee3a 100644
+index 629a65ca47..946ee3afcc 100644
 --- a/src/render_helpers/surface.rs
 +++ b/src/render_helpers/surface.rs
 @@ -1,14 +1,151 @@
@@ -2334,7 +2353,7 @@ index 629a65c..946ee3a 100644
                          Err(err) => {
                              warn!("failed to import surface: {}", err);
 diff --git a/src/window/mapped.rs b/src/window/mapped.rs
-index a12e9e4..7d4130e 100644
+index a12e9e4ea5..7d4130e354 100644
 --- a/src/window/mapped.rs
 +++ b/src/window/mapped.rs
 @@ -1,8 +1,8 @@

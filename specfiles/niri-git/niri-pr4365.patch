@@ -1,5 +1,5 @@
 diff --git a/src/render_helpers/solid_color.rs b/src/render_helpers/solid_color.rs
-index 0c179f0..73f0efc 100644
+index 0c179f0d54..73f0efca6e 100644
 --- a/src/render_helpers/solid_color.rs
 +++ b/src/render_helpers/solid_color.rs
 @@ -130,7 +130,7 @@ impl Element for SolidColorRenderElement {

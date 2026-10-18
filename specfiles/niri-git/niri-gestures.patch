@@ -1,8 +1,8 @@
 diff --git a/niri-config/src/gestures.rs b/niri-config/src/gestures.rs
-index dcf296a..3049b1f 100644
+index dcf296aca2..1371406851 100644
 --- a/niri-config/src/gestures.rs
 +++ b/niri-config/src/gestures.rs
-@@ -1,14 +1,155 @@
+@@ -1,14 +1,157 @@
 -use crate::utils::MergeWith;
 +use knuffel::errors::DecodeError;
 +
@@ -58,6 +58,7 @@ index dcf296a..3049b1f 100644
 +        let fallbacks: &[GestureDirection] = match direction {
 +            Left | Right => &[Horizontal, Swipe],
 +            Up | Down => &[Vertical, Swipe],
++            PinchIn | PinchOut => &[Pinch],
 +            _ => &[],
 +        };
 +        std::iter::once(&direction)
@@ -87,13 +88,14 @@ index dcf296a..3049b1f 100644
 +    Right,
 +    Up,
 +    Down,
++    Pinch,
 +    PinchIn,
 +    PinchOut,
 +}
 +
 +impl GestureDirection {
 +    pub fn is_pinch(self) -> bool {
-+        matches!(self, Self::PinchIn | Self::PinchOut)
++        matches!(self, Self::Pinch | Self::PinchIn | Self::PinchOut)
 +    }
 +}
 +
@@ -161,7 +163,7 @@ index dcf296a..3049b1f 100644
  pub struct GesturesPart {
      #[knuffel(child)]
      pub dnd_edge_view_scroll: Option<DndEdgeViewScrollPart>,
-@@ -16,6 +157,10 @@ pub struct GesturesPart {
+@@ -16,6 +159,10 @@ pub struct GesturesPart {
      pub dnd_edge_workspace_switch: Option<DndEdgeWorkspaceSwitchPart>,
      #[knuffel(child)]
      pub hot_corners: Option<HotCorners>,
@@ -172,7 +174,7 @@ index dcf296a..3049b1f 100644
  }
  
  impl MergeWith<GesturesPart> for Gestures {
-@@ -24,8 +169,14 @@ impl MergeWith<GesturesPart> for Gestures {
+@@ -24,8 +171,14 @@ impl MergeWith<GesturesPart> for Gestures {
              (self, part),
              dnd_edge_view_scroll,
              dnd_edge_workspace_switch,
@@ -187,7 +189,7 @@ index dcf296a..3049b1f 100644
      }
  }
  
-@@ -110,3 +261,24 @@ pub struct HotCorners {
+@@ -110,3 +263,24 @@ pub struct HotCorners {
      #[knuffel(child)]
      pub bottom_right: bool,
  }
@@ -213,7 +215,7 @@ index dcf296a..3049b1f 100644
 +    }
 +}
 diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
-index 54c364a..b74d778 100644
+index d0dc4f9104..e7ffd5e66f 100644
 --- a/niri-config/src/lib.rs
 +++ b/niri-config/src/lib.rs
 @@ -888,6 +888,9 @@ mod tests {
@@ -226,7 +228,7 @@ index 54c364a..b74d778 100644
              }
  
              environment {
-@@ -1702,6 +1705,31 @@ mod tests {
+@@ -1706,6 +1709,31 @@ mod tests {
                      bottom_left: false,
                      bottom_right: false,
                  },
@@ -259,7 +261,7 @@ index 54c364a..b74d778 100644
              overview: Overview {
                  zoom: 0.5,
 diff --git a/src/input/mod.rs b/src/input/mod.rs
-index 03c3ddc..935410b 100644
+index 03c3ddc33f..935410b0f4 100644
 --- a/src/input/mod.rs
 +++ b/src/input/mod.rs
 @@ -5,6 +5,7 @@ use std::time::Duration;
@@ -633,7 +635,7 @@ index 03c3ddc..935410b 100644
 +    }
 +}
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index b2c5ced..e695d2b 100644
+index 6fa49298b4..90367cd6bd 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
 @@ -669,7 +669,7 @@ impl Options {
@@ -646,7 +648,7 @@ index b2c5ced..e695d2b 100644
              blur: config.blur,
              disable_resize_throttling: config.debug.disable_resize_throttling,
 diff --git a/src/layout/monitor.rs b/src/layout/monitor.rs
-index 53c39e3..a1d6e45 100644
+index 53c39e3216..a1d6e455ac 100644
 --- a/src/layout/monitor.rs
 +++ b/src/layout/monitor.rs
 @@ -1867,7 +1867,8 @@ impl<W: LayoutElement> Monitor<W> {
@@ -660,7 +662,7 @@ index 53c39e3..a1d6e45 100644
              dnd_nonzero_start_time: None,
          };
 diff --git a/src/niri.rs b/src/niri.rs
-index 39ad9f3..7c19dcc 100644
+index 19a86b4f82..f4ff4f6e60 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -437,7 +437,7 @@ pub struct Niri {
@@ -672,7 +674,7 @@ index 39ad9f3..7c19dcc 100644
      pub overview_scroll_swipe_gesture: ScrollSwipeGesture,
      pub vertical_wheel_tracker: ScrollTracker,
      pub horizontal_wheel_tracker: ScrollTracker,
-@@ -2980,7 +2980,7 @@ impl Niri {
+@@ -2982,7 +2982,7 @@ impl Niri {
              pointer_inside_hot_corner: false,
              pointer_constraint_position_hint: None,
              tablet_cursor_location: None,

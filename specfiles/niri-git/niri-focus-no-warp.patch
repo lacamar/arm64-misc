@@ -1,0 +1,13 @@
+--- a/src/niri.rs
++++ b/src/niri.rs
+@@ -1126,9 +1126,7 @@
+ 
+         let new_active = self.niri.layout.active_output().cloned();
+         if new_active != active_output {
+-            if !self.maybe_warp_cursor_to_focus_centered() {
+-                self.move_cursor_to_output(&new_active.unwrap());
+-            }
++            self.maybe_warp_cursor_to_focus_centered();
+         } else {
+             self.maybe_warp_cursor_to_focus();
+         }

@@ -1,5 +1,5 @@
 diff --git a/src/layout/workspace.rs b/src/layout/workspace.rs
-index 4da404d..a6d66b9 100644
+index 4da404de62..a6d66b9b71 100644
 --- a/src/layout/workspace.rs
 +++ b/src/layout/workspace.rs
 @@ -2105,7 +2105,33 @@ impl<W: LayoutElement> Workspace<W> {

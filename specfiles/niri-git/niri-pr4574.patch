@@ -1,5 +1,5 @@
 diff --git a/src/handlers/image_copy_capture.rs b/src/handlers/image_copy_capture.rs
-index 81f9fd1..793a741 100644
+index 81f9fd128f..793a7418da 100644
 --- a/src/handlers/image_copy_capture.rs
 +++ b/src/handlers/image_copy_capture.rs
 @@ -442,9 +442,8 @@ impl ImageCopyCaptureHandler for State {
