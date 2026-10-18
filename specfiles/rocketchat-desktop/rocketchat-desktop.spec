@@ -6,7 +6,7 @@
 
 Name:           rocketchat-desktop
 Version:        4.18.3
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Desktop client for Rocket.Chat
 
 License:        MIT
@@ -84,7 +84,7 @@ Exec=rocketchat-desktop %U
 Icon=rocketchat-desktop
 Terminal=false
 Type=Application
-StartupWMClass=Rocket.Chat
+StartupWMClass=rocket-chat
 MimeType=x-scheme-handler/rocketchat;
 Categories=Network;InstantMessaging;Chat;
 DESKTOP
@@ -102,5 +102,8 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/*/apps/%{name}.png
 
 %changelog
+* Sun Oct 18 2026 lacamar <lchlnm@pm.me> - 4.18.3-3
+- Fix StartupWMClass
+
 * Sun Oct 18 2026 lacamar <lchlnm@pm.me> - 4.18.3-2
 - Rebuild on system electron, offline yarn cache
