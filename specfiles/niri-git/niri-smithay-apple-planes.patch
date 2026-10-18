@@ -1,23 +1,22 @@
 diff --git a/smithay/src/backend/drm/compositor/mod.rs b/smithay/src/backend/drm/compositor/mod.rs
-index 3f471cf3bd..e0f4da20b3 100644
+index 3f471cf..d397ee9 100644
 --- a/smithay/src/backend/drm/compositor/mod.rs
 +++ b/smithay/src/backend/drm/compositor/mod.rs
 @@ -1075,6 +1075,7 @@ where
  
      cursor_size: Size<i32, Physical>,
      cursor_state: Option<CursorState<G>>,
-+    overlay_cursor: bool,
++    apple: bool,
  
      element_states: IndexMap<Id, ElementState<<F as ExportFramebuffer<A::Buffer>>::Framebuffer>>,
      previous_element_states: IndexMap<Id, ElementState<<F as ExportFramebuffer<A::Buffer>>::Framebuffer>>,
-@@ -1189,6 +1190,15 @@ where
+@@ -1189,6 +1190,14 @@ where
                  .to_lowercase()
                  .contains("nvidia");
  
-+        // apple-drm has no cursor plane, borrow the topmost overlay
-+        let overlay_cursor =
-+            driver.name().to_string_lossy() == "apple" && planes.cursor.is_empty() && !planes.overlay.is_empty();
-+        if overlay_cursor {
++        // apple-drm: no cursor plane, borrow the topmost overlay; DCP blends translucent planes unlike GL
++        let apple = driver.name().to_string_lossy() == "apple";
++        if apple && planes.cursor.is_empty() && !planes.overlay.is_empty() {
 +            let mut plane = planes.overlay.remove(0);
 +            plane.type_ = PlaneType::Cursor;
 +            planes.cursor.push(plane);
@@ -26,22 +25,21 @@ index 3f471cf3bd..e0f4da20b3 100644
          let cursor_size = Size::from((cursor_size.w as i32, cursor_size.h as i32));
          let damage_tracker = OutputDamageTracker::from_mode_source(output_mode_source.clone());
          let supports_fencing = !surface.is_legacy()
-@@ -1257,6 +1267,7 @@ where
+@@ -1257,6 +1266,7 @@ where
                          framebuffer_exporter,
                          cursor_size,
                          cursor_state,
-+                        overlay_cursor,
++                        apple,
                          surface,
                          damage_tracker,
                          output_mode_source,
-@@ -1372,6 +1383,15 @@ where
+@@ -1372,6 +1382,14 @@ where
                  .to_lowercase()
                  .contains("nvidia");
  
-+        // apple-drm has no cursor plane, borrow the topmost overlay
-+        let overlay_cursor =
-+            driver.name().to_string_lossy() == "apple" && planes.cursor.is_empty() && !planes.overlay.is_empty();
-+        if overlay_cursor {
++        // apple-drm: no cursor plane, borrow the topmost overlay; DCP blends translucent planes unlike GL
++        let apple = driver.name().to_string_lossy() == "apple";
++        if apple && planes.cursor.is_empty() && !planes.overlay.is_empty() {
 +            let mut plane = planes.overlay.remove(0);
 +            plane.type_ = PlaneType::Cursor;
 +            planes.cursor.push(plane);
@@ -50,39 +48,39 @@ index 3f471cf3bd..e0f4da20b3 100644
          let cursor_size = Size::from((cursor_size.w as i32, cursor_size.h as i32));
          let damage_tracker = OutputDamageTracker::from_mode_source(output_mode_source.clone());
          let supports_fencing = !surface.is_legacy()
-@@ -1439,6 +1459,7 @@ where
+@@ -1439,6 +1457,7 @@ where
              framebuffer_exporter,
              cursor_size,
              cursor_state,
-+            overlay_cursor,
++            apple,
              surface,
              damage_tracker,
              output_mode_source,
-@@ -3057,7 +3078,7 @@ where
+@@ -3057,7 +3076,7 @@ where
  
          // if the element is greater than the cursor size we can not
          // use the cursor plane to scan out the element
 -        if element_size.w > self.cursor_size.w || element_size.h > self.cursor_size.h {
-+        if !self.overlay_cursor && (element_size.w > self.cursor_size.w || element_size.h > self.cursor_size.h) {
++        if !self.apple && (element_size.w > self.cursor_size.w || element_size.h > self.cursor_size.h) {
              trace!("element {:?} too big for cursor plane(s), skipping", element.id(),);
              return None;
          }
-@@ -3116,7 +3137,13 @@ where
+@@ -3116,7 +3135,13 @@ where
              return None;
          };
  
 -        let cursor_plane_size = if let Some(size_hints) = plane_info.size_hints.as_deref() {
 +        // keep >=32px of the plane on-screen so moves never need a test commit
-+        let pad = if self.overlay_cursor { 32 } else { 0 };
++        let pad = if self.apple { 32 } else { 0 };
 +
-+        let cursor_plane_size = if self.overlay_cursor {
++        let cursor_plane_size = if self.apple {
 +            let s = (element_size.w.max(element_size.h) + 2 * pad + 63) & !63;
 +            Size::from((s, s))
 +        } else if let Some(size_hints) = plane_info.size_hints.as_deref() {
              // size hints are in order of preference, so we can choose the first one
              // that can hold the whole element
              //
-@@ -3134,7 +3161,7 @@ where
+@@ -3134,7 +3159,7 @@ where
          // this calculates the location of the cursor plane taking the simulated transform
          // into consideration
          let cursor_plane_location = output_transform
@@ -91,7 +89,7 @@ index 3f471cf3bd..e0f4da20b3 100644
              - output_transform.transform_point_in(Point::default(), &cursor_plane_size);
  
          let previous_state = self
-@@ -3264,6 +3291,7 @@ where
+@@ -3264,6 +3289,7 @@ where
              element,
              element_size,
              cursor_plane_size,
@@ -99,7 +97,7 @@ index 3f471cf3bd..e0f4da20b3 100644
              output_transform,
              &mut cursor_buffer,
          ) {
-@@ -3277,6 +3305,7 @@ where
+@@ -3277,6 +3303,7 @@ where
              element,
              element_size,
              cursor_plane_size,
@@ -107,7 +105,7 @@ index 3f471cf3bd..e0f4da20b3 100644
              output_transform,
              &mut cursor_buffer,
          ) {
-@@ -3348,7 +3377,7 @@ where
+@@ -3348,7 +3375,7 @@ where
                              pixman_renderer.render(&mut framebuffer, cursor_plane_size, output_transform)?;
                          frame.clear(Color32F::TRANSPARENT, &[Rectangle::from_size(cursor_plane_size)])?;
                          let src = element.src();
@@ -116,7 +114,18 @@ index 3f471cf3bd..e0f4da20b3 100644
                          frame.render_texture_from_to(
                              &cursor_texture,
                              src,
-@@ -4199,6 +4228,7 @@ fn copy_element_to_cursor_bo<R, E>(
+@@ -3738,6 +3765,10 @@ where
+             return Err(None);
+         }
+ 
++        if self.apple && !element_is_opaque {
++            return Err(None);
++        }
++
+         let element_id = element.id();
+ 
+         // Check if we have a free plane, otherwise we can exit early
+@@ -4199,6 +4230,7 @@ fn copy_element_to_cursor_bo<R, E>(
      element: &E,
      element_size: Size<i32, Physical>,
      cursor_size: Size<i32, Physical>,
@@ -124,7 +133,7 @@ index 3f471cf3bd..e0f4da20b3 100644
      output_transform: Transform,
      bo: &mut GbmBuffer,
  ) -> bool
-@@ -4226,7 +4256,27 @@ where
+@@ -4226,7 +4258,27 @@ where
      let bo_format = bo.format().code;
      let bo_stride = bo.stride();
  

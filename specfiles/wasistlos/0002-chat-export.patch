@@ -1,0 +1,2162 @@
+diff --git a/.github/ISSUE_TEMPLATE/bug_report.md b/.github/ISSUE_TEMPLATE/bug_report.md
+deleted file mode 100644
+index 78e89bd..0000000
+--- a/.github/ISSUE_TEMPLATE/bug_report.md
++++ /dev/null
+@@ -1,29 +0,0 @@
+----
+-name: Bug report
+-about: Create a report to help us improve
+-title: ''
+-labels: bug
+-assignees: ''
+-
+----
+-
+-**Description**
+-A clear and concise description of what the bug is.
+-
+-**To Reproduce**
+-Steps to reproduce the behavior:
+-1. Go to '...'
+-2. Click on '....'
+-3. Scroll down to '....'
+-4. See the error
+-
+-**Expected behavior**
+-A clear and concise description of what you expected to happen.
+-
+-**Screenshots**
+-If applicable, add screenshots to help explain your problem.
+-
+-**Environment**
+- - Distro [e.g. Ubuntu, Arch Linux]
+- - Package [e.g. snap, debian]
+- - Desktop Environment or Window Manager [e.g. Gnome, i3wm]
+diff --git a/.github/ISSUE_TEMPLATE/config.yml b/.github/ISSUE_TEMPLATE/config.yml
+deleted file mode 100644
+index de1c2c7..0000000
+--- a/.github/ISSUE_TEMPLATE/config.yml
++++ /dev/null
+@@ -1,5 +0,0 @@
+-blank_issues_enabled: true
+-contact_links:
+-  - name: GitHub Community Support
+-    url: https://github.community/
+-    about: Please ask and answer questions here.
+diff --git a/.github/ISSUE_TEMPLATE/feature_request.md b/.github/ISSUE_TEMPLATE/feature_request.md
+deleted file mode 100644
+index 6665601..0000000
+--- a/.github/ISSUE_TEMPLATE/feature_request.md
++++ /dev/null
+@@ -1,14 +0,0 @@
+----
+-name: Feature request
+-about: Suggest an idea for this project
+-title: ''
+-labels: enhancement
+-assignees: ''
+-
+----
+-
+-**Is your feature request related to a problem? Please describe.**
+-A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+-
+-**Describe the solution you'd like**
+-A clear and concise description of what you want to happen.
+diff --git a/.github/code_of_conduct.md b/.github/code_of_conduct.md
+deleted file mode 100644
+index e7bfd95..0000000
+--- a/.github/code_of_conduct.md
++++ /dev/null
+@@ -1,76 +0,0 @@
+-# Contributor Covenant Code of Conduct
+-
+-## Our Pledge
+-
+-In the interest of fostering an open and welcoming environment, we as
+-contributors and maintainers pledge to making participation in our project and
+-our community a harassment-free experience for everyone, regardless of age, body
+-size, disability, ethnicity, sex characteristics, gender identity and expression,
+-level of experience, education, socio-economic status, nationality, personal
+-appearance, race, religion, or sexual identity and orientation.
+-
+-## Our Standards
+-
+-Examples of behavior that contributes to creating a positive environment
+-include:
+-
+-* Using welcoming and inclusive language
+-* Being respectful of differing viewpoints and experiences
+-* Gracefully accepting constructive criticism
+-* Focusing on what is best for the community
+-* Showing empathy towards other community members
+-
+-Examples of unacceptable behavior by participants include:
+-
+-* The use of sexualized language or imagery and unwelcome sexual attention or
+- advances
+-* Trolling, insulting/derogatory comments, and personal or political attacks
+-* Public or private harassment
+-* Publishing others' private information, such as a physical or electronic
+- address, without explicit permission
+-* Other conduct which could reasonably be considered inappropriate in a
+- professional setting
+-
+-## Our Responsibilities
+-
+-Project maintainers are responsible for clarifying the standards of acceptable
+-behavior and are expected to take appropriate and fair corrective action in
+-response to any instances of unacceptable behavior.
+-
+-Project maintainers have the right and responsibility to remove, edit, or
+-reject comments, commits, code, wiki edits, issues, and other contributions
+-that are not aligned to this Code of Conduct, or to ban temporarily or
+-permanently any contributor for other behaviors that they deem inappropriate,
+-threatening, offensive, or harmful.
+-
+-## Scope
+-
+-This Code of Conduct applies both within project spaces and in public spaces
+-when an individual is representing the project or its community. Examples of
+-representing a project or community include using an official project e-mail
+-address, posting via an official social media account, or acting as an appointed
+-representative at an online or offline event. Representation of a project may be
+-further defined and clarified by project maintainers.
+-
+-## Enforcement
+-
+-Instances of abusive, harassing, or otherwise unacceptable behavior may be
+-reported by contacting the project team at nshecan@gmail.com. All
+-complaints will be reviewed and investigated and will result in a response that
+-is deemed necessary and appropriate to the circumstances. The project team is
+-obligated to maintain confidentiality with regard to the reporter of an incident.
+-Further details of specific enforcement policies may be posted separately.
+-
+-Project maintainers who do not follow or enforce the Code of Conduct in good
+-faith may face temporary or permanent repercussions as determined by other
+-members of the project's leadership.
+-
+-## Attribution
+-
+-This Code of Conduct is adapted from the [Contributor Covenant][homepage], version 1.4,
+-available at https://www.contributor-covenant.org/version/1/4/code-of-conduct.html
+-
+-[homepage]: https://www.contributor-covenant.org
+-
+-For answers to common questions about this code of conduct, see
+-https://www.contributor-covenant.org/faq
+diff --git a/.github/funding.yml b/.github/funding.yml
+deleted file mode 100644
+index faabb4b..0000000
+--- a/.github/funding.yml
++++ /dev/null
+@@ -1,4 +0,0 @@
+-github: xeco23
+-open_collective: WasIstLos
+-ko_fi: xeco19
+-custom: "paypal.me/xeco19"
+diff --git a/.github/pull_request_template.md b/.github/pull_request_template.md
+deleted file mode 100644
+index 32120ce..0000000
+--- a/.github/pull_request_template.md
++++ /dev/null
+@@ -1,6 +0,0 @@
+-Fixes #
+-
+-**Proposed Changes**
+- -
+- -
+- -
+diff --git a/.github/workflows/build.yml b/.github/workflows/build.yml
+deleted file mode 100644
+index 8b3f07c..0000000
+--- a/.github/workflows/build.yml
++++ /dev/null
+@@ -1,37 +0,0 @@
+-name: Build
+-
+-on:
+-  push:
+-    branches: [ master ]
+-  pull_request:
+-    branches: [ master ]
+-
+-jobs:
+-  build:
+-    runs-on: ubuntu-latest
+-
+-    steps:
+-      - name: Checkout
+-        uses: actions/checkout@v3
+-
+-      - name: Install Dependencies
+-        run: |
+-          sudo apt update
+-          sudo apt -y install build-essential intltool libgtkmm-3.0-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev libcanberra-dev
+-
+-      - name: Configure
+-        run: |
+-          mkdir -p build/debug
+-          mkdir -p build/release
+-
+-      - name: Debug Build
+-        run: |
+-          cd build/debug
+-          cmake -DCMAKE_BUILD_TYPE=Debug ../..
+-          make -j4
+-
+-      - name: Release Build
+-        run: |
+-          cd build/release
+-          cmake -DCMAKE_BUILD_TYPE=Release ../..
+-          make -j4
+diff --git a/.github/workflows/install.yml b/.github/workflows/install.yml
+deleted file mode 100644
+index 3b23e23..0000000
+--- a/.github/workflows/install.yml
++++ /dev/null
+@@ -1,34 +0,0 @@
+-name: Install
+-
+-on:
+-  push:
+-    branches: [ master ]
+-  pull_request:
+-    branches: [ master ]
+-
+-jobs:
+-  install:
+-    runs-on: ubuntu-latest
+-
+-    steps:
+-      - name: Checkout
+-        uses: actions/checkout@v3
+-
+-      - name: Install Dependencies
+-        run: |
+-          sudo apt update
+-          sudo apt -y install build-essential intltool libgtkmm-3.0-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev libcanberra-dev
+-
+-      - name: Configure
+-        run: mkdir build
+-
+-      - name: Build
+-        run: |
+-          cd build
+-          cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr ..
+-          make -j4
+-
+-      - name: Install
+-        run: |
+-          cd build
+-          sudo make install
+diff --git a/.github/workflows/linter.yml b/.github/workflows/linter.yml
+deleted file mode 100644
+index b351395..0000000
+--- a/.github/workflows/linter.yml
++++ /dev/null
+@@ -1,22 +0,0 @@
+-name: Linter
+-
+-on:
+-  push:
+-    branches: [ master ]
+-  pull_request:
+-    branches: [ master ]
+-
+-jobs:
+-  linter:
+-    runs-on: ubuntu-latest
+-
+-    steps:
+-      - name: Checkout
+-        uses: actions/checkout@v3
+-
+-      - name: Lint clang-format
+-        uses: DoozyX/clang-format-lint-action@v0.15
+-        with:
+-          source: './src'
+-          extensions: 'hpp,cpp'
+-          clangFormatVersion: 15
+diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
+deleted file mode 100644
+index 613c10d..0000000
+--- a/.github/workflows/release.yml
++++ /dev/null
+@@ -1,123 +0,0 @@
+-name: Release
+-
+-on:
+-  push:
+-    branches: [ release ]
+-
+-jobs:
+-  release:
+-    runs-on: ubuntu-latest
+-
+-    steps:
+-      - name: Checkout
+-        uses: actions/checkout@v3
+-
+-      - name: Install Dependencies
+-        run: |
+-          sudo apt update
+-          sudo apt -y install build-essential intltool cmake pkg-config libgtkmm-3.0-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev libcanberra-dev debhelper zsync squashfs-tools
+-
+-      - name: Build & Install
+-        run: |
+-          mkdir -p build/release && cd build/release
+-          cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr ../..
+-          make -j4
+-          make install DESTDIR=../../AppDir
+-
+-      - name: Set Version
+-        run: |
+-          version=$(cat "build/release/src/VERSION")
+-          echo "RELEASE_VERSION=${version}" >> "$GITHUB_ENV"
+-          echo "RELEASE_TAG=v${version}" >> "$GITHUB_ENV"
+-          sed -i -E "s/\((.*?)\)/(${version})/g" debian/changelog
+-
+-      - name: Build Debian Package
+-        id: dpkg-buildpackage
+-        uses: jtdor/build-deb-action@v1
+-        env:
+-          DEB_BUILD_OPTIONS: noautodbgsym
+-        with:
+-          artifacts-dir: "."
+-          buildpackage-opts: -uc -us -ui
+-
+-      - name: Build Snap Package
+-        id: snapcraft
+-        uses: snapcore/action-build@v1
+-
+-      - name: Build AppImage Package
+-        id: appimage
+-        uses: AppImageCrafters/build-appimage@fe2205a4d6056be47051f7b1b3811106e9814910
+-        with:
+-          recipe: "./appimage/AppImageBuilder.yml"
+-        env:
+-          UPDATE_INFO: gh-releases-zsync|xeco23|wasistlos|${{ env.RELEASE_VERSION }}|*x86_64.AppImage.zsync
+-
+-      - name: Push Tag
+-        id: push-tag
+-        uses: anothrNick/github-tag-action@1.46.0
+-        env:
+-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+-          CUSTOM_TAG: ${{ env.RELEASE_TAG }}
+-
+-      - name: Generate Changelog
+-        id: generate-changelog
+-        uses: heinrichreimer/github-changelog-generator-action@v2.3
+-        with:
+-          token: ${{ secrets.GITHUB_TOKEN }}
+-          onlyLastTag: true
+-          unreleased: false
+-          stripGeneratorNotice: true
+-
+-      - name: Create Release
+-        id: create-release
+-        uses: actions/create-release@v1
+-        env:
+-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+-        with:
+-          tag_name: ${{ env.RELEASE_TAG }}
+-          release_name: ${{ env.RELEASE_VERSION }}
+-          body: ${{ steps.generate-changelog.outputs.changelog }}
+-          draft: false
+-          prerelease: false
+-
+-      - name: Upload Debian Package
+-        id: upload-debian-package
+-        uses: actions/upload-release-asset@v1
+-        env:
+-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+-        with:
+-          upload_url: ${{ steps.create-release.outputs.upload_url }}
+-          asset_path: "wasistlos_${{ env.RELEASE_VERSION }}_amd64.deb"
+-          asset_name: "wasistlos_${{ env.RELEASE_VERSION }}_amd64.deb"
+-          asset_content_type: application/deb
+-
+-      - name: Upload Snap Package
+-        id: upload-snap-package
+-        uses: actions/upload-release-asset@v1
+-        env:
+-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+-        with:
+-          upload_url: ${{ steps.create-release.outputs.upload_url }}
+-          asset_path: ${{ steps.snapcraft.outputs.snap }}
+-          asset_name: ${{ steps.snapcraft.outputs.snap }}
+-          asset_content_type: application/snap
+-
+-      - name: Upload AppImage Package
+-        id: upload-appimage-package
+-        uses: actions/upload-release-asset@v1
+-        env:
+-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+-        with:
+-          upload_url: ${{ steps.create-release.outputs.upload_url }}
+-          asset_path: "wasistlos-${{ env.RELEASE_VERSION }}-x86_64.AppImage"
+-          asset_name: "wasistlos-${{ env.RELEASE_VERSION }}-x86_64.AppImage"
+-          asset_content_type: application/appimage
+-
+-      - name: Publish Snap to Store
+-        id: snapcraft-publish
+-        uses: snapcore/action-publish@v1
+-        env:
+-          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAP_STORE_LOGIN }}
+-        with:
+-          snap: ${{ steps.snapcraft.outputs.snap }}
+-          release: stable
+diff --git a/.gitignore b/.gitignore
+deleted file mode 100644
+index 30f52b7..0000000
+--- a/.gitignore
++++ /dev/null
+@@ -1,36 +0,0 @@
+-# Compiled object files
+-*.slo
+-*.lo
+-*.o
+-*.obj
+-
+-# Precompiled headers
+-*.gch
+-*.pch
+-
+-# Compiled dynamic libraries
+-*.so
+-*.dylib
+-*.dll
+-
+-# Compiled static libraries
+-*.lai
+-*.la
+-*.a
+-*.lib
+-
+-# Executables
+-*.exe
+-*.out
+-*.app
+-
+-# Temporary ui files
+-*.ui~
+-*.ui#
+-
+-# Common build directory
+-build/
+-
+-# IDE folders
+-.idea/
+-.vscode/
+diff --git a/resource/ui/MainWindow.ui b/resource/ui/MainWindow.ui
+index 4fdfac5..72496e2 100644
+--- a/resource/ui/MainWindow.ui
++++ b/resource/ui/MainWindow.ui
+@@ -111,11 +111,11 @@
+           </packing>
+         </child>
+         <child>
+-          <object class="GtkModelButton" id="button_preferences">
++          <object class="GtkModelButton" id="button_continuous_export">
+             <property name="visible">True</property>
+             <property name="can-focus">True</property>
+             <property name="receives-default">True</property>
+-            <property name="text" translatable="yes">Preferences</property>
++            <property name="text" translatable="yes">Continuous Chat Export…</property>
+           </object>
+           <packing>
+             <property name="expand">False</property>
+@@ -124,11 +124,11 @@
+           </packing>
+         </child>
+         <child>
+-          <object class="GtkModelButton" id="button_shortcuts">
++          <object class="GtkModelButton" id="button_paste_image">
+             <property name="visible">True</property>
+             <property name="can-focus">True</property>
+             <property name="receives-default">True</property>
+-            <property name="text" translatable="yes">Keyboard Shortcuts</property>
++            <property name="text" translatable="yes">Paste Image from Clipboard</property>
+           </object>
+           <packing>
+             <property name="expand">False</property>
+@@ -137,16 +137,40 @@
+           </packing>
+         </child>
+         <child>
+-          <object class="GtkModelButton" id="button_paste_image">
++          <object class="GtkSeparator" id="separator_2">
++            <property name="visible">True</property>
++            <property name="can-focus">False</property>
++          </object>
++          <packing>
++            <property name="expand">False</property>
++            <property name="fill">True</property>
++            <property name="position">5</property>
++          </packing>
++        </child>
++        <child>
++          <object class="GtkModelButton" id="button_preferences">
+             <property name="visible">True</property>
+             <property name="can-focus">True</property>
+             <property name="receives-default">True</property>
+-            <property name="text" translatable="yes">Paste Image from Clipboard</property>
++            <property name="text" translatable="yes">Preferences</property>
+           </object>
+           <packing>
+             <property name="expand">False</property>
+             <property name="fill">True</property>
+-            <property name="position">5</property>
++            <property name="position">6</property>
++          </packing>
++        </child>
++        <child>
++          <object class="GtkModelButton" id="button_shortcuts">
++            <property name="visible">True</property>
++            <property name="can-focus">True</property>
++            <property name="receives-default">True</property>
++            <property name="text" translatable="yes">Keyboard Shortcuts</property>
++          </object>
++          <packing>
++            <property name="expand">False</property>
++            <property name="fill">True</property>
++            <property name="position">7</property>
+           </packing>
+         </child>
+         <child>
+@@ -159,7 +183,7 @@
+           <packing>
+             <property name="expand">False</property>
+             <property name="fill">True</property>
+-            <property name="position">6</property>
++            <property name="position">8</property>
+           </packing>
+         </child>
+         <child>
+@@ -172,7 +196,7 @@
+           <packing>
+             <property name="expand">False</property>
+             <property name="fill">True</property>
+-            <property name="position">7</property>
++            <property name="position">9</property>
+           </packing>
+         </child>
+       </object>
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 3ae6f68..7a4c24a 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -24,6 +24,8 @@ include_directories(${APPINDICATOR_INCLUDE_DIRS})
+ pkg_check_modules(CANBERRA libcanberra REQUIRED)
+ include_directories(${CANBERRA_INCLUDE_DIRS})
+ 
++find_package(whisper REQUIRED)
++
+ include_directories(${CMAKE_CURRENT_BINARY_DIR})
+ 
+ list(APPEND
+@@ -48,6 +50,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
+         ${APPINDICATOR_LIBRARIES}
+         ${CANBERRA_LIBRARIES}
+         ${Intl_LIBRARIES}
++        whisper
+     )
+ 
+ install(TARGETS ${CMAKE_PROJECT_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
+diff --git a/src/ui/MainWindow.cpp b/src/ui/MainWindow.cpp
+index add643f..98f1ae7 100644
+--- a/src/ui/MainWindow.cpp
++++ b/src/ui/MainWindow.cpp
+@@ -61,6 +61,10 @@ namespace wil::ui
+         refBuilder->get_widget("button_zoom_out", buttonZoomOut);
+         buttonZoomOut->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onZoomOut));
+ 
++        Gtk::ModelButton* buttonContinuousExport = nullptr;
++        refBuilder->get_widget("button_continuous_export", buttonContinuousExport);
++        buttonContinuousExport->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onConfigureContinuousExport));
++
+         Gtk::ModelButton* buttonPasteImage = nullptr;
+         refBuilder->get_widget("button_paste_image", buttonPasteImage);
+         buttonPasteImage->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onPasteImage));
+@@ -209,6 +213,13 @@ namespace wil::ui
+         return Gtk::ApplicationWindow::on_window_state_event(windowStateEvent);
+     }
+ 
++    bool MainWindow::on_focus_in_event(GdkEventFocus* focusEvent)
++    {
++        m_webView.resyncContinuousExport();
++
++        return Gtk::ApplicationWindow::on_focus_in_event(focusEvent);
++    }
++
+     bool MainWindow::on_delete_event(GdkEventAny*)
+     {
+         if (m_trayIcon.isVisible())
+@@ -273,6 +284,11 @@ namespace wil::ui
+         }
+     }
+ 
++    void MainWindow::onConfigureContinuousExport()
++    {
++        m_webView.configureContinuousExport();
++    }
++
+     void MainWindow::onPasteImage()
+     {
+         m_webView.pasteImageFromClipboard();
+diff --git a/src/ui/MainWindow.hpp b/src/ui/MainWindow.hpp
+index 1c02a2a..ccb60d9 100644
+--- a/src/ui/MainWindow.hpp
++++ b/src/ui/MainWindow.hpp
+@@ -26,6 +26,7 @@ namespace wil::ui
+             bool on_scroll_event(GdkEventScroll* scrollEvent) override;
+             bool on_window_state_event(GdkEventWindowState* windowStateEvent) override;
+             bool on_delete_event(GdkEventAny*) override;
++            bool on_focus_in_event(GdkEventFocus* focusEvent) override;
+ 
+         private:
+             void onRefresh();
+@@ -33,6 +34,7 @@ namespace wil::ui
+             void onOpenPreferences();
+             void onOpenPhoneNumber();
+             void onPhoneNumberDialogResponse(int responseId);
++            void onConfigureContinuousExport();
+             void onPasteImage();
+             void onNotificationChanged(bool show);
+             void onShow();
+diff --git a/src/ui/WebView.cpp b/src/ui/WebView.cpp
+index 0efe765..a19fb1e 100644
+--- a/src/ui/WebView.cpp
++++ b/src/ui/WebView.cpp
+@@ -5,14 +5,34 @@
+ #include <streambuf>
+ #include <optional>
+ #include <locale>
++#include <cctype>
++#include <cstdlib>
++#include <sstream>
++#include <vector>
++#include <algorithm>
++#include <map>
++#include <set>
++#include <deque>
++#include <memory>
++#include <thread>
++#include <mutex>
++#include <condition_variable>
++#include <chrono>
++#include <sys/resource.h>
++#include <unistd.h>
++#include <jsc/jsc.h>
++#include <whisper.h>
+ #include <glibmm/i18n.h>
+ #include <glibmm/main.h>
+ #include <glibmm/miscutils.h>
++#include <glibmm/fileutils.h>
++#include <glibmm/ustring.h>
+ #include <gtkmm/messagedialog.h>
+ #include <gtkmm/filechooserdialog.h>
+ #include <gtkmm/clipboard.h>
+ #include <gdkmm/pixbuf.h>
+ #include <glib.h>
++#include <glib/gstdio.h>
+ #include "../util/Settings.hpp"
+ #include "Config.hpp"
+ 
+@@ -23,6 +43,1304 @@ namespace wil::ui
+         constexpr auto const WHATSAPP_WEB_URI = "https://web.whatsapp.com";
+         constexpr auto const USER_AGENT       = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+ 
++        constexpr auto const CONTINUOUS_EXPORT_GROUP = "chat-export";
++
++        constexpr auto const CURRENT_CHAT_TITLE_SCRIPT = "window.__wilCurrentTitle ? window.__wilCurrentTitle() : ''";
++
++        constexpr auto const CONTINUOUS_EXPORT_INIT_SCRIPT = R"JS(
++            (function() {
++                if (window.__wilContinuousExportInstalled) { return; }
++                window.__wilContinuousExportInstalled = true;
++
++                function currentTitle() {
++                    var titleEl = document.querySelector('#main header [data-testid="conversation-info-header-chat-title"]')
++                        || document.querySelector('#main header span[dir="auto"]');
++                    return titleEl ? titleEl.innerText.trim() : '';
++                }
++                window.__wilCurrentTitle = currentTitle;
++
++                // A reply's quoted message comes first; the reply text is the last top-level span.
++                function messageTextNode(node) {
++                    var spans = Array.prototype.filter.call(node.querySelectorAll('span.selectable-text'), function(span) {
++                        return !span.parentElement.closest('span.selectable-text');
++                    });
++                    return spans.length ? spans[spans.length - 1] : node;
++                }
++
++                // Rows carry bare message ids (no chat prefix), which Msg.get() cannot resolve.
++                var msgIndex = {}, msgIndexAt = 0;
++                function storeMessage(id) {
++                    if (!id) { return null; }
++                    try {
++                        var Msg = window.require('WAWebCollections').Msg;
++                        var msg = Msg.get(id) || msgIndex[id];
++                        if (!msg && Date.now() - msgIndexAt > 2000) {
++                            msgIndex   = {};
++                            msgIndexAt = Date.now();
++                            (Msg.getModelsArray ? Msg.getModelsArray() : Msg._models || []).forEach(function(m) {
++                                if (m.id) { msgIndex[m.id.id] = m; msgIndex[m.id._serialized] = m; }
++                            });
++                            msg = msgIndex[id];
++                        }
++                        return msg || null;
++                    } catch (e) { return null; }
++                }
++
++                var VOICE_SELECTOR = '[data-icon="audio-play"], [data-icon="audio-pause"], [data-icon^="ptt"], [aria-label*="voice message" i]';
++                var CLOCK_PATTERN  = /^\d{1,2}[:.]\d{2}(\s*[ap]\.?\s?m\.?)?$/i;
++
++                function voiceNote(row, seen) {
++                    var id = row.getAttribute('data-id');
++                    if (!id || seen[id] || row.querySelector('div.copyable-text[data-pre-plain-text]')) { return null; }
++
++                    var msg = storeMessage(id);
++                    var media = isAttachment(msg);
++                    if (!media && (msg ? !/^(ptt|audio)$/.test(msg.type) : !row.querySelector(VOICE_SELECTOR))) { return null; }
++                    seen[id] = true;
++
++                    var clocks = Array.prototype.map.call(row.querySelectorAll('span'), function(span) {
++                        return (span.innerText || '').trim();
++                    }).filter(function(text) { return CLOCK_PATTERN.test(text); });
++
++                    var seconds  = msg ? parseInt(msg.duration, 10) : NaN;
++                    var duration = isNaN(seconds) ? (clocks.length > 1 ? clocks[0] : '')
++                        : Math.floor(seconds / 60) + ':' + ('0' + seconds % 60).slice(-2);
++                    var group    = id.indexOf('@g.us') !== -1;
++                    var sender   = msg && msg.senderObj ? (msg.senderObj.formattedName || msg.senderObj.pushname || '') : '';
++
++                    return {
++                        voice:    true,
++                        media:    media ? attachmentMarker(id, msg) : '',
++                        id:       id,
++                        duration: duration,
++                        clock:    clocks.length ? clocks[clocks.length - 1] : '',
++                        t:        msg ? msg.t : 0,
++                        out:      msg ? msg.id.fromMe : (id.indexOf('true_') === 0 || !!row.closest('.message-out')),
++                        sender:   group ? sender : ''
++                    };
++                }
++
++                function isAttachment(msg) {
++                    return !!(msg && msg.mediaData && /^(image|video|document|sticker|ptv)$/.test(msg.type));
++                }
++
++                // "\x05id\x05type\x05name\x05" prefixes the caption; native code turns it into a link.
++                function attachmentMarker(id, msg) {
++                    var mime = (msg.mimetype || '').split(';')[0];
++                    var name = msg.filename || (mime.indexOf('/') !== -1 ? '.' + mime.split('/')[1] : '');
++                    return '\x05' + id + '\x05' + msg.type + '\x05' + name.replace(/[\x01-\x05\n]/g, '') + '\x05';
++                }
++
++                function sameDay(a, b) {
++                    return new Date(a * 1000).toDateString() === new Date(b * 1000).toDateString();
++                }
++
++                function formatClock(date, like) {
++                    var hours   = date.getHours();
++                    var minutes = ('0' + date.getMinutes()).slice(-2);
++                    if (/[ap]\.?\s?m/i.test(like)) {
++                        var suffix = hours < 12 ? 'AM' : 'PM';
++                        return (hours % 12 || 12) + ':' + minutes + ' ' + (/[ap]m/.test(like) ? suffix.toLowerCase() : suffix);
++                    }
++                    return ('0' + hours).slice(-2) + ':' + minutes;
++                }
++
++                function formatDate(date, template) {
++                    var day   = date.getDate(), month = date.getMonth() + 1, year = date.getFullYear();
++                    var parts = (template.split(',')[1] || '').trim().match(/^(\d+)(\D)(\d+)\D(\d+)$/);
++                    if (!parts || parts[1].length === 4) {
++                        return year + '-' + ('0' + month).slice(-2) + '-' + ('0' + day).slice(-2);
++                    }
++                    var pad = function(value, like) { return like.charAt(0) === '0' ? ('0' + value).slice(-2) : String(value); };
++                    var y   = parts[4].length === 2 ? String(year).slice(-2) : year;
++                    return parts[2] === '/' && parseInt(parts[3], 10) > 12
++                        ? pad(month, parts[1]) + '/' + pad(day, parts[3]) + '/' + y
++                        : pad(day, parts[1]) + parts[2] + pad(month, parts[3]) + parts[2] + y;
++                }
++
++                // Voice notes carry no data-pre-plain-text, so borrow the date format from a same-day text message.
++                function resolveVoiceNotes(entries, title) {
++                    var ownName = '';
++                    entries.forEach(function(entry) { if (!entry.voice && entry.out && entry.sender) { ownName = entry.sender; } });
++
++                    var template = '';
++                    entries.forEach(function(entry) { if (!entry.voice && entry.time.indexOf(',') !== -1) { template = entry.time; } });
++
++                    return entries.filter(function(entry, index) {
++                        if (!entry.voice) { return true; }
++
++                        var neighbour = null;
++                        for (var distance = 1; !neighbour && distance < entries.length; ++distance) {
++                            [entries[index - distance], entries[index + distance]].forEach(function(candidate) {
++                                if (!neighbour && candidate && !candidate.voice && candidate.time.indexOf(',') !== -1
++                                    && (!entry.t || !candidate.t || sameDay(entry.t, candidate.t))) {
++                                    neighbour = candidate;
++                                }
++                            });
++                        }
++
++                        var date = new Date(entry.t * 1000);
++                        if (neighbour && (entry.t || entry.clock)) {
++                            var parts   = neighbour.time.split(',');
++                            entry.time  = (entry.t ? formatClock(date, parts[0]) : entry.clock) + ',' + parts.slice(1).join(',');
++                        } else if (entry.t) {
++                            entry.time = formatClock(date, template ? template.split(',')[0] : '00') + ', ' + formatDate(date, template);
++                        } else {
++                            return false;
++                        }
++
++                        entry.sender = entry.out ? (ownName || 'You') : (entry.id.indexOf('@g.us') !== -1 ? (entry.sender || 'Unknown') : title);
++                        entry.text   = entry.media || ('\x04' + entry.id + '\x04' + entry.duration);
++                        return true;
++                    });
++                }
++
++                function scrapeAndNotify() {
++                    var title = currentTitle();
++                    if (!title) { return; }
++
++                    var entries = [];
++                    var seen    = {};
++                    document.querySelectorAll('#main div.copyable-text[data-pre-plain-text], #main [data-id]').forEach(function(node) {
++                        if (node.hasAttribute('data-id')) {
++                            var voice = voiceNote(node, seen);
++                            if (voice) { entries.push(voice); }
++                            return;
++                        }
++
++                        var meta     = (node.getAttribute('data-pre-plain-text') || '').trim();
++                        var match    = meta.match(/^\[(.*?)\]\s*(.*?):\s*$/);
++                        var text     = (messageTextNode(node).innerText || '').trim();
++                        var row      = node.closest('[data-id]');
++                        var msg      = row ? storeMessage(row.getAttribute('data-id')) : null;
++
++                        if (!match && !text) { return; }
++
++                        entries.push({
++                            time:   match ? match[1] : '',
++                            sender: match ? match[2] : '',
++                            text:   (isAttachment(msg) ? attachmentMarker(row.getAttribute('data-id'), msg) : '') + text,
++                            t:      msg ? msg.t : 0,
++                            out:    !!node.closest('.message-out')
++                        });
++                    });
++
++                    entries = resolveVoiceNotes(entries, title);
++                    if (entries.length === 0) { return; }
++
++                    var records = entries.map(function(entry) {
++                        return (entry.t || 0) + '\x02' + entry.time + '\x02' + entry.sender + '\x02' + entry.text + '\x03';
++                    }).join('');
++
++                    try {
++                        window.webkit.messageHandlers.wilContinuousExport.postMessage(title + '\x01' + records);
++                    } catch (e) { /* handler not registered yet */ }
++                }
++
++                window.__wilForceContinuousExportScrape = scrapeAndNotify;
++
++                async function downloadMedia(id) {
++                    var msg = storeMessage(id);
++                    if (!msg) { throw new Error('message not in store'); }
++                    if (!msg.mediaData || msg.mediaData.mediaStage === 'REUPLOADING') { throw new Error('no mediaData'); }
++                    // Always download: a RESOLVED stage can outlive the evicted blob cache.
++                    await msg.downloadMedia({downloadEvenIfExpensive: true, rmrReason: 1, isUserInitiated: true});
++                    if (/ERROR|FETCHING/.test(msg.mediaData.mediaStage)) {
++                        throw new Error('mediaStage ' + msg.mediaData.mediaStage);
++                    }
++                    var media = msg.mediaObject;
++                    var blob  = (media && window.require('WAWebMediaInMemoryBlobCache').InMemoryMediaBlobCache.get(media.filehash))
++                             || (media && media.mediaBlob && media.mediaBlob.forceToBlob());
++                    if (!blob) { throw new Error('no media blob'); }
++                    return blob;
++                }
++
++                function readBase64(blob) {
++                    return new Promise(function(resolve, reject) {
++                        var reader = new FileReader();
++                        reader.onload  = function() { resolve(reader.result.slice(reader.result.indexOf(',') + 1)); };
++                        reader.onerror = function() { reject(reader.error); };
++                        reader.readAsDataURL(blob);
++                    });
++                }
++
++                var mediaQueue = Promise.resolve();
++                window.__wilFetchMedia = function(id) {
++                    mediaQueue = mediaQueue.then(function() { return downloadMedia(id).then(readBase64); })
++                        .catch(function(e) { return '\x01' + String(e && e.message || e); })
++                        .then(function(data) {
++                            try { window.webkit.messageHandlers.wilMedia.postMessage(id + '\x01' + data); } catch (e) { /* handler not registered yet */ }
++                        });
++                };
++
++                function messageScroller() {
++                    var message = document.querySelector('#main div.copyable-text[data-pre-plain-text]');
++                    for (var el = message && message.parentElement; el && el !== document.body; el = el.parentElement) {
++                        var overflowY = getComputedStyle(el).overflowY;
++                        if ((overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
++                            return el;
++                        }
++                    }
++                    return null;
++                }
++
++                // Walks the chat upwards in overlapping steps so every message passes through
++                // the virtualized window once; stops after the top stops loading older history.
++                var backfilling = false;
++                window.__wilContinuousExportBackfill = function() {
++                    var scroller = messageScroller();
++                    if (backfilling || !scroller) { return; }
++                    backfilling = true;
++
++                    var title      = currentTitle();
++                    var lastHeight = scroller.scrollHeight;
++                    var idleSteps  = 0;
++
++                    function step() {
++                        if (!scroller.isConnected || currentTitle() !== title) {
++                            backfilling = false;
++                            return;
++                        }
++
++                        scrapeAndNotify();
++
++                        idleSteps  = (scroller.scrollTop <= 0 && scroller.scrollHeight === lastHeight) ? idleSteps + 1 : 0;
++                        lastHeight = scroller.scrollHeight;
++
++                        if (idleSteps >= 10) {
++                            backfilling = false;
++                            scroller.scrollTop = scroller.scrollHeight;
++                            return;
++                        }
++
++                        scroller.scrollTop = Math.max(0, scroller.scrollTop - scroller.clientHeight * 0.6);
++                        setTimeout(step, 500);
++                    }
++
++                    step();
++                };
++
++                var lastTitle      = currentTitle();
++                var debounceTimer  = null;
++                var observer       = new MutationObserver(function() {
++                    var title = currentTitle();
++                    if (title && title !== lastTitle) {
++                        lastTitle = title;
++                        if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = null; }
++                        scrapeAndNotify();
++                        return;
++                    }
++
++                    lastTitle = title;
++                    if (debounceTimer) { clearTimeout(debounceTimer); }
++                    debounceTimer = setTimeout(scrapeAndNotify, 600);
++                });
++                observer.observe(document.body, {childList: true, subtree: true});
++
++                scrapeAndNotify();
++            })();
++        )JS";
++
++        std::string sanitizeFilename(std::string name)
++        {
++            for (auto& character : name)
++            {
++                if (character == '/' || character == '\\' || character == ':' || character == '*' || character == '?' || character == '"'
++                    || character == '<' || character == '>' || character == '|')
++                {
++                    character = '_';
++                }
++            }
++
++            return name.empty() ? "whatsapp-chat" : name;
++        }
++
++        std::string sanitizeSettingsKey(std::string name)
++        {
++            for (auto& character : name)
++            {
++                if (!std::isalnum(static_cast<unsigned char>(character)) && character != '.' && character != '-' && character != '_')
++                {
++                    character = '_';
++                }
++            }
++
++            return name.empty() ? "whatsapp-chat" : name;
++        }
++
++        std::string exportPathFor(std::string const& title)
++        {
++            return util::Settings::getInstance().getValue<Glib::ustring>(CONTINUOUS_EXPORT_GROUP, sanitizeSettingsKey(title), Glib::ustring{}).raw();
++        }
++
++        void triggerImmediateContinuousExportScrape(WebKitWebView* view)
++        {
++            webkit_web_view_evaluate_javascript(view, "if (window.__wilForceContinuousExportScrape) { window.__wilForceContinuousExportScrape(); }",
++                -1, nullptr, nullptr, nullptr, nullptr, nullptr);
++        }
++
++        void startContinuousExportBackfill(WebKitWebView* view)
++        {
++            webkit_web_view_evaluate_javascript(view, "if (window.__wilContinuousExportBackfill) { window.__wilContinuousExportBackfill(); }",
++                -1, nullptr, nullptr, nullptr, nullptr, nullptr);
++        }
++
++        // Returns true if a destination was set (i.e. the user didn't cancel).
++        bool promptForContinuousExportPath(std::string const& chatTitle)
++        {
++            auto dialog = Gtk::FileChooserDialog{_("Continuous Chat Export Location"), Gtk::FILE_CHOOSER_ACTION_SAVE};
++            dialog.add_button(_("Cancel"), Gtk::RESPONSE_CANCEL);
++            dialog.add_button(_("Save"), Gtk::RESPONSE_OK);
++            dialog.set_current_name(sanitizeFilename(chatTitle) + ".md");
++
++            if (dialog.run() != Gtk::RESPONSE_OK)
++            {
++                return false;
++            }
++
++            util::Settings::getInstance().setValue<Glib::ustring>(
++                CONTINUOUS_EXPORT_GROUP, sanitizeSettingsKey(chatTitle), dialog.get_filename());
++            return true;
++        }
++
++        void continuousExportConfigureFinished(GObject* sourceObject, GAsyncResult* result, gpointer)
++        {
++            GError* error      = nullptr;
++            auto* const value  = webkit_web_view_evaluate_javascript_finish(WEBKIT_WEB_VIEW(sourceObject), result, &error);
++
++            if (!value)
++            {
++                std::cerr << "WebView: Failed to read current chat title: " << (error ? error->message : "unknown error") << std::endl;
++                if (error)
++                {
++                    g_error_free(error);
++                }
++                return;
++            }
++
++            auto* const resultString = jsc_value_to_string(value);
++            auto const  title        = std::string{resultString ? resultString : ""};
++            g_free(resultString);
++            g_object_unref(value);
++
++            if (title.empty())
++            {
++                auto dialog = Gtk::MessageDialog{_("No Chat Open"), false, Gtk::MESSAGE_INFO, Gtk::BUTTONS_OK};
++                dialog.set_secondary_text(_("Open a chat before configuring continuous export."));
++                dialog.run();
++                return;
++            }
++
++            auto* const view = WEBKIT_WEB_VIEW(sourceObject);
++            auto const  key  = sanitizeSettingsKey(title);
++
++            if (auto const currentPath = exportPathFor(title); !currentPath.empty())
++            {
++
++                auto dialog = Gtk::MessageDialog{_("Continuous Export Enabled"), false, Gtk::MESSAGE_QUESTION, Gtk::BUTTONS_NONE};
++                dialog.set_secondary_text(Glib::ustring::compose(_("“%1” is currently exporting to:\n%2"), title, currentPath));
++                dialog.add_button(_("Fetch Full History"), Gtk::RESPONSE_ACCEPT);
++                dialog.add_button(_("Stop Exporting"), Gtk::RESPONSE_REJECT);
++                dialog.add_button(_("Change Location"), Gtk::RESPONSE_APPLY);
++                dialog.add_button(_("Cancel"), Gtk::RESPONSE_CANCEL);
++
++                switch (dialog.run())
++                {
++                    case Gtk::RESPONSE_ACCEPT:
++                        startContinuousExportBackfill(view);
++                        break;
++
++                    case Gtk::RESPONSE_REJECT:
++                        util::Settings::getInstance().removeValue(CONTINUOUS_EXPORT_GROUP, key);
++                        break;
++
++                    case Gtk::RESPONSE_APPLY:
++                        if (promptForContinuousExportPath(title))
++                        {
++                            startContinuousExportBackfill(view);
++                        }
++                        break;
++
++                    default:
++                        break;
++                }
++            }
++            else
++            {
++                auto dialog = Gtk::MessageDialog{_("Enable Continuous Export?"), false, Gtk::MESSAGE_QUESTION, Gtk::BUTTONS_YES_NO};
++                dialog.set_secondary_text(
++                    Glib::ustring::compose(_("Continuously export “%1” to a markdown file, updated as new messages arrive?"), title));
++
++                if ((dialog.run() == Gtk::RESPONSE_YES) && promptForContinuousExportPath(title))
++                {
++                    startContinuousExportBackfill(view);
++                }
++            }
++        }
++
++        struct ChatEntry
++        {
++            std::string time;
++            std::string sender;
++            std::string text;
++            long long   t = 0;
++
++            bool operator==(ChatEntry const& other) const
++            {
++                return (time == other.time) && (sender == other.sender) && (text == other.text);
++            }
++        };
++
++        std::vector<ChatEntry> parseIncomingRecords(std::string const& records)
++        {
++            std::vector<ChatEntry> entries;
++            std::size_t pos = 0;
++
++            while (pos < records.size())
++            {
++                auto const recordEnd = records.find('\x03', pos);
++                if (recordEnd == std::string::npos)
++                {
++                    break;
++                }
++
++                auto const record = records.substr(pos, recordEnd - pos);
++                auto const sep0   = record.find('\x02');
++                auto const sep1   = (sep0 == std::string::npos) ? sep0 : record.find('\x02', sep0 + 1);
++                auto const sep2   = (sep1 == std::string::npos) ? sep1 : record.find('\x02', sep1 + 1);
++
++                if (sep2 != std::string::npos)
++                {
++                    entries.push_back(ChatEntry{record.substr(sep0 + 1, sep1 - sep0 - 1), record.substr(sep1 + 1, sep2 - sep1 - 1), record.substr(sep2 + 1),
++                        std::atoll(record.c_str())});
++                }
++
++                pos = recordEnd + 1;
++            }
++
++            return entries;
++        }
++
++        std::string renderChatMarkdown(std::string const& title, std::vector<ChatEntry> const& entries)
++        {
++            std::string out = "# " + title + "\n\n";
++
++            for (auto const& entry : entries)
++            {
++                out += "**" + entry.sender + "** _" + entry.time + "_\n";
++                if (entry.t > 0)
++                {
++                    out += "<!-- " + std::to_string(entry.t) + " -->\n";
++                }
++                out += "\n";
++
++                std::size_t lineStart = 0;
++                while (true)
++                {
++                    auto const lineEnd = entry.text.find('\n', lineStart);
++                    auto const line    = (lineEnd == std::string::npos) ? entry.text.substr(lineStart) : entry.text.substr(lineStart, lineEnd - lineStart);
++                    out += "> " + line + "\n";
++
++                    if (lineEnd == std::string::npos)
++                    {
++                        break;
++                    }
++                    lineStart = lineEnd + 1;
++                }
++
++                out += "\n";
++            }
++
++            return out;
++        }
++
++        std::vector<ChatEntry> parseExistingMarkdown(std::string const& markdown)
++        {
++            std::vector<ChatEntry> entries;
++            std::istringstream     stream{markdown};
++            std::string            line;
++            bool                   inEntry = false;
++            std::string            currentSender;
++            std::string            currentTime;
++            long long              currentT = 0;
++            std::vector<std::string> currentLines;
++
++            auto flush = [&]()
++            {
++                if (!inEntry)
++                {
++                    return;
++                }
++
++                std::string text;
++                for (std::size_t i = 0; i < currentLines.size(); ++i)
++                {
++                    if (i)
++                    {
++                        text += "\n";
++                    }
++                    text += currentLines[i];
++                }
++
++                entries.push_back(ChatEntry{currentTime, currentSender, text, currentT});
++                inEntry = false;
++                currentLines.clear();
++            };
++
++            while (std::getline(stream, line))
++            {
++                if ((line.rfind("**", 0) == 0) && !line.empty() && (line.back() == '_'))
++                {
++                    if (auto const sepPos = line.find("** _", 2); sepPos != std::string::npos)
++                    {
++                        flush();
++                        inEntry       = true;
++                        currentSender = line.substr(2, sepPos - 2);
++                        currentTime   = line.substr(sepPos + 4, line.size() - (sepPos + 4) - 1);
++                        currentT      = 0;
++                        continue;
++                    }
++                }
++
++                if (inEntry && (line.rfind("<!-- ", 0) == 0))
++                {
++                    currentT = std::atoll(line.c_str() + 5);
++                }
++                else if (inEntry && (line.rfind("> ", 0) == 0))
++                {
++                    currentLines.push_back(line.substr(2));
++                }
++                else if (inEntry && (line == ">"))
++                {
++                    currentLines.push_back("");
++                }
++            }
++            flush();
++
++            return entries;
++        }
++
++        std::vector<ChatEntry> mergeEntries(std::vector<ChatEntry> existing, std::vector<ChatEntry> const& window)
++        {
++            if (existing.empty())
++            {
++                return window;
++            }
++
++            auto findPos = [&existing](ChatEntry const& needle) -> std::optional<std::size_t>
++            {
++                for (std::size_t i = 0; i < existing.size(); ++i)
++                {
++                    if (existing[i] == needle)
++                    {
++                        return i;
++                    }
++                }
++                return std::nullopt;
++            };
++
++            struct Insertion
++            {
++                std::size_t             at;
++                std::vector<ChatEntry>  items;
++            };
++
++            std::vector<Insertion>     insertions;
++            std::vector<ChatEntry>     pending;
++            std::optional<std::size_t> afterPos;
++
++            auto flushPending = [&]()
++            {
++                if (pending.empty())
++                {
++                    return;
++                }
++                insertions.push_back(Insertion{afterPos.has_value() ? (*afterPos + 1) : 0, pending});
++                pending.clear();
++            };
++
++            for (auto const& item : window)
++            {
++                if (auto const pos = findPos(item))
++                {
++                    if (!existing[*pos].t)
++                    {
++                        existing[*pos].t = item.t;
++                    }
++                    flushPending();
++                    afterPos = pos;
++                }
++                else
++                {
++                    pending.push_back(item);
++                }
++            }
++
++            if (!pending.empty())
++            {
++                insertions.push_back(Insertion{afterPos.has_value() ? (*afterPos + 1) : existing.size(), pending});
++            }
++
++            std::sort(insertions.begin(), insertions.end(), [](Insertion const& a, Insertion const& b) { return a.at > b.at; });
++
++            for (auto const& insertion : insertions)
++            {
++                existing.insert(existing.begin() + static_cast<std::ptrdiff_t>(insertion.at), insertion.items.begin(), insertion.items.end());
++            }
++
++            return existing;
++        }
++
++        void mergeIntoExport(std::string const& path, std::string const& title, std::vector<ChatEntry> const& windowEntries)
++        {
++            auto existingEntries = std::vector<ChatEntry>{};
++            if (auto inFile = std::ifstream{path}; inFile)
++            {
++                auto const existingMarkdown = std::string{std::istreambuf_iterator<char>(inFile), std::istreambuf_iterator<char>()};
++                existingEntries              = parseExistingMarkdown(existingMarkdown);
++            }
++
++            auto mergedEntries = mergeEntries(std::move(existingEntries), windowEntries);
++            if (std::all_of(mergedEntries.begin(), mergedEntries.end(), [](ChatEntry const& entry) { return entry.t > 0; }))
++            {
++                std::stable_sort(mergedEntries.begin(), mergedEntries.end(), [](ChatEntry const& a, ChatEntry const& b) { return a.t < b.t; });
++            }
++
++            auto outFile = std::ofstream{path};
++            outFile << renderChatMarkdown(title, mergedEntries);
++        }
++
++        constexpr auto const VOICE_NOTES_GROUP = "voice-notes";
++        constexpr auto const VOICE_MODEL_URL   = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin";
++
++        struct PendingVoiceNote
++        {
++            std::string title;
++            ChatEntry   entry;
++            std::string duration;
++        };
++
++        struct TranscriptionJob
++        {
++            std::string id;
++            std::string audio;
++            std::string modelPath;
++            std::string language;
++        };
++
++        struct TranscriptionResult
++        {
++            std::string                id;
++            std::optional<std::string> transcript;
++            std::string                error;
++        };
++
++        struct VoiceNoteState
++        {
++            WebKitWebView*                          view = nullptr;
++            std::map<std::string, PendingVoiceNote> pending;
++            std::set<std::string>                   requested;
++            std::set<std::string>                   transcribing;
++            std::set<std::string>                   failed;
++            bool                                    modelPrompted = false;
++            bool                                    errorShown    = false;
++
++            std::mutex                       mutex;
++            std::condition_variable          wake;
++            std::deque<TranscriptionJob>     jobs;
++            unsigned                         workers = 0;
++            unsigned                         busy    = 0;
++            std::shared_ptr<whisper_context> model;
++            std::string                      modelPath;
++            std::mutex                       loadMutex;
++        };
++
++        VoiceNoteState& voiceNotes()
++        {
++            // Leaked on purpose: detached workers outlive static destruction.
++            static auto* const state = new VoiceNoteState{};
++            return *state;
++        }
++
++        std::string voiceModelPath()
++        {
++            // Shared with pywhispercpp's model cache.
++            auto const fallback = Glib::build_filename(Glib::get_user_data_dir(), std::string{"pywhispercpp"}, std::string{"models"}, std::string{"ggml-large-v3.bin"});
++            return util::Settings::getInstance().getValue<Glib::ustring>(VOICE_NOTES_GROUP, "model", fallback).raw();
++        }
++
++        std::string transcriptPath(std::string const& id)
++        {
++            return Glib::build_filename(std::string{g_get_user_state_dir()}, std::string{WIL_NAME}, std::string{"voice-notes"}, sanitizeSettingsKey(id) + ".txt");
++        }
++
++        std::optional<std::string> cachedTranscript(std::string const& id)
++        {
++            auto inFile = std::ifstream{transcriptPath(id)};
++            if (!inFile)
++            {
++                return std::nullopt;
++            }
++            return std::string{std::istreambuf_iterator<char>(inFile), std::istreambuf_iterator<char>()};
++        }
++
++        void saveTranscript(std::string const& id, std::string const& transcript)
++        {
++            auto const path = transcriptPath(id);
++            g_mkdir_with_parents(Glib::path_get_dirname(path).c_str(), 0700);
++            auto outFile = std::ofstream{path};
++            outFile << transcript;
++        }
++
++        std::string voiceNoteText(std::string const& duration, std::string const& transcript)
++        {
++            auto text = std::string{"🎤 Voice note"};
++            if (!duration.empty())
++            {
++                text += " (" + duration + ")";
++            }
++            return transcript.empty() ? text : text + ": " + transcript;
++        }
++
++        std::optional<std::vector<float>> decodeAudio(std::string const& audio, std::string& error)
++        {
++            GError* gerror  = nullptr;
++            auto* const process = g_subprocess_new(
++                static_cast<GSubprocessFlags>(G_SUBPROCESS_FLAGS_STDIN_PIPE | G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_PIPE), &gerror,
++                "ffmpeg", "-loglevel", "error", "-i", "pipe:0", "-f", "f32le", "-ac", "1", "-ar", "16000", "pipe:1", nullptr);
++            if (!process)
++            {
++                error = gerror->message;
++                g_error_free(gerror);
++                return std::nullopt;
++            }
++
++            auto* const input  = g_bytes_new(audio.data(), audio.size());
++            GBytes*     output = nullptr;
++            GBytes*     stderrBytes = nullptr;
++            auto const  ok     = g_subprocess_communicate(process, input, nullptr, &output, &stderrBytes, &gerror)
++                && g_subprocess_get_if_exited(process) && (g_subprocess_get_exit_status(process) == 0);
++            g_bytes_unref(input);
++
++            std::optional<std::vector<float>> samples;
++            if (ok)
++            {
++                gsize size        = 0;
++                auto const* data  = static_cast<float const*>(g_bytes_get_data(output, &size));
++                samples           = std::vector<float>(data, data + size / sizeof(float));
++            }
++            else if (gerror)
++            {
++                error = gerror->message;
++                g_error_free(gerror);
++            }
++            else
++            {
++                gsize size = 0;
++                auto const* data = static_cast<char const*>(stderrBytes ? g_bytes_get_data(stderrBytes, &size) : nullptr);
++                error = "ffmpeg: " + (data ? std::string{data, size} : std::string{"failed"});
++            }
++
++            if (output)
++            {
++                g_bytes_unref(output);
++            }
++            if (stderrBytes)
++            {
++                g_bytes_unref(stderrBytes);
++            }
++            g_object_unref(process);
++            return samples;
++        }
++
++        std::shared_ptr<whisper_context> loadModel(std::string const& path, std::string& error)
++        {
++            auto&      state = voiceNotes();
++            auto const lock  = std::lock_guard{state.loadMutex};
++            {
++                auto const inner = std::lock_guard{state.mutex};
++                if (state.model && (state.modelPath == path))
++                {
++                    return state.model;
++                }
++            }
++
++            auto params       = whisper_context_default_params();
++            params.flash_attn = true;
++            auto* const raw   = whisper_init_from_file_with_params(path.c_str(), params);
++            if (!raw)
++            {
++                error = "failed to load model " + path;
++                return nullptr;
++            }
++
++            auto const inner = std::lock_guard{state.mutex};
++            state.model      = std::shared_ptr<whisper_context>{raw, whisper_free};
++            state.modelPath  = path;
++            return state.model;
++        }
++
++        TranscriptionResult transcribe(TranscriptionJob const& job, int threads)
++        {
++            auto result = TranscriptionResult{job.id, std::nullopt, {}};
++
++            auto const samples = decodeAudio(job.audio, result.error);
++            if (!samples)
++            {
++                return result;
++            }
++
++            auto const model = loadModel(job.modelPath, result.error);
++            if (!model)
++            {
++                return result;
++            }
++
++            auto const state = std::unique_ptr<whisper_state, decltype(&whisper_free_state)>{whisper_init_state(model.get()), whisper_free_state};
++            if (!state)
++            {
++                result.error = "whisper_init_state failed";
++                return result;
++            }
++
++            auto params             = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
++            params.language         = job.language.c_str();
++            params.n_threads        = threads;
++            params.print_progress   = false;
++            params.print_realtime   = false;
++            params.print_special    = false;
++            params.print_timestamps = false;
++            params.no_context       = true;
++
++            if (whisper_full_with_state(model.get(), state.get(), params, samples->data(), static_cast<int>(samples->size())) != 0)
++            {
++                result.error = "whisper_full failed";
++                return result;
++            }
++
++            std::string transcript;
++            std::string previous;
++            for (int i = 0; i < whisper_full_n_segments_from_state(state.get()); ++i)
++            {
++                std::string segment = whisper_full_get_segment_text_from_state(state.get(), i);
++                auto const  first   = segment.find_first_not_of(" \t\n");
++                if (first == std::string::npos)
++                {
++                    continue;
++                }
++                segment = segment.substr(first, segment.find_last_not_of(" \t\n") - first + 1);
++                if (segment == previous)
++                {
++                    continue;
++                }
++                previous = segment;
++                transcript += (transcript.empty() ? "" : " ") + segment;
++            }
++
++            result.transcript = transcript;
++            return result;
++        }
++
++        void showVoiceNoteError(std::string const& message)
++        {
++            std::cerr << "WebView: Voice note transcription failed: " << message << std::endl;
++
++            auto& state = voiceNotes();
++            if (state.errorShown)
++            {
++                return;
++            }
++            state.errorShown = true;
++
++            auto dialog = Gtk::MessageDialog{_("Voice Note Transcription Failed"), false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK};
++            dialog.set_secondary_text(message);
++            dialog.run();
++        }
++
++        gboolean voiceNoteTranscribed(gpointer data)
++        {
++            auto const result = std::unique_ptr<TranscriptionResult>{static_cast<TranscriptionResult*>(data)};
++            auto&      state  = voiceNotes();
++            state.requested.erase(result->id);
++            state.transcribing.erase(result->id);
++
++            if (!result->transcript)
++            {
++                state.failed.insert(result->id);
++                showVoiceNoteError(result->error);
++                return G_SOURCE_REMOVE;
++            }
++
++            saveTranscript(result->id, *result->transcript);
++
++            if (auto const it = state.pending.find(result->id); it != state.pending.end())
++            {
++                auto entry = it->second.entry;
++                entry.text = voiceNoteText(it->second.duration, *result->transcript);
++                if (auto const path = exportPathFor(it->second.title); !path.empty())
++                {
++                    mergeIntoExport(path, it->second.title, {entry});
++                }
++                state.pending.erase(it);
++            }
++            else if (state.view)
++            {
++                triggerImmediateContinuousExportScrape(state.view);
++            }
++
++            return G_SOURCE_REMOVE;
++        }
++
++        void transcriptionWorker(int threads)
++        {
++            auto& state = voiceNotes();
++            // Inherited by ggml's compute threads and the ffmpeg child, so the UI keeps priority.
++            setpriority(PRIO_PROCESS, static_cast<id_t>(gettid()), 10);
++
++            while (true)
++            {
++                auto job = TranscriptionJob{};
++                {
++                    auto lock = std::unique_lock{state.mutex};
++                    if (!state.wake.wait_for(lock, std::chrono::minutes{10}, [&state] { return !state.jobs.empty(); }))
++                    {
++                        if (state.busy == 0)
++                        {
++                            state.model.reset();
++                        }
++                        continue;
++                    }
++                    job = std::move(state.jobs.front());
++                    state.jobs.pop_front();
++                    ++state.busy;
++                }
++
++                auto* const result = new TranscriptionResult{transcribe(job, threads)};
++                {
++                    auto const lock = std::lock_guard{state.mutex};
++                    --state.busy;
++                }
++                g_idle_add(voiceNoteTranscribed, result);
++            }
++        }
++
++        void enqueueTranscription(std::string const& id, std::string audio)
++        {
++            auto& state = voiceNotes();
++            {
++                auto const lock = std::lock_guard{state.mutex};
++                state.jobs.push_back(TranscriptionJob{id, std::move(audio), voiceModelPath(),
++                    util::Settings::getInstance().getValue<Glib::ustring>(VOICE_NOTES_GROUP, "language", "auto").raw()});
++            }
++
++            if (state.workers == 0)
++            {
++                whisper_log_set([](ggml_log_level, char const*, void*) {}, nullptr);
++                // Workers share one loaded model via per-job whisper states; a third of the cores stay free for the UI.
++                auto const threads = std::max(1u, std::thread::hardware_concurrency() * 2 / 3);
++                state.workers      = std::clamp(threads / 4, 1u, 3u);
++                for (auto i = 0u; i < state.workers; ++i)
++                {
++                    std::thread{transcriptionWorker, static_cast<int>(threads / state.workers)}.detach();
++                }
++            }
++            state.wake.notify_one();
++        }
++
++        void voiceModelDownloaded(GObject* sourceObject, GAsyncResult* result, gpointer userData)
++        {
++            auto const partialPath = std::unique_ptr<std::string>{static_cast<std::string*>(userData)};
++            auto const finalPath   = partialPath->substr(0, partialPath->size() - std::string{".part"}.size());
++
++            GError* error = nullptr;
++            if (!g_subprocess_wait_check_finish(G_SUBPROCESS(sourceObject), result, &error) || (g_rename(partialPath->c_str(), finalPath.c_str()) != 0))
++            {
++                showVoiceNoteError(error ? std::string{error->message} : std::string{"failed to download "} + VOICE_MODEL_URL);
++                if (error)
++                {
++                    g_error_free(error);
++                }
++                g_unlink(partialPath->c_str());
++                return;
++            }
++
++            voiceNotes().failed.clear();
++            if (auto* const view = voiceNotes().view)
++            {
++                triggerImmediateContinuousExportScrape(view);
++            }
++        }
++
++        bool ensureVoiceModel()
++        {
++            auto& state = voiceNotes();
++            if (Glib::file_test(voiceModelPath(), Glib::FILE_TEST_IS_REGULAR))
++            {
++                return true;
++            }
++            if (state.modelPrompted)
++            {
++                return false;
++            }
++            state.modelPrompted = true;
++
++            auto dialog = Gtk::MessageDialog{_("Transcribe Voice Notes?"), false, Gtk::MESSAGE_QUESTION, Gtk::BUTTONS_NONE};
++            dialog.set_secondary_text(_("Continuous export can transcribe voice notes into the chat log. This needs a Whisper speech recognition model (about 3 GB)."));
++            dialog.add_button(_("Download Model"), Gtk::RESPONSE_ACCEPT);
++            dialog.add_button(_("Choose Model File…"), Gtk::RESPONSE_APPLY);
++            dialog.add_button(_("Not Now"), Gtk::RESPONSE_CANCEL);
++
++            switch (dialog.run())
++            {
++                case Gtk::RESPONSE_ACCEPT:
++                {
++                    auto const path = voiceModelPath();
++                    g_mkdir_with_parents(Glib::path_get_dirname(path).c_str(), 0755);
++
++                    GError* error   = nullptr;
++                    auto* const partialPath = new std::string{path + ".part"};
++                    auto* const process = g_subprocess_new(G_SUBPROCESS_FLAGS_NONE, &error, "curl", "-fsSL", "-o", partialPath->c_str(), VOICE_MODEL_URL, nullptr);
++                    if (!process)
++                    {
++                        delete partialPath;
++                        showVoiceNoteError(error->message);
++                        g_error_free(error);
++                        return false;
++                    }
++                    g_subprocess_wait_check_async(process, nullptr, voiceModelDownloaded, partialPath);
++                    g_object_unref(process);
++                    return false;
++                }
++
++                case Gtk::RESPONSE_APPLY:
++                {
++                    auto chooser = Gtk::FileChooserDialog{_("Choose Whisper Model"), Gtk::FILE_CHOOSER_ACTION_OPEN};
++                    chooser.add_button(_("Cancel"), Gtk::RESPONSE_CANCEL);
++                    chooser.add_button(_("Open"), Gtk::RESPONSE_OK);
++                    if (chooser.run() != Gtk::RESPONSE_OK)
++                    {
++                        return false;
++                    }
++                    util::Settings::getInstance().setValue<Glib::ustring>(VOICE_NOTES_GROUP, "model", chooser.get_filename());
++                    return true;
++                }
++
++                default:
++                    return false;
++            }
++        }
++
++        void requestVoiceNote(std::string const& title, ChatEntry const& entry, std::string const& id, std::string const& duration)
++        {
++            auto& state = voiceNotes();
++            state.pending[id] = PendingVoiceNote{title, entry, duration};
++
++            if (!state.view || state.requested.count(id) || state.failed.count(id)
++                || (id.find_first_of("'\\\n") != std::string::npos) || !ensureVoiceModel())
++            {
++                return;
++            }
++
++            state.requested.insert(id);
++            auto const script = "if (window.__wilFetchMedia) { window.__wilFetchMedia('" + id + "'); }";
++            webkit_web_view_evaluate_javascript(state.view, script.c_str(), -1, nullptr, nullptr, nullptr, nullptr, nullptr);
++        }
++
++        // Voice notes arrive as "\x04id\x04duration"; untranscribed ones are held back until their transcript is ready.
++        std::vector<ChatEntry> resolveVoiceNotes(std::string const& title, std::vector<ChatEntry> entries)
++        {
++            std::vector<ChatEntry> resolved;
++            for (auto& entry : entries)
++            {
++                if (entry.text.empty() || (entry.text[0] != '\x04'))
++                {
++                    resolved.push_back(std::move(entry));
++                    continue;
++                }
++
++                auto const sep      = entry.text.find('\x04', 1);
++                auto const id       = entry.text.substr(1, sep == std::string::npos ? std::string::npos : sep - 1);
++                auto const duration = (sep == std::string::npos) ? std::string{} : entry.text.substr(sep + 1);
++
++                if (auto const transcript = cachedTranscript(id))
++                {
++                    entry.text = voiceNoteText(duration, *transcript);
++                    resolved.push_back(std::move(entry));
++                }
++                else
++                {
++                    requestVoiceNote(title, entry, id, duration);
++                }
++            }
++            return resolved;
++        }
++
++        void voiceNoteReceived(std::string const& id, std::string const& data)
++        {
++            auto& state = voiceNotes();
++            if (!state.requested.count(id) || state.transcribing.count(id))
++            {
++                return;
++            }
++
++            if (data.empty() || (data[0] == '\x01'))
++            {
++                state.requested.erase(id);
++                state.failed.insert(id);
++                std::cerr << "WebView: Could not fetch audio for voice note " << id << ": " << (data.empty() ? "" : data.substr(1)) << std::endl;
++                return;
++            }
++
++            gsize       size    = 0;
++            auto* const decoded = g_base64_decode(data.c_str(), &size);
++            state.transcribing.insert(id);
++            enqueueTranscription(id, std::string{reinterpret_cast<char const*>(decoded), size});
++            g_free(decoded);
++        }
++
++        struct AttachmentState
++        {
++            std::map<std::string, std::string> pending;
++            std::set<std::string>              failed;
++        };
++
++        AttachmentState& attachments()
++        {
++            static AttachmentState state;
++            return state;
++        }
++
++        std::string attachmentLink(std::string const& exportPath, std::string const& id, std::string const& type, std::string const& name)
++        {
++            auto const  base     = Glib::path_get_basename(exportPath);
++            auto const  dirName  = base.substr(0, base.rfind('.')) + "_attachments";
++            // fromMe_chat_key[_participant]
++            auto const  keyStart = id.find('_', id.find('_') + 1);
++            auto const  keyId    = (keyStart == std::string::npos) ? id : id.substr(keyStart + 1, id.find('_', keyStart + 1) - keyStart - 1);
++            auto const  fileName = sanitizeFilename(name.empty() || name[0] == '.' ? keyId + name : keyId + "_" + name);
++            auto const  file     = Glib::build_filename(Glib::path_get_dirname(exportPath), dirName, fileName);
++
++            auto& state = attachments();
++            if (!Glib::file_test(file, Glib::FILE_TEST_EXISTS) && !state.pending.count(id) && !state.failed.count(id)
++                && (id.find_first_of("'\\\n") == std::string::npos) && voiceNotes().view)
++            {
++                state.pending[id] = file;
++                auto const script = "if (window.__wilFetchMedia) { window.__wilFetchMedia('" + id + "'); }";
++                webkit_web_view_evaluate_javascript(voiceNotes().view, script.c_str(), -1, nullptr, nullptr, nullptr, nullptr, nullptr);
++            }
++
++            auto* const escaped = g_uri_escape_string((dirName + "/" + fileName).c_str(), "/", TRUE);
++            auto const  target  = std::string{escaped};
++            g_free(escaped);
++
++            auto const embed = (type == "image") || (type == "sticker");
++            return std::string{embed ? "![" : "[📎 "} + (name.empty() || name[0] == '.' ? type : name) + "](" + target + ")";
++        }
++
++        // Attachments arrive as "\x05id\x05type\x05name\x05caption"; the link is stable, the file lands asynchronously.
++        std::vector<ChatEntry> resolveAttachments(std::string const& exportPath, std::vector<ChatEntry> entries)
++        {
++            for (auto& entry : entries)
++            {
++                if (entry.text.empty() || (entry.text[0] != '\x05'))
++                {
++                    continue;
++                }
++
++                auto const s1 = entry.text.find('\x05', 1);
++                auto const s2 = (s1 == std::string::npos) ? s1 : entry.text.find('\x05', s1 + 1);
++                auto const s3 = (s2 == std::string::npos) ? s2 : entry.text.find('\x05', s2 + 1);
++                if (s3 == std::string::npos)
++                {
++                    continue;
++                }
++
++                auto const caption = entry.text.substr(s3 + 1);
++                auto const link    = attachmentLink(exportPath, entry.text.substr(1, s1 - 1), entry.text.substr(s1 + 1, s2 - s1 - 1), entry.text.substr(s2 + 1, s3 - s2 - 1));
++                entry.text         = caption.empty() ? link : link + "\n" + caption;
++            }
++            return entries;
++        }
++
++        void attachmentReceived(std::string const& id, std::string const& data)
++        {
++            auto&      state = attachments();
++            auto const it    = state.pending.find(id);
++            auto const file  = it->second;
++            state.pending.erase(it);
++
++            if (data.empty() || (data[0] == '\x01'))
++            {
++                state.failed.insert(id);
++                std::cerr << "WebView: Could not fetch attachment " << id << ": " << (data.empty() ? "" : data.substr(1)) << std::endl;
++                return;
++            }
++
++            gsize       size    = 0;
++            auto* const decoded = g_base64_decode(data.c_str(), &size);
++            g_mkdir_with_parents(Glib::path_get_dirname(file).c_str(), 0755);
++            auto const tmp = file + ".part";
++            {
++                auto outFile = std::ofstream{tmp, std::ios::binary};
++                outFile.write(reinterpret_cast<char const*>(decoded), static_cast<std::streamsize>(size));
++            }
++            g_free(decoded);
++            g_rename(tmp.c_str(), file.c_str());
++        }
++
++        void mediaReceived(WebKitUserContentManager*, WebKitJavascriptResult* jsResult, gpointer)
++        {
++            auto* const resultString = jsc_value_to_string(webkit_javascript_result_get_js_value(jsResult));
++            auto const  raw          = std::string{resultString ? resultString : ""};
++            g_free(resultString);
++
++            auto const sep = raw.find('\x01');
++            if (sep == std::string::npos)
++            {
++                return;
++            }
++
++            auto const id = raw.substr(0, sep);
++            if (attachments().pending.count(id))
++            {
++                attachmentReceived(id, raw.substr(sep + 1));
++            }
++            else
++            {
++                voiceNoteReceived(id, raw.substr(sep + 1));
++            }
++        }
++
++        void continuousExportMessageReceived(WebKitUserContentManager*, WebKitJavascriptResult* jsResult, gpointer)
++        {
++            auto* const value         = webkit_javascript_result_get_js_value(jsResult);
++            auto* const resultString  = jsc_value_to_string(value);
++            auto const  raw           = std::string{resultString ? resultString : ""};
++            g_free(resultString);
++
++            auto const delimiterPos = raw.find('\x01');
++            if (delimiterPos == std::string::npos)
++            {
++                return;
++            }
++
++            auto const title   = raw.substr(0, delimiterPos);
++            auto const records = raw.substr(delimiterPos + 1);
++            auto const path    = exportPathFor(title);
++            if (path.empty())
++            {
++                return;
++            }
++
++            auto const windowEntries = resolveAttachments(path, resolveVoiceNotes(title, parseIncomingRecords(records)));
++            if (windowEntries.empty())
++            {
++                return;
++            }
++
++            mergeIntoExport(path, title, windowEntries);
++        }
++
+         std::optional<std::string> getSystemLanguage()
+         {
+             try
+@@ -262,6 +1580,10 @@ namespace wil::ui
+         g_signal_connect(*this, "permission-request", G_CALLBACK(permissionRequest), nullptr);
+         g_signal_connect(*this, "decide-policy", G_CALLBACK(decidePolicy), nullptr);
+         g_signal_connect(*this, "show-notification", G_CALLBACK(showNotification), this);
++        g_signal_connect(*this, "web-process-terminated", G_CALLBACK(+[](WebKitWebView* view, WebKitWebProcessTerminationReason reason, gpointer) {
++            std::cerr << "WebView: Web process terminated (reason " << reason << "), reloading" << std::endl;
++            Glib::signal_idle().connect_once([view] { webkit_web_view_reload(view); });
++        }), nullptr);
+         g_signal_connect(webContext, "download-started", G_CALLBACK(downloadStarted), nullptr);
+         g_signal_connect(webContext, "initialize-notification-permissions", G_CALLBACK(initializeNotificationPermission), nullptr);
+         Glib::signal_timeout().connect(sigc::mem_fun(*this, &WebView::onTimeout), 5000);
+@@ -287,6 +1609,8 @@ namespace wil::ui
+             applyCustomCss(cssFilePath);
+         }
+ 
++        setupContinuousExport();
++
+         webkit_web_view_load_uri(*this, WHATSAPP_WEB_URI);
+     }
+ 
+@@ -348,6 +1672,17 @@ namespace wil::ui
+         sendRequest("whatsapp://send?phone=" + phoneNumber);
+     }
+ 
++    void WebView::configureContinuousExport()
++    {
++        webkit_web_view_evaluate_javascript(
++            *this, CURRENT_CHAT_TITLE_SCRIPT, -1, nullptr, nullptr, nullptr, continuousExportConfigureFinished, nullptr);
++    }
++
++    void WebView::resyncContinuousExport()
++    {
++        triggerImmediateContinuousExportScrape(*this);
++    }
++
+     void WebView::pasteImageFromClipboard()
+     {
+         auto const clipboard = Gtk::Clipboard::get();
+@@ -487,4 +1822,21 @@ namespace wil::ui
+         auto* manager = webkit_web_view_get_user_content_manager(*this);
+         webkit_user_content_manager_add_style_sheet(manager, styleSheet);
+     }
++
++    void WebView::setupContinuousExport()
++    {
++        auto* const manager = webkit_web_view_get_user_content_manager(*this);
++
++        g_signal_connect(manager, "script-message-received::wilContinuousExport", G_CALLBACK(continuousExportMessageReceived), nullptr);
++        webkit_user_content_manager_register_script_message_handler(manager, "wilContinuousExport");
++
++        voiceNotes().view = *this;
++        g_signal_connect(manager, "script-message-received::wilMedia", G_CALLBACK(mediaReceived), nullptr);
++        webkit_user_content_manager_register_script_message_handler(manager, "wilMedia");
++
++        auto* const script = webkit_user_script_new(
++            CONTINUOUS_EXPORT_INIT_SCRIPT, WEBKIT_USER_CONTENT_INJECT_TOP_FRAME, WEBKIT_USER_SCRIPT_INJECT_AT_DOCUMENT_END, nullptr, nullptr);
++        webkit_user_content_manager_add_script(manager, script);
++        webkit_user_script_unref(script);
++    }
+ }
+diff --git a/src/ui/WebView.hpp b/src/ui/WebView.hpp
+index a39afc2..c66977f 100644
+--- a/src/ui/WebView.hpp
++++ b/src/ui/WebView.hpp
+@@ -24,6 +24,8 @@ namespace wil::ui
+             void            setHwAccelPolicy(WebKitHardwareAccelerationPolicy policy);
+             void            sendRequest(std::string url);
+             void            openPhoneNumber(std::string const& phoneNumber);
++            void            configureContinuousExport();
++            void            resyncContinuousExport();
+             void            pasteImageFromClipboard();
+             void            zoomIn();
+             void            zoomOut();
+@@ -40,6 +42,7 @@ namespace wil::ui
+             void onLoadStatusChanged(WebKitLoadEvent loadEvent);
+             bool onTimeout();
+             void applyCustomCss(const std::string& cssFilePath);
++            void setupContinuousExport();
+ 
+             friend void detail::loadChanged(WebKitWebView*, WebKitLoadEvent, gpointer);
+ 
+diff --git a/src/util/SettingMap.hpp b/src/util/SettingMap.hpp
+index 5160aa4..6c7efee 100644
+--- a/src/util/SettingMap.hpp
++++ b/src/util/SettingMap.hpp
+@@ -14,6 +14,7 @@ namespace wil::util
+         public:
+             bool loadFromFile(std::string const& fileName);
+             bool saveToFile(std::string const& fileName);
++            void removeValue(Glib::ustring const& group, Glib::ustring const& key);
+ 
+             template<typename ValueType>
+             void setValue(Glib::ustring const& group, Glib::ustring const& key, ValueType value);
+@@ -56,6 +57,18 @@ namespace wil::util
+         }
+     }
+ 
++    inline void SettingMap::removeValue(Glib::ustring const& group, Glib::ustring const& key)
++    {
++        try
++        {
++            m_map.remove_key(group, key);
++        }
++        catch (Glib::KeyFileError const& error)
++        {
++            std::cerr << "SettingMap: Failed to remove key: " << error.what().c_str() << std::endl;
++        }
++    }
++
+     template<typename ValueType>
+     inline void SettingMap::setValue(Glib::ustring const& group, Glib::ustring const& key, ValueType value)
+     {
+diff --git a/src/util/Settings.cpp b/src/util/Settings.cpp
+index 9ae9cb0..fcaf0ec 100644
+--- a/src/util/Settings.cpp
++++ b/src/util/Settings.cpp
+@@ -45,6 +45,12 @@ namespace wil::util
+         m_settingMap.saveToFile(m_configFilePath);
+     }
+ 
++    void Settings::removeValue(Glib::ustring const& group, Glib::ustring const& key)
++    {
++        m_settingMap.removeValue(group, key);
++        m_settingMap.saveToFile(m_configFilePath);
++    }
++
+     void Settings::setAutostart(bool autostart)
+     {
+         if (auto autostartDir = Gio::File::create_for_path(m_configDir + "/autostart"); !autostartDir->query_exists())
+diff --git a/src/util/Settings.hpp b/src/util/Settings.hpp
+index 894d518..6533f17 100644
+--- a/src/util/Settings.hpp
++++ b/src/util/Settings.hpp
+@@ -20,6 +20,8 @@ namespace wil::util
+             template<typename ValueType>
+             ValueType getValue(Glib::ustring const& group, Glib::ustring const& key, ValueType defaultValue = {});
+ 
++            void removeValue(Glib::ustring const& group, Glib::ustring const& key);
++
+         private:
+             Settings();
+             ~Settings();
+@@ -43,28 +45,35 @@ namespace wil::util
+     template<typename ValueType>
+     inline void Settings::setValue(Glib::ustring const& group, Glib::ustring const& key, ValueType value)
+     {
+-        if ((group == "general") && (key == "autostart") && std::is_same_v<ValueType, bool>)
+-        {
+-            setAutostart(value);
+-        }
+-        else
++        // Must be "if constexpr": for ValueType's like Glib::ustring, which don't
++        // convert to/from bool, the discarded branch would otherwise still need to
++        // compile.
++        if constexpr (std::is_same_v<ValueType, bool>)
+         {
+-            m_settingMap.setValue(group, key, value);
++            if ((group == "general") && (key == "autostart"))
++            {
++                setAutostart(value);
++                m_settingMap.saveToFile(m_configFilePath);
++                return;
++            }
+         }
+ 
++        m_settingMap.setValue(group, key, value);
+         m_settingMap.saveToFile(m_configFilePath);
+     }
+ 
+     template<typename ValueType>
+     inline ValueType Settings::getValue(Glib::ustring const& group, Glib::ustring const& key, ValueType defaultValue)
+     {
+-        if ((group == "general") && (key == "autostart") && std::is_same_v<ValueType, bool>)
++        // See setValue() for why this needs "if constexpr" rather than a runtime check.
++        if constexpr (std::is_same_v<ValueType, bool>)
+         {
+-            return getAutostart();
+-        }
+-        else
+-        {
+-            return m_settingMap.getValue(group, key, defaultValue);
++            if ((group == "general") && (key == "autostart"))
++            {
++                return getAutostart();
++            }
+         }
++
++        return m_settingMap.getValue(group, key, defaultValue);
+     }
+ }

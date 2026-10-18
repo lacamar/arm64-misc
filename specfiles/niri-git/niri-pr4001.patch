@@ -1,5 +1,5 @@
 diff --git a/src/handlers/mod.rs b/src/handlers/mod.rs
-index 2186450067..04f76a819c 100644
+index 2186450..04f76a8 100644
 --- a/src/handlers/mod.rs
 +++ b/src/handlers/mod.rs
 @@ -26,6 +26,7 @@ use smithay::reexports::rustix::fs::{fcntl_setfl, OFlags};
@@ -133,7 +133,7 @@ index 2186450067..04f76a819c 100644
      fn new_popup(&mut self, surface: PopupSurface) {
          let popup = PopupKind::InputMethod(surface);
 diff --git a/src/layout/floating.rs b/src/layout/floating.rs
-index c1935394fa..c7198338ba 100644
+index c193539..c719833 100644
 --- a/src/layout/floating.rs
 +++ b/src/layout/floating.rs
 @@ -372,6 +372,22 @@ impl<W: LayoutElement> FloatingSpace<W> {
@@ -160,7 +160,7 @@ index c1935394fa..c7198338ba 100644
          for (tile, pos) in self.tiles_with_offsets() {
              if tile.window().id() == id {
 diff --git a/src/layout/monitor.rs b/src/layout/monitor.rs
-index 761d226b28..53c39e3216 100644
+index 761d226..53c39e3 100644
 --- a/src/layout/monitor.rs
 +++ b/src/layout/monitor.rs
 @@ -1354,6 +1354,19 @@ impl<W: LayoutElement> Monitor<W> {
@@ -184,7 +184,7 @@ index 761d226b28..53c39e3216 100644
          let ws_size = self.view_size.upscale(zoom);
          let scale = self.scale.fractional_scale();
 diff --git a/src/layout/scrolling.rs b/src/layout/scrolling.rs
-index cea3160bc5..be24ab39b9 100644
+index cea3160..be24ab3 100644
 --- a/src/layout/scrolling.rs
 +++ b/src/layout/scrolling.rs
 @@ -2604,6 +2604,29 @@ impl<W: LayoutElement> ScrollingSpace<W> {
@@ -218,7 +218,7 @@ index cea3160bc5..be24ab39b9 100644
          let view_pos = self.target_view_pos();
          let col_xs = self.column_xs(self.data.iter().copied());
 diff --git a/src/layout/workspace.rs b/src/layout/workspace.rs
-index a6d66b9b71..487eedfbd0 100644
+index a6d66b9..487eedf 100644
 --- a/src/layout/workspace.rs
 +++ b/src/layout/workspace.rs
 @@ -1647,6 +1647,14 @@ impl<W: LayoutElement> Workspace<W> {
@@ -237,7 +237,7 @@ index a6d66b9b71..487eedfbd0 100644
          &self,
          window: &W::Id,
 diff --git a/src/niri.rs b/src/niri.rs
-index c0c496056c..c94e7cf460 100644
+index 3d5e621..39ad9f3 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -102,6 +102,7 @@ use smithay::wayland::keyboard_shortcuts_inhibit::{
@@ -256,7 +256,7 @@ index c0c496056c..c94e7cf460 100644
      pub idle_notifier_state: IdleNotifierState<State>,
      pub idle_inhibit_manager_state: IdleInhibitManagerState,
      pub data_device_state: DataDeviceState,
-@@ -2650,6 +2652,7 @@ impl Niri {
+@@ -2649,6 +2651,7 @@ impl Niri {
          let pointer_gestures_state = PointerGesturesState::new::<State>(&display_handle);
          let relative_pointer_state = RelativePointerManagerState::new::<State>(&display_handle);
          let pointer_constraints_state = PointerConstraintsState::new::<State>(&display_handle);
@@ -264,7 +264,7 @@ index c0c496056c..c94e7cf460 100644
          let idle_notifier_state = IdleNotifierState::new(&display_handle, event_loop.clone());
          let idle_inhibit_manager_state = IdleInhibitManagerState::new::<State>(&display_handle);
          let data_device_state = DataDeviceState::new::<State>(&display_handle);
-@@ -2932,6 +2935,7 @@ impl Niri {
+@@ -2931,6 +2934,7 @@ impl Niri {
              pointer_gestures_state,
              relative_pointer_state,
              pointer_constraints_state,
@@ -273,7 +273,7 @@ index c0c496056c..c94e7cf460 100644
              idle_inhibit_manager_state,
              data_device_state,
 diff --git a/src/utils/mod.rs b/src/utils/mod.rs
-index 6f3684cd4c..f337f9d08b 100644
+index 6f3684c..f337f9d 100644
 --- a/src/utils/mod.rs
 +++ b/src/utils/mod.rs
 @@ -26,7 +26,9 @@ use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;

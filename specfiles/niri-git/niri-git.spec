@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        22%{?dist}
+Release:        23%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -44,8 +44,7 @@ URL:            https://github.com/niri-wm/niri
 VCS:            git+%{url}#%{commit}:
 Source:         %{url}/archive/%{commit}/niri-%{shortcommit}.tar.gz
 Source1:        https://github.com/Smithay/smithay/archive/%{smithay_commit}/smithay-%{sub %{smithay_commit} 1 8}.tar.gz
-Patch:          niri-argb2101010.patch
-Patch:          niri-ctm-gamma.patch
+Patch:          niri-local-tweaks.patch
 # https://github.com/niri-wm/niri/pull/4485
 Patch:          niri-pr4485.patch
 # https://github.com/niri-wm/niri/pull/4365
@@ -67,20 +66,12 @@ Patch:          niri-wp-protocols.patch
 Patch:          niri-pr4118.patch
 # https://github.com/niri-wm/niri/pull/4001
 Patch:          niri-pr4001.patch
-Patch:          niri-smithay-local.patch
-Patch:          niri-smithay-overlay-cursor.patch
-Patch:          niri-smithay-opaque-overlays.patch
-Patch:          niri-commit-timers-dirty.patch
-Patch:          niri-scratchpad-backdrop.patch
-Patch:          niri-scratchpad-follow.patch
+Patch:          niri-smithay-apple-planes.patch
 Patch:          niri-gestures.patch
-Patch:          niri-scratchpad-hide.patch
 Patch:          niri-frame-callback-rate.patch
-Patch:          niri-scratchpad-center.patch
 Patch:          niri-color-management.patch
 Patch:          niri-xdg-toplevel-icon.patch
 Patch:          niri-vulkan.patch
-Patch:          niri-focus-no-warp.patch
 
 BuildRequires:  cargo-rpm-macros >= 26
 BuildRequires:  pkgconfig(udev)
@@ -115,15 +106,11 @@ Recommends:     xdg-desktop-portal-gtk
 Recommends:     xdg-desktop-portal-gnome
 Recommends:     gnome-keyring
 
-# Suggested utilities, bound in the default config
-Recommends:     alacritty
+# Suggested utilities
 Recommends:     fuzzel
 Recommends:     swaylock
 Recommends:     waybar
-# Suggested utilities
 Recommends:     swaybg
-Recommends:     mako
-Recommends:     swayidle
 
 %description
 A scrollable-tiling Wayland compositor.
@@ -189,6 +176,13 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Sun Oct 18 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^9.git.45739bc0-23
+- Fold local patches
+- Drop scratchpad backdrop/modal
+- Drop NIRI_CTM_GAMMA knob
+- Simplify Vulkan renderer
+- Drop alacritty/mako/swayidle Recommends
+
 * Sun Oct 18 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^9.git.45739bc0-22
 - Don't warp cursor to output on focus-window
 

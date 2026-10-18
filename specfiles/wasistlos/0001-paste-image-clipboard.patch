@@ -1,5 +1,5 @@
 diff --git a/resource/ui/MainWindow.ui b/resource/ui/MainWindow.ui
-index 153e648..832d339 100644
+index 75aae40..4fdfac5 100644
 --- a/resource/ui/MainWindow.ui
 +++ b/resource/ui/MainWindow.ui
 @@ -136,6 +136,19 @@
@@ -20,9 +20,9 @@ index 153e648..832d339 100644
 +          </packing>
 +        </child>
          <child>
-           <object class="GtkSeparator" id="separator_2">
+           <object class="GtkModelButton" id="button_about">
              <property name="visible">True</property>
-@@ -144,7 +157,7 @@
+@@ -146,7 +159,7 @@
            <packing>
              <property name="expand">False</property>
              <property name="fill">True</property>
@@ -31,7 +31,7 @@ index 153e648..832d339 100644
            </packing>
          </child>
          <child>
-@@ -157,7 +170,7 @@
+@@ -159,7 +172,7 @@
            <packing>
              <property name="expand">False</property>
              <property name="fill">True</property>
@@ -39,41 +39,14 @@ index 153e648..832d339 100644
 +            <property name="position">7</property>
            </packing>
          </child>
-         <child>
-@@ -170,7 +183,7 @@
-           <packing>
-             <property name="expand">False</property>
-             <property name="fill">True</property>
--            <property name="position">7</property>
-+            <property name="position">8</property>
-           </packing>
-         </child>
-         <child>
-@@ -183,7 +196,7 @@
-           <packing>
-             <property name="expand">False</property>
-             <property name="fill">True</property>
--            <property name="position">8</property>
-+            <property name="position">9</property>
-           </packing>
-         </child>
-         <child>
-@@ -196,7 +209,7 @@
-           <packing>
-             <property name="expand">False</property>
-             <property name="fill">True</property>
--            <property name="position">9</property>
-+            <property name="position">10</property>
-           </packing>
-         </child>
        </object>
 diff --git a/src/ui/MainWindow.cpp b/src/ui/MainWindow.cpp
-index a8e48b9..a71f341 100644
+index 661baee..add643f 100644
 --- a/src/ui/MainWindow.cpp
 +++ b/src/ui/MainWindow.cpp
-@@ -69,6 +69,10 @@ namespace wil::ui
-         refBuilder->get_widget("button_continuous_export", buttonContinuousExport);
-         buttonContinuousExport->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onConfigureContinuousExport));
+@@ -61,6 +61,10 @@ namespace wil::ui
+         refBuilder->get_widget("button_zoom_out", buttonZoomOut);
+         buttonZoomOut->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onZoomOut));
  
 +        Gtk::ModelButton* buttonPasteImage = nullptr;
 +        refBuilder->get_widget("button_paste_image", buttonPasteImage);
@@ -82,8 +55,8 @@ index a8e48b9..a71f341 100644
          Gtk::ModelButton* buttonPreferences = nullptr;
          refBuilder->get_widget("button_preferences", buttonPreferences);
          buttonPreferences->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::onOpenPreferences));
-@@ -298,6 +302,11 @@ namespace wil::ui
-         m_webView.configureContinuousExport();
+@@ -269,6 +273,11 @@ namespace wil::ui
+         }
      }
  
 +    void MainWindow::onPasteImage()
@@ -95,23 +68,23 @@ index a8e48b9..a71f341 100644
      {
          if (!is_visible())
 diff --git a/src/ui/MainWindow.hpp b/src/ui/MainWindow.hpp
-index f9210d9..df7b341 100644
+index 01f51f3..1c02a2a 100644
 --- a/src/ui/MainWindow.hpp
 +++ b/src/ui/MainWindow.hpp
-@@ -36,6 +36,7 @@ namespace wil::ui
+@@ -33,6 +33,7 @@ namespace wil::ui
+             void onOpenPreferences();
+             void onOpenPhoneNumber();
              void onPhoneNumberDialogResponse(int responseId);
-             void onExportChat();
-             void onConfigureContinuousExport();
 +            void onPasteImage();
              void onNotificationChanged(bool show);
              void onShow();
              void onQuit();
 diff --git a/src/ui/WebView.cpp b/src/ui/WebView.cpp
-index 26a6a10..e8c2ad9 100644
+index 49f59d7..0efe765 100644
 --- a/src/ui/WebView.cpp
 +++ b/src/ui/WebView.cpp
-@@ -16,6 +16,9 @@
- #include <glibmm/ustring.h>
+@@ -10,6 +10,9 @@
+ #include <glibmm/miscutils.h>
  #include <gtkmm/messagedialog.h>
  #include <gtkmm/filechooserdialog.h>
 +#include <gtkmm/clipboard.h>
@@ -120,21 +93,12 @@ index 26a6a10..e8c2ad9 100644
  #include "../util/Settings.hpp"
  #include "Config.hpp"
  
-@@ -737,6 +740,78 @@ namespace wil::ui
+@@ -165,6 +168,69 @@ namespace wil::ui
  
              return cssContent;
          }
 +
-+        // Built on demand (not left running) to place a clipboard image into whatever
-+        // chat's compose box is currently open, by simulating an image-file drop.
-+        // WebKitGTK does not reliably surface GTK/X11/Wayland clipboard image data to
-+        // the DOM's paste event the way Chrome/Firefox do -- a real Ctrl+V for an
-+        // image copied from a native app (a screenshot tool, a file manager, GIMP...)
-+        // often silently does nothing -- so this bypasses paste entirely and instead
-+        // constructs a DataTransfer carrying the image as a File and dispatches it as
-+        // a 'drop', which WhatsApp Web's own drop handler picks up the same as a
-+        // real drag-and-drop. WebView::pasteImageFromClipboard() splices the
-+        // base64-encoded PNG data in between these two halves before evaluating.
++        // WebKitGTK doesn't surface native clipboard images to paste events; fake a file drop instead.
 +        constexpr auto const PASTE_IMAGE_SCRIPT_PREFIX = R"JS(
 +            (function() {
 +                try {
@@ -199,8 +163,8 @@ index 26a6a10..e8c2ad9 100644
      }
  
      namespace detail
-@@ -875,6 +950,44 @@ namespace wil::ui
-         triggerImmediateContinuousExportScrape(*this);
+@@ -282,6 +348,44 @@ namespace wil::ui
+         sendRequest("whatsapp://send?phone=" + phoneNumber);
      }
  
 +    void WebView::pasteImageFromClipboard()
@@ -245,13 +209,13 @@ index 26a6a10..e8c2ad9 100644
      {
          if (auto zoomLevel = webkit_web_view_get_zoom_level(*this); zoomLevel < 2.0)
 diff --git a/src/ui/WebView.hpp b/src/ui/WebView.hpp
-index 2c0ba81..1516a3f 100644
+index faef7fd..a39afc2 100644
 --- a/src/ui/WebView.hpp
 +++ b/src/ui/WebView.hpp
-@@ -27,6 +27,7 @@ namespace wil::ui
-             void            exportChatTranscript();
-             void            configureContinuousExport();
-             void            resyncContinuousExport();
+@@ -24,6 +24,7 @@ namespace wil::ui
+             void            setHwAccelPolicy(WebKitHardwareAccelerationPolicy policy);
+             void            sendRequest(std::string url);
+             void            openPhoneNumber(std::string const& phoneNumber);
 +            void            pasteImageFromClipboard();
              void            zoomIn();
              void            zoomOut();

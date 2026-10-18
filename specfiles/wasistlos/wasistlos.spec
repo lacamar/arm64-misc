@@ -1,17 +1,14 @@
 %global tag 1.7.0
 Name: wasistlos
 Version: %{tag}
-Release: 12%{?dist}
+Release: 13%{?dist}
 Summary: An unofficial WhatsApp desktop application for Linux.
 
 License: GNU GPL v3
 URL:     https://github.com/xeco23/WasIstLos
 Source0: %{url}/archive/v%{version}/wasistlos-%{version}.tar.gz
-Patch0:  0001-export-chat-transcript.patch
-Patch1:  0002-continuous-chat-export.patch
-Patch2:  0003-paste-image-clipboard.patch
-Patch3:  0004-voice-note-transcription.patch
-Patch4:  0005-export-attachments.patch
+Patch0:  0001-paste-image-clipboard.patch
+Patch1:  0002-chat-export.patch
 
 BuildRequires: cmake
 BuildRequires: pkgconfig
@@ -61,6 +58,12 @@ An unofficial WhatsApp desktop application for Linux.
 
 
 %changelog
+* Sun Oct 18 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-13
+- Drop one-shot transcript export
+- Sort export by message timestamp
+- Unify media fetch, drop playback fallback
+- Squash patch series
+
 * Sun Oct 18 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-12
 - Continuous export: save attachments to <chat>_attachments, link them
 
