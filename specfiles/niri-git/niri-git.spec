@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        19%{?dist}
+Release:        20%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -78,6 +78,7 @@ Patch:          niri-scratchpad-hide.patch
 Patch:          niri-frame-callback-rate.patch
 Patch:          niri-scratchpad-center.patch
 Patch:          niri-color-management.patch
+Patch:          niri-xdg-toplevel-icon.patch
 
 BuildRequires:  cargo-rpm-macros >= 26
 BuildRequires:  pkgconfig(udev)
@@ -185,6 +186,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Sun Oct 18 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^9.git.45739bc0-20
+- Add xdg-toplevel-icon global
+
 * Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^9.git.45739bc0-19
 - Update to 45739bc0
 - Update Smithay to 8a270232
