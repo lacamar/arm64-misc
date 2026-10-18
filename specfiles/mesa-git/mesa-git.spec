@@ -97,7 +97,7 @@ Summary:        Mesa graphics libraries
 %global commitdate 20261017
 %global ver 27.0.0
 Version:        %{ver}~git%{commitdate}.%{shortcommit}
-Release:        2%{?dist}
+Release:        3%{?dist}
 License:        MIT AND BSD-3-Clause AND SGI-B-2.0
 URL:            https://mesa3d.org
 
@@ -113,6 +113,7 @@ Patch1:         hk-zls-load-op-none.patch
 Patch2:         hk-placed-map.patch
 Patch3:         hk-vs-attrib-limit.patch
 Patch4:         asahi-shadow-flush-wb.patch
+Patch5:         agx-query-nowait.patch
 
 # In CentOS/RHEL, Rust crates required to build NVK are vendored.
 # The minimum target versions are obtained from the .wrap files
@@ -766,6 +767,9 @@ ln -s libGLX_mesa.so.0 %{buildroot}%{_libdir}/libGLX_system.so.0
 %endif
 
 %changelog
+* Sun Oct 18 2026 lacamar <lchlnm@pm.me> - 27.0.0~git20261017.335d5698-3
+- asahi: non-blocking query result polling
+
 * Sat Oct 17 2026 lacamar <lchlnm@pm.me> - 27.0.0~git20261017.335d5698-2
 - Disable d3d12 on f43
 

@@ -1,0 +1,49 @@
+diff --git a/src/gallium/drivers/asahi/agx_query.c b/src/gallium/drivers/asahi/agx_query.c
+index 0d439762..f08e4d55 100644
+--- a/src/gallium/drivers/asahi/agx_query.c
++++ b/src/gallium/drivers/asahi/agx_query.c
+@@ -5,6 +5,7 @@
+  */
+ 
+ #include <stdint.h>
++#include <xf86drm.h>
+ #include "pipe/p_defines.h"
+ #include "util/bitset.h"
+ #include "util/macros.h"
+@@ -203,6 +204,25 @@ sync_query_writers(struct agx_context *ctx, struct agx_query *query,
+    }
+ }
+ 
++static bool
++query_writers_idle(struct agx_context *ctx, struct agx_query *query)
++{
++   struct agx_device *dev = agx_device(ctx->base.screen);
++
++   flush_query_writers(ctx, query, "Polling query results");
++
++   for (unsigned i = 0; i < AGX_MAX_BATCHES; ++i) {
++      struct agx_batch *batch = &ctx->batches.slots[i];
++
++      if (query->writer_generation[i] == ctx->batches.generation[i] &&
++          agx_batch_is_submitted(batch) &&
++          drmSyncobjWait(dev->fd, &batch->syncobj, 1, 0, 0, NULL))
++         return false;
++   }
++
++   return true;
++}
++
+ static bool
+ is_query_busy(struct agx_context *ctx, struct agx_query *query)
+ {
+@@ -389,7 +409,9 @@ agx_get_query_result(struct pipe_context *pctx, struct pipe_query *pquery,
+    struct agx_context *ctx = agx_context(pctx);
+    struct agx_device *dev = agx_device(pctx->screen);
+ 
+-   /* TODO: Honour `wait` */
++   if (!wait && !query_writers_idle(ctx, query))
++      return false;
++
+    sync_query_writers(ctx, query, "Reading query results");
+ 
+    uint64_t *ptr = query->ptr.cpu;
