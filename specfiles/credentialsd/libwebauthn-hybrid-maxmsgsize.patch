@@ -1,0 +1,15 @@
+diff --git a/libwebauthn/src/webauthn.rs b/libwebauthn/src/webauthn.rs
+index 9d715da..257ec82 100644
+--- a/libwebauthn/src/webauthn.rs
++++ b/libwebauthn/src/webauthn.rs
+@@ -74,6 +74,10 @@ fn ensure_msg_size(
+     request: &CborRequest,
+     info: &Ctap2GetInfoResponse,
+ ) -> Result<(), PlatformError> {
++    // Hybrid authenticators often omit maxMsgSize; the 1024 default would reject them.
++    if !info.max_msg_size.is_some_and(|size| size > 0) {
++        return Ok(());
++    }
+     let size = request.ctap_hid_data().len();
+     let max = info.max_msg_size();
+     if size > max {
