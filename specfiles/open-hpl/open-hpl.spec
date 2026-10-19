@@ -1,5 +1,5 @@
 Name:           open-hpl
-Version:        1.3.56
+Version:        1.3.57
 Release:        1%{?dist}
 Summary:        Native aarch64 port of Frictional Games' HPL engine
 
@@ -138,6 +138,9 @@ launcher bunker 1944430 "Amnesia The Bunker" \
 %{_datadir}/icons/hicolor/128x128/apps/open-hpl-*.png
 
 %changelog
+* Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.57-1
+- Fix voice lines randomly skipped
+
 * Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.56-1
 - Refuse to run with writable Steam libraries
 - Protect all Steam library folders
