@@ -6,3 +6,9 @@
 .beads-credential-key
 .beads/proxieddb/
 *.gate.lock*
+
+# mx-rpm downloads and SRPMs
+*.src.rpm
+specfiles/**/*.tar.*
+specfiles/**/*.zip
+specfiles/**/*.patch.new
