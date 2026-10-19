@@ -1,0 +1,13 @@
+--- a/crates/webhid-daemon/src/security.rs	2026-10-19 14:05:52.556140111 +0200
++++ b/crates/webhid-daemon/src/security.rs	2026-10-19 14:05:52.568862060 +0200
+@@ -34,6 +34,10 @@
+         }
+     };
+ 
++    if cred.uid() == unsafe { libc::geteuid() } {
++        return true;
++    }
++
+     let target_gid = match resolve_webhid_gid() {
+         Some(g) => g,
+         None => {

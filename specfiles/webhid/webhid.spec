@@ -3,13 +3,14 @@
 
 Name:           webhid
 Version:        3.2.0
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        WebHID for Firefox via a native-messaging bridge and hidraw daemon
 
 License:        MIT
 URL:            https://github.com/OpenPolyfill/WebHID
 Source0:        %{url}/archive/v%{version}/WebHID-%{version}.tar.gz
 Source1:        https://addons.mozilla.org/firefox/downloads/file/4981792/webhid-%{version}.xpi
+Patch0:         webhid-allow-same-uid.patch
 
 BuildRequires:  cargo
 BuildRequires:  gcc
@@ -64,5 +65,8 @@ udevadm trigger --subsystem-match=hidraw >/dev/null 2>&1 || :
 %{_datadir}/webhid/
 
 %changelog
+* Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - 3.2.0-2
+- Accept same-user socket peers
+
 * Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - 3.2.0-1
 - Initial package
