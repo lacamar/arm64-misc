@@ -3,7 +3,7 @@
 
 Name:           webhid
 Version:        3.2.0
-Release:        3%{?dist}
+Release:        4%{?dist}
 Summary:        WebHID for Firefox via a native-messaging bridge and hidraw daemon
 
 License:        MIT
@@ -32,11 +32,11 @@ cargo build --release --locked -p webhid-daemon -p webhid-native-messaging --man
 install -Dm755 crates/target/release/webhid-daemon %{buildroot}%{_bindir}/webhid-daemon
 install -Dm755 crates/target/release/webhid-native-messaging %{buildroot}%{_bindir}/webhid-native-messaging
 install -Dm644 manifests/72-webhid.rules %{buildroot}%{_udevrulesdir}/72-webhid.rules
-install -dm755 %{buildroot}%{_libdir}/mozilla/native-messaging-hosts
+install -dm755 %{buildroot}%{_prefix}/lib/mozilla/native-messaging-hosts
 sed 's|{{NM_BIN}}|%{_bindir}/webhid-native-messaging|' manifests/webhid.forwarder_nm_host.json \
-  > %{buildroot}%{_libdir}/mozilla/native-messaging-hosts/webhid.forwarder_nm_host.json
+  > %{buildroot}%{_prefix}/lib/mozilla/native-messaging-hosts/webhid.forwarder_nm_host.json
 sed 's|{{DAEMON_BIN}}|%{_bindir}/webhid-daemon|' manifests/webhid.daemon_nm_host.json \
-  > %{buildroot}%{_libdir}/mozilla/native-messaging-hosts/webhid.daemon_nm_host.json
+  > %{buildroot}%{_prefix}/lib/mozilla/native-messaging-hosts/webhid.daemon_nm_host.json
 sed 's|{{DAEMON_BIN}}|%{_bindir}/webhid-daemon|' manifests/webhid-daemon.user.service \
   | install -Dm644 /dev/stdin %{buildroot}%{_userunitdir}/webhid-daemon.service
 install -Dm644 /dev/stdin %{buildroot}%{_userpresetdir}/80-webhid.preset <<<'enable webhid-daemon.service'
@@ -59,12 +59,15 @@ udevadm trigger --subsystem-match=hidraw >/dev/null 2>&1 || :
 %{_bindir}/webhid-daemon
 %{_bindir}/webhid-native-messaging
 %{_udevrulesdir}/72-webhid.rules
-%{_libdir}/mozilla/native-messaging-hosts/webhid.*_nm_host.json
+%{_prefix}/lib/mozilla/native-messaging-hosts/webhid.*_nm_host.json
 %{_userunitdir}/webhid-daemon.service
 %{_userpresetdir}/80-webhid.preset
 %{_datadir}/webhid/
 
 %changelog
+* Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - 3.2.0-4
+- Move NM manifests to /usr/lib/mozilla
+
 * Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - 3.2.0-3
 - Fix patch level
 
