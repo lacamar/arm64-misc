@@ -1,5 +1,5 @@
 Name:           open-hpl
-Version:        1.3.59
+Version:        1.3.60
 Release:        1%{?dist}
 Summary:        Native aarch64 port of Frictional Games' HPL engine
 
@@ -138,6 +138,9 @@ launcher bunker 1944430 "Amnesia The Bunker" \
 %{_datadir}/icons/hicolor/128x128/apps/open-hpl-*.png
 
 %changelog
+* Tue Oct 20 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.60-1
+- Fix falling off zeppelin platform at theta transition
+
 * Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.59-1
 - Fix omnitool panel/slot sounds
 - Fix welding sparks and torch sound following Kate
