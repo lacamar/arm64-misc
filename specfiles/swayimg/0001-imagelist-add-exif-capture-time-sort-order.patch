@@ -1,17 +1,15 @@
 diff --git a/CONFIG.md b/CONFIG.md
-index d74f2f0..8420185 100644
 --- a/CONFIG.md
 +++ b/CONFIG.md
-@@ -453,6 +453,7 @@ Since 5.5.
+@@ -466,6 +466,7 @@
  * `"alpha"`: Lexicographic sort: 1,10,2,20,a,b,c
  * `"numeric"`: Numeric sort: 1,2,3,10,100,a,b,c
  * `"mtime"`: Modification time sort
-+* `"exif"`: EXIF capture time sort (`DateTimeOriginal`/`DateTimeDigitized`/`DateTime`), falls back to path order if unavailable
++* `"exif"`: EXIF capture time sort (`DateTimeOriginal`/`DateTimeDigitized`/`DateTime`), falls back to file creation time, then modification time
  * `"size"`: Size sort
  * `"random"`: Random order
  
 diff --git a/extra/swayimg.lua b/extra/swayimg.lua
-index 0d98f74..80ba68c 100644
 --- a/extra/swayimg.lua
 +++ b/extra/swayimg.lua
 @@ -15,6 +15,7 @@
@@ -23,10 +21,9 @@ index 0d98f74..80ba68c 100644
  ---| "random"  # Random order
  
 diff --git a/src/image.hpp b/src/image.hpp
-index 976c8a8..0c41df0 100644
 --- a/src/image.hpp
 +++ b/src/image.hpp
-@@ -18,6 +18,7 @@ struct ImageEntry {
+@@ -18,6 +18,7 @@
      size_t index = std::numeric_limits<size_t>::max(); ///< Index in image list
      std::filesystem::path path; ///< Path to the image file
      std::time_t mtime = 0;      ///< File modification time
@@ -35,10 +32,9 @@ index 976c8a8..0c41df0 100644
      bool mark = false;          ///< Marked image flag
      bool removed = false;       ///< State, true if removed from image list
 diff --git a/src/imagelist.cpp b/src/imagelist.cpp
-index 7259412..bc6444d 100644
 --- a/src/imagelist.cpp
 +++ b/src/imagelist.cpp
-@@ -4,16 +4,23 @@
+@@ -4,16 +4,26 @@
  
  #include "imagelist.hpp"
  
@@ -55,6 +51,9 @@ index 7259412..bc6444d 100644
  #include <random>
  #include <string>
  
++#include <fcntl.h>
++#include <sys/stat.h>
++
 +#ifdef HAVE_LIBEXIV2
 +#include <exiv2/exiv2.hpp>
 +#endif // HAVE_LIBEXIV2
@@ -62,7 +61,7 @@ index 7259412..bc6444d 100644
  namespace {
  
  /**
-@@ -78,6 +85,56 @@ int compare_strings(const std::string& l, const std::string& r,
+@@ -78,6 +88,56 @@
      return cmp;
  }
  
@@ -119,7 +118,7 @@ index 7259412..bc6444d 100644
  /**
   * Comparison of two paths.
   * @param l,r paths to compare
-@@ -128,6 +185,10 @@ bool compare_entries(const ImageEntry& l, const ImageEntry& r,
+@@ -128,6 +188,10 @@
          case ImageList::Order::Mtime:
              return l.mtime == r.mtime ? compare_paths(l.path, r.path, false) < 0
                                        : l.mtime < r.mtime;
@@ -130,7 +129,7 @@ index 7259412..bc6444d 100644
          case ImageList::Order::Size:
              return l.size == r.size ? compare_paths(l.path, r.path, false) < 0
                                      : l.size < r.size;
-@@ -539,11 +600,17 @@ ImageEntryPtr ImageList::add_file(const std::filesystem::path& path)
+@@ -539,11 +603,24 @@
  
      const size_t size = std::filesystem::file_size(path);
  
@@ -139,6 +138,13 @@ index 7259412..bc6444d 100644
 +#ifdef HAVE_LIBEXIV2
 +    exif_time = read_exif_time(path);
 +#endif // HAVE_LIBEXIV2
++    if (!exif_time) {
++        struct statx stx;
++        exif_time = statx(AT_FDCWD, path.c_str(), 0, STATX_BTIME, &stx) == 0 &&
++                (stx.stx_mask & STATX_BTIME)
++            ? stx.stx_btime.tv_sec
++            : mtime;
++    }
 +
 +    return add_entry(path, mtime, size, exif_time);
  }
@@ -150,7 +156,7 @@ index 7259412..bc6444d 100644
  {
      ImageEntryPtr entry = nullptr;
  
-@@ -552,6 +619,7 @@ ImageEntryPtr ImageList::add_entry(const std::filesystem::path& path,
+@@ -552,6 +629,7 @@
          entry->path = path;
          entry->mtime = mtime;
          entry->size = size;
@@ -159,18 +165,17 @@ index 7259412..bc6444d 100644
          entries_arr.push_back(entry);
      }
 diff --git a/src/imagelist.hpp b/src/imagelist.hpp
-index a4f2b5e..8731b11 100644
 --- a/src/imagelist.hpp
 +++ b/src/imagelist.hpp
-@@ -20,6 +20,7 @@ public:
+@@ -20,6 +20,7 @@
          Alpha,   ///< Lexicographic sort
          Numeric, ///< Numeric sort
          Mtime,   ///< Modification time sort
 +        Exif,    ///< EXIF capture time sort
          Size,    ///< Size sort
-         Random   ///< Random order
+         Random,  ///< Random order
      };
-@@ -181,10 +182,12 @@ private:
+@@ -181,10 +182,12 @@
       * @param path path to the image file
       * @param mtime file modification time
       * @param size size of the file
@@ -185,10 +190,9 @@ index a4f2b5e..8731b11 100644
      /**
       * Sort and reindex image list.
 diff --git a/src/luaengine.cpp b/src/luaengine.cpp
-index d3bd50e..4d43410 100644
 --- a/src/luaengine.cpp
 +++ b/src/luaengine.cpp
-@@ -51,6 +51,7 @@ static constexpr std::array ilorders =
+@@ -51,6 +51,7 @@
          { ImageList::Order::Alpha,   "alpha"   },
          { ImageList::Order::Numeric, "numeric" },
          { ImageList::Order::Mtime,   "mtime"   },

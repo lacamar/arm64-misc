@@ -3,7 +3,7 @@
 
 Name:           webhid
 Version:        3.2.0
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        WebHID for Firefox via a native-messaging bridge and hidraw daemon
 
 License:        MIT
@@ -23,7 +23,7 @@ Daemon, native-messaging hosts, udev rule and signed Firefox extension
 providing navigator.hid in Gecko browsers.
 
 %prep
-%autosetup -n WebHID-%{version}
+%autosetup -p1 -n WebHID-%{version}
 
 %build
 cargo build --release --locked -p webhid-daemon -p webhid-native-messaging --manifest-path crates/Cargo.toml
@@ -65,6 +65,9 @@ udevadm trigger --subsystem-match=hidraw >/dev/null 2>&1 || :
 %{_datadir}/webhid/
 
 %changelog
+* Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - 3.2.0-3
+- Fix patch level
+
 * Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - 3.2.0-2
 - Accept same-user socket peers
 
