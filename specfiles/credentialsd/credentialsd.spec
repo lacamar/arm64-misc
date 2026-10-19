@@ -3,7 +3,7 @@
 
 Name:           credentialsd
 Version:        0.3.1
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        xdg-desktop-portal backend for WebAuthn credentials
 
 License:        LGPL-3.0-only
@@ -14,8 +14,9 @@ Source2:        credentialsd.portal
 Source3:        portals.conf
 Patch0:         credentialsd-supersede-stale-request.patch
 Patch1:         libwebauthn-hybrid-maxmsgsize.patch
+Patch2:         credentialsd-webext-all-frames.patch
 
-BuildRequires:  blueprint-compiler
+BuildRequires:  blueprint-compiler >= 0.20.4
 BuildRequires:  cargo
 BuildRequires:  clang-devel
 BuildRequires:  desktop-file-utils
@@ -58,6 +59,7 @@ Routes WebAuthn calls from Firefox-based browsers to credentialsd.
 %prep
 %autosetup -N
 %autopatch -p1 -M 0
+%autopatch -p1 -m 2
 tar -xf %{SOURCE1}
 %patch -P 1 -p1 -d libwebauthn-%{lwa_commit}
 cat >> Cargo.toml <<EOF
@@ -124,6 +126,10 @@ install -Dpm0644 %{SOURCE3} %{buildroot}%{portalconfdir}/portals.conf
 %{_datadir}/credentialsd/
 
 %changelog
+* Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.1-2
+- Inject web extension into iframes
+- Require blueprint-compiler >= 0.20.4
+
 * Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.1-1
 - Initial package
 - Allow hybrid authenticators without maxMsgSize
