@@ -1,5 +1,5 @@
 Name:           open-hpl
-Version:        1.3.57
+Version:        1.3.58
 Release:        1%{?dist}
 Summary:        Native aarch64 port of Frictional Games' HPL engine
 
@@ -138,6 +138,10 @@ launcher bunker 1944430 "Amnesia The Bunker" \
 %{_datadir}/icons/hicolor/128x128/apps/open-hpl-*.png
 
 %changelog
+* Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.58-1
+- Fix jumping after loading an underwater save
+- Official save date format
+
 * Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - 1.3.57-1
 - Fix voice lines randomly skipped
 
