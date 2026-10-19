@@ -1,4 +1,4 @@
-%global tag b11715
+%global tag b11723
 
 Summary:        Port of Facebook's LLaMA model in C/C++
 Name:           llama-cpp
@@ -171,6 +171,9 @@ rm -f %{buildroot}/usr/lib64/libllama-*-impl.so-*.debug
 %{_libdir}/pkgconfig/llama.pc
 
 %changelog
+* Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - b11723-1
+ - Update to b11723
+
 * Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - b11715-1
  - Update to b11715
 
