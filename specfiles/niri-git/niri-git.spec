@@ -24,9 +24,9 @@
 # Convince rust-srpm-macros to use Cargo.lock with the Smithay commit.
 %global __cargo_common_opts %{?_smp_mflags} -Z avoid-dev-deps --locked
 
-%global bumpver 9
+%global bumpver 10
 %global tag 26.04
-%global commit 45739bc072f9875a674d335ae724f10d3b35c665
+%global commit 12de51d6a60baad8896366920278a24f17921f52
 %global shortcommit %{sub %{commit} 1 8}
 %global smithay_commit 8a270232f1bfc416c781273c98a3f52a812a0bba
 
@@ -176,6 +176,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^10.git.12de51d6-23
+ - Update to commit 12de51d6a60baad8896366920278a24f17921f52
+
 * Sun Oct 18 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^9.git.45739bc0-23
 - Fold local patches
 - Drop scratchpad backdrop/modal
