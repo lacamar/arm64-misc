@@ -1,7 +1,7 @@
 %global tag 1.7.0
 Name: wasistlos
 Version: %{tag}
-Release: 13%{?dist}
+Release: 14%{?dist}
 Summary: An unofficial WhatsApp desktop application for Linux.
 
 License: GNU GPL v3
@@ -58,6 +58,10 @@ An unofficial WhatsApp desktop application for Linux.
 
 
 %changelog
+* Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-14
+- Export full text of "Read more" messages
+- Replace truncated entries in existing exports
+
 * Sun Oct 18 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-13
 - Drop one-shot transcript export
 - Sort export by message timestamp

@@ -627,7 +627,7 @@ index 1c02a2a..ccb60d9 100644
              void onNotificationChanged(bool show);
              void onShow();
 diff --git a/src/ui/WebView.cpp b/src/ui/WebView.cpp
-index 0efe765..a19fb1e 100644
+index 0efe765..770068b 100644
 --- a/src/ui/WebView.cpp
 +++ b/src/ui/WebView.cpp
 @@ -5,14 +5,34 @@
@@ -665,7 +665,7 @@ index 0efe765..a19fb1e 100644
  #include "../util/Settings.hpp"
  #include "Config.hpp"
  
-@@ -23,6 +43,1304 @@ namespace wil::ui
+@@ -23,6 +43,1338 @@ namespace wil::ui
          constexpr auto const WHATSAPP_WEB_URI = "https://web.whatsapp.com";
          constexpr auto const USER_AGENT       = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
  
@@ -839,6 +839,11 @@ index 0efe765..a19fb1e 100644
 +                        var text     = (messageTextNode(node).innerText || '').trim();
 +                        var row      = node.closest('[data-id]');
 +                        var msg      = row ? storeMessage(row.getAttribute('data-id')) : null;
++                        // Long messages render cut off behind "Read more"; the store holds the full text.
++                        var full     = msg && (msg.type === 'chat' ? msg.body : msg.caption);
++                        if (full && full.length > text.length && (row.querySelector('.read-more-button') || /(\.\.\.|\u2026)$/.test(text))) {
++                            text = full.trim();
++                        }
 +
 +                        if (!match && !text) { return; }
 +
@@ -1246,6 +1251,30 @@ index 0efe765..a19fb1e 100644
 +            return entries;
 +        }
 +
++        std::string alnumPrefix(std::string const& text, std::size_t length)
++        {
++            std::string prefix;
++            for (auto const c : text)
++            {
++                if (std::isalnum(static_cast<unsigned char>(c)) && prefix.size() < length)
++                {
++                    prefix += c;
++                }
++            }
++            return prefix;
++        }
++
++        // Entries exported before full-text lookup hold the "Read more" cut-off text.
++        bool isTruncatedOf(ChatEntry const& old, ChatEntry const& full)
++        {
++            auto const endsWith = [&old](std::string const& suffix)
++            {
++                return old.text.size() >= suffix.size() && old.text.compare(old.text.size() - suffix.size(), suffix.size(), suffix) == 0;
++            };
++            return old.time == full.time && old.sender == full.sender && full.text.size() > old.text.size()
++                && (endsWith("...") || endsWith("\u2026")) && alnumPrefix(old.text, 16) == alnumPrefix(full.text, 16);
++        }
++
 +        std::vector<ChatEntry> mergeEntries(std::vector<ChatEntry> existing, std::vector<ChatEntry> const& window)
 +        {
 +            if (existing.empty())
@@ -1259,6 +1288,11 @@ index 0efe765..a19fb1e 100644
 +                {
 +                    if (existing[i] == needle)
 +                    {
++                        return i;
++                    }
++                    if (isTruncatedOf(existing[i], needle))
++                    {
++                        existing[i].text = needle.text;
 +                        return i;
 +                    }
 +                }
@@ -1970,7 +2004,7 @@ index 0efe765..a19fb1e 100644
          std::optional<std::string> getSystemLanguage()
          {
              try
-@@ -262,6 +1580,10 @@ namespace wil::ui
+@@ -262,6 +1614,10 @@ namespace wil::ui
          g_signal_connect(*this, "permission-request", G_CALLBACK(permissionRequest), nullptr);
          g_signal_connect(*this, "decide-policy", G_CALLBACK(decidePolicy), nullptr);
          g_signal_connect(*this, "show-notification", G_CALLBACK(showNotification), this);
@@ -1981,7 +2015,7 @@ index 0efe765..a19fb1e 100644
          g_signal_connect(webContext, "download-started", G_CALLBACK(downloadStarted), nullptr);
          g_signal_connect(webContext, "initialize-notification-permissions", G_CALLBACK(initializeNotificationPermission), nullptr);
          Glib::signal_timeout().connect(sigc::mem_fun(*this, &WebView::onTimeout), 5000);
-@@ -287,6 +1609,8 @@ namespace wil::ui
+@@ -287,6 +1643,8 @@ namespace wil::ui
              applyCustomCss(cssFilePath);
          }
  
@@ -1990,7 +2024,7 @@ index 0efe765..a19fb1e 100644
          webkit_web_view_load_uri(*this, WHATSAPP_WEB_URI);
      }
  
-@@ -348,6 +1672,17 @@ namespace wil::ui
+@@ -348,6 +1706,17 @@ namespace wil::ui
          sendRequest("whatsapp://send?phone=" + phoneNumber);
      }
  
@@ -2008,7 +2042,7 @@ index 0efe765..a19fb1e 100644
      void WebView::pasteImageFromClipboard()
      {
          auto const clipboard = Gtk::Clipboard::get();
-@@ -487,4 +1822,21 @@ namespace wil::ui
+@@ -487,4 +1856,21 @@ namespace wil::ui
          auto* manager = webkit_web_view_get_user_content_manager(*this);
          webkit_user_content_manager_add_style_sheet(manager, styleSheet);
      }
