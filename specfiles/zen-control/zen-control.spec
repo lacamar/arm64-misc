@@ -9,7 +9,7 @@
 
 Name:           zen-control
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        16%{?dist}
+Release:        17%{?dist}
 Summary:        MCP bridge and WebExtension to drive the Zen browser from Claude Code
 
 License:        LicenseRef-Not-specified
@@ -73,6 +73,10 @@ cat > %{buildroot}%{_sysconfdir}/zen/policies/policies.json <<'EOS'
       "credentialsd-helper@iinuwa.xyz": {
         "installation_mode": "normal_installed",
         "install_url": "file://%{_datadir}/credentialsd/credentialsd-firefox-helper.xpi"
+      },
+      "webhid@k4zoku.dev": {
+        "installation_mode": "normal_installed",
+        "install_url": "file://%{_datadir}/webhid/webhid.xpi"
       }
     }
   }
@@ -95,6 +99,9 @@ chmod 0755 %{buildroot}%{_bindir}/%{name}
 %config(noreplace) %{_sysconfdir}/zen/policies/policies.json
 
 %changelog
+* Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-17
+- Install WebHID extension via policy
+
 * Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-16
 - Install credentialsd extension via policy
 
