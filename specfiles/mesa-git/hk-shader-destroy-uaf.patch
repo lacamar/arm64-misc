@@ -1,0 +1,15 @@
+--- a/src/asahi/vulkan/hk_shader.c
++++ b/src/asahi/vulkan/hk_shader.c
+@@ -1283,10 +1283,10 @@
+       hk_shader_destroy(dev, shader);
+    }
+ 
+-   vk_shader_free(&dev->vk, pAllocator, &obj->vk);
+-
+    free(obj->debug_nir_dump);
+    free(obj->debug_agx_dump);
++
++   vk_shader_free(&dev->vk, pAllocator, &obj->vk);
+ }
+ 
+ static void dump_shader_ir(

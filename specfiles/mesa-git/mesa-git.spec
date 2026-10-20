@@ -97,7 +97,7 @@ Summary:        Mesa graphics libraries
 %global commitdate 20261017
 %global ver 27.0.0
 Version:        %{ver}~git%{commitdate}.%{shortcommit}
-Release:        3%{?dist}
+Release:        4%{?dist}
 License:        MIT AND BSD-3-Clause AND SGI-B-2.0
 URL:            https://mesa3d.org
 
@@ -114,6 +114,7 @@ Patch2:         hk-placed-map.patch
 Patch3:         hk-vs-attrib-limit.patch
 Patch4:         asahi-shadow-flush-wb.patch
 Patch5:         agx-query-nowait.patch
+Patch6:         hk-shader-destroy-uaf.patch
 
 # In CentOS/RHEL, Rust crates required to build NVK are vendored.
 # The minimum target versions are obtained from the .wrap files
@@ -767,6 +768,9 @@ ln -s libGLX_mesa.so.0 %{buildroot}%{_libdir}/libGLX_system.so.0
 %endif
 
 %changelog
+* Tue Oct 20 2026 lacamar <lchlnm@pm.me> - 27.0.0~git20261017.335d5698-4
+- hk: fix use-after-free in shader destroy
+
 * Sun Oct 18 2026 lacamar <lchlnm@pm.me> - 27.0.0~git20261017.335d5698-3
 - asahi: non-blocking query result polling
 
