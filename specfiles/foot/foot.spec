@@ -3,7 +3,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        10%{?dist}
+Release:        11%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -18,6 +18,7 @@ Source2:        gpgkey-5BBD4992C116573F.asc
 # Session save/restore for --server (downstream)
 Patch0:         foot-session-restore.patch
 Patch1:         foot-vulkan.patch
+Patch2:         foot-tabs.patch
 
 BuildRequires:  gcc
 BuildRequires:  gnupg2
@@ -148,6 +149,14 @@ desktop-file-validate \
 
 
 %changelog
+* Tue Oct 20 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-11
+- Add vertical tabs with sidebar
+- Add workspaces
+- Add split view
+- Add tab drag and detach
+- Add foot/footclient --tab
+- Session state v5
+
 * Sun Oct 18 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-10
 - Add optional Vulkan renderer ([tweak] renderer=vulkan)
 
