@@ -9,7 +9,7 @@
 
 Name:           zen-control
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        17%{?dist}
+Release:        18%{?dist}
 Summary:        MCP bridge and WebExtension to drive the Zen browser from Claude Code
 
 License:        LicenseRef-Not-specified
@@ -30,6 +30,7 @@ Patch10:        0011-dark-canvas-capture.patch
 Patch11:        0012-screenshot-annotate-fullpage.patch
 Patch12:        0013-screenshot-path-wait-gone.patch
 Patch13:        0014-network-bodies.patch
+Patch14:        0015-background-tabs-stay-visible.patch
 
 BuildArch:      noarch
 
@@ -99,6 +100,10 @@ chmod 0755 %{buildroot}%{_bindir}/%{name}
 %config(noreplace) %{_sysconfdir}/zen/policies/policies.json
 
 %changelog
+* Wed Oct 21 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-18
+- Controlled background tabs report visible (rAF, timers, popovers run)
+- Drop tab_new active and tab_select activate; only handoff shows a tab
+
 * Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-17
 - Install WebHID extension via policy
 

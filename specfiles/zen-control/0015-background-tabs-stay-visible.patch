@@ -1,0 +1,88 @@
+diff -Naur a/extension/background.js b/extension/background.js
+--- a/extension/background.js	2026-10-21 21:55:17.433821300 +0200
++++ b/extension/background.js	2026-10-21 21:55:17.456087025 +0200
+@@ -482,6 +482,7 @@
+   if (!TABLESS.includes(cmd)) {
+     const t = cmd === "tab_select" ? { id: args.tabId } : await resolveTab(args.tabId, sid);
+     if (stopped.has(t.id)) throw new Error(`The user stopped Claude on tab ${t.id}. Ask them before continuing; they can resume it from the Zen Control toolbar button.`);
++    if (cmd !== "tab_close") priv?.active(t.id, true).catch(() => {});
+   }
+   switch (cmd) {
+     case "ping":
+@@ -497,7 +498,7 @@
+     case "handoff":
+       return handoff(await resolveTab(args.tabId, sid), args);
+     case "tab_new": {
+-      const t = await browser.tabs.create({ url: args.url || "about:blank", active: !!args.active });
++      const t = await browser.tabs.create({ url: args.url || "about:blank", active: false });
+       use(sid, t.id);
+       priv?.folder(t.id, args.folder || "Claude").catch(() => {});
+       if (args.url) await withLoad(t.id, async () => {}, args.timeout);
+@@ -506,7 +507,6 @@
+     case "tab_select": {
+       const t = await browser.tabs.get(args.tabId);
+       use(sid, t.id);
+-      if (args.activate) await browser.tabs.update(t.id, { active: true });
+       return tabInfo(await browser.tabs.get(t.id));
+     }
+     case "tab_close": {
+@@ -572,6 +572,7 @@
+   for (const [s, t] of current) if (t === id) current.delete(s);
+   for (const set of touched.values()) set.delete(id);
+   controlled.delete(id);
++  priv?.active(id, false).catch(() => {});
+   tapBodies(id);
+   stopped.delete(id);
+ }
+diff -Naur a/extension/manifest.json b/extension/manifest.json
+--- a/extension/manifest.json	2026-10-21 21:55:17.433846008 +0200
++++ b/extension/manifest.json	2026-10-21 21:59:32.891550338 +0200
+@@ -1,7 +1,7 @@
+ {
+   "manifest_version": 2,
+   "name": "Zen Control",
+-  "version": "0.1.2.13",
++  "version": "0.1.2.14",
+   "description": "Lets Claude Code drive this browser through a local MCP bridge (ws://127.0.0.1:17373).",
+   "browser_specific_settings": {
+     "gecko": {
+diff -Naur a/extension/privileged/api.js b/extension/privileged/api.js
+--- a/extension/privileged/api.js	2026-10-21 21:55:17.433699674 +0200
++++ b/extension/privileged/api.js	2026-10-21 21:55:17.455801148 +0200
+@@ -67,6 +67,16 @@
+             throw new ExtensionUtils.ExtensionError(String(e?.message || e));
+           }
+         },
++        // page sees itself visible (rAF, timers, popovers) without the tab being shown
++        active(tabId, on) {
++          try {
++            const tab = context.extension.tabManager.get(tabId).nativeTab, gb = tab.documentGlobal.gBrowser, b = tab.linkedBrowser;
++            if (on) gb.activateBrowserForPrintPreview(b);
++            else { gb._printPreviewBrowsers.delete(b); b.docShellIsActive = gb.shouldActivateDocShell(b); }
++          } catch (e) {
++            throw new ExtensionUtils.ExtensionError(String(e?.message || e));
++          }
++        },
+         folder(tabId, label) {
+           try {
+             const tab = context.extension.tabManager.get(tabId).nativeTab, win = tab.documentGlobal;
+diff -Naur a/extension/privileged/schema.json b/extension/privileged/schema.json
+--- a/extension/privileged/schema.json	2026-10-21 21:55:17.433722091 +0200
++++ b/extension/privileged/schema.json	2026-10-21 21:55:17.455853898 +0200
+@@ -1 +1 @@
+-[{"namespace": "zenControl", "functions": [{"name": "send", "type": "function", "async": true, "parameters": [{"name": "tabId", "type": "integer"}, {"name": "frameId", "type": "integer"}, {"name": "name", "type": "string"}, {"name": "data", "type": "any", "optional": true}]}, {"name": "folder", "type": "function", "async": true, "parameters": [{"name": "tabId", "type": "integer"}, {"name": "label", "type": "string"}]}, {"name": "capture", "type": "function", "async": true, "parameters": [{"name": "tabId", "type": "integer"}, {"name": "rect", "type": "object", "additionalProperties": {"type": "number"}, "optional": true}, {"name": "scale", "type": "number", "optional": true}, {"name": "bg", "type": "string"}]}]}]
++[{"namespace": "zenControl", "functions": [{"name": "send", "type": "function", "async": true, "parameters": [{"name": "tabId", "type": "integer"}, {"name": "frameId", "type": "integer"}, {"name": "name", "type": "string"}, {"name": "data", "type": "any", "optional": true}]}, {"name": "active", "type": "function", "async": true, "parameters": [{"name": "tabId", "type": "integer"}, {"name": "on", "type": "boolean"}]}, {"name": "folder", "type": "function", "async": true, "parameters": [{"name": "tabId", "type": "integer"}, {"name": "label", "type": "string"}]}, {"name": "capture", "type": "function", "async": true, "parameters": [{"name": "tabId", "type": "integer"}, {"name": "rect", "type": "object", "additionalProperties": {"type": "number"}, "optional": true}, {"name": "scale", "type": "number", "optional": true}, {"name": "bg", "type": "string"}]}]}]
+diff -Naur a/server/index.js b/server/index.js
+--- a/server/index.js	2026-10-21 21:55:17.433927759 +0200
++++ b/server/index.js	2026-10-21 21:58:09.345999000 +0200
+@@ -177,8 +177,8 @@
+     const lines = r.tabs.map((t) => `${t.id === r.currentTabId ? "*" : " "} ${t.id}${t.active ? " (active)" : ""} ${clip(t.title, 80)} — ${clip(t.url, 150)}`);
+     return text(`${lines.join("\n")}\n(${r.tabs.length} of ${r.total} tabs${r.tabs.length < r.total ? "; pass query or all=true for others" : ""})`);
+   });
+-tool("tab_new", "Open a new background tab, optionally at a URL, and make it the current tab. All tools work on background tabs.", { url: z.string().optional(), active: z.boolean().optional().describe("Show the tab in its window (default false)") }, async (a) => text(await sendCommand("tab_new", { ...a, folder: FOLDER })));
+-tool("tab_select", "Make a tab the current target without showing it; all tools work on background tabs.", { tabId: z.number().int(), activate: z.boolean().optional().describe("Also show the tab in its window (default false)") }, async (a) => text(await sendCommand("tab_select", a)));
++tool("tab_new", "Open a new background tab, optionally at a URL, and make it the current tab. All tools work on background tabs and pages behave as if visible; the user's view never changes.", { url: z.string().optional() }, async (a) => text(await sendCommand("tab_new", { ...a, folder: FOLDER })));
++tool("tab_select", "Make a tab the current target without showing it; all tools work on background tabs. Pages behave as if visible, so never try to bring a tab to the front; use handoff when the user must see it.", { tabId: z.number().int() }, async (a) => text(await sendCommand("tab_select", a)));
+ tool("tab_close", "Close a tab (default: the current one).", { tabId }, async (a) => text(await sendCommand("tab_close", a)));
+ tool("navigate", "Navigate the current tab to a URL and wait for the page to load.", { url: z.string().describe("URL; https:// is assumed without a scheme"), tabId }, async (a) => text(await sendCommand("navigate", a)));
+ tool("go_back", "Go back in history and wait for load.", { tabId }, async (a) => text(await sendCommand("back", a)));
