@@ -3,7 +3,7 @@
 
 Name:           credentialsd
 Version:        0.3.1
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        xdg-desktop-portal backend for WebAuthn credentials
 
 License:        LGPL-3.0-only
@@ -15,6 +15,7 @@ Source3:        portals.conf
 Patch0:         credentialsd-supersede-stale-request.patch
 Patch1:         libwebauthn-hybrid-maxmsgsize.patch
 Patch2:         credentialsd-webext-all-frames.patch
+Patch3:         credentialsd-cancel-on-ui-close.patch
 
 BuildRequires:  blueprint-compiler >= 0.20.4
 BuildRequires:  cargo
@@ -126,6 +127,10 @@ install -Dpm0644 %{SOURCE3} %{buildroot}%{portalconfdir}/portals.conf
 %{_datadir}/credentialsd/
 
 %changelog
+* Thu Oct 22 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.1-3
+- Cancel request when UI closes
+- Handle requests concurrently so stale ones cannot block
+
 * Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.1-2
 - Inject web extension into iframes
 - Require blueprint-compiler >= 0.20.4
