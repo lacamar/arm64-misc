@@ -627,7 +627,7 @@ index 1c02a2a..ccb60d9 100644
              void onNotificationChanged(bool show);
              void onShow();
 diff --git a/src/ui/WebView.cpp b/src/ui/WebView.cpp
-index 0efe765..770068b 100644
+index 0efe765..7fd23fa 100644
 --- a/src/ui/WebView.cpp
 +++ b/src/ui/WebView.cpp
 @@ -5,14 +5,34 @@
@@ -665,7 +665,7 @@ index 0efe765..770068b 100644
  #include "../util/Settings.hpp"
  #include "Config.hpp"
  
-@@ -23,6 +43,1338 @@ namespace wil::ui
+@@ -23,6 +43,1420 @@ namespace wil::ui
          constexpr auto const WHATSAPP_WEB_URI = "https://web.whatsapp.com";
          constexpr auto const USER_AGENT       = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
  
@@ -741,9 +741,15 @@ index 0efe765..770068b 100644
 +                        duration: duration,
 +                        clock:    clocks.length ? clocks[clocks.length - 1] : '',
 +                        t:        msg ? msg.t : 0,
++                        remote:   chatOf(msg),
 +                        out:      msg ? msg.id.fromMe : (id.indexOf('true_') === 0 || !!row.closest('.message-out')),
 +                        sender:   group ? sender : ''
 +                    };
++                }
++
++                function chatOf(msg) {
++                    var remote = msg && msg.id && msg.id.remote;
++                    return remote ? String(remote._serialized || remote) : '';
 +                }
 +
 +                function isAttachment(msg) {
@@ -848,6 +854,8 @@ index 0efe765..770068b 100644
 +                        if (!match && !text) { return; }
 +
 +                        entries.push({
++                            id:     row ? row.getAttribute('data-id') : '',
++                            remote: chatOf(msg),
 +                            time:   match ? match[1] : '',
 +                            sender: match ? match[2] : '',
 +                            text:   (isAttachment(msg) ? attachmentMarker(row.getAttribute('data-id'), msg) : '') + text,
@@ -856,11 +864,16 @@ index 0efe765..770068b 100644
 +                        });
 +                    });
 +
-+                    entries = resolveVoiceNotes(entries, title);
++                    // While switching chats the header can update before the old chat's rows are gone.
++                    var counts = {}, chat = '';
++                    entries.forEach(function(entry) {
++                        if (entry.remote && (counts[entry.remote] = (counts[entry.remote] || 0) + 1) > (counts[chat] || 0)) { chat = entry.remote; }
++                    });
++                    entries = resolveVoiceNotes(entries.filter(function(entry) { return !entry.remote || entry.remote === chat; }), title);
 +                    if (entries.length === 0) { return; }
 +
 +                    var records = entries.map(function(entry) {
-+                        return (entry.t || 0) + '\x02' + entry.time + '\x02' + entry.sender + '\x02' + entry.text + '\x03';
++                        return (entry.t || 0) + '\x02' + (entry.id || '').replace(/[\x01-\x05\s]/g, '') + '\x02' + entry.time + '\x02' + entry.sender + '\x02' + entry.text + '\x03';
 +                    }).join('');
 +
 +                    try {
@@ -1115,6 +1128,7 @@ index 0efe765..770068b 100644
 +            std::string sender;
 +            std::string text;
 +            long long   t = 0;
++            std::string id;
 +
 +            bool operator==(ChatEntry const& other) const
 +            {
@@ -1139,11 +1153,12 @@ index 0efe765..770068b 100644
 +                auto const sep0   = record.find('\x02');
 +                auto const sep1   = (sep0 == std::string::npos) ? sep0 : record.find('\x02', sep0 + 1);
 +                auto const sep2   = (sep1 == std::string::npos) ? sep1 : record.find('\x02', sep1 + 1);
++                auto const sep3   = (sep2 == std::string::npos) ? sep2 : record.find('\x02', sep2 + 1);
 +
-+                if (sep2 != std::string::npos)
++                if (sep3 != std::string::npos)
 +                {
-+                    entries.push_back(ChatEntry{record.substr(sep0 + 1, sep1 - sep0 - 1), record.substr(sep1 + 1, sep2 - sep1 - 1), record.substr(sep2 + 1),
-+                        std::atoll(record.c_str())});
++                    entries.push_back(ChatEntry{record.substr(sep1 + 1, sep2 - sep1 - 1), record.substr(sep2 + 1, sep3 - sep2 - 1), record.substr(sep3 + 1),
++                        std::atoll(record.c_str()), record.substr(sep0 + 1, sep1 - sep0 - 1)});
 +                }
 +
 +                pos = recordEnd + 1;
@@ -1159,9 +1174,9 @@ index 0efe765..770068b 100644
 +            for (auto const& entry : entries)
 +            {
 +                out += "**" + entry.sender + "** _" + entry.time + "_\n";
-+                if (entry.t > 0)
++                if (entry.t > 0 || !entry.id.empty())
 +                {
-+                    out += "<!-- " + std::to_string(entry.t) + " -->\n";
++                    out += "<!-- " + std::to_string(entry.t) + (entry.id.empty() ? "" : " " + entry.id) + " -->\n";
 +                }
 +                out += "\n";
 +
@@ -1194,6 +1209,7 @@ index 0efe765..770068b 100644
 +            std::string            currentSender;
 +            std::string            currentTime;
 +            long long              currentT = 0;
++            std::string            currentId;
 +            std::vector<std::string> currentLines;
 +
 +            auto flush = [&]()
@@ -1213,7 +1229,7 @@ index 0efe765..770068b 100644
 +                    text += currentLines[i];
 +                }
 +
-+                entries.push_back(ChatEntry{currentTime, currentSender, text, currentT});
++                entries.push_back(ChatEntry{currentTime, currentSender, text, currentT, currentId});
 +                inEntry = false;
 +                currentLines.clear();
 +            };
@@ -1229,13 +1245,19 @@ index 0efe765..770068b 100644
 +                        currentSender = line.substr(2, sepPos - 2);
 +                        currentTime   = line.substr(sepPos + 4, line.size() - (sepPos + 4) - 1);
 +                        currentT      = 0;
++                        currentId.clear();
 +                        continue;
 +                    }
 +                }
 +
 +                if (inEntry && (line.rfind("<!-- ", 0) == 0))
 +                {
-+                    currentT = std::atoll(line.c_str() + 5);
++                    auto fields = std::istringstream{line.substr(5)};
++                    fields >> currentT >> currentId;
++                    if (currentId == "-->")
++                    {
++                        currentId.clear();
++                    }
 +                }
 +                else if (inEntry && (line.rfind("> ", 0) == 0))
 +                {
@@ -1275,28 +1297,58 @@ index 0efe765..770068b 100644
 +                && (endsWith("...") || endsWith("\u2026")) && alnumPrefix(old.text, 16) == alnumPrefix(full.text, 16);
 +        }
 +
++        bool sameSecond(ChatEntry const& a, ChatEntry const& b)
++        {
++            return a.t > 0 && a.t == b.t && a.sender == b.sender;
++        }
++
++        // Matches by message id; entries without one (older exports, rows missing from the store) fall back to content.
 +        std::vector<ChatEntry> mergeEntries(std::vector<ChatEntry> existing, std::vector<ChatEntry> const& window)
 +        {
-+            if (existing.empty())
-+            {
-+                return window;
-+            }
++            std::vector<bool> claimed(existing.size()), stale(existing.size());
 +
-+            auto findPos = [&existing](ChatEntry const& needle) -> std::optional<std::size_t>
++            auto findPos = [&](ChatEntry const& needle) -> std::optional<std::size_t>
 +            {
-+                for (std::size_t i = 0; i < existing.size(); ++i)
++                if (!needle.id.empty())
 +                {
-+                    if (existing[i] == needle)
++                    for (std::size_t i = 0; i < existing.size(); ++i)
 +                    {
-+                        return i;
-+                    }
-+                    if (isTruncatedOf(existing[i], needle))
-+                    {
-+                        existing[i].text = needle.text;
-+                        return i;
++                        if (!claimed[i] && existing[i].id == needle.id)
++                        {
++                            return i;
++                        }
 +                    }
 +                }
-+                return std::nullopt;
++
++                std::optional<std::size_t> bySecond;
++                auto                       secondCount = 0;
++                for (std::size_t i = 0; i < existing.size(); ++i)
++                {
++                    auto const& entry = existing[i];
++                    if (claimed[i] || (!entry.id.empty() && !needle.id.empty()))
++                    {
++                        continue;
++                    }
++                    if (entry == needle || isTruncatedOf(entry, needle) || isTruncatedOf(needle, entry))
++                    {
++                        return i;
++                    }
++                    if (sameSecond(entry, needle))
++                    {
++                        bySecond = i;
++                        ++secondCount;
++                    }
++                }
++
++                // An edited message keeps its timestamp; claim it when nothing else was sent by them that second.
++                auto const windowCount = std::count_if(window.begin(), window.end(), [&needle](ChatEntry const& other) { return sameSecond(other, needle); });
++                return (secondCount == 1 && windowCount == 1) ? bySecond : std::nullopt;
++            };
++
++            auto byTime = [&existing](long long t)
++            {
++                auto const it = std::find_if(existing.begin(), existing.end(), [t](ChatEntry const& entry) { return t > 0 && entry.t > t; });
++                return static_cast<std::size_t>(it - existing.begin());
 +            };
 +
 +            struct Insertion
@@ -1309,46 +1361,70 @@ index 0efe765..770068b 100644
 +            std::vector<ChatEntry>     pending;
 +            std::optional<std::size_t> afterPos;
 +
-+            auto flushPending = [&]()
++            for (std::size_t w = 0; w < window.size(); ++w)
 +            {
-+                if (pending.empty())
-+                {
-+                    return;
-+                }
-+                insertions.push_back(Insertion{afterPos.has_value() ? (*afterPos + 1) : 0, pending});
-+                pending.clear();
-+            };
-+
-+            for (auto const& item : window)
-+            {
-+                if (auto const pos = findPos(item))
-+                {
-+                    if (!existing[*pos].t)
-+                    {
-+                        existing[*pos].t = item.t;
-+                    }
-+                    flushPending();
-+                    afterPos = pos;
-+                }
-+                else
++                auto const& item = window[w];
++                auto const  pos  = findPos(item);
++                if (!pos)
 +                {
 +                    pending.push_back(item);
++                    continue;
 +                }
++
++                claimed[*pos] = true;
++                auto& entry   = existing[*pos];
++                if (!isTruncatedOf(item, entry))
++                {
++                    entry.text = item.text;
++                }
++                entry.time   = item.time;
++                entry.sender = item.sender;
++                entry.t      = item.t ? item.t : entry.t;
++                entry.id     = item.id.empty() ? entry.id : item.id;
++
++                if (!pending.empty())
++                {
++                    insertions.push_back(Insertion{afterPos ? (*afterPos + 1) : *pos, std::move(pending)});
++                    pending.clear();
++                }
++                afterPos = pos;
 +            }
 +
 +            if (!pending.empty())
 +            {
-+                insertions.push_back(Insertion{afterPos.has_value() ? (*afterPos + 1) : existing.size(), pending});
++                insertions.push_back(Insertion{afterPos ? (*afterPos + 1) : byTime(pending.front().t), std::move(pending)});
 +            }
 +
-+            std::sort(insertions.begin(), insertions.end(), [](Insertion const& a, Insertion const& b) { return a.at > b.at; });
++            // Pre-edit copies left by older exports; window edges are skipped since their second may be cut off.
++            for (std::size_t w = 1; w + 1 < window.size(); ++w)
++            {
++                for (std::size_t i = 0; i < existing.size(); ++i)
++                {
++                    if (!window[w].id.empty() && !claimed[i] && existing[i].id.empty() && sameSecond(existing[i], window[w]))
++                    {
++                        stale[i] = true;
++                    }
++                }
++            }
++
++            std::stable_sort(insertions.begin(), insertions.end(), [](Insertion const& a, Insertion const& b) { return a.at > b.at; });
 +
 +            for (auto const& insertion : insertions)
 +            {
-+                existing.insert(existing.begin() + static_cast<std::ptrdiff_t>(insertion.at), insertion.items.begin(), insertion.items.end());
++                auto const at = static_cast<std::ptrdiff_t>(insertion.at);
++                existing.insert(existing.begin() + at, insertion.items.begin(), insertion.items.end());
++                stale.insert(stale.begin() + at, insertion.items.size(), false);
 +            }
 +
-+            return existing;
++            std::vector<ChatEntry> merged;
++            for (std::size_t i = 0; i < existing.size(); ++i)
++            {
++                if (!stale[i])
++                {
++                    merged.push_back(std::move(existing[i]));
++                }
++            }
++            return merged;
 +        }
 +
 +        void mergeIntoExport(std::string const& path, std::string const& title, std::vector<ChatEntry> const& windowEntries)
@@ -1366,8 +1442,14 @@ index 0efe765..770068b 100644
 +                std::stable_sort(mergedEntries.begin(), mergedEntries.end(), [](ChatEntry const& a, ChatEntry const& b) { return a.t < b.t; });
 +            }
 +
-+            auto outFile = std::ofstream{path};
-+            outFile << renderChatMarkdown(title, mergedEntries);
++            try
++            {
++                Glib::file_set_contents(path, renderChatMarkdown(title, mergedEntries));
++            }
++            catch (Glib::FileError const& error)
++            {
++                std::cerr << "WebView: Could not write " << path << ": " << error.what() << std::endl;
++            }
 +        }
 +
 +        constexpr auto const VOICE_NOTES_GROUP = "voice-notes";
@@ -2004,7 +2086,7 @@ index 0efe765..770068b 100644
          std::optional<std::string> getSystemLanguage()
          {
              try
-@@ -262,6 +1614,10 @@ namespace wil::ui
+@@ -262,6 +1696,10 @@ namespace wil::ui
          g_signal_connect(*this, "permission-request", G_CALLBACK(permissionRequest), nullptr);
          g_signal_connect(*this, "decide-policy", G_CALLBACK(decidePolicy), nullptr);
          g_signal_connect(*this, "show-notification", G_CALLBACK(showNotification), this);
@@ -2015,7 +2097,7 @@ index 0efe765..770068b 100644
          g_signal_connect(webContext, "download-started", G_CALLBACK(downloadStarted), nullptr);
          g_signal_connect(webContext, "initialize-notification-permissions", G_CALLBACK(initializeNotificationPermission), nullptr);
          Glib::signal_timeout().connect(sigc::mem_fun(*this, &WebView::onTimeout), 5000);
-@@ -287,6 +1643,8 @@ namespace wil::ui
+@@ -287,6 +1725,8 @@ namespace wil::ui
              applyCustomCss(cssFilePath);
          }
  
@@ -2024,7 +2106,7 @@ index 0efe765..770068b 100644
          webkit_web_view_load_uri(*this, WHATSAPP_WEB_URI);
      }
  
-@@ -348,6 +1706,17 @@ namespace wil::ui
+@@ -348,6 +1788,17 @@ namespace wil::ui
          sendRequest("whatsapp://send?phone=" + phoneNumber);
      }
  
@@ -2042,7 +2124,7 @@ index 0efe765..770068b 100644
      void WebView::pasteImageFromClipboard()
      {
          auto const clipboard = Gtk::Clipboard::get();
-@@ -487,4 +1856,21 @@ namespace wil::ui
+@@ -487,4 +1938,21 @@ namespace wil::ui
          auto* manager = webkit_web_view_get_user_content_manager(*this);
          webkit_user_content_manager_add_style_sheet(manager, styleSheet);
      }
