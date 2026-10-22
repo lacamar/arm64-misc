@@ -1,4 +1,4 @@
-%global tag 5.6
+%global tag 5.6.1
 Name:           shairport-sync
 Version:        %{tag}
 Release:        1%{?dist}
@@ -118,6 +118,9 @@ install -m0644 -D shairport-sync.sysusers.conf %{buildroot}%{_sysusersdir}/shair
 %{_sysusersdir}/shairport-sync.conf
 
 %changelog
+* Thu Oct 22 2026 Lachlan Marie <lchlnm@pm.me> - 5.6.1-1
+- Update to 5.6.1
+
 * Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 5.6-1
 - Update to 5.6
 
