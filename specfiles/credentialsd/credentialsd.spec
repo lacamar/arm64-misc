@@ -1,9 +1,10 @@
+# copr-exclude-chroots: fedora-43-aarch64
 %global lwa_commit efa374d6303eb1ebeff373878fa76736f3d2c308
 %global portalconfdir %{_sysconfdir}/xdg/xdg-desktop-portal
 
 Name:           credentialsd
 Version:        0.3.1
-Release:        3%{?dist}
+Release:        4%{?dist}
 Summary:        xdg-desktop-portal backend for WebAuthn credentials
 
 License:        LGPL-3.0-only
@@ -127,6 +128,9 @@ install -Dpm0644 %{SOURCE3} %{buildroot}%{portalconfdir}/portals.conf
 %{_datadir}/credentialsd/
 
 %changelog
+* Thu Oct 22 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.1-4
+- Skip fedora-43 COPR chroot
+
 * Thu Oct 22 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.1-3
 - Cancel request when UI closes
 - Handle requests concurrently so stale ones cannot block
