@@ -1,8 +1,8 @@
 diff --git a/lib/app/layouts/conversation_details/material/material_chat_options.dart b/lib/app/layouts/conversation_details/material/material_chat_options.dart
-index 761acc9..773520c 100644
+index 761acc9..8bf70db 100644
 --- a/lib/app/layouts/conversation_details/material/material_chat_options.dart
 +++ b/lib/app/layouts/conversation_details/material/material_chat_options.dart
-@@ -610,73 +610,49 @@ class ExpressiveChatOptions extends StatelessWidget {
+@@ -610,73 +610,48 @@ class ExpressiveChatOptions extends StatelessWidget {
        return;
      }
  
@@ -70,8 +70,7 @@ index 761acc9..773520c 100644
 +      await file.writeAsBytes(await doc.save());
 +      if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
 +      showSnackbar("Success", "Saved transcript to the downloads folder", type: SnackbarType.success);
-+    } catch (e, s) {
-+      Logger.error("Failed to generate PDF transcript", error: e, trace: s);
++    } catch (e) {
 +      if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
 +      showSnackbar("Error", "Failed to generate PDF: $e", type: SnackbarType.error);
      }
@@ -116,10 +115,10 @@ index 761acc9..773520c 100644
    }
  }
 diff --git a/lib/app/layouts/conversation_details/widgets/chat_options.dart b/lib/app/layouts/conversation_details/widgets/chat_options.dart
-index 76a4bbf..5b878c6 100644
+index 76a4bbf..9f3c47d 100644
 --- a/lib/app/layouts/conversation_details/widgets/chat_options.dart
 +++ b/lib/app/layouts/conversation_details/widgets/chat_options.dart
-@@ -591,99 +591,50 @@ class _ChatOptionsState extends State<ChatOptions> with ThemeHelpers {
+@@ -591,99 +591,49 @@ class _ChatOptionsState extends State<ChatOptions> with ThemeHelpers {
                showSnackbar("Error", "No messages found!", type: SnackbarType.error);
                return;
              }
@@ -190,8 +189,7 @@ index 76a4bbf..5b878c6 100644
 +              await file.writeAsBytes(await doc.save());
 +              if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
 +              showSnackbar("Success", "Saved transcript to the downloads folder", type: SnackbarType.success);
-+            } catch (e, s) {
-+              Logger.error("Failed to generate PDF transcript", error: e, trace: s);
++            } catch (e) {
 +              if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
 +              showSnackbar("Error", "Failed to generate PDF: $e", type: SnackbarType.error);
              }

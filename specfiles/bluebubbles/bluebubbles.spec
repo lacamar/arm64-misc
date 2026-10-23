@@ -12,7 +12,7 @@
 
 Name:       bluebubbles
 Version:    %{tag}
-Release:    2%{?dist}
+Release:    3%{?dist}
 Summary:    iMessage client for Linux, part of the BlueBubbles ecosystem
 
 License:    Apache-2.0
@@ -112,6 +112,9 @@ install -Dpm0644 flatpak/%{appid}.metainfo.xml \
 %{_metainfodir}/%{appid}.metainfo.xml
 
 %changelog
+* Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 2.1.3.93-3
+- Fix build: drop Logger call
+
 * Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 2.1.3.93-2
 - Fix PDF transcript export hang
 
