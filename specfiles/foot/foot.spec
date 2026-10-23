@@ -3,7 +3,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        19%{?dist}
+Release:        20%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -149,6 +149,18 @@ desktop-file-validate \
 
 
 %changelog
+* Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-20
+- GUI-style confirm dialogs
+- Centered modals; fixed [tabs] switcher-width
+- Cursor editing in rename and switcher
+- Mouse wheel in menus and switcher
+- Debounce closing tabs and modal actions
+- Pinned tabs and splits stay at the top; bigger pin gap
+- Drag a split pane out within the sidebar
+- Search button centered in the footer
+- Reset cursor after drags
+- Redraw all panes together on split relayout
+
 * Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-19
 - Menus highlight only the item under the pointer
 - Gap between pinned and unpinned tabs

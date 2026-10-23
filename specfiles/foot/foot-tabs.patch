@@ -174,7 +174,7 @@ index 12f29d7..8356cd0 100644
      '(-F --fullscreen)'{-F,--fullscreen}'[start in fullscreen mode]' \
      '(-L --login-shell)'{-L,--login-shell}'[start shell as a login shell]' \
 diff --git a/config.c b/config.c
-index 76dd7d9..b61d535 100644
+index 76dd7d9..b514cbe 100644
 --- a/config.c
 +++ b/config.c
 @@ -186,6 +186,34 @@ static const char *const binding_action_map[] = {
@@ -212,7 +212,7 @@ index 76dd7d9..b61d535 100644
  
      /* Mouse-specific actions */
      [BIND_ACTION_SCROLLBACK_UP_MOUSE] = "scrollback-up-mouse",
-@@ -1321,17 +1349,48 @@ parse_section_session(struct context *ctx)
+@@ -1321,17 +1349,51 @@ parse_section_session(struct context *ctx)
  }
  
  static bool
@@ -233,6 +233,9 @@ index 76dd7d9..b61d535 100644
 +
 +    else if (streq(key, "animations"))
 +        return value_to_bool(ctx, &conf->tabs.animations);
++
++    else if (streq(key, "switcher-width"))
++        return value_to_uint32(ctx, 10, &conf->tabs.modal_width);
 +
 +    else if (streq(key, "position")) {
 +        int right;
@@ -263,7 +266,7 @@ index 76dd7d9..b61d535 100644
          if (streq(it->item.program, key))
              return value_to_str(ctx, &it->item.command);
      }
-@@ -1340,11 +1399,22 @@ parse_section_session_restore(struct context *ctx)
+@@ -1340,11 +1402,22 @@ parse_section_session_restore(struct context *ctx)
      if (!value_to_str(ctx, &command))
          return false;
  
@@ -288,7 +291,7 @@ index 76dd7d9..b61d535 100644
  static bool
  parse_section_url(struct context *ctx)
  {
-@@ -3148,6 +3218,8 @@ enum section {
+@@ -3148,6 +3221,8 @@ enum section {
      SECTION_SCROLLBACK,
      SECTION_SESSION,
      SECTION_SESSION_RESTORE,
@@ -297,7 +300,7 @@ index 76dd7d9..b61d535 100644
      SECTION_URL,
      SECTION_REGEX,
      SECTION_COLORS_DARK,
-@@ -3182,6 +3254,8 @@ static const struct {
+@@ -3182,6 +3257,8 @@ static const struct {
      [SECTION_SCROLLBACK] =      {&parse_section_scrollback, "scrollback"},
      [SECTION_SESSION] =         {&parse_section_session, "session"},
      [SECTION_SESSION_RESTORE] = {&parse_section_session_restore, "session-restore"},
@@ -306,7 +309,7 @@ index 76dd7d9..b61d535 100644
      [SECTION_URL] =             {&parse_section_url, "url"},
      [SECTION_REGEX] =           {&parse_section_regex, "regex", true},
      [SECTION_COLORS_DARK] =     {&parse_section_colors_dark, "colors-dark"},
-@@ -3430,6 +3504,15 @@ add_default_key_bindings(struct config *conf)
+@@ -3430,6 +3507,15 @@ add_default_key_bindings(struct config *conf)
          {BIND_ACTION_CLIPBOARD_PASTE, m("none"), {{XKB_KEY_XF86Paste}}},
          {BIND_ACTION_PRIMARY_PASTE, m(XKB_MOD_NAME_SHIFT), {{XKB_KEY_Insert}}},
          {BIND_ACTION_SEARCH_START, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_SHIFT), {{XKB_KEY_r}}},
@@ -322,15 +325,15 @@ index 76dd7d9..b61d535 100644
          {BIND_ACTION_FONT_SIZE_UP, m(XKB_MOD_NAME_CTRL), {{XKB_KEY_plus}}},
          {BIND_ACTION_FONT_SIZE_UP, m(XKB_MOD_NAME_CTRL), {{XKB_KEY_equal}}},
          {BIND_ACTION_FONT_SIZE_UP, m(XKB_MOD_NAME_CTRL), {{XKB_KEY_KP_Add}}},
-@@ -3571,6 +3654,7 @@ config_load(struct config *conf, const char *conf_path,
+@@ -3571,6 +3657,7 @@ config_load(struct config *conf, const char *conf_path,
          .title = xstrdup("foot"),
          .app_id = (as_server ? xstrdup("footclient") : xstrdup("foot")),
          .toplevel_tag = xstrdup(""),
-+        .tabs = {.width = 200, .activity = true, .animations = true},
++        .tabs = {.width = 200, .activity = true, .animations = true, .modal_width = 60},
          .word_delimiters = xc32dup(U",│`|:\"'()[]{}<>"),
          .size = {
              .type = CONF_SIZE_PX,
-@@ -3639,6 +3723,7 @@ config_load(struct config *conf, const char *conf_path,
+@@ -3639,6 +3726,7 @@ config_load(struct config *conf, const char *conf_path,
              .save_interval_secs = 20,
              .scrollback_lines = 1000,
              .restore_rules = tll_init(),
@@ -338,7 +341,7 @@ index 76dd7d9..b61d535 100644
          },
          .colors_dark = {
              .fg = default_foreground,
-@@ -3983,6 +4068,26 @@ key_binding_list_clone(struct config_key_binding_list *dst,
+@@ -3983,6 +4071,26 @@ key_binding_list_clone(struct config_key_binding_list *dst,
      }
  }
  
@@ -365,7 +368,7 @@ index 76dd7d9..b61d535 100644
  struct config *
  config_clone(const struct config *old)
  {
-@@ -4049,15 +4154,8 @@ config_clone(const struct config *old)
+@@ -4049,15 +4157,8 @@ config_clone(const struct config *old)
          tll_push_back(conf->env_vars, copy);
      }
  
@@ -383,7 +386,7 @@ index 76dd7d9..b61d535 100644
  
      conf->utmp_helper_path =
          old->utmp_helper_path != NULL ? xstrdup(old->utmp_helper_path) : NULL;
-@@ -4144,11 +4242,8 @@ config_free(struct config *conf)
+@@ -4144,11 +4245,8 @@ config_free(struct config *conf)
          tll_remove(conf->env_vars, it);
      }
  
@@ -398,7 +401,7 @@ index 76dd7d9..b61d535 100644
      free(conf->utmp_helper_path);
      user_notifications_free(&conf->notifications);
 diff --git a/config.h b/config.h
-index 27715d4..b91a3ab 100644
+index 27715d4..50b9c75 100644
 --- a/config.h
 +++ b/config.h
 @@ -232,6 +232,8 @@ struct session_restore_rule {
@@ -410,7 +413,7 @@ index 27715d4..b91a3ab 100644
  struct config {
      char *conf_path;
      char *term;
-@@ -338,9 +340,18 @@ struct config {
+@@ -338,9 +340,19 @@ struct config {
          bool enabled;
          uint32_t save_interval_secs;
          uint32_t scrollback_lines;
@@ -425,6 +428,7 @@ index 27715d4..b91a3ab 100644
 +        bool show;
 +        bool right;
 +        bool animations;
++        uint32_t modal_width;
 +    } tabs;
 +
      struct {
@@ -500,10 +504,10 @@ index 24d81b5..22e8893 100644
  
  The following keyboard shortcuts are available by default. They can be
 diff --git a/doc/foot.ini.5.scd b/doc/foot.ini.5.scd
-index e65729b..7b08a06 100644
+index e65729b..c4c9e50 100644
 --- a/doc/foot.ini.5.scd
 +++ b/doc/foot.ini.5.scd
-@@ -937,6 +937,101 @@ _"$@"_ to keep its original arguments. Rules also apply to the
+@@ -937,6 +937,109 @@ _"$@"_ to keep its original arguments. Rules also apply to the
  program foot's own child is running, so a window launched as
  *footclient claude* is resumed rather than restarted.
  
@@ -542,7 +546,10 @@ index e65729b..7b08a06 100644
 +*Up*/*Down*/*Return*/*Escape*.
 +
 +Drag a tab to reorder it, onto the inner end of another tab's row to
-+split the two, or out of the sidebar onto any foot window: near a pane's left, right, top or bottom edge it is split in
++split the two, or out of the sidebar onto any foot window. A pane of a
++split dragged within the sidebar moves inside its split, or out of it
++when dropped elsewhere in the list (or below it). When dragged out of
++the sidebar onto a window: near a pane's left, right, top or bottom edge it is split in
 +on that side (top and bottom stack the panes vertically); in the
 +middle of a pane it is added as a tab; over a sidebar it is inserted
 +where the line shows. Dropped anywhere else it opens in its own
@@ -592,6 +599,11 @@ index e65729b..7b08a06 100644
 +*position*
 +	Sidebar side: _left_ or _right_. Default: _left_.
 +
++*switcher-width*
++	Width, in columns, of the quick switcher, rename and confirm
++	boxes; long titles are shortened instead of widening them.
++	Default: _60_.
++
 +*animations*
 +	Boolean. Short sidebar animations (the current-tab highlight
 +	glides, the sidebar slides in). They only redraw the sidebar.
@@ -605,7 +617,7 @@ index e65729b..7b08a06 100644
  # SECTION: url
  
  Note that you can also add custom regular expressions, see the 'regex'
-@@ -1587,6 +1682,60 @@ e.g. *search-start=none*.
+@@ -1587,6 +1690,60 @@ e.g. *search-start=none*.
  *quit*
  	Quit foot. Default: _none_.
  
@@ -689,10 +701,10 @@ index 92d84c3..6d19e2f 100644
  	Set initial window width and height, in pixels. Default: _700x500_.
  
 diff --git a/foot.ini b/foot.ini
-index 6469af7..8497b44 100644
+index 6469af7..ba18d12 100644
 --- a/foot.ini
 +++ b/foot.ini
-@@ -195,6 +195,13 @@
+@@ -195,6 +195,14 @@
  # button-maximize-color=<regular2>
  # button-close-color=<regular1>
  
@@ -702,11 +714,12 @@ index 6469af7..8497b44 100644
 +# show=no
 +# position=left
 +# animations=yes
++# switcher-width=60
 +
  [key-bindings]
  # scrollback-up-page=Shift+Page_Up Shift+KP_Page_Up
  # scrollback-up-half-page=none
-@@ -230,6 +237,26 @@
+@@ -230,6 +238,26 @@
  # color-theme-toggle=none
  # noop=none
  # quit=none
@@ -768,7 +781,7 @@ index fa0e2ce..f896d02 100644
          seat->ime.cursor_rect.pending.height / term->scale);
  
 diff --git a/input.c b/input.c
-index f6ba9de..573ac32 100644
+index f6ba9de..709a57f 100644
 --- a/input.c
 +++ b/input.c
 @@ -26,12 +26,14 @@
@@ -1159,7 +1172,7 @@ index f6ba9de..573ac32 100644
          break;
  
      }
-@@ -3329,6 +3564,15 @@ mouse_scroll(struct seat *seat, int amount, enum wl_pointer_axis axis)
+@@ -3329,6 +3564,20 @@ mouse_scroll(struct seat *seat, int amount, enum wl_pointer_axis axis)
      struct terminal *term = seat->mouse_focus;
      xassert(term != NULL);
  
@@ -1169,13 +1182,18 @@ index f6ba9de..573ac32 100644
 +            tabs_cycle_lines(term->window, amount);
 +        return;
 +    }
++    if (term->active_surface == TERM_SURF_TAB_MENU) {
++        if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL)
++            tabs_menu_wheel(term->window, amount);
++        return;
++    }
 +    if (term->active_surface != TERM_SURF_GRID)
 +        return;
 +
      int button = axis == WL_POINTER_AXIS_VERTICAL_SCROLL
          ? amount < 0 ? BTN_WHEEL_BACK : BTN_WHEEL_FORWARD
          : amount < 0 ? BTN_WHEEL_LEFT : BTN_WHEEL_RIGHT;
-@@ -3398,14 +3642,16 @@ wl_pointer_axis(void *data, struct wl_pointer *wl_pointer,
+@@ -3398,14 +3647,16 @@ wl_pointer_axis(void *data, struct wl_pointer *wl_pointer,
       * Without this, very slow scrolling will never actually scroll
       * anything.
       */
@@ -1195,7 +1213,7 @@ index f6ba9de..573ac32 100644
  }
  
  static void
-@@ -3554,7 +3800,7 @@ wl_touch_down(void *data, struct wl_touch *wl_touch, uint32_t serial,
+@@ -3554,7 +3805,7 @@ wl_touch_down(void *data, struct wl_touch *wl_touch, uint32_t serial,
          return;
  
      struct wl_window *win = wl_surface_get_user_data(surface);
@@ -1204,7 +1222,7 @@ index f6ba9de..573ac32 100644
  
      LOG_DBG("touch_down: touch=%p, x=%d, y=%d", (void *)wl_touch,
              wl_fixed_to_int(surface_x), wl_fixed_to_int(surface_y));
-@@ -3586,7 +3832,7 @@ wl_touch_up(void *data, struct wl_touch *wl_touch, uint32_t serial,
+@@ -3586,7 +3837,7 @@ wl_touch_up(void *data, struct wl_touch *wl_touch, uint32_t serial,
      LOG_DBG("touch_up: touch=%p", (void *)wl_touch);
  
      struct wl_window *win = wl_surface_get_user_data(seat->touch.surface);
@@ -1213,7 +1231,7 @@ index f6ba9de..573ac32 100644
  
      struct terminal *old_term = seat->mouse_focus;
      enum term_surface old_active_surface = term->active_surface;
-@@ -3613,8 +3859,10 @@ wl_touch_up(void *data, struct wl_touch *wl_touch, uint32_t serial,
+@@ -3613,8 +3864,10 @@ wl_touch_up(void *data, struct wl_touch *wl_touch, uint32_t serial,
          break;
      }
  
@@ -1226,7 +1244,7 @@ index f6ba9de..573ac32 100644
  }
  
  static void
-@@ -3629,7 +3877,7 @@ wl_touch_motion(void *data, struct wl_touch *wl_touch, uint32_t time,
+@@ -3629,7 +3882,7 @@ wl_touch_motion(void *data, struct wl_touch *wl_touch, uint32_t time,
              wl_fixed_to_int(surface_x), wl_fixed_to_int(surface_y));
  
      struct wl_window *win = wl_surface_get_user_data(seat->touch.surface);
@@ -1235,7 +1253,7 @@ index f6ba9de..573ac32 100644
  
      struct terminal *old_term = seat->mouse_focus;
      enum term_surface old_active_surface = term->active_surface;
-@@ -3661,8 +3909,10 @@ wl_touch_motion(void *data, struct wl_touch *wl_touch, uint32_t time,
+@@ -3661,8 +3914,10 @@ wl_touch_motion(void *data, struct wl_touch *wl_touch, uint32_t time,
          break;
      }
  
@@ -1576,7 +1594,7 @@ index 05281d0..0a1d61a 100644
  
          case 'D':
 diff --git a/render.c b/render.c
-index 72b68e1..5a0e4eb 100644
+index 72b68e1..a23abc4 100644
 --- a/render.c
 +++ b/render.c
 @@ -43,6 +43,7 @@
@@ -2287,7 +2305,7 @@ index 72b68e1..5a0e4eb 100644
      const char *icon_name = term_icon(term);
      LOG_DBG("setting toplevel icon: %s", icon_name);
  
-@@ -5357,6 +5464,652 @@ render_refresh_icon(struct terminal *term)
+@@ -5357,6 +5464,710 @@ render_refresh_icon(struct terminal *term)
      term->render.icon.last_update = now;
  }
  
@@ -2599,10 +2617,10 @@ index 72b68e1..5a0e4eb 100644
 +    if (win->hover.what == TAB_HOVER_NEW)
 +        sidebar_fill(buf, hover_bg, alpha, gamma, 0, fy, row_h, row_h);
 +    if (win->hover.what == TAB_HOVER_SEARCH)
-+        sidebar_fill(buf, hover_bg, alpha, gamma, row_h, fy, row_h, row_h);
++        sidebar_fill(buf, hover_bg, alpha, gamma, w / 2 - row_h / 2, fy, row_h, row_h);
 +    {
 +        const int sw = text_width(term, U"⌕");
-+        sidebar_text(term, buf, U"⌕", row_h + (row_h - sw) / 2, fy, row_h, w, c->fg, gamma);
++        sidebar_text(term, buf, U"⌕", w / 2 - sw / 2, fy, row_h, w, c->fg, gamma);
 +    }
 +    if (win->hover.what == TAB_HOVER_HIDE)
 +        sidebar_fill(buf, hover_bg, alpha, gamma, w - row_h, fy, row_h, row_h);
@@ -2703,15 +2721,24 @@ index 72b68e1..5a0e4eb 100644
 +    for (int i = 0; i < nrows; i++)
 +        lines[i] = tabs_menu_line(win, first + i);
 +
++    const bool confirm = tabs_menu_is_confirm(win);
++    char32_t *message = confirm ? tabs_confirm_message(win) : NULL;
++
 +    size_t cols = header != NULL ? c32len(header) : 0;
 +    for (int i = 0; i < nrows; i++)
 +        cols = max(cols, c32len(lines[i]));
-+    if (input != NULL)
-+        cols = max(cols, (size_t)40);
 +    cols = min(cols, (size_t)60) + 4;
++    /* Fixed width for the switcher, rename and confirm boxes, so long names don't resize them */
++    if (input != NULL || confirm) {
++        int ww0, wh0;
++        tabs_win_size(win, &ww0, &wh0);
++        const size_t fit = max(20, (int)(ww0 * scale / cw) - 4);
++        cols = min((size_t)term->conf->tabs.modal_width, fit);
++    }
 +
 +    win->menu.header = (header != NULL) + (input != NULL);
-+    const int rows = max(nrows, input != NULL ? 1 : 0) + win->menu.header + 2;
++    /* Confirm: title, blank, message, blank, buttons */
++    const int rows = confirm ? 7 : max(nrows, input != NULL ? 1 : 0) + win->menu.header + 2;
 +    /* Buffer size must be a multiple of the scale */
 +    const int w = (int)(ceilf(cols * cw / scale) * scale);
 +    const int h = (int)(ceilf(rows * ch / scale) * scale);
@@ -2723,7 +2750,7 @@ index 72b68e1..5a0e4eb 100644
 +    const int WW = (int)roundf(ww * scale), WH = (int)roundf(wh * scale);
 +    const bool center = win->menu.x < 0;
 +    const int x = max(0, center ? (WW - w) / 2 : min(win->menu.x, WW - w));
-+    const int y = max(0, center ? (WH - h) / 3 : min(win->menu.y, WH - h));
++    const int y = max(0, center ? (WH - h) / 2 : min(win->menu.y, WH - h));
 +
 +    struct buffer *buf = shm_get_buffer(win->menu_chain, w, h);
 +    pixman_image_set_clip_region32(buf->pix[0], NULL);
@@ -2736,9 +2763,40 @@ index 72b68e1..5a0e4eb 100644
 +    sidebar_fill(buf, c->fg, 0xffff, gamma, x1 - line, y0, line, y1 - y0);
 +
 +    int ry = ch;
-+    if (header != NULL) {
-+        const uint32_t hc = win->menu.kind == TAB_MENU_CONFIRM_KILL ||
-+            win->menu.kind == TAB_MENU_CONFIRM_CLOSE ? c->table[1] : accent;
++    if (confirm) {
++        const uint32_t danger = c->table[1];
++        sidebar_text(term, buf, header, 2 * cw, ry, ch, w - 2 * cw, c->fg, gamma);
++        sidebar_text_mid(term, buf, message, 2 * cw, ry + 2 * ch, ch, w - 2 * cw,
++                         color_blend_towards(c->fg, c->bg, 1.4), gamma);
++        free(message);
++
++        /* [ Cancel ]  [ Close ], right-aligned; the destructive one in red */
++        const int by = ry + 4 * ch;
++        int bx = w - 2 * cw;
++        for (int i = 1; i >= 0; i--) {
++            char32_t *label = tabs_menu_line(win, i);
++            const int lw = text_width(term, label);
++            const int bw = lw + 2 * cw;
++            bx -= bw;
++            win->menu.btn_x[i] = bx;
++            win->menu.btn_w[i] = bw;
++            win->menu.btn_y = by;
++            const bool sel = win->menu.sel == i;
++            const uint32_t edge = i == 1 ? danger : c->fg;
++            if (sel)
++                sidebar_fill(buf, edge, 0xffff, gamma, bx, by, bw, ch);
++            sidebar_fill(buf, edge, 0xffff, gamma, bx, by, bw, line);
++            sidebar_fill(buf, edge, 0xffff, gamma, bx, by + ch - line, bw, line);
++            sidebar_fill(buf, edge, 0xffff, gamma, bx, by, line, ch);
++            sidebar_fill(buf, edge, 0xffff, gamma, bx + bw - line, by, line, ch);
++            sidebar_text(term, buf, label, bx + cw, by, ch, bx + bw,
++                         sel ? c->bg : edge, gamma);
++            free(label);
++            bx -= cw;
++        }
++    }
++    if (!confirm && header != NULL) {
++        const uint32_t hc = accent;
 +        sidebar_text(term, buf, header, 2 * cw, ry, ch, w - 2 * cw, hc, gamma);
 +        ry += ch;
 +    }
@@ -2746,23 +2804,29 @@ index 72b68e1..5a0e4eb 100644
 +        sidebar_fill(buf, color_blend_towards(c->bg, c->fg, 1.15), 0xffff, gamma,
 +                     cw, ry, w - 2 * cw, ch);
 +        int tx = sidebar_text(term, buf, U"› ", 2 * cw, ry, ch, w - 2 * cw, accent, gamma);
-+        /* Long input: show its end, where the cursor is */
-+        const char32_t *shown = input;
-+        while (*shown != U'\0' && tx + text_width(term, shown) > w - 3 * cw)
-+            shown++;
-+        tx = sidebar_text(term, buf, shown, tx, ry, ch, w - 2 * cw, c->fg, gamma);
-+        sidebar_fill(buf, accent, 0xffff, gamma, tx, ry + line * 2, max(1, 2 * line), ch - 4 * line);
++        /* Scroll the text so the cursor stays visible */
++        const size_t len = c32len(input), cur = min(win->menu.cursor, len);
++        char32_t before[cur + 1];
++        memcpy(before, input, cur * sizeof(char32_t));
++        before[cur] = U'\0';
++        size_t start = 0;
++        while (start < cur && tx + text_width(term, &before[start]) > w - 3 * cw)
++            start++;
++        const int cx = sidebar_text(term, buf, &before[start], tx, ry, ch, w - 2 * cw, c->fg, gamma);
++        sidebar_text(term, buf, &input[cur], cx, ry, ch, w - 2 * cw, c->fg, gamma);
++        sidebar_fill(buf, accent, 0xffff, gamma, cx, ry + line * 2, max(1, 2 * line), ch - 4 * line);
 +        ry += ch;
 +    }
 +
-+    for (int i = 0; i < nrows; i++, ry += ch) {
++    for (int i = 0; !confirm && i < nrows; i++, ry += ch) {
 +        const bool sel = first + i == win->menu.sel;
 +        if (sel)
 +            sidebar_fill(buf, c->fg, 0xffff, gamma, cw, ry, w - 2 * cw, ch);
 +        sidebar_text_mid(term, buf, lines[i], 2 * cw, ry, ch, w - 2 * cw,
 +                         sel ? c->bg : c->fg, gamma);
-+        free(lines[i]);
 +    }
++    for (int i = 0; i < nrows; i++)
++        free(lines[i]);
 +    if (input != NULL && win->menu.n == 0 && win->menu.kind == TAB_MENU_SWITCHER)
 +        sidebar_text(term, buf, U"no matches", 2 * cw, ry, ch, w - 2 * cw,
 +                     color_blend_towards(c->fg, c->bg, 2), gamma);
@@ -2900,6 +2964,18 @@ index 72b68e1..5a0e4eb 100644
 +            term_damage_view(t);
 +        }
 +        wl_subsurface_set_position(t->pane.sub, tabs_pane_x(t), tabs_pane_y(t));
++        /* Redraw every pane in this pass, even one still waiting for its last
++           frame, so they all land with the new layout in one commit */
++        if (t->pane_cb != NULL) {
++            wl_callback_destroy(t->pane_cb);
++            t->pane_cb = NULL;
++            t->render.refresh.grid |= t->render.pending.grid;
++            t->render.refresh.csd |= t->render.pending.csd;
++            t->render.refresh.search |= t->render.pending.search;
++            t->render.refresh.urls |= t->render.pending.urls;
++            t->render.pending.grid = t->render.pending.csd = false;
++            t->render.pending.search = t->render.pending.urls = false;
++        }
 +        render_refresh(t);
 +        n++;
 +    }
@@ -4081,10 +4157,10 @@ index 6289937..b385f1b 100644
          del_from_env(&custom_env, "TERM_PROGRAM");            /* Wezterm, Ghostty */
 diff --git a/tabs.c b/tabs.c
 new file mode 100644
-index 0000000..8d3d770
+index 0000000..8826a0b
 --- /dev/null
 +++ b/tabs.c
-@@ -0,0 +1,3261 @@
+@@ -0,0 +1,3513 @@
 +#include "tabs.h"
 +
 +#include <limits.h>
@@ -4095,6 +4171,7 @@ index 0000000..8d3d770
 +#include <time.h>
 +#include <signal.h>
 +#include <unistd.h>
++#include <wctype.h>
 +
 +#include <sys/epoll.h>
 +#include <sys/timerfd.h>
@@ -4294,23 +4371,61 @@ index 0000000..8d3d770
 +
 +/* Pinned tabs lead the list, set apart by a small gap */
 +
++/* A row (a tab, or a whole split) is pinned when any of its panes is */
++static bool
++row_pinned(struct terminal **arr, size_t s, size_t e)
++{
++    for (size_t i = s; i < e; i++)
++        if (arr[i]->tab_pinned)
++            return true;
++    return false;
++}
++
 +static int
 +pinned_lines(const struct wl_window *win)
 +{
-+    int n = 0;
-+    tll_foreach(win->tabs, it) {
-+        if (!it->item->tab_pinned)
++    struct terminal **arr;
++    const size_t n = to_arr((struct wl_window *)win, &arr);
++    size_t i = 0;
++    while (i < n) {
++        size_t s, e;
++        row_extent(arr, n, i, &s, &e);
++        if (!row_pinned(arr, s, e))
 +            break;
-+        n++;
++        i = e;
 +    }
-+    return n;
++    free(arr);
++    return i;
++}
++
++/* Keeps pinned rows first, in their current order */
++static void
++pin_order(struct wl_window *win)
++{
++    struct terminal **arr;
++    const size_t n = to_arr(win, &arr);
++    struct terminal **out = xmalloc((n + 1) * sizeof(out[0]));
++    size_t k = 0;
++    for (int pass = 0; pass < 2; pass++) {
++        for (size_t i = 0; i < n;) {
++            size_t s, e;
++            row_extent(arr, n, i, &s, &e);
++            if (row_pinned(arr, s, e) == (pass == 0)) {
++                memcpy(&out[k], &arr[s], (e - s) * sizeof(out[0]));
++                k += e - s;
++            }
++            i = e;
++        }
++    }
++    free(arr);
++    from_arr(win, out, n);
 +}
 +
 +static int
 +pin_gap(const struct wl_window *win)
 +{
 +    const int p = pinned_lines(win);
-+    return p > 0 && p < tabs_line_count(win) ? (int)roundf(6 * win->term->scale) : 0;
++    return p > 0 && p < tabs_line_count(win) ? (int)roundf(12 * win->term->scale) : 0;
 +}
 +
 +static float
@@ -4637,6 +4752,7 @@ index 0000000..8d3d770
 +    memmove(&arr[pos + 1], &arr[pos], (n - pos) * sizeof(arr[0]));
 +    arr[pos] = term;
 +    from_arr(win, arr, n + 1);
++    pin_order(win);
 +    render_refresh_sidebar(win);
 +}
 +
@@ -5024,6 +5140,7 @@ index 0000000..8d3d770
 +        return false;
 +
 +    dissolve_singletons(win);
++    pin_order(win);
 +    sidebar_update(win);
 +
 +    struct terminal *act = win->term;
@@ -5535,6 +5652,7 @@ index 0000000..8d3d770
 +
 +    from_arr(win, arr, n);
 +    render_refresh_sidebar(win);
++    pin_order(win);
 +}
 +
 +void
@@ -5604,11 +5722,41 @@ index 0000000..8d3d770
 +
 +static void set_split_cue(struct wl_window *win, struct terminal *target);
 +
++static void
++drop_pane_at(struct wl_window *win, struct terminal *t, int ins)
++{
++    struct terminal *set[MAX_SET];
++    const size_t n = visible_set(t, set);
++    const int first = tabs_line_of(win, set[0]);
++    const int last = first + (int)n - 1;
++
++    if (ins > first && ins <= last) {
++        /* Within its own split: reorder the panes */
++        size_t ti = 0;
++        while (set[ti] != t)
++            ti++;
++        int pos = ins - first;
++        if ((size_t)pos > ti)
++            pos--;
++        if ((size_t)pos != ti)
++            group_place(win, t, pos, t->group_vertical);
++        return;
++    }
++
++    /* Elsewhere, or below the list: out of the split, into that spot */
++    struct terminal *before = ins < tabs_line_count(win) ? tabs_line_term(win, ins) : NULL;
++    pop_out(win, t);
++    const int cur = tabs_row_of(win, t);
++    const int to = before != NULL ? tabs_row_of(win, before) : tabs_row_count(win);
++    move_row(win, t, (to > cur ? to - 1 : to) - cur);
++}
++
 +void
 +tabs_sidebar_cancel_drag(struct wl_window *win)
 +{
 +    if (win->sidebar_drag.tab == NULL)
 +        return;
++    win->drop_row = -1;
 +    memset(&win->sidebar_drag, 0, sizeof(win->sidebar_drag));
 +    set_split_cue(win, NULL);
 +    render_refresh_sidebar(win);
@@ -5740,7 +5888,7 @@ index 0000000..8d3d770
 +            return TAB_HOVER_HIDE;
 +        if (x < row_h)
 +            return TAB_HOVER_NEW;
-+        if (x < 2 * row_h)
++        if (x >= w / 2 - row_h / 2 && x < w / 2 + row_h / 2)
 +            return TAB_HOVER_SEARCH;
 +        return TAB_HOVER_NONE;
 +    }
@@ -5908,6 +6056,9 @@ index 0000000..8d3d770
 +    wayl->tab_dnd.source = NULL;
 +    wayl->tab_dnd.icon = NULL;
 +    wayl->tab_dnd.icon_chain = NULL;
++    tll_foreach(wayl->seats, it)
++        if (it->item.mouse_focus != NULL)
++            term_xcursor_update_for_seat(it->item.mouse_focus, &it->item);
 +    wayl->tab_dnd.target = NULL;
 +    wayl->tab_dnd.surface = NULL;
 +}
@@ -6248,6 +6399,10 @@ index 0000000..8d3d770
 +            if (win->term->conf->tabs.right)
 +                sidebar_resize_to(win, x);
 +            win->sidebar_resize.seat = NULL;
++            int row;
++            set_hover(seat, win, sidebar_zone(win, x, y, &row), row);
++            if (seat->mouse_focus != NULL)
++                term_xcursor_update_for_seat(seat->mouse_focus, seat);
 +            render_refresh_sidebar(win);
 +            return;
 +        }
@@ -6257,14 +6412,19 @@ index 0000000..8d3d770
 +        struct terminal *split_target = win->sidebar_drag.split_target;
 +        const bool dragging = win->sidebar_drag.dragging;
 +        const enum tab_drop drop = win->sidebar_drag.drop;
++        const int ins = win->drop_row;
 +        tabs_sidebar_cancel_drag(win);
++        if (seat->mouse_focus != NULL)
++            term_xcursor_update_for_seat(seat->mouse_focus, seat);
 +        if (dragging && split_target != NULL) {
 +            tabs_activate(win, split_target);
 +            tabs_split_with(t);
 +            return;
 +        }
-+        if (seat->mouse_focus != NULL)
-+            term_xcursor_update_for_seat(seat->mouse_focus, seat);
++        if (dragging && drop == TAB_DROP_NONE && t->group != 0 && ins >= 0) {
++            drop_pane_at(win, t, ins);
++            return;
++        }
 +        if (!dragging) {
 +            if (tabs_is_visible(t))
 +                tabs_focus_pane(win, t);
@@ -6447,8 +6607,20 @@ index 0000000..8d3d770
 +    struct terminal *st = split_target_at(win, x, y, t);
 +    win->sidebar_drag.split_target = st;
 +    set_split_cue(win, st);
-+    if (st != NULL)
++    if (st != NULL) {
++        win->drop_row = -1;
 +        return;
++    }
++
++    /* A pane of a split shows where it will land instead of moving the whole split */
++    if (t->group != 0) {
++        const int ins = max(0, min(tabs_line_at(win, y + row_h / 2), tabs_line_count(win)));
++        if (ins != win->drop_row) {
++            win->drop_row = ins;
++            render_refresh_sidebar(win);
++        }
++        return;
++    }
 +
 +    const int line = min(tabs_line_at(win, y), tabs_line_count(win) - 1);
 +    const int target = tabs_row_of(win, tabs_line_term(win, line));
@@ -6539,6 +6711,9 @@ index 0000000..8d3d770
 +        return;
 +    if (!pressed) {
 +        win->pane_drag.seat = NULL;
++        win->pane_drag.hover = divider_at(win, seat->mouse.x, seat->mouse.y);
++        if (seat->mouse_focus != NULL)
++            term_xcursor_update_for_seat(seat->mouse_focus, seat);
 +        return;
 +    }
 +    const int d = divider_at(win, seat->mouse.x, seat->mouse.y);
@@ -6794,9 +6969,9 @@ index 0000000..8d3d770
 +    [MI_SPLIT] = "Split with current",
 +    [MI_UNSPLIT] = "Unsplit all",
 +    [MI_POP] = "Move out of split",
-+    [MI_NO] = "No",
-+    [MI_YES] = "Yes, kill",
-+    [MI_YES_CLOSE] = "Yes, close",
++    [MI_NO] = "Cancel",
++    [MI_YES] = "Kill",
++    [MI_YES_CLOSE] = "Close",
 +    [MI_SPLIT_SELECTED] = "Split selected",
 +    [MI_CLOSE_SELECTED] = "Close selected",
 +    [MI_CLEAR_SELECTION] = "Clear selection",
@@ -6827,19 +7002,37 @@ index 0000000..8d3d770
 +    return r != NULL ? r : xc32dup(U"foot");
 +}
 +
++bool
++tabs_menu_is_confirm(const struct wl_window *win)
++{
++    return win->menu.kind == TAB_MENU_CONFIRM_KILL || win->menu.kind == TAB_MENU_CONFIRM_CLOSE;
++}
++
++/* Message line under a confirm dialog's title */
++char32_t *
++tabs_confirm_message(const struct wl_window *win)
++{
++    const struct terminal *t = win->menu.target;
++    const char *title = t->tab_label != NULL ? t->tab_label
++        : t->window_title != NULL ? t->window_title : "foot";
++    char *m = xasprintf(win->menu.kind == TAB_MENU_CONFIRM_KILL
++                        ? "“%s” will be killed immediately."
++                        : "“%s” is pinned and will be closed.", title);
++    char32_t *r = ambstoc32(m);
++    free(m);
++    return r != NULL ? r : xc32dup(U"");
++}
++
 +char32_t *
 +tabs_menu_header(const struct wl_window *win)
 +{
-+    const struct terminal *t = win->menu.target;
 +    char *h = NULL;
 +    switch (win->menu.kind) {
 +    case TAB_MENU_CONFIRM_KILL:
-+        h = xasprintf("Kill “%s”?", t->window_title != NULL ? t->window_title : "foot");
++        h = xstrdup("Kill this tab?");
 +        break;
 +    case TAB_MENU_CONFIRM_CLOSE:
-+        h = xasprintf("Close pinned “%s”?",
-+                      t->tab_label != NULL ? t->tab_label
-+                      : t->window_title != NULL ? t->window_title : "foot");
++        h = xstrdup("Close pinned tab?");
 +        break;
 +    case TAB_MENU_RENAME:
 +        h = xstrdup("Rename tab (empty: use the program's title)");
@@ -6935,6 +7128,7 @@ index 0000000..8d3d770
 +    win->menu.target = t;
 +    win->menu.x = x;
 +    win->menu.y = y;
++    win->menu.opened = tabs_now_ms();
 +
 +    int *it = win->menu.items;
 +    int n = 0;
@@ -6971,6 +7165,7 @@ index 0000000..8d3d770
 +        if (c != NULL) {
 +            win->menu.text_len = min(c32len(c), ALEN(win->menu.text) - 1);
 +            memcpy(win->menu.text, c, win->menu.text_len * sizeof(char32_t));
++            win->menu.cursor = win->menu.text_len;
 +            free(c);
 +        }
 +        break;
@@ -7033,20 +7228,41 @@ index 0000000..8d3d770
 +{
 +    struct wl_window *win = t->window;
 +    t->tab_pinned = pin;
-+    /* Pinned tabs lead the list */
-+    int pinned = 0;
-+    for (int r = 0, rows = tabs_row_count(win); r < rows; r++) {
-+        const struct terminal *rt = tabs_row_term(win, r);
-+        if (rt != t && rt->tab_pinned)
-+            pinned++;
++    if (pin) {
++        /* Newly pinned rows go to the end of the pinned block */
++        struct terminal **arr;
++        const size_t n = to_arr(win, &arr);
++        size_t ts, te;
++        row_extent(arr, n, arr_index(arr, n, t), &ts, &te);
++        int pinned_rows = 0;
++        for (size_t i = 0; i < n;) {
++            size_t s, e;
++            row_extent(arr, n, i, &s, &e);
++            if (s != ts && row_pinned(arr, s, e))
++                pinned_rows++;
++            i = e;
++        }
++        free(arr);
++        move_row(win, t, pinned_rows - tabs_row_of(win, t));
 +    }
-+    move_row(win, t, pinned - tabs_row_of(win, t));
++    pin_order(win);
 +    render_refresh_sidebar(win);
 +}
++
++#define CLOSE_DEBOUNCE_MS 400
++#define MODAL_DEBOUNCE_MS 300
 +
 +void
 +tabs_close_tab(struct terminal *t)
 +{
++    /* A double-click or repeated close key must not take the next tab too */
++    struct wl_window *win = t->window;
++    const uint64_t now = tabs_now_ms();
++    if (win != NULL) {
++        if (now - win->last_close < CLOSE_DEBOUNCE_MS)
++            return;
++        win->last_close = now;
++    }
 +    if (t->tab_pinned && t->window != NULL) {
 +        menu_open_center(t->window, t, TAB_MENU_CONFIRM_CLOSE);
 +        return;
@@ -7151,6 +7367,8 @@ index 0000000..8d3d770
 +{
 +    if (i < 0 || i >= win->menu.n)
 +        return;
++    if (tabs_now_ms() - win->menu.opened < MODAL_DEBOUNCE_MS)
++        return;
 +    if (win->menu.kind == TAB_MENU_SWITCHER) {
 +        win->menu.sel = i;
 +        menu_commit_text(seat, win);
@@ -7163,7 +7381,7 @@ index 0000000..8d3d770
 +
 +    switch (item) {
 +    case MI_CLOSE:     tabs_close_tab(t); break;
-+    case MI_KILL:      menu_open(win, t, TAB_MENU_CONFIRM_KILL, x, y); break;
++    case MI_KILL:      menu_open_center(win, t, TAB_MENU_CONFIRM_KILL); break;
 +    case MI_YES:       tabs_kill(t); break;
 +    case MI_YES_CLOSE: term_shutdown(t); break;
 +    case MI_DUPLICATE: tabs_duplicate(t); break;
@@ -7219,6 +7437,14 @@ index 0000000..8d3d770
 +menu_item_at(const struct wl_window *win, int x, int y)
 +{
 +    const int ch = win->term->cell_height;
++    if (tabs_menu_is_confirm(win)) {
++        if (y < win->menu.btn_y || y >= win->menu.btn_y + ch)
++            return -1;
++        for (int i = 0; i < 2; i++)
++            if (x >= win->menu.btn_x[i] && x < win->menu.btn_x[i] + win->menu.btn_w[i])
++                return i;
++        return -1;
++    }
 +    if (x < 0 || x >= win->menu.w || y < 0 || ch <= 0)
 +        return -1;
 +    const int i = y / ch - 1 - win->menu.header;
@@ -7226,10 +7452,21 @@ index 0000000..8d3d770
 +}
 +
 +static bool
++is_word(char32_t c)
++{
++    return iswalnum((wint_t)c) || c == U'_' || c == U'-' || c == U'.';
++}
++
++static bool
 +menu_text_key(struct seat *seat, struct wl_window *win, xkb_keysym_t sym,
 +              const char *utf8)
 +{
++    char32_t *b = win->menu.text;
 +    size_t *len = &win->menu.text_len;
++    size_t *c = &win->menu.cursor;
++    const bool ctrl = seat->kbd.ctrl;
++    *c = min(*c, *len);
++
 +    switch (sym) {
 +    case XKB_KEY_Return:
 +    case XKB_KEY_KP_Enter:
@@ -7241,13 +7478,46 @@ index 0000000..8d3d770
 +        tabs_menu_close(win);
 +        return true;
 +    case XKB_KEY_BackSpace:
-+        if (*len > 0)
++        if (*c > 0) {
++            size_t from = *c - 1;
++            if (ctrl)
++                while (from > 0 && is_word(b[from - 1]))
++                    from--;
++            memmove(&b[from], &b[*c], (*len - *c) * sizeof(char32_t));
++            *len -= *c - from;
++            *c = from;
++        }
++        break;
++    case XKB_KEY_Delete:
++        if (*c < *len) {
++            memmove(&b[*c], &b[*c + 1], (*len - *c - 1) * sizeof(char32_t));
 +            (*len)--;
++        }
++        break;
++    case XKB_KEY_Left:
++        if (*c > 0)
++            (*c)--;
++        if (ctrl)
++            while (*c > 0 && is_word(b[*c - 1]))
++                (*c)--;
++        break;
++    case XKB_KEY_Right:
++        if (*c < *len)
++            (*c)++;
++        if (ctrl)
++            while (*c < *len && is_word(b[*c]))
++                (*c)++;
++        break;
++    case XKB_KEY_Home:
++        *c = 0;
++        break;
++    case XKB_KEY_End:
++        *c = *len;
 +        break;
 +    case XKB_KEY_Up:
 +    case XKB_KEY_ISO_Left_Tab:
 +        if (win->menu.n > 0)
-+            win->menu.sel = (win->menu.sel + win->menu.n - 1) % win->menu.n;
++            win->menu.sel = win->menu.sel <= 0 ? win->menu.n - 1 : win->menu.sel - 1;
 +        break;
 +    case XKB_KEY_Down:
 +    case XKB_KEY_Tab:
@@ -7255,20 +7525,46 @@ index 0000000..8d3d770
 +            win->menu.sel = (win->menu.sel + 1) % win->menu.n;
 +        break;
 +    default:
-+        if ((sym == XKB_KEY_u || sym == XKB_KEY_U) && seat->kbd.ctrl) {
-+            *len = 0;
++        if (ctrl) {
++            switch (sym) {
++            case XKB_KEY_a: case XKB_KEY_A: *c = 0; break;
++            case XKB_KEY_e: case XKB_KEY_E: *c = *len; break;
++            case XKB_KEY_u: case XKB_KEY_U:
++                memmove(b, &b[*c], (*len - *c) * sizeof(char32_t));
++                *len -= *c;
++                *c = 0;
++                break;
++            case XKB_KEY_k: case XKB_KEY_K:
++                *len = *c;
++                break;
++            case XKB_KEY_w: case XKB_KEY_W: {
++                size_t from = *c;
++                while (from > 0 && !is_word(b[from - 1]))
++                    from--;
++                while (from > 0 && is_word(b[from - 1]))
++                    from--;
++                memmove(&b[from], &b[*c], (*len - *c) * sizeof(char32_t));
++                *len -= *c - from;
++                *c = from;
++                break;
++            }
++            }
 +            break;
 +        }
 +        if (utf8 != NULL && (unsigned char)utf8[0] >= 0x20) {
 +            char32_t *w = ambstoc32(utf8);
-+            for (size_t i = 0; w != NULL && w[i] != U'\0'; i++)
-+                if (*len < ALEN(win->menu.text) - 1 && w[i] >= 0x20)
-+                    win->menu.text[(*len)++] = w[i];
++            for (size_t i = 0; w != NULL && w[i] != U'\0'; i++) {
++                if (*len >= ALEN(win->menu.text) - 1 || w[i] < 0x20)
++                    continue;
++                memmove(&b[*c + 1], &b[*c], (*len - *c) * sizeof(char32_t));
++                b[(*c)++] = w[i];
++                (*len)++;
++            }
 +            free(w);
 +        }
 +        break;
 +    }
-+    win->menu.text[*len] = U'\0';
++    b[*len] = U'\0';
 +    if (win->menu.kind == TAB_MENU_SWITCHER)
 +        switcher_filter(win);
 +    menu_scroll_fix(win);
@@ -7286,8 +7582,28 @@ index 0000000..8d3d770
 +        return menu_text_key(seat, win, sym, utf8);
 +
 +    const int n = win->menu.n;
-+    const bool confirm = win->menu.kind == TAB_MENU_CONFIRM_KILL ||
-+        win->menu.kind == TAB_MENU_CONFIRM_CLOSE;
++    const bool confirm = tabs_menu_is_confirm(win);
++
++    if (confirm) {
++        switch (sym) {
++        case XKB_KEY_Left:
++        case XKB_KEY_Right:
++        case XKB_KEY_Tab:
++        case XKB_KEY_ISO_Left_Tab:
++            menu_select(win, win->menu.sel == 1 ? 0 : 1);
++            return true;
++        case XKB_KEY_Return:
++        case XKB_KEY_KP_Enter:
++        case XKB_KEY_space:
++            seat_stop_repeat(seat);
++            /* Nothing chosen yet: Enter is Cancel */
++            if (win->menu.sel == 1)
++                menu_activate(seat, win, 1);
++            else
++                tabs_menu_close(win);
++            return true;
++        }
++    }
 +
 +    switch (sym) {
 +    case XKB_KEY_Up:
@@ -7310,6 +7626,7 @@ index 0000000..8d3d770
 +    case XKB_KEY_Y:
 +        if (confirm) {
 +            seat_stop_repeat(seat);
++            win->menu.sel = 1;
 +            menu_activate(seat, win, 1);
 +        }
 +        break;
@@ -7333,6 +7650,17 @@ index 0000000..8d3d770
 +}
 +
 +void
++tabs_menu_wheel(struct wl_window *win, int amount)
++{
++    const int n = win->menu.n;
++    if (n == 0 || amount == 0 || tabs_menu_is_confirm(win))
++        return;
++    const int step = amount > 0 ? 1 : -1;
++    const int cur = win->menu.sel < 0 ? (step > 0 ? -1 : n) : win->menu.sel;
++    menu_select(win, max(0, min(n - 1, cur + step)));
++}
++
++void
 +tabs_menu_leave(struct wl_window *win)
 +{
 +    if (win->menu.kind != TAB_MENU_NONE && win->menu.kind != TAB_MENU_SWITCHER)
@@ -7348,10 +7676,10 @@ index 0000000..8d3d770
 +}
 diff --git a/tabs.h b/tabs.h
 new file mode 100644
-index 0000000..55c3052
+index 0000000..dbb3b59
 --- /dev/null
 +++ b/tabs.h
-@@ -0,0 +1,123 @@
+@@ -0,0 +1,126 @@
 +#pragma once
 +
 +#include <stdbool.h>
@@ -7464,7 +7792,10 @@ index 0000000..55c3052
 +void tabs_menu_button(struct seat *seat, struct wl_window *win, int button, bool pressed);
 +void tabs_menu_motion(struct seat *seat, struct wl_window *win);
 +void tabs_menu_leave(struct wl_window *win);
++void tabs_menu_wheel(struct wl_window *win, int amount);
 +char32_t *tabs_menu_header(const struct wl_window *win);
++bool tabs_menu_is_confirm(const struct wl_window *win);
++char32_t *tabs_confirm_message(const struct wl_window *win);
 +const char32_t *tabs_menu_input(const struct wl_window *win);
 +char32_t *tabs_menu_line(const struct wl_window *win, int i);
 +int tabs_menu_rows(const struct wl_window *win);
@@ -7886,10 +8217,10 @@ index 7566e95..1c77ef7 100644
  int term_font_baseline(const struct terminal *term);
  
 diff --git a/tests/test-config.c b/tests/test-config.c
-index 4fff7f0..18066cd 100644
+index 4fff7f0..b1e6ec3 100644
 --- a/tests/test-config.c
 +++ b/tests/test-config.c
-@@ -706,6 +706,30 @@ test_section_touch(void)
+@@ -706,6 +706,31 @@ test_section_touch(void)
      config_free(&conf);
  }
  
@@ -7905,6 +8236,7 @@ index 4fff7f0..18066cd 100644
 +    test_boolean(&ctx, &parse_section_tabs, "activity", &conf.tabs.activity);
 +    test_boolean(&ctx, &parse_section_tabs, "show", &conf.tabs.show);
 +    test_boolean(&ctx, &parse_section_tabs, "animations", &conf.tabs.animations);
++    test_uint32(&ctx, &parse_section_tabs, "switcher-width", &conf.tabs.modal_width);
 +
 +    ctx.key = "position";
 +    ctx.value = "right";
@@ -7920,7 +8252,7 @@ index 4fff7f0..18066cd 100644
  static void
  test_section_colors_dark(void)
  {
-@@ -1539,6 +1563,7 @@ main(int argc, const char *const *argv)
+@@ -1539,6 +1564,7 @@ main(int argc, const char *const *argv)
      test_section_cursor();
      test_section_mouse();
      test_section_touch();
@@ -8244,7 +8576,7 @@ index a2c255a..3a4318b 100644
  }
  
 diff --git a/wayland.h b/wayland.h
-index 3ed68b2..e6514a0 100644
+index 3ed68b2..56717e5 100644
 --- a/wayland.h
 +++ b/wayland.h
 @@ -84,6 +84,7 @@ struct wl_clipboard {
@@ -8255,7 +8587,7 @@ index 3ed68b2..e6514a0 100644
      char *text;
      uint32_t serial;
  };
-@@ -368,9 +369,94 @@ struct xdg_activation_token_context {
+@@ -368,9 +369,98 @@ struct xdg_activation_token_context {
      void *cb_data;                                /* Callback user pointer */
  };
  
@@ -8293,6 +8625,7 @@ index 3ed68b2..e6514a0 100644
 +    bool sidebar_dirty;
 +    bool closing;
 +    bool commit_parent;  /* panes rendered: commit them together */
++    uint64_t last_close;
 +    struct {
 +        struct seat *seat;
 +        struct terminal *tab;
@@ -8346,11 +8679,14 @@ index 3ed68b2..e6514a0 100644
 +        size_t text_len;
 +        struct terminal *found[256];
 +        int scroll;
++        size_t cursor;
++        uint64_t opened;
++        int btn_x[2], btn_w[2], btn_y;  /* confirm dialog buttons */
 +    } menu;
      struct wayl_surface surface;
      struct xdg_surface *xdg_surface;
      struct xdg_toplevel *xdg_toplevel;
-@@ -524,6 +610,41 @@ struct wayland {
+@@ -524,6 +614,41 @@ struct wayland {
      tll(struct seat) seats;
  
      tll(struct terminal *) terms;
