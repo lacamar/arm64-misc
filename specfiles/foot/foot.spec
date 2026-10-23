@@ -3,7 +3,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        21%{?dist}
+Release:        22%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -149,6 +149,11 @@ desktop-file-validate \
 
 
 %changelog
+* Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-22
+- Add tab name prefix
+- Keep sorted tab lists sorted
+- Add manual sort order
+
 * Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-21
 - Fix window resizing when splits change
 - Fix crash splitting after unsplit

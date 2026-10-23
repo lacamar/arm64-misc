@@ -504,10 +504,10 @@ index 24d81b5..22e8893 100644
  
  The following keyboard shortcuts are available by default. They can be
 diff --git a/doc/foot.ini.5.scd b/doc/foot.ini.5.scd
-index e65729b..c4c9e50 100644
+index e65729b..52f2b36 100644
 --- a/doc/foot.ini.5.scd
 +++ b/doc/foot.ini.5.scd
-@@ -937,6 +937,109 @@ _"$@"_ to keep its original arguments. Rules also apply to the
+@@ -937,6 +937,111 @@ _"$@"_ to keep its original arguments. Rules also apply to the
  program foot's own child is running, so a window launched as
  *footclient claude* is resumed rather than restarted.
  
@@ -539,10 +539,12 @@ index e65729b..c4c9e50 100644
 +select several (right-click a selected tab to split or close them
 +together); scroll the wheel to switch to the previous/next tab (drag
 +the scrollbar on the outer edge to move through a long list);
-+right-click the empty part of the sidebar to sort the tabs by name,
-+most recent use, program or opening order (pinned tabs stay first);
-+middle-click to close; right-click for a menu (close, kill, duplicate, split, move
-+out of split, unsplit all) driven by mouse or
++right-click the empty part of the sidebar to keep the tabs sorted by
++name, most recent use, program or opening order, or in manual order
++(pinned tabs stay first; a sorted list can't be reordered by hand);
++middle-click to close; right-click for a menu (close, kill, duplicate,
++rename, set a prefix shown as _prefix | title_, split, move out of
++split, unsplit all) driven by mouse or
 +*Up*/*Down*/*Return*/*Escape*.
 +
 +Drag a tab to reorder it, onto the inner end of another tab's row to
@@ -617,7 +619,7 @@ index e65729b..c4c9e50 100644
  # SECTION: url
  
  Note that you can also add custom regular expressions, see the 'regex'
-@@ -1587,6 +1690,60 @@ e.g. *search-start=none*.
+@@ -1587,6 +1692,60 @@ e.g. *search-start=none*.
  *quit*
  	Quit foot. Default: _none_.
  
@@ -1594,7 +1596,7 @@ index 05281d0..0a1d61a 100644
  
          case 'D':
 diff --git a/render.c b/render.c
-index 72b68e1..bced2f5 100644
+index 72b68e1..c3c1d14 100644
 --- a/render.c
 +++ b/render.c
 @@ -43,6 +43,7 @@
@@ -1898,22 +1900,29 @@ index 72b68e1..bced2f5 100644
  
          render_osd(
              term, sub_surf, term->fonts[0], bufs[i], label,
-@@ -4350,6 +4386,11 @@ render_update_title(struct terminal *term)
+@@ -4350,27 +4386,55 @@ render_update_title(struct terminal *term)
  {
      static const size_t max_len = 2048;
  
+-    const char *title = term->window_title != NULL ? term->window_title : "foot";
+-    char *copy = NULL;
+-
+-    if (strlen(title) > max_len) {
+-        copy = xstrndup(title, max_len);
+-        title = copy;
++    term->window->order_dirty = true;
 +    if (!tabs_is_active(term)) {
 +        render_refresh_sidebar(term->window);
 +        return;
-+    }
+     }
+ 
++    char *title = tabs_title(term);
++    if (strlen(title) > max_len)
++        title[max_len] = '\0';
 +
-     const char *title = term->window_title != NULL ? term->window_title : "foot";
-     char *copy = NULL;
- 
-@@ -4360,17 +4401,43 @@ render_update_title(struct terminal *term)
- 
      xdg_toplevel_set_title(term->window->xdg_toplevel, title);
-     free(copy);
+-    free(copy);
++    free(title);
 +    if (tabs_sidebar_visible(term->window))
 +        render_refresh_sidebar(term->window);
  }
@@ -1956,7 +1965,7 @@ index 72b68e1..bced2f5 100644
      bool grid = term->render.pending.grid;
      bool csd = term->render.pending.csd;
      bool search = term->is_searching && term->render.pending.search;
-@@ -4393,6 +4460,9 @@ frame_callback(void *data, struct wl_callback *wl_callback, uint32_t callback_da
+@@ -4393,6 +4457,9 @@ frame_callback(void *data, struct wl_callback *wl_callback, uint32_t callback_da
          quirk_weston_csd_off(term);
      }
  
@@ -1966,7 +1975,7 @@ index 72b68e1..bced2f5 100644
      if (search)
          render_search_box(term);
  
-@@ -4413,6 +4483,7 @@ frame_callback(void *data, struct wl_callback *wl_callback, uint32_t callback_da
+@@ -4413,6 +4480,7 @@ frame_callback(void *data, struct wl_callback *wl_callback, uint32_t callback_da
  static void
  tiocswinsz(struct terminal *term)
  {
@@ -1974,7 +1983,7 @@ index 72b68e1..bced2f5 100644
      if (term->ptmx >= 0) {
          if (ioctl(term->ptmx, (unsigned int)TIOCSWINSZ,
                       &(struct winsize){
-@@ -4488,16 +4559,18 @@ delayed_reflow_of_normal_grid(struct terminal *term)
+@@ -4488,16 +4556,18 @@ delayed_reflow_of_normal_grid(struct terminal *term)
  static bool
  fdm_tiocswinsz(struct fdm *fdm, int fd, int events, void *data)
  {
@@ -1999,7 +2008,7 @@ index 72b68e1..bced2f5 100644
      }
      return true;
  }
-@@ -4530,7 +4603,7 @@ send_dimensions_to_client(struct terminal *term)
+@@ -4530,7 +4600,7 @@ send_dimensions_to_client(struct terminal *term)
              fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
              if (fd < 0)
                  LOG_ERRNO("failed to create TIOCSWINSZ timer");
@@ -2008,7 +2017,7 @@ index 72b68e1..bced2f5 100644
                  close(fd);
                  fd = -1;
              }
-@@ -4585,6 +4658,53 @@ set_size_from_grid(struct terminal *term, int *width, int *height, int cols, int
+@@ -4585,6 +4655,53 @@ set_size_from_grid(struct terminal *term, int *width, int *height, int cols, int
          *height = new_height;
  }
  
@@ -2062,7 +2071,7 @@ index 72b68e1..bced2f5 100644
  /* Move to terminal.c? */
  bool
  render_resize(struct terminal *term, int width, int height, uint8_t opts)
-@@ -4605,19 +4725,23 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
+@@ -4605,19 +4722,23 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
  
      /* Convert logical size to physical size */
      const float scale = term->scale;
@@ -2089,7 +2098,7 @@ index 72b68e1..bced2f5 100644
          } else {
              /* Otherwise, use a user-configured size */
              switch (term->conf->size.type) {
-@@ -4633,12 +4757,13 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
+@@ -4633,12 +4754,13 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
              case CONF_SIZE_CELLS:
                  set_size_from_grid(term, &width, NULL,
                                     term->conf->size.width, term->conf->size.height);
@@ -2104,7 +2113,7 @@ index 72b68e1..bced2f5 100644
          /* The compositor is letting us choose the height */
          if (term->stashed_height != 0) {
              /* If a default size is requested, prefer the "last used" size */
-@@ -4672,7 +4797,7 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
+@@ -4672,7 +4794,7 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
      const int min_rows = 1;
  
      /* Minimum window size (must be divisible by the scaling factor)*/
@@ -2113,7 +2122,7 @@ index 72b68e1..bced2f5 100644
      const int min_height = roundf(scale * ceilf((min_rows * term->cell_height) / scale));
  
      width = max(width, min_width);
-@@ -4687,12 +4812,12 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
+@@ -4687,12 +4809,12 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
      const int pad_bottom= min(max_pad_y, scale * term->conf->pad_bottom);
  
      if (is_floating &&
@@ -2129,7 +2138,7 @@ index 72b68e1..bced2f5 100644
          width = max(min_width, roundf(scale * roundf(width / scale)));
  
          height = ((height - (pad_top + pad_bottom)) / term->cell_height)
-@@ -4724,7 +4849,7 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
+@@ -4724,7 +4846,7 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
  
      /* Screen rows/cols after resize */
      const int new_cols =
@@ -2138,7 +2147,7 @@ index 72b68e1..bced2f5 100644
      const int new_rows =
          (term->height - (pad_top + pad_bottom)) / term->cell_height;
  
-@@ -4765,7 +4890,7 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
+@@ -4765,7 +4887,7 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
      /* Margins */
      const int grid_width = new_cols * term->cell_width;
      const int grid_height = new_rows * term->cell_height;
@@ -2147,7 +2156,7 @@ index 72b68e1..bced2f5 100644
      const int total_y_pad = term->height - grid_height;
  
      const enum center_when center = term->conf->center_when;
-@@ -4776,16 +4901,16 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
+@@ -4776,16 +4898,16 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
          (center == CENTER_FULLSCREEN && term->window->is_fullscreen);
  
      if (centered_padding && !term->window->is_resizing) {
@@ -2168,7 +2177,7 @@ index 72b68e1..bced2f5 100644
      xassert(term->margins.right >= pad_right);
      xassert(term->margins.top >= pad_top);
      xassert(term->margins.bottom >= pad_bottom);
-@@ -5004,55 +5129,16 @@ damage_view:
+@@ -5004,55 +5126,16 @@ damage_view:
      /* Signal TIOCSWINSZ */
      send_dimensions_to_client(term);
  
@@ -2229,7 +2238,7 @@ index 72b68e1..bced2f5 100644
  
      tll_free(term->normal.scroll_damage);
      tll_free(term->alt.scroll_damage);
-@@ -5061,8 +5147,10 @@ damage_view:
+@@ -5061,8 +5144,10 @@ damage_view:
      shm_unref(term->render.last_buf);
      term->render.last_buf = NULL;
      term_damage_view(term);
@@ -2242,7 +2251,20 @@ index 72b68e1..bced2f5 100644
      render_refresh(term);
  
      return true;
-@@ -5207,6 +5295,9 @@ fdm_hook_refresh_pending_terminals(struct fdm *fdm, void *data)
+@@ -5201,12 +5286,22 @@ fdm_hook_refresh_pending_terminals(struct fdm *fdm, void *data)
+     struct renderer *renderer = data;
+     struct wayland *wayl = renderer->wayl;
+ 
++    tll_foreach(wayl->windows, it) {
++        if (it->item->order_dirty) {
++            it->item->order_dirty = false;
++            tabs_apply_order(it->item);
++        }
++    }
++
+     tll_foreach(renderer->wayl->terms, it) {
+         struct terminal *term = it->item;
+ 
          if (unlikely(term->shutdown.in_progress || !term->window->is_configured))
              continue;
  
@@ -2252,7 +2274,7 @@ index 72b68e1..bced2f5 100644
          bool grid = term->render.refresh.grid;
          bool csd = term->render.refresh.csd;
          bool search = term->is_searching && term->render.refresh.search;
-@@ -5223,7 +5314,7 @@ fdm_hook_refresh_pending_terminals(struct fdm *fdm, void *data)
+@@ -5223,7 +5318,7 @@ fdm_hook_refresh_pending_terminals(struct fdm *fdm, void *data)
          term->render.refresh.search = false;
          term->render.refresh.urls = false;
  
@@ -2261,7 +2283,7 @@ index 72b68e1..bced2f5 100644
              struct grid *original_grid = term->grid;
              if (urls_mode_is_active(term)) {
                  xassert(term->url.grid_snapshot != NULL);
-@@ -5235,6 +5326,8 @@ fdm_hook_refresh_pending_terminals(struct fdm *fdm, void *data)
+@@ -5235,6 +5330,8 @@ fdm_hook_refresh_pending_terminals(struct fdm *fdm, void *data)
                  render_csd(term);
                  quirk_weston_csd_off(term);
              }
@@ -2270,7 +2292,7 @@ index 72b68e1..bced2f5 100644
              if (search)
                  render_search_box(term);
              if (urls)
-@@ -5257,6 +5350,14 @@ fdm_hook_refresh_pending_terminals(struct fdm *fdm, void *data)
+@@ -5257,6 +5354,14 @@ fdm_hook_refresh_pending_terminals(struct fdm *fdm, void *data)
          }
      }
  
@@ -2285,7 +2307,7 @@ index 72b68e1..bced2f5 100644
      tll_foreach(wayl->seats, it) {
          if (it->item.pointer.xcursor_pending) {
              if (it->item.pointer.xcursor_callback == NULL) {
-@@ -5312,6 +5413,9 @@ render_refresh_app_id(struct terminal *term)
+@@ -5312,6 +5417,9 @@ render_refresh_app_id(struct terminal *term)
          return;
      }
  
@@ -2295,7 +2317,7 @@ index 72b68e1..bced2f5 100644
      const char *app_id =
          term->app_id != NULL ? term->app_id : term->conf->app_id;
  
-@@ -5344,6 +5448,9 @@ render_refresh_icon(struct terminal *term)
+@@ -5344,6 +5452,9 @@ render_refresh_icon(struct terminal *term)
          return;
      }
  
@@ -2305,7 +2327,7 @@ index 72b68e1..bced2f5 100644
      const char *icon_name = term_icon(term);
      LOG_DBG("setting toplevel icon: %s", icon_name);
  
-@@ -5357,6 +5464,708 @@ render_refresh_icon(struct terminal *term)
+@@ -5357,6 +5468,710 @@ render_refresh_icon(struct terminal *term)
      term->render.icon.last_update = now;
  }
  
@@ -2421,8 +2443,9 @@ index 72b68e1..bced2f5 100644
 +static char32_t *
 +sidebar_label(const struct terminal *t)
 +{
-+    char32_t *r = ambstoc32(t->tab_label != NULL ? t->tab_label
-+                            : t->window_title != NULL ? t->window_title : "foot");
++    char *s = tabs_title(t);
++    char32_t *r = ambstoc32(s);
++    free(s);
 +    return r != NULL ? r : xc32dup(U"foot");
 +}
 +
@@ -2934,6 +2957,7 @@ index 72b68e1..bced2f5 100644
 +render_refresh_sidebar(struct wl_window *win)
 +{
 +    win->sidebar_dirty = true;
++    win->order_dirty = true;
 +    if (win->term != NULL)
 +        win->term->render.refresh.csd = true;
 +}
@@ -3364,7 +3388,7 @@ index 683ad74..1ee55bc 100644
  
  void server_global_theme_switch_to_dark(struct server *server);
 diff --git a/session.c b/session.c
-index 4d2298b..37e2be7 100644
+index 4d2298b..846027a 100644
 --- a/session.c
 +++ b/session.c
 @@ -4,6 +4,8 @@
@@ -3388,12 +3412,12 @@ index 4d2298b..37e2be7 100644
  
  #define STATE_MAGIC "FOOT-SESSION"
 -#define STATE_VERSION 4
-+#define STATE_VERSION 8
++#define STATE_VERSION 9
 +#define RECENT_MAX 10
  #define MAX_CHAIN_DEPTH 16
  #define RULE_TIMEOUT_SECS 5
  #define RULE_OUTPUT_MAX (64 * 1024)
-@@ -41,6 +46,15 @@ typedef tll(struct session_command) command_list_t;
+@@ -41,6 +46,17 @@ typedef tll(struct session_command) command_list_t;
  
  struct session_window {
      char *name;
@@ -3404,12 +3428,14 @@ index 4d2298b..37e2be7 100644
 +    bool pinned;
 +    float weight;
 +    char *label;
++    char *prefix;
++    int sort_mode;
 +    int sidebar_w;       /* 0: default */
 +    int sidebar_hidden;  /* -1: default */
      char *cwd;
      char *snapshot;
      size_t launch_argc;
-@@ -90,6 +104,8 @@ struct rule_eval {
+@@ -90,6 +106,8 @@ struct rule_eval {
  struct session_tracked {
      struct session *session;
      struct terminal *term;
@@ -3418,7 +3444,7 @@ index 4d2298b..37e2be7 100644
      const struct config *conf;
      char *name;
      size_t launch_argc;
-@@ -114,6 +130,7 @@ struct session {
+@@ -114,6 +132,7 @@ struct session {
  
      tll(struct session_tracked *) windows;
      tll(struct closed_window) closed;
@@ -3426,26 +3452,28 @@ index 4d2298b..37e2be7 100644
      tll(struct relaunch) relaunch;
      tll(struct rule_eval *) evals;
  
-@@ -179,6 +196,7 @@ window_free(struct session_window *w)
+@@ -179,6 +198,8 @@ window_free(struct session_window *w)
      if (w == NULL)
          return;
      free(w->name);
 +    free(w->label);
++    free(w->prefix);
      free(w->cwd);
      free(w->snapshot);
      argv_free(w->launch_argc, w->launch_argv);
-@@ -346,6 +364,10 @@ static void
+@@ -346,6 +367,11 @@ static void
  write_window(FILE *f, const struct session_window *w)
  {
      write_blob(f, w->name);
 +    fprintf(f, "%d %u %d %d %d\n", w->pos, w->group, w->current | w->vertical << 1,
 +            w->sidebar_w, w->sidebar_hidden);
-+    fprintf(f, "%d %d\n", w->pinned, (int)roundf(w->weight * 1000));
++    fprintf(f, "%d %d %d\n", w->pinned, (int)roundf(w->weight * 1000), w->sort_mode);
 +    write_blob(f, w->label);
++    write_blob(f, w->prefix);
      write_blob(f, w->cwd);
      write_blob(f, w->snapshot);
      write_argv(f, w->launch_argc, w->launch_argv);
-@@ -403,8 +425,46 @@ read_window(FILE *f, int version)
+@@ -403,8 +429,56 @@ read_window(FILE *f, int version)
      int cols, rows;
  
      w->name = version >= 4 ? read_blob(f) : toplevel_name_new();
@@ -3472,7 +3500,9 @@ index 4d2298b..37e2be7 100644
 +        w->vertical = current & 2;
 +        if (ok && version >= 8) {
 +            int pinned, weight;
-+            ok = fscanf(f, "%d %d\n", &pinned, &weight) == 2;
++            ok = version >= 9
++                ? fscanf(f, "%d %d %d\n", &pinned, &weight, &w->sort_mode) == 3
++                : fscanf(f, "%d %d\n", &pinned, &weight) == 2;
 +            w->pinned = pinned;
 +            w->weight = weight / 1000.f;
 +            char *label = ok ? read_blob(f) : NULL;
@@ -3481,6 +3511,14 @@ index 4d2298b..37e2be7 100644
 +                w->label = label;
 +            else
 +                free(label);
++            if (ok && version >= 9) {
++                char *prefix = read_blob(f);
++                ok = prefix != NULL;
++                if (ok && prefix[0] != '\0')
++                    w->prefix = prefix;
++                else
++                    free(prefix);
++            }
 +        }
 +        /* v6 saved the then-default visible sidebar for every window */
 +        if (version == 6)
@@ -3493,7 +3531,7 @@ index 4d2298b..37e2be7 100644
          (version > 2 || fscanf(f, "%d %d\n", &cols, &rows) == 2) &&
          (w->snapshot = read_blob(f)) != NULL &&
          read_argv(f, &w->launch_argc, &w->launch_argv) &&
-@@ -471,38 +531,94 @@ read_state(const char *path, window_list_t *out, char **xdg_id)
+@@ -471,38 +545,94 @@ read_state(const char *path, window_list_t *out, char **xdg_id)
      free(backup);
  }
  
@@ -3601,7 +3639,7 @@ index 4d2298b..37e2be7 100644
  
      if (fclose(f) != 0) {
          free(buf);
-@@ -868,14 +984,15 @@ eval_envp(pid_t pid, const char *cwd)
+@@ -868,14 +998,15 @@ eval_envp(pid_t pid, const char *cwd)
      return envp;
  }
  
@@ -3621,7 +3659,7 @@ index 4d2298b..37e2be7 100644
      }
      fcntl(fds[0], F_SETFL, O_NONBLOCK);
  
-@@ -887,7 +1004,7 @@ eval_start(struct session *s, struct relaunch *r, const char *command,
+@@ -887,7 +1018,7 @@ eval_start(struct session *s, struct relaunch *r, const char *command,
      for (size_t i = 0; i < argc; i++)
          sh_argv[3 + i] = argv[i];
  
@@ -3630,7 +3668,7 @@ index 4d2298b..37e2be7 100644
  
      sigset_t mask;
      sigemptyset(&mask);
-@@ -920,9 +1037,22 @@ eval_start(struct session *s, struct relaunch *r, const char *command,
+@@ -920,9 +1051,22 @@ eval_start(struct session *s, struct relaunch *r, const char *command,
      if (child < 0) {
          LOG_ERRNO("failed to fork");
          close(fds[0]);
@@ -3654,7 +3692,7 @@ index 4d2298b..37e2be7 100644
      struct rule_eval *ev = xmalloc(sizeof(*ev));
      *ev = (struct rule_eval){
          .session = s,
-@@ -930,13 +1060,13 @@ eval_start(struct session *s, struct relaunch *r, const char *command,
+@@ -930,13 +1074,13 @@ eval_start(struct session *s, struct relaunch *r, const char *command,
          .starttime = r->starttime,
          .program = xstrdup(r->program),
          .child = child,
@@ -3671,7 +3709,7 @@ index 4d2298b..37e2be7 100644
          ev->fd = -1;
          ev->failed = true;
      }
-@@ -1033,6 +1163,23 @@ build_window(struct session *s, const struct session_tracked *t,
+@@ -1033,6 +1177,25 @@ build_window(struct session *s, const struct session_tracked *t,
          .commands = tll_init(),
      };
  
@@ -3682,6 +3720,8 @@ index 4d2298b..37e2be7 100644
 +        w->pinned = t->term->tab_pinned;
 +        w->weight = t->term->pane_weight;
 +        w->label = t->term->tab_label != NULL ? xstrdup(t->term->tab_label) : NULL;
++        w->prefix = t->term->tab_prefix != NULL ? xstrdup(t->term->tab_prefix) : NULL;
++        w->sort_mode = win->sort_mode;
 +        w->current = win->term == t->term;
 +        w->sidebar_w = win->sidebar_w;
 +        w->sidebar_hidden = win->sidebar_hidden;
@@ -3695,7 +3735,7 @@ index 4d2298b..37e2be7 100644
      if (w->cwd == NULL) {
          const char *home = getenv("HOME");
          w->cwd = xstrdup(t->term->cwd != NULL ? t->term->cwd
-@@ -1288,6 +1435,33 @@ static const struct xdg_session_v1_listener xdg_session_listener = {
+@@ -1288,6 +1451,35 @@ static const struct xdg_session_v1_listener xdg_session_listener = {
      .replaced = &xdg_session_replaced,
  };
  
@@ -3707,6 +3747,7 @@ index 4d2298b..37e2be7 100644
 +    struct terminal *current;
 +    int sidebar_w;
 +    int sidebar_hidden;
++    int sort_mode;
 +};
 +
 +static void
@@ -3717,6 +3758,7 @@ index 4d2298b..37e2be7 100644
 +            rw->win->sidebar_w = rw->sidebar_w;
 +        if (rw->sidebar_hidden >= 0)
 +            rw->win->sidebar_hidden = rw->sidebar_hidden;
++        rw->win->sort_mode = rw->sort_mode;
 +        if (rw->current != NULL)
 +            tabs_activate(rw->win, rw->current);
 +        tabs_relayout(rw->win);
@@ -3729,7 +3771,7 @@ index 4d2298b..37e2be7 100644
  static void
  restore(struct session *s, session_restore_cb cb, void *data)
  {
-@@ -1304,22 +1478,199 @@ restore(struct session *s, session_restore_cb cb, void *data)
+@@ -1304,22 +1496,203 @@ restore(struct session *s, session_restore_cb cb, void *data)
          xdg_session_v1_add_listener(s->wayl->xdg_session, &xdg_session_listener, s);
      }
  
@@ -3742,6 +3784,7 @@ index 4d2298b..37e2be7 100644
 +                .name = xstrdup(w->name),
 +                .sidebar_w = w->sidebar_w,
 +                .sidebar_hidden = w->sidebar_hidden,
++                .sort_mode = w->sort_mode,
 +            };
 +        }
 +
@@ -3756,6 +3799,7 @@ index 4d2298b..37e2be7 100644
 +        const bool pinned = w->pinned;
 +        const float weight = w->weight;
 +        char *label = w->label != NULL ? xstrdup(w->label) : NULL;
++        char *prefix = w->prefix != NULL ? xstrdup(w->prefix) : NULL;
 +        const bool split = rw.prev != NULL && group != 0 && group == rw.prev_group;
 +
 +        struct terminal *term = script != NULL
@@ -3773,7 +3817,8 @@ index 4d2298b..37e2be7 100644
 +            term->tab_pinned = pinned;
 +            term->pane_weight = weight;
 +            term->tab_label = label;
-+            label = NULL;
++            term->tab_prefix = prefix;
++            label = prefix = NULL;
 +            if (term->group != 0) {
 +                tll_foreach(rw.win->tabs, it)
 +                    if (it->item->group == term->group)
@@ -3784,6 +3829,7 @@ index 4d2298b..37e2be7 100644
          }
  
 +        free(label);
++        free(prefix);
          free(snapshot_path);
          free(script);
          tll_remove(windows, it);
@@ -3930,7 +3976,7 @@ index 4d2298b..37e2be7 100644
  }
  
  /* Public API */
-@@ -1413,6 +1764,11 @@ session_destroy(struct session *s)
+@@ -1413,6 +1786,11 @@ session_destroy(struct session *s)
          tll_remove(s->closed, it);
      }
  
@@ -3942,7 +3988,7 @@ index 4d2298b..37e2be7 100644
      tll_foreach(s->windows, it) {
          it->item->session = NULL;
          tll_remove(s->windows, it);
-@@ -1432,6 +1788,7 @@ track(struct session *s, struct terminal *term, const struct config *conf,
+@@ -1432,6 +1810,7 @@ track(struct session *s, struct terminal *term, const struct config *conf,
      *t = (struct session_tracked){
          .session = s,
          .term = term,
@@ -3950,7 +3996,7 @@ index 4d2298b..37e2be7 100644
          .conf = conf,
          .name = name,
          .launch_argc = launch_argc,
-@@ -1442,6 +1799,17 @@ track(struct session *s, struct terminal *term, const struct config *conf,
+@@ -1442,6 +1821,17 @@ track(struct session *s, struct terminal *term, const struct config *conf,
      return t;
  }
  
@@ -3968,7 +4014,7 @@ index 4d2298b..37e2be7 100644
  struct session_tracked *
  session_track(struct session *s, struct terminal *term,
                const struct config *conf,
-@@ -1450,11 +1818,13 @@ session_track(struct session *s, struct terminal *term,
+@@ -1450,11 +1840,13 @@ session_track(struct session *s, struct terminal *term,
      if (s == NULL)
          return NULL;
  
@@ -3984,7 +4030,7 @@ index 4d2298b..37e2be7 100644
          win->toplevel_session = xdg_session_v1_add_toplevel(
              s->wayl->xdg_session, win->xdg_toplevel, t->name);
      }
-@@ -1477,6 +1847,59 @@ session_track_restored(struct session *s, struct terminal *term,
+@@ -1477,6 +1869,60 @@ session_track_restored(struct session *s, struct terminal *term,
      return t;
  }
  
@@ -3995,6 +4041,7 @@ index 4d2298b..37e2be7 100644
 +    *c = *w;
 +    c->name = xstrdup(w->name);
 +    c->label = w->label != NULL ? xstrdup(w->label) : NULL;
++    c->prefix = w->prefix != NULL ? xstrdup(w->prefix) : NULL;
 +    c->cwd = xstrdup(w->cwd);
 +    c->snapshot = w->snapshot != NULL ? xstrdup(w->snapshot) : NULL;
 +    c->launch_argv = argv_dup(w->launch_argc, w->launch_argv);
@@ -4044,7 +4091,7 @@ index 4d2298b..37e2be7 100644
  void
  session_untrack(struct session_tracked *t)
  {
-@@ -1489,12 +1912,14 @@ session_untrack(struct session_tracked *t)
+@@ -1489,12 +1935,14 @@ session_untrack(struct session_tracked *t)
              if (it->item == t)
                  tll_remove(s->windows, it);
          }
@@ -4062,7 +4109,7 @@ index 4d2298b..37e2be7 100644
      }
  
      window_free(t->saved);
-@@ -1504,6 +1929,48 @@ session_untrack(struct session_tracked *t)
+@@ -1504,6 +1952,48 @@ session_untrack(struct session_tracked *t)
      free(t);
  }
  
@@ -4155,10 +4202,10 @@ index 6289937..b385f1b 100644
          del_from_env(&custom_env, "TERM_PROGRAM");            /* Wezterm, Ghostty */
 diff --git a/tabs.c b/tabs.c
 new file mode 100644
-index 0000000..e5e69ef
+index 0000000..a220413
 --- /dev/null
 +++ b/tabs.c
-@@ -0,0 +1,3513 @@
+@@ -0,0 +1,3580 @@
 +#include "tabs.h"
 +
 +#include <limits.h>
@@ -5614,6 +5661,8 @@ index 0000000..e5e69ef
 +static void
 +move_row(struct wl_window *win, struct terminal *t, int delta)
 +{
++    if (win->sort_mode != 0)
++        return;
 +    struct terminal **arr;
 +    size_t n = to_arr(win, &arr);
 +
@@ -6751,8 +6800,7 @@ index 0000000..e5e69ef
 +        render_refresh_sidebar(t->window);
 +    }
 +    if (!focused) {
-+        char *title = xstrdup(t->tab_label != NULL ? t->tab_label
-+                              : t->window_title != NULL ? t->window_title : "foot");
++        char *title = tabs_title(t);
 +        notify_notify(t, &(struct notification){
 +            .title = xstrdup("Command finished"),
 +            .body = title,
@@ -6801,7 +6849,7 @@ index 0000000..e5e69ef
 +
 +/* Sorting: pinned tabs stay first, splits move as one row */
 +
-+enum { SORT_NAME, SORT_RECENT, SORT_PROGRAM, SORT_AGE };
++enum { SORT_NONE, SORT_NAME, SORT_RECENT, SORT_PROGRAM, SORT_AGE };
 +
 +struct sort_row {
 +    size_t start, len;
@@ -6853,13 +6901,18 @@ index 0000000..e5e69ef
 +    case SORT_AGE:
 +        r = (a->created > b->created) - (a->created < b->created);
 +        break;
++    case SORT_NONE:
++        break;
 +    }
 +    return r != 0 ? r : (a->order > b->order) - (a->order < b->order);
 +}
 +
-+static void
-+tabs_sort(struct wl_window *win, int mode)
++/* A sorted window keeps its order: every change re-sorts it */
++void
++tabs_apply_order(struct wl_window *win)
 +{
++    if (win->sort_mode == SORT_NONE || win->closing || tll_length(win->tabs) < 2)
++        return;
 +    struct terminal **arr;
 +    const size_t n = to_arr(win, &arr);
 +    struct sort_row *rows = xcalloc(n + 1, sizeof(rows[0]));
@@ -6875,14 +6928,13 @@ index 0000000..e5e69ef
 +            r->recent = max(r->recent, arr[k]->tab_last_active);
 +            r->created = min(r->created, arr[k]->tab_created);
 +        }
-+        r->name = xstrdup(t->tab_label != NULL ? t->tab_label
-+                          : t->window_title != NULL ? t->window_title : "");
-+        r->program = program_of(t);
++        r->name = tabs_title(t);
++        r->program = win->sort_mode == SORT_PROGRAM ? program_of(t) : xstrdup("");
 +        nr++;
 +        i = e;
 +    }
 +
-+    sort_mode = mode;
++    sort_mode = win->sort_mode;
 +    qsort(rows, nr, sizeof(rows[0]), &sort_cmp);
 +
 +    struct terminal **out = xmalloc((n + 1) * sizeof(out[0]));
@@ -6894,8 +6946,21 @@ index 0000000..e5e69ef
 +        free(rows[i].program);
 +    }
 +    free(rows);
++    const bool changed = memcmp(arr, out, n * sizeof(arr[0])) != 0;
 +    free(arr);
++    if (!changed) {
++        free(out);
++        return;
++    }
 +    from_arr(win, out, n);
++    render_refresh_sidebar(win);
++}
++
++static void
++tabs_sort(struct wl_window *win, int mode)
++{
++    win->sort_mode = mode;
++    tabs_apply_order(win);
 +    render_refresh_sidebar(win);
 +}
 +
@@ -6958,6 +7023,7 @@ index 0000000..e5e69ef
 +    MI_SPLIT_SELECTED, MI_CLOSE_SELECTED, MI_CLEAR_SELECTION, MI_POP,
 +    MI_RENAME, MI_PIN, MI_UNPIN, MI_BROADCAST, MI_UNBROADCAST, MI_YES_CLOSE,
 +    MI_REOPEN, MI_SORT_NAME, MI_SORT_RECENT, MI_SORT_PROGRAM, MI_SORT_AGE,
++    MI_SORT_NONE, MI_PREFIX,
 +};
 +
 +static const char *const menu_labels[] = {
@@ -6983,20 +7049,23 @@ index 0000000..e5e69ef
 +    [MI_SORT_RECENT] = "By most recently used",
 +    [MI_SORT_PROGRAM] = "By program",
 +    [MI_SORT_AGE] = "By opening order",
++    [MI_SORT_NONE] = "Manual order",
++    [MI_PREFIX] = "Set prefix…",
 +};
 +
 +static bool
 +menu_has_input(const struct wl_window *win)
 +{
-+    return win->menu.kind == TAB_MENU_RENAME || win->menu.kind == TAB_MENU_SWITCHER;
++    return win->menu.kind == TAB_MENU_RENAME || win->menu.kind == TAB_MENU_SWITCHER ||
++        win->menu.kind == TAB_MENU_PREFIX;
 +}
 +
 +static char32_t *
 +tab_title32(const struct terminal *t)
 +{
-+    const char *s = t->tab_label != NULL ? t->tab_label
-+        : t->window_title != NULL ? t->window_title : "foot";
++    char *s = tabs_title(t);
 +    char32_t *r = ambstoc32(s);
++    free(s);
 +    return r != NULL ? r : xc32dup(U"foot");
 +}
 +
@@ -7011,11 +7080,11 @@ index 0000000..e5e69ef
 +tabs_confirm_message(const struct wl_window *win)
 +{
 +    const struct terminal *t = win->menu.target;
-+    const char *title = t->tab_label != NULL ? t->tab_label
-+        : t->window_title != NULL ? t->window_title : "foot";
++    char *title = tabs_title(t);
 +    char *m = xasprintf(win->menu.kind == TAB_MENU_CONFIRM_KILL
 +                        ? "“%s” will be killed immediately."
 +                        : "“%s” is pinned and will be closed.", title);
++    free(title);
 +    char32_t *r = ambstoc32(m);
 +    free(m);
 +    return r != NULL ? r : xc32dup(U"");
@@ -7041,6 +7110,9 @@ index 0000000..e5e69ef
 +    case TAB_MENU_SORT:
 +        h = xstrdup("Sort tabs");
 +        break;
++    case TAB_MENU_PREFIX:
++        h = xstrdup("Tab prefix (empty: none)");
++        break;
 +    default:
 +        return NULL;
 +    }
@@ -7058,6 +7130,19 @@ index 0000000..e5e69ef
 +char32_t *
 +tabs_menu_line(const struct wl_window *win, int i)
 +{
++    if (win->menu.kind == TAB_MENU_SORT) {
++        static const int modes[] = {
++            [MI_SORT_NONE] = SORT_NONE, [MI_SORT_NAME] = SORT_NAME,
++            [MI_SORT_RECENT] = SORT_RECENT, [MI_SORT_PROGRAM] = SORT_PROGRAM,
++            [MI_SORT_AGE] = SORT_AGE, [MI_REOPEN] = -1,
++        };
++        const int item = win->menu.items[i];
++        char *s = xasprintf("%s %s", modes[item] == win->sort_mode ? "✓" : " ",
++                            menu_labels[item]);
++        char32_t *r = ambstoc32(s);
++        free(s);
++        return r != NULL ? r : xc32dup(U"");
++    }
 +    if (win->menu.kind != TAB_MENU_SWITCHER) {
 +        char32_t *r = ambstoc32(menu_labels[win->menu.items[i]]);
 +        return r != NULL ? r : xc32dup(U"");
@@ -7136,6 +7221,7 @@ index 0000000..e5e69ef
 +        it[n++] = MI_KILL;
 +        it[n++] = MI_DUPLICATE;
 +        it[n++] = MI_RENAME;
++        it[n++] = MI_PREFIX;
 +        it[n++] = t->tab_pinned ? MI_UNPIN : MI_PIN;
 +        if (t->group != 0 && t->group == win->term->group) {
 +            it[n++] = MI_POP;
@@ -7157,8 +7243,11 @@ index 0000000..e5e69ef
 +        it[n++] = MI_NO;
 +        it[n++] = MI_YES_CLOSE;
 +        break;
-+    case TAB_MENU_RENAME: {
-+        const char *cur = t->tab_label != NULL ? t->tab_label : "";
++    case TAB_MENU_RENAME:
++    case TAB_MENU_PREFIX: {
++        const char *cur = kind == TAB_MENU_PREFIX ? t->tab_prefix : t->tab_label;
++        if (cur == NULL)
++            cur = "";
 +        char32_t *c = ambstoc32(cur);
 +        if (c != NULL) {
 +            win->menu.text_len = min(c32len(c), ALEN(win->menu.text) - 1);
@@ -7171,6 +7260,7 @@ index 0000000..e5e69ef
 +    case TAB_MENU_SWITCHER:
 +        break;
 +    case TAB_MENU_SORT:
++        it[n++] = MI_SORT_NONE;
 +        it[n++] = MI_SORT_NAME;
 +        it[n++] = MI_SORT_RECENT;
 +        it[n++] = MI_SORT_PROGRAM;
@@ -7218,7 +7308,25 @@ index 0000000..e5e69ef
 +{
 +    free(t->tab_label);
 +    t->tab_label = label != NULL && label[0] != '\0' ? xstrdup(label) : NULL;
++    render_refresh_title(t);
 +    render_refresh_sidebar(t->window);
++}
++
++void
++tabs_set_prefix(struct terminal *t, const char *prefix)
++{
++    free(t->tab_prefix);
++    t->tab_prefix = prefix != NULL && prefix[0] != '\0' ? xstrdup(prefix) : NULL;
++    render_refresh_title(t);
++    render_refresh_sidebar(t->window);
++}
++
++char *
++tabs_title(const struct terminal *t)
++{
++    const char *base = t->tab_label != NULL ? t->tab_label
++        : t->window_title != NULL ? t->window_title : "foot";
++    return t->tab_prefix != NULL ? xasprintf("%s | %s", t->tab_prefix, base) : xstrdup(base);
 +}
 +
 +void
@@ -7346,11 +7454,15 @@ index 0000000..e5e69ef
 +menu_commit_text(struct seat *seat, struct wl_window *win)
 +{
 +    struct terminal *t = win->menu.target;
-+    if (win->menu.kind == TAB_MENU_RENAME) {
++    if (win->menu.kind == TAB_MENU_RENAME || win->menu.kind == TAB_MENU_PREFIX) {
 +        win->menu.text[win->menu.text_len] = U'\0';
 +        char *label = ac32tombs(win->menu.text);
++        const bool prefix = win->menu.kind == TAB_MENU_PREFIX;
 +        tabs_menu_close(win);
-+        tabs_rename(t, label);
++        if (prefix)
++            tabs_set_prefix(t, label);
++        else
++            tabs_rename(t, label);
 +        free(label);
 +    } else if (win->menu.kind == TAB_MENU_SWITCHER) {
 +        struct terminal *pick = win->menu.n > 0 ? win->menu.found[win->menu.sel] : NULL;
@@ -7388,6 +7500,7 @@ index 0000000..e5e69ef
 +    case MI_POP:       pop_out(win, t); break;
 +    case MI_NO:        break;
 +    case MI_RENAME:    menu_open(win, t, TAB_MENU_RENAME, x, y); break;
++    case MI_PREFIX:    menu_open(win, t, TAB_MENU_PREFIX, x, y); break;
 +    case MI_PIN:       tabs_pin(t, true); break;
 +    case MI_UNPIN:     tabs_pin(t, false); break;
 +    case MI_BROADCAST:
@@ -7397,6 +7510,7 @@ index 0000000..e5e69ef
 +    case MI_SORT_RECENT:  tabs_sort(win, SORT_RECENT); break;
 +    case MI_SORT_PROGRAM: tabs_sort(win, SORT_PROGRAM); break;
 +    case MI_SORT_AGE:     tabs_sort(win, SORT_AGE); break;
++    case MI_SORT_NONE:    tabs_sort(win, SORT_NONE); break;
 +    case MI_SPLIT_SELECTED:  split_selected(win); break;
 +    case MI_CLOSE_SELECTED:  close_selected(win); break;
 +    case MI_CLEAR_SELECTION: clear_selection(win); break;
@@ -7674,10 +7788,10 @@ index 0000000..e5e69ef
 +}
 diff --git a/tabs.h b/tabs.h
 new file mode 100644
-index 0000000..dbb3b59
+index 0000000..b9392f4
 --- /dev/null
 +++ b/tabs.h
-@@ -0,0 +1,126 @@
+@@ -0,0 +1,129 @@
 +#pragma once
 +
 +#include <stdbool.h>
@@ -7799,13 +7913,16 @@ index 0000000..dbb3b59
 +int tabs_menu_rows(const struct wl_window *win);
 +
 +void tabs_rename(struct terminal *t, const char *label);
++void tabs_set_prefix(struct terminal *t, const char *prefix);
++char *tabs_title(const struct terminal *t);
++void tabs_apply_order(struct wl_window *win);
 +void tabs_pin(struct terminal *t, bool pin);
 +void tabs_toggle_broadcast(struct wl_window *win);
 +void tabs_reopen(struct wl_window *win);
 +void tabs_open_switcher(struct wl_window *win);
 +void tabs_open_rename(struct wl_window *win, struct terminal *t);
 diff --git a/terminal.c b/terminal.c
-index 555b88f..b931fc4 100644
+index 555b88f..45593cb 100644
 --- a/terminal.c
 +++ b/terminal.c
 @@ -1,4 +1,5 @@
@@ -8031,15 +8148,16 @@ index 555b88f..b931fc4 100644
  
      mtx_lock(&term->render.workers.lock);
      xassert(tll_length(term->render.workers.queue) == 0);
-@@ -2012,6 +2092,7 @@ term_destroy(struct terminal *term)
+@@ -2012,6 +2092,8 @@ term_destroy(struct terminal *term)
  
      free(term->app_id);
      free(term->window_title);
 +    free(term->tab_label);
++    free(term->tab_prefix);
      tll_free_and_free(term->window_title_stack, free);
  
      for (size_t i = 0; i < sizeof(term->fonts) / sizeof(term->fonts[0]); i++)
-@@ -3205,6 +3286,9 @@ term_scroll_partial(struct terminal *term, struct scroll_region region, int rows
+@@ -3205,6 +3287,9 @@ term_scroll_partial(struct terminal *term, struct scroll_region region, int rows
      LOG_DBG("scroll: rows=%d, region.start=%d, region.end=%d",
              rows, region.start, region.end);
  
@@ -8049,7 +8167,7 @@ index 555b88f..b931fc4 100644
      /* Verify scroll amount has been clamped */
      xassert(rows <= region.end - region.start);
  
-@@ -3778,6 +3862,21 @@ term_xcursor_update_for_seat(struct terminal *term, struct seat *seat)
+@@ -3778,6 +3863,21 @@ term_xcursor_update_for_seat(struct terminal *term, struct seat *seat)
              shape = CURSOR_SHAPE_LEFT_PTR;
          break;
  
@@ -8071,7 +8189,7 @@ index 555b88f..b931fc4 100644
      case TERM_SURF_TITLE:
      case TERM_SURF_BUTTON_MINIMIZE:
      case TERM_SURF_BUTTON_MAXIMIZE:
-@@ -3792,8 +3891,14 @@ term_xcursor_update_for_seat(struct terminal *term, struct seat *seat)
+@@ -3792,8 +3892,14 @@ term_xcursor_update_for_seat(struct terminal *term, struct seat *seat)
          shape = xcursor_for_csd_border(term, seat->mouse.x, seat->mouse.y);
          break;
  
@@ -8088,7 +8206,7 @@ index 555b88f..b931fc4 100644
      }
  
      if (shape == CURSOR_SHAPE_NONE)
-@@ -3911,7 +4016,16 @@ term_bell(struct terminal *term)
+@@ -3911,7 +4017,16 @@ term_bell(struct terminal *term)
      if (!term->bell_action_enabled)
          return;
  
@@ -8106,7 +8224,7 @@ index 555b88f..b931fc4 100644
          if (!wayl_win_set_urgent(term->window)) {
              /*
               * Urgency (xdg-activation) is relatively new in
-@@ -4589,8 +4703,16 @@ out:
+@@ -4589,8 +4704,16 @@ out:
  enum term_surface
  term_surface_kind(const struct terminal *term, const struct wl_surface *surface)
  {
@@ -8124,7 +8242,7 @@ index 555b88f..b931fc4 100644
      else if (surface == term->window->csd.surface[CSD_SURF_TITLE].surface.surf)
          return TERM_SURF_TITLE;
      else if (surface == term->window->csd.surface[CSD_SURF_LEFT].surface.surf)
-@@ -4931,6 +5053,7 @@ term_theme_switch_to_dark(struct terminal *term)
+@@ -4931,6 +5054,7 @@ term_theme_switch_to_dark(struct terminal *term)
  
      if (term->report_theme_changes)
          term_to_slave(term, "\033[?997;1n", 9);
@@ -8132,7 +8250,7 @@ index 555b88f..b931fc4 100644
  
      term_damage_view(term);
      term_damage_margins(term);
-@@ -4951,6 +5074,7 @@ term_theme_switch_to_light(struct terminal *term)
+@@ -4951,6 +5075,7 @@ term_theme_switch_to_light(struct terminal *term)
  
      if (term->report_theme_changes)
          term_to_slave(term, "\033[?997;2n", 9);
@@ -8140,7 +8258,7 @@ index 555b88f..b931fc4 100644
  
      term_damage_view(term);
      term_damage_margins(term);
-@@ -4966,12 +5090,14 @@ term_theme_toggle(struct terminal *term)
+@@ -4966,12 +5091,14 @@ term_theme_toggle(struct terminal *term)
  
          if (term->report_theme_changes)
              term_to_slave(term, "\033[?997;2n", 9);
@@ -8156,7 +8274,7 @@ index 555b88f..b931fc4 100644
  
      wayl_win_alpha_changed(term->window);
 diff --git a/terminal.h b/terminal.h
-index 7566e95..1c77ef7 100644
+index 7566e95..2d98720 100644
 --- a/terminal.h
 +++ b/terminal.h
 @@ -362,6 +362,9 @@ enum term_surface {
@@ -8169,7 +8287,7 @@ index 7566e95..1c77ef7 100644
  };
  
  enum overlay_style {
-@@ -635,6 +638,26 @@ struct terminal {
+@@ -635,6 +638,27 @@ struct terminal {
  
      struct wayland *wl;
      struct wl_window *window;
@@ -8179,6 +8297,7 @@ index 7566e95..1c77ef7 100644
 +    bool tab_done;
 +    bool group_broadcast;
 +    char *tab_label;
++    char *tab_prefix;
 +    float pane_weight;
 +    uint64_t cmd_started;
 +    uint64_t tab_created;
@@ -8196,7 +8315,7 @@ index 7566e95..1c77ef7 100644
      bool visual_focus;
      bool kbd_focus;
      enum term_surface active_surface;
-@@ -844,7 +867,8 @@ struct terminal *term_init(
+@@ -844,7 +868,8 @@ struct terminal *term_init(
      struct wayland *wayl, const char *foot_exe, const char *cwd,
      const char *token, const char *toplevel_name, const char *pty_path,
      int argc, char *const *argv, const char *const *envp,
@@ -8206,7 +8325,7 @@ index 7566e95..1c77ef7 100644
  
  bool term_shutdown(struct terminal *term);
  int term_destroy(struct terminal *term);
-@@ -866,6 +890,7 @@ bool term_font_size_increase(struct terminal *term);
+@@ -866,6 +891,7 @@ bool term_font_size_increase(struct terminal *term);
  bool term_font_size_decrease(struct terminal *term);
  bool term_font_size_reset(struct terminal *term);
  bool term_font_dpi_changed(struct terminal *term, float old_scale);
@@ -8578,7 +8697,7 @@ index a2c255a..2a590ec 100644
  }
  
 diff --git a/wayland.h b/wayland.h
-index 3ed68b2..56717e5 100644
+index 3ed68b2..fd62993 100644
 --- a/wayland.h
 +++ b/wayland.h
 @@ -84,6 +84,7 @@ struct wl_clipboard {
@@ -8589,7 +8708,7 @@ index 3ed68b2..56717e5 100644
      char *text;
      uint32_t serial;
  };
-@@ -368,9 +369,98 @@ struct xdg_activation_token_context {
+@@ -368,9 +369,101 @@ struct xdg_activation_token_context {
      void *cb_data;                                /* Callback user pointer */
  };
  
@@ -8598,6 +8717,7 @@ index 3ed68b2..56717e5 100644
 +enum tab_menu_kind {
 +    TAB_MENU_NONE, TAB_MENU_ACTIONS, TAB_MENU_CONFIRM_KILL, TAB_MENU_SELECTION,
 +    TAB_MENU_CONFIRM_CLOSE, TAB_MENU_RENAME, TAB_MENU_SWITCHER, TAB_MENU_SORT,
++    TAB_MENU_PREFIX,
 +};
 +
 +enum tab_hover {
@@ -8625,6 +8745,8 @@ index 3ed68b2..56717e5 100644
 +    int sidebar_w;
 +    bool sidebar_hidden;
 +    bool sidebar_dirty;
++    bool order_dirty;
++    int sort_mode;  /* 0: manual */
 +    bool closing;
 +    bool commit_parent;  /* panes rendered: commit them together */
 +    uint64_t last_close;
@@ -8688,7 +8810,7 @@ index 3ed68b2..56717e5 100644
      struct wayl_surface surface;
      struct xdg_surface *xdg_surface;
      struct xdg_toplevel *xdg_toplevel;
-@@ -524,6 +614,41 @@ struct wayland {
+@@ -524,6 +617,41 @@ struct wayland {
      tll(struct seat) seats;
  
      tll(struct terminal *) terms;
