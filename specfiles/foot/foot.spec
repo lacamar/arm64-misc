@@ -3,7 +3,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        14%{?dist}
+Release:        15%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -149,6 +149,18 @@ desktop-file-validate \
 
 
 %changelog
+* Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-15
+- Sidebar on every window, hidden by default
+- Drag tabs between windows, with drag label and drop hints
+- Ctrl/Shift-click to select tabs; split or close selected
+- Hover feedback and pointer cursors in sidebar and menus
+- First click on an unfocused pane only focuses it
+- Default keys: Ctrl+PgDn/PgUp, Ctrl+Shift+j/k, Ctrl+Shift+PgDn/PgUp to move
+- Add FOOT_TAB_ID and footclient --focus-tab
+- Mark activity only for new lines, not redraws
+- Fix doubled transparency in split view
+- Fix crash restoring a split view at default size
+
 * Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-14
 - Drop workspaces; restore v5 sessions as flat tabs
 - Add resizable sidebar

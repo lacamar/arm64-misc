@@ -1,57 +1,66 @@
 diff --git a/client-protocol.h b/client-protocol.h
-index efd601d..f8a1ea2 100644
+index efd601d..83415fe 100644
 --- a/client-protocol.h
 +++ b/client-protocol.h
-@@ -13,7 +13,8 @@ struct client_data {
+@@ -13,7 +13,9 @@ struct client_data {
      bool hold:1;
      bool no_wait:1;
      bool xdga_token:1;
 -    uint8_t reserved:5;
 +    bool tab:1;
-+    uint8_t reserved:4;
++    bool focus:1;
++    uint8_t reserved:3;
  
      uint8_t token_len;
      uint16_t cwd_len;
 diff --git a/client.c b/client.c
-index ab56d72..8678598 100644
+index ab56d72..5371508 100644
 --- a/client.c
 +++ b/client.c
-@@ -79,6 +79,7 @@ print_usage(const char *prog_name)
+@@ -79,6 +79,8 @@ print_usage(const char *prog_name)
          "  -T,--title=TITLE                         initial window title (foot)\n"
          "  -a,--app-id=ID                           window application ID (foot)\n"
          "     --toplevel-tag=TAG                    set a custom toplevel tag\n"
 +        "     --tab                                 open as a tab in the last focused window\n"
++        "     --focus-tab=ID                        focus the tab with FOOT_TAB_ID (or a process inside it)\n"
          "  -w,--window-size-pixels=WIDTHxHEIGHT     initial width and height, in pixels\n"
          "  -W,--window-size-chars=WIDTHxHEIGHT      initial width and height, in characters\n"
          "  -m,--maximized                           start in maximized mode\n"
-@@ -142,6 +143,7 @@ send_string_list(int fd, const string_list_t *string_list)
+@@ -142,6 +144,8 @@ send_string_list(int fd, const string_list_t *string_list)
  
  enum {
      TOPLEVEL_TAG_OPTION = CHAR_MAX + 1,
 +    TAB_OPTION = CHAR_MAX + 2,
++    FOCUS_TAB_OPTION = CHAR_MAX + 3,
  };
  
  int
-@@ -160,6 +162,7 @@ main(int argc, char *const *argv)
+@@ -160,6 +164,8 @@ main(int argc, char *const *argv)
          {"app-id",             required_argument, NULL, 'a'},
          {"class",              required_argument, NULL, 'a'},
          {"toplevel-tag",       required_argument, NULL, TOPLEVEL_TAG_OPTION},
 +        {"tab",                no_argument,       NULL, TAB_OPTION},
++        {"focus-tab",          required_argument, NULL, FOCUS_TAB_OPTION},
          {"window-size-pixels", required_argument, NULL, 'w'},
          {"window-size-chars",  required_argument, NULL, 'W'},
          {"maximized",          no_argument,       NULL, 'm'},
-@@ -187,6 +190,7 @@ main(int argc, char *const *argv)
+@@ -187,6 +193,8 @@ main(int argc, char *const *argv)
  
      /* Used to format overrides */
      bool no_wait = false;
 +    bool tab = false;
++    char *focus_tab = NULL;
  
      /* For XDG activation */
      const char *token = getenv("XDG_ACTIVATION_TOKEN");
-@@ -235,6 +239,10 @@ main(int argc, char *const *argv)
+@@ -235,6 +243,14 @@ main(int argc, char *const *argv)
                  goto err;
              break;
  
++        case FOCUS_TAB_OPTION:
++            focus_tab = optarg;
++            break;
++
 +        case TAB_OPTION:
 +            tab = true;
 +            break;
@@ -59,11 +68,25 @@ index ab56d72..8678598 100644
          case 'L':
              if (!push_string(&overrides, "login-shell=yes", &total_len))
                  goto err;
-@@ -478,6 +486,7 @@ main(int argc, char *const *argv)
+@@ -379,6 +395,12 @@ main(int argc, char *const *argv)
+         argv += optind;
+     }
+ 
++    char *focus_argv[] = {focus_tab, NULL};
++    if (focus_tab != NULL) {
++        argc = 1;
++        argv = focus_argv;
++    }
++
+     log_init(log_colorize, false, LOG_FACILITY_USER, log_level);
+ 
+     fd = socket(AF_UNIX, SOCK_STREAM, 0);
+@@ -478,6 +500,8 @@ main(int argc, char *const *argv)
      const struct client_data data = {
          .hold = hold,
          .no_wait = no_wait,
 +        .tab = tab,
++        .focus = focus_tab != NULL,
          .xdga_token = xdga_token,
          .token_len = token_len,
          .cwd_len = cwd_len,
@@ -80,17 +103,27 @@ index e27be2f..ab8bc31 100644
          "--config"
          "--font"
 diff --git a/completions/bash/footclient b/completions/bash/footclient
-index c7f1df4..17ec64a 100644
+index c7f1df4..a0a9315 100644
 --- a/completions/bash/footclient
 +++ b/completions/bash/footclient
-@@ -7,6 +7,7 @@ _footclient()
+@@ -7,6 +7,8 @@ _footclient()
      flags=(
          "--app-id"
          "--toplevel-tag"
 +        "--tab"
++        "--focus-tab"
          "--fullscreen"
          "--help"
          "--hold"
+@@ -68,7 +70,7 @@ _footclient()
+         COMPREPLY=( $(compgen -W "none error warning info" -- ${cur}) ) ;;
+     --log-colorize|-l)
+         COMPREPLY=( $(compgen -W "never always auto" -- ${cur}) ) ;;
+-    --app-id|--toplevel-tag|--help|--override|--title|--version|--window-size-chars|--window-size-pixels|-[ahoTvWw])
++    --app-id|--toplevel-tag|--focus-tab|--help|--override|--title|--version|--window-size-chars|--window-size-pixels|-[ahoTvWw])
+         # Don't autocomplete for these flags
+         : ;;
+     *)
 diff --git a/completions/fish/foot.fish b/completions/fish/foot.fish
 index 21b42d3..ce2edf6 100644
 --- a/completions/fish/foot.fish
@@ -128,19 +161,20 @@ index 0fd83b3..c592e30 100644
      '(-F --fullscreen)'{-F,--fullscreen}'[start in fullscreen mode]' \
      '(-L --login-shell)'{-L,--login-shell}'[start shell as a login shell]' \
 diff --git a/completions/zsh/_footclient b/completions/zsh/_footclient
-index 12f29d7..2f0c4bc 100644
+index 12f29d7..8356cd0 100644
 --- a/completions/zsh/_footclient
 +++ b/completions/zsh/_footclient
-@@ -6,6 +6,7 @@ _arguments \
+@@ -6,6 +6,8 @@ _arguments \
      '(-T --title)'{-T,--title}'[initial window title]:()' \
      '(-a --app-id)'{-a,--app-id}'[value to set the app-id property on the Wayland window to (foot)]:()' \
      '--toplevel-tag=[value to set the toplevel-tag property on the Wayland window to]:()' \
 +    '--tab[open as a tab in the last focused window]' \
++    '--focus-tab=[focus the tab with FOOT_TAB_ID]:id:()' \
      '(-m --maximized)'{-m,--maximized}'[start in maximized mode]' \
      '(-F --fullscreen)'{-F,--fullscreen}'[start in fullscreen mode]' \
      '(-L --login-shell)'{-L,--login-shell}'[start shell as a login shell]' \
 diff --git a/config.c b/config.c
-index 76dd7d9..617561c 100644
+index 76dd7d9..483b16d 100644
 --- a/config.c
 +++ b/config.c
 @@ -186,6 +186,29 @@ static const char *const binding_action_map[] = {
@@ -264,25 +298,29 @@ index 76dd7d9..617561c 100644
      [SECTION_URL] =             {&parse_section_url, "url"},
      [SECTION_REGEX] =           {&parse_section_regex, "regex", true},
      [SECTION_COLORS_DARK] =     {&parse_section_colors_dark, "colors-dark"},
-@@ -3430,6 +3496,9 @@ add_default_key_bindings(struct config *conf)
+@@ -3430,6 +3496,13 @@ add_default_key_bindings(struct config *conf)
          {BIND_ACTION_CLIPBOARD_PASTE, m("none"), {{XKB_KEY_XF86Paste}}},
          {BIND_ACTION_PRIMARY_PASTE, m(XKB_MOD_NAME_SHIFT), {{XKB_KEY_Insert}}},
          {BIND_ACTION_SEARCH_START, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_SHIFT), {{XKB_KEY_r}}},
 +        {BIND_ACTION_NEW_TAB, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_SHIFT), {{XKB_KEY_t}}},
-+        {BIND_ACTION_NEXT_TAB, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_SHIFT), {{XKB_KEY_Next}}},
-+        {BIND_ACTION_PREV_TAB, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_SHIFT), {{XKB_KEY_Prior}}},
++        {BIND_ACTION_NEXT_TAB, m(XKB_MOD_NAME_CTRL), {{XKB_KEY_Next}}},
++        {BIND_ACTION_NEXT_TAB, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_SHIFT), {{XKB_KEY_j}}},
++        {BIND_ACTION_PREV_TAB, m(XKB_MOD_NAME_CTRL), {{XKB_KEY_Prior}}},
++        {BIND_ACTION_PREV_TAB, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_SHIFT), {{XKB_KEY_k}}},
++        {BIND_ACTION_MOVE_TAB_DOWN, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_SHIFT), {{XKB_KEY_Next}}},
++        {BIND_ACTION_MOVE_TAB_UP, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_SHIFT), {{XKB_KEY_Prior}}},
          {BIND_ACTION_FONT_SIZE_UP, m(XKB_MOD_NAME_CTRL), {{XKB_KEY_plus}}},
          {BIND_ACTION_FONT_SIZE_UP, m(XKB_MOD_NAME_CTRL), {{XKB_KEY_equal}}},
          {BIND_ACTION_FONT_SIZE_UP, m(XKB_MOD_NAME_CTRL), {{XKB_KEY_KP_Add}}},
-@@ -3571,6 +3640,7 @@ config_load(struct config *conf, const char *conf_path,
+@@ -3571,6 +3644,7 @@ config_load(struct config *conf, const char *conf_path,
          .title = xstrdup("foot"),
          .app_id = (as_server ? xstrdup("footclient") : xstrdup("foot")),
          .toplevel_tag = xstrdup(""),
-+        .tabs = {.width = 200, .activity = true, .show = true},
++        .tabs = {.width = 200, .activity = true},
          .word_delimiters = xc32dup(U",│`|:\"'()[]{}<>"),
          .size = {
              .type = CONF_SIZE_PX,
-@@ -3639,6 +3709,7 @@ config_load(struct config *conf, const char *conf_path,
+@@ -3639,6 +3713,7 @@ config_load(struct config *conf, const char *conf_path,
              .save_interval_secs = 20,
              .scrollback_lines = 1000,
              .restore_rules = tll_init(),
@@ -290,7 +328,7 @@ index 76dd7d9..617561c 100644
          },
          .colors_dark = {
              .fg = default_foreground,
-@@ -3983,6 +4054,26 @@ key_binding_list_clone(struct config_key_binding_list *dst,
+@@ -3983,6 +4058,26 @@ key_binding_list_clone(struct config_key_binding_list *dst,
      }
  }
  
@@ -317,7 +355,7 @@ index 76dd7d9..617561c 100644
  struct config *
  config_clone(const struct config *old)
  {
-@@ -4049,15 +4140,8 @@ config_clone(const struct config *old)
+@@ -4049,15 +4144,8 @@ config_clone(const struct config *old)
          tll_push_back(conf->env_vars, copy);
      }
  
@@ -335,7 +373,7 @@ index 76dd7d9..617561c 100644
  
      conf->utmp_helper_path =
          old->utmp_helper_path != NULL ? xstrdup(old->utmp_helper_path) : NULL;
-@@ -4144,11 +4228,8 @@ config_free(struct config *conf)
+@@ -4144,11 +4232,8 @@ config_free(struct config *conf)
          tll_remove(conf->env_vars, it);
      }
  
@@ -381,6 +419,41 @@ index 27715d4..5688634 100644
      struct {
          char32_t *label_letters;
          struct config_spawn_template launch;
+diff --git a/cursor-shape.c b/cursor-shape.c
+index c195a55..ff01bf8 100644
+--- a/cursor-shape.c
++++ b/cursor-shape.c
+@@ -25,6 +25,8 @@ cursor_shape_to_string(enum cursor_shape shape)
+         [CURSOR_SHAPE_RIGHT_SIDE] = {"e-resize", "right_side", NULL},
+         [CURSOR_SHAPE_TOP_SIDE] = {"n-resize", "top_side", NULL},
+         [CURSOR_SHAPE_BOTTOM_SIDE] = {"s-resize", "bottom_side", NULL},
++        [CURSOR_SHAPE_POINTER] = {"pointer", "hand2", NULL},
++        [CURSOR_SHAPE_GRABBING] = {"grabbing", "closedhand", "fleur", NULL},
+ 
+     };
+ 
+@@ -46,6 +48,8 @@ cursor_shape_to_server_shape(enum cursor_shape shape)
+         [CURSOR_SHAPE_RIGHT_SIDE] = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_E_RESIZE,
+         [CURSOR_SHAPE_TOP_SIDE] = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_N_RESIZE,
+         [CURSOR_SHAPE_BOTTOM_SIDE] = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_S_RESIZE,
++        [CURSOR_SHAPE_POINTER] = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_POINTER,
++        [CURSOR_SHAPE_GRABBING] = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_GRABBING,
+     };
+ 
+     xassert(shape <= ALEN(table));
+diff --git a/cursor-shape.h b/cursor-shape.h
+index 1369058..8d17511 100644
+--- a/cursor-shape.h
++++ b/cursor-shape.h
+@@ -17,6 +17,8 @@ enum cursor_shape {
+     CURSOR_SHAPE_RIGHT_SIDE,
+     CURSOR_SHAPE_TOP_SIDE,
+     CURSOR_SHAPE_BOTTOM_SIDE,
++    CURSOR_SHAPE_POINTER,
++    CURSOR_SHAPE_GRABBING,
+ 
+     CURSOR_SHAPE_COUNT,
+ };
 diff --git a/doc/foot.1.scd b/doc/foot.1.scd
 index 24d81b5..22e8893 100644
 --- a/doc/foot.1.scd
@@ -416,10 +489,10 @@ index 24d81b5..22e8893 100644
  
  The following keyboard shortcuts are available by default. They can be
 diff --git a/doc/foot.ini.5.scd b/doc/foot.ini.5.scd
-index e65729b..0d20413 100644
+index e65729b..606d060 100644
 --- a/doc/foot.ini.5.scd
 +++ b/doc/foot.ini.5.scd
-@@ -937,6 +937,54 @@ _"$@"_ to keep its original arguments. Rules also apply to the
+@@ -937,6 +937,65 @@ _"$@"_ to keep its original arguments. Rules also apply to the
  program foot's own child is running, so a window launched as
  *footclient claude* is resumed rather than restarted.
  
@@ -441,18 +514,27 @@ index e65729b..0d20413 100644
 +
 +# SECTION: tabs
 +
-+Several terminals (tabs) can share one window. With two or more
-+tabs, a sidebar lists them. Session restore brings each window back
++Several terminals (tabs) can share one window. Every window has a
++sidebar listing its tabs. Session restore brings each window back
 +with all its tabs, split views and sidebar state.
 +
-+Sidebar mouse actions: left-click a tab to select it; drag it to
-+reorder, onto the terminal to show it side by side with the current
-+tab, or out of the window to detach it into its own window;
-+middle-click to close it; right-click for a menu (close, kill,
-+duplicate, split, unsplit) driven by mouse or *Up*/*Down*/*Return*/
-+*Escape*. Drag the sidebar's inner edge to resize it. The bottom row
-+has *+* for a new tab and an arrow that hides the sidebar; a hidden
-+sidebar leaves an arrow in the bottom corner that shows it again.
++Sidebar mouse actions: left-click a tab to select it;
++*Control*-click or *Shift*-click to select several (right-click a
++selected tab to split or close them together); drag a tab to reorder
++it, onto a terminal to show it side by side with that window's
++current tab, onto another foot window's sidebar to move it there, or
++anywhere else to detach it into its own window; middle-click to close
++it; right-click for a menu (close, kill, duplicate, split, unsplit)
++driven by mouse or *Up*/*Down*/*Return*/*Escape*. Drag the sidebar's
++inner edge to resize it. The bottom row has *+* for a new tab and an
++arrow that hides the sidebar; a hidden sidebar leaves an arrow in the
++bottom corner that shows it again.
++
++In a split view, the first click on an unfocused pane only focuses
++it.
++
++Each tab's shell gets *FOOT_TAB_ID*; *footclient --focus-tab* brings
++that tab to the front, e.g. from a notification action.
 +
 +*Kill* sends SIGKILL to the tab's foreground process group and its
 +shell, after a confirmation. *Close* hangs up as when closing a
@@ -463,18 +545,20 @@ index e65729b..0d20413 100644
 +	Default sidebar width, in pixels (scaled). Default: _200_.
 +
 +*show*
-+	Boolean. Whether new windows show the sidebar. Default: _yes_.
++	Boolean. Whether new windows show the sidebar. Default: _no_.
 +
 +*position*
 +	Sidebar side: _left_ or _right_. Default: _left_.
 +
 +*activity*
-+	Boolean. Mark background tabs that print output. Default: _yes_.
++	Boolean. Mark background tabs that print new lines. Redraws in
++	place, such as spinners and status lines, don't count. Default:
++	_yes_.
 +
  # SECTION: url
  
  Note that you can also add custom regular expressions, see the 'regex'
-@@ -1587,6 +1635,45 @@ e.g. *search-start=none*.
+@@ -1587,6 +1646,46 @@ e.g. *search-start=none*.
  *quit*
  	Quit foot. Default: _none_.
  
@@ -482,11 +566,12 @@ index e65729b..0d20413 100644
 +	Open a new tab in the current tab's working directory. Default: _Control+Shift+t_.
 +
 +*next-tab*, *prev-tab*
-+	Select the next/previous tab. Default: _Control+Shift+Next_,
-+	_Control+Shift+Prior_.
++	Select the next/previous tab. Default: _Control+Next
++	Control+Shift+j_, _Control+Prior Control+Shift+k_.
 +
 +*move-tab-down*, *move-tab-up*
-+	Move the current tab down/up in the sidebar. Default: _none_.
++	Move the current tab down/up in the sidebar. Default:
++	_Control+Shift+Next_, _Control+Shift+Prior_.
 +
 +*select-tab-1* ... *select-tab-9*
 +	Select tab N. Default: _none_.
@@ -521,10 +606,10 @@ index e65729b..0d20413 100644
  
  This section lets you override the default key bindings used in
 diff --git a/doc/footclient.1.scd b/doc/footclient.1.scd
-index 92d84c3..61c03e9 100644
+index 92d84c3..6d19e2f 100644
 --- a/doc/footclient.1.scd
 +++ b/doc/footclient.1.scd
-@@ -41,6 +41,11 @@ terminal has terminated.
+@@ -41,6 +41,17 @@ terminal has terminated.
  	to. The compositor can use this value for session management,
  	window rules etc. Default: _not set_
  
@@ -533,11 +618,17 @@ index 92d84c3..61c03e9 100644
 +	a new window if there is none. Requires a server of the same
 +	version.
 +
++*--focus-tab*=_ID_
++	Bring the tab with *FOOT_TAB_ID* _ID_ to the front, along with its
++	window, and exit. _ID_ may also be the PID of any process running
++	in the tab. Exits with 1 if no tab matches. The window is focused
++	when *XDG_ACTIVATION_TOKEN* is set, and marked urgent otherwise.
++
  *-w*,*--window-size-pixels*=_WIDTHxHEIGHT_
  	Set initial window width and height, in pixels. Default: _700x500_.
  
 diff --git a/foot.ini b/foot.ini
-index 6469af7..e59ec09 100644
+index 6469af7..25676d5 100644
 --- a/foot.ini
 +++ b/foot.ini
 @@ -195,6 +195,12 @@
@@ -547,7 +638,7 @@ index 6469af7..e59ec09 100644
 +[tabs]
 +# width=200
 +# activity=yes
-+# show=yes
++# show=no
 +# position=left
 +
  [key-bindings]
@@ -606,7 +697,7 @@ index fa0e2ce..2c3f785 100644
          seat->ime.cursor_rect.pending.width / term->scale,
          seat->ime.cursor_rect.pending.height / term->scale);
 diff --git a/input.c b/input.c
-index f6ba9de..8301675 100644
+index f6ba9de..48a44e8 100644
 --- a/input.c
 +++ b/input.c
 @@ -26,12 +26,14 @@
@@ -726,7 +817,7 @@ index f6ba9de..8301675 100644
      if (term->unicode_mode.active) {
          if (pressed)
              unicode_mode_input(seat, term, sym);
-@@ -2415,6 +2489,47 @@ mouse_button_state_reset(struct seat *seat)
+@@ -2415,6 +2489,54 @@ mouse_button_state_reset(struct seat *seat)
      memset(&seat->mouse.last_time, 0, sizeof(seat->mouse.last_time));
  }
  
@@ -735,6 +826,13 @@ index f6ba9de..8301675 100644
 +seat_stop_repeat(struct seat *seat)
 +{
 +    stop_repeater(seat, -1);
++}
++
++/* After starting DnD the compositor keeps the button release */
++void
++seat_forget_buttons(struct seat *seat)
++{
++    mouse_button_state_reset(seat);
 +}
 +
 +void
@@ -774,7 +872,7 @@ index f6ba9de..8301675 100644
   void
  mouse_coord_pixel_to_cell(struct seat *seat, const struct terminal *term,
                            int x, int y)
-@@ -2475,7 +2590,7 @@ wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
+@@ -2475,7 +2597,7 @@ wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
      struct seat *seat = data;
  
      struct wl_window *win = wl_surface_get_user_data(surface);
@@ -783,7 +881,7 @@ index f6ba9de..8301675 100644
  
      seat->mouse_focus = term;
      term->active_surface = term_surface_kind(term, surface);
-@@ -2507,7 +2622,16 @@ wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
+@@ -2507,6 +2629,18 @@ wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
          break;
      }
  
@@ -795,12 +893,14 @@ index f6ba9de..8301675 100644
 +        tabs_menu_motion(seat, win);
 +        break;
 +
-     case TERM_SURF_TITLE:
 +    case TERM_SURF_SIDEBAR_BUTTON:
++        tabs_sidebar_btn_hover(win, true);
++        break;
++
+     case TERM_SURF_TITLE:
      case TERM_SURF_BORDER_LEFT:
      case TERM_SURF_BORDER_RIGHT:
-     case TERM_SURF_BORDER_TOP:
-@@ -2521,7 +2645,7 @@ wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
+@@ -2521,7 +2655,7 @@ wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
          break;
  
      case TERM_SURF_NONE:
@@ -809,7 +909,7 @@ index f6ba9de..8301675 100644
          break;
      }
  }
-@@ -2584,7 +2708,7 @@ wl_pointer_leave(void *data, struct wl_pointer *wl_pointer,
+@@ -2584,7 +2718,7 @@ wl_pointer_leave(void *data, struct wl_pointer *wl_pointer,
          if (surface != NULL) {
              /* Sway 1.4 sends this event with a NULL surface when we destroy the window */
              const struct wl_window UNUSED *win = wl_surface_get_user_data(surface);
@@ -818,26 +918,26 @@ index f6ba9de..8301675 100644
          }
  
          enum term_surface active_surface = old_moused->active_surface;
-@@ -2605,7 +2729,18 @@ wl_pointer_leave(void *data, struct wl_pointer *wl_pointer,
+@@ -2605,7 +2739,18 @@ wl_pointer_leave(void *data, struct wl_pointer *wl_pointer,
              selection_finalize(seat, old_moused, seat->pointer.serial);
              break;
  
 +        case TERM_SURF_SIDEBAR:
 +            if (old_moused->window->sidebar_drag.seat == seat)
 +                tabs_sidebar_cancel_drag(old_moused->window);
-+            if (old_moused->window->sidebar_resize.hover) {
-+                old_moused->window->sidebar_resize.hover = false;
-+                render_refresh_sidebar(old_moused->window);
-+            }
++            tabs_sidebar_leave(old_moused->window);
++            break;
++
++        case TERM_SURF_SIDEBAR_BUTTON:
++            tabs_sidebar_btn_hover(old_moused->window, false);
 +            break;
 +
          case TERM_SURF_NONE:
-+        case TERM_SURF_SIDEBAR_BUTTON:
 +        case TERM_SURF_TAB_MENU:
          case TERM_SURF_TITLE:
          case TERM_SURF_BORDER_LEFT:
          case TERM_SURF_BORDER_RIGHT:
-@@ -2691,6 +2826,9 @@ wl_pointer_motion(void *data, struct wl_pointer *wl_pointer,
+@@ -2691,6 +2836,9 @@ wl_pointer_motion(void *data, struct wl_pointer *wl_pointer,
      case TERM_SURF_NONE:
      case TERM_SURF_GRID:
      case TERM_SURF_TITLE:
@@ -847,7 +947,7 @@ index f6ba9de..8301675 100644
      case TERM_SURF_BORDER_LEFT:
      case TERM_SURF_BORDER_RIGHT:
      case TERM_SURF_BORDER_TOP:
-@@ -2715,6 +2853,17 @@ wl_pointer_motion(void *data, struct wl_pointer *wl_pointer,
+@@ -2715,6 +2863,17 @@ wl_pointer_motion(void *data, struct wl_pointer *wl_pointer,
      case TERM_SURF_NONE:
          break;
  
@@ -865,7 +965,7 @@ index f6ba9de..8301675 100644
      case TERM_SURF_BUTTON_MINIMIZE:
          if (pointer_is_on_button(term, seat, CSD_SURF_MINIMIZE) != is_on_button)
              render_refresh_csd(term);
-@@ -3108,7 +3257,30 @@ wl_pointer_button(void *data, struct wl_pointer *wl_pointer,
+@@ -3108,7 +3267,30 @@ wl_pointer_button(void *data, struct wl_pointer *wl_pointer,
          seat->mouse.last_released_button = button;
      }
  
@@ -896,7 +996,7 @@ index f6ba9de..8301675 100644
      case TERM_SURF_TITLE:
          if (state == WL_POINTER_BUTTON_STATE_PRESSED) {
  
-@@ -3241,11 +3413,13 @@ wl_pointer_button(void *data, struct wl_pointer *wl_pointer,
+@@ -3241,11 +3423,16 @@ wl_pointer_button(void *data, struct wl_pointer *wl_pointer,
              pointer_is_on_button(term, seat, CSD_SURF_CLOSE) &&
              state == WL_POINTER_BUTTON_STATE_RELEASED)
          {
@@ -906,12 +1006,15 @@ index f6ba9de..8301675 100644
          break;
  
      case TERM_SURF_GRID: {
-+        if (state == WL_POINTER_BUTTON_STATE_PRESSED && term->window->term != term)
++        /* The first click on an unfocused pane only focuses it */
++        if (state == WL_POINTER_BUTTON_STATE_PRESSED && term->window->term != term) {
 +            tabs_focus_pane(term->window, term);
++            break;
++        }
          search_cancel(term);
          urls_reset(term);
  
-@@ -3297,7 +3471,7 @@ wl_pointer_button(void *data, struct wl_pointer *wl_pointer,
+@@ -3297,7 +3484,7 @@ wl_pointer_button(void *data, struct wl_pointer *wl_pointer,
      }
  
      case TERM_SURF_NONE:
@@ -920,7 +1023,7 @@ index f6ba9de..8301675 100644
          break;
  
      }
-@@ -3554,7 +3728,7 @@ wl_touch_down(void *data, struct wl_touch *wl_touch, uint32_t serial,
+@@ -3554,7 +3741,7 @@ wl_touch_down(void *data, struct wl_touch *wl_touch, uint32_t serial,
          return;
  
      struct wl_window *win = wl_surface_get_user_data(surface);
@@ -929,7 +1032,7 @@ index f6ba9de..8301675 100644
  
      LOG_DBG("touch_down: touch=%p, x=%d, y=%d", (void *)wl_touch,
              wl_fixed_to_int(surface_x), wl_fixed_to_int(surface_y));
-@@ -3586,7 +3760,7 @@ wl_touch_up(void *data, struct wl_touch *wl_touch, uint32_t serial,
+@@ -3586,7 +3773,7 @@ wl_touch_up(void *data, struct wl_touch *wl_touch, uint32_t serial,
      LOG_DBG("touch_up: touch=%p", (void *)wl_touch);
  
      struct wl_window *win = wl_surface_get_user_data(seat->touch.surface);
@@ -938,7 +1041,7 @@ index f6ba9de..8301675 100644
  
      struct terminal *old_term = seat->mouse_focus;
      enum term_surface old_active_surface = term->active_surface;
-@@ -3613,8 +3787,10 @@ wl_touch_up(void *data, struct wl_touch *wl_touch, uint32_t serial,
+@@ -3613,8 +3800,10 @@ wl_touch_up(void *data, struct wl_touch *wl_touch, uint32_t serial,
          break;
      }
  
@@ -951,7 +1054,7 @@ index f6ba9de..8301675 100644
  }
  
  static void
-@@ -3629,7 +3805,7 @@ wl_touch_motion(void *data, struct wl_touch *wl_touch, uint32_t time,
+@@ -3629,7 +3818,7 @@ wl_touch_motion(void *data, struct wl_touch *wl_touch, uint32_t time,
              wl_fixed_to_int(surface_x), wl_fixed_to_int(surface_y));
  
      struct wl_window *win = wl_surface_get_user_data(seat->touch.surface);
@@ -960,7 +1063,7 @@ index f6ba9de..8301675 100644
  
      struct terminal *old_term = seat->mouse_focus;
      enum term_surface old_active_surface = term->active_surface;
-@@ -3661,8 +3837,10 @@ wl_touch_motion(void *data, struct wl_touch *wl_touch, uint32_t time,
+@@ -3661,8 +3850,10 @@ wl_touch_motion(void *data, struct wl_touch *wl_touch, uint32_t time,
          break;
      }
  
@@ -974,14 +1077,15 @@ index f6ba9de..8301675 100644
  
  static void
 diff --git a/input.h b/input.h
-index 347466a..2f631b5 100644
+index 347466a..9d2274b 100644
 --- a/input.h
 +++ b/input.h
-@@ -31,6 +31,9 @@ extern const struct wl_pointer_listener pointer_listener;
+@@ -31,6 +31,10 @@ extern const struct wl_pointer_listener pointer_listener;
  extern const struct wl_touch_listener touch_listener;
  
  void input_repeat(struct seat *seat, uint32_t key);
 +void seat_stop_repeat(struct seat *seat);
++void seat_forget_buttons(struct seat *seat);
 +void seat_retarget(struct seat *seat, struct terminal *old,
 +                   struct terminal *new, bool mouse);
  
@@ -1267,7 +1371,7 @@ index 3ee329d..ebdfb6a 100644
                  /* No token so request our own and let the compositor decide focus vs. urgency */
                  LOG_DBG("set window urgency on notification activation (no XDG token available)");
 diff --git a/render.c b/render.c
-index 72b68e1..9b851c4 100644
+index 72b68e1..e008bea 100644
 --- a/render.c
 +++ b/render.c
 @@ -43,6 +43,7 @@
@@ -1953,7 +2057,7 @@ index 72b68e1..9b851c4 100644
      const char *icon_name = term_icon(term);
      LOG_DBG("setting toplevel icon: %s", icon_name);
  
-@@ -5357,6 +5452,366 @@ render_refresh_icon(struct terminal *term)
+@@ -5357,6 +5452,513 @@ render_refresh_icon(struct terminal *term)
      term->render.icon.last_update = now;
  }
  
@@ -2091,19 +2195,39 @@ index 72b68e1..9b851c4 100644
 +    pixman_image_set_clip_region32(buf->pix[0], &clip);
 +    pixman_region32_fini(&clip);
 +
++    const uint32_t hover_bg = color_blend_towards(c->bg, c->fg, 1.25);
++    const uint32_t picked_bg = color_blend_towards(c->bg, accent, 1.45);
++    const int line = max(1, (int)roundf(scale));
++    const bool right = term->conf->tabs.right;
++
 +    for (int r = 0; r < rows; r++) {
 +        const int y = (r - win->sidebar_scroll) * row_h;
 +        if (y + row_h <= 0 || y >= list_h)
 +            continue;
 +        struct terminal *t = tabs_row_term(win, r);
 +        const bool active = t == act_row;
-+        const bool dragged = win->sidebar_drag.dragging &&
-+            win->sidebar_drag.drop != TAB_DROP_NONE && win->sidebar_drag.tab == t;
-+        if (active) {
++        const bool grabbed = win->sidebar_drag.dragging && win->sidebar_drag.tab == t;
++        const bool hovered = win->hover.what == TAB_HOVER_ROW && win->hover.row == r;
++
++        if (active)
 +            sidebar_fill(buf, sel_bg, 0xffff, gamma, 0, y, w, row_h);
-+            sidebar_fill(buf, sel_accent, 0xffff, gamma,
-+                         term->conf->tabs.right ? w - bar : 0, y, bar, row_h);
++        else if (t->tab_selected)
++            sidebar_fill(buf, picked_bg, 0xffff, gamma, 0, y, w, row_h);
++        else if (hovered || grabbed)
++            sidebar_fill(buf, hover_bg, alpha, gamma, 0, y, w, row_h);
++
++        if (active || t->tab_selected)
++            sidebar_fill(buf, active ? sel_accent : accent, 0xffff, gamma,
++                         right ? w - bar : 0, y, bar, row_h);
++
++        if (grabbed) {
++            const uint32_t o = win->sidebar_drag.drop == TAB_DROP_NONE ? accent : c->table[3];
++            sidebar_fill(buf, o, 0xffff, gamma, 0, y, w, 2 * line);
++            sidebar_fill(buf, o, 0xffff, gamma, 0, y + row_h - 2 * line, w, 2 * line);
++            sidebar_fill(buf, o, 0xffff, gamma, 0, y, 2 * line, row_h);
++            sidebar_fill(buf, o, 0xffff, gamma, w - 2 * line, y, 2 * line, row_h);
 +        }
++
 +        bool bell, act;
 +        char32_t *label = sidebar_label(win, t, &bell, &act);
 +        const char32_t *mark = bell ? U" •" : act ? U" ◦" : NULL;
@@ -2111,19 +2235,34 @@ index 72b68e1..9b851c4 100644
 +            ? fcft_rasterize_char_utf32(term->fonts[0], mark[1], term->font_subpixel)
 +            : NULL;
 +        const int mark_w = mg != NULL ? 2 * mg->advance.x : 0;
-+        const uint32_t fg = dragged ? c->table[3] : active ? sel_fg : c->fg;
-+        int x = sidebar_text(term, buf, label, pad, y, row_h, w - pad - mark_w, fg, gamma);
++        const char32_t *hint =
++            grabbed && win->sidebar_drag.drop == TAB_DROP_SPLIT ? U"⇥ split " :
++            grabbed && win->sidebar_drag.drop == TAB_DROP_DETACH ? U"↗ new window " : NULL;
++        const uint32_t fg = active ? sel_fg : c->fg;
++        int x = pad;
++        if (hint != NULL)
++            x = sidebar_text(term, buf, hint, x, y, row_h, w - pad, c->table[3], gamma);
++        x = sidebar_text(term, buf, label, x, y, row_h, w - pad - mark_w, fg, gamma);
 +        if (mark != NULL)
 +            sidebar_text(term, buf, mark, x, y, row_h, w,
 +                         bell ? c->table[3] : c->table[4], gamma);
 +        free(label);
 +    }
 +
++    if (win->drop_row >= 0) {
++        const int y = (win->drop_row - win->sidebar_scroll) * row_h;
++        sidebar_fill(buf, accent, 0xffff, gamma, 0, max(0, y - line), w, 3 * line);
++    }
++
 +    pixman_image_set_clip_region32(buf->pix[0], NULL);
 +    const int fy = h - row_h;
 +    sidebar_fill(buf, c->fg, 0x4000, gamma, 0, fy - 1, w, 1);
++    if (win->hover.what == TAB_HOVER_NEW)
++        sidebar_fill(buf, hover_bg, alpha, gamma, 0, fy, 2 * row_h, row_h);
++    if (win->hover.what == TAB_HOVER_HIDE)
++        sidebar_fill(buf, hover_bg, alpha, gamma, w - row_h, fy, row_h, row_h);
 +    sidebar_text(term, buf, U"+", pad, fy, row_h, w, c->fg, gamma);
-+    sidebar_text(term, buf, term->conf->tabs.right ? U"›" : U"‹",
++    sidebar_text(term, buf, right ? U"›" : U"‹",
 +                 w - row_h / 2 - pad / 2, fy, row_h, w, c->fg, gamma);
 +
 +    if (win->sidebar_resize.hover || win->sidebar_resize.seat != NULL)
@@ -2180,7 +2319,8 @@ index 72b68e1..9b851c4 100644
 +    struct buffer *buf = shm_get_buffer(win->sidebar_chain, s, s);
 +
 +    pixman_image_set_clip_region32(buf->pix[0], NULL);
-+    sidebar_fill(buf, color_blend_towards(c->bg, c->fg, 1.1), 0xffff, gamma, 0, 0, s, s);
++    sidebar_fill(buf, color_blend_towards(c->bg, c->fg, win->hover.btn ? 1.35 : 1.1),
++                 0xffff, gamma, 0, 0, s, s);
 +    const char32_t *arrow = term->conf->tabs.right ? U"‹" : U"›";
 +    const struct fcft_glyph *g =
 +        fcft_rasterize_char_utf32(term->fonts[0], arrow[0], term->font_subpixel);
@@ -2260,6 +2400,109 @@ index 72b68e1..9b851c4 100644
 +    wl_surface_commit(win->surface.surf);
 +}
 +
++static int
++text_width(const struct terminal *term, const char32_t *text)
++{
++    int w = 0;
++    for (; *text != U'\0'; text++) {
++        const struct fcft_glyph *g =
++            fcft_rasterize_char_utf32(term->fonts[0], *text, term->font_subpixel);
++        if (g != NULL)
++            w += g->advance.x;
++    }
++    return w;
++}
++
++void
++render_tab_drop_hint(struct wl_window *win)
++{
++    if (!win->drop_split) {
++        if (win->hint_surf.surface.surf != NULL) {
++            wayl_win_subsurface_destroy(&win->hint_surf);
++            memset(&win->hint_surf, 0, sizeof(win->hint_surf));
++        }
++        return;
++    }
++
++    struct terminal *term = win->term;
++    if (win->hint_surf.surface.surf == NULL) {
++        if (!wayl_win_subsurface_new(win, &win->hint_surf, false))
++            return;
++        wl_subsurface_set_desync(win->hint_surf.sub);
++    }
++
++    const struct colors *c = &term->colors;
++    const bool gamma = wayl_do_linear_blending(term->wl, term->conf);
++    const float scale = term->scale;
++    const uint32_t accent = (c->cursor_bg >> 31) ? c->cursor_bg : c->fg;
++    const int line = max(1, (int)roundf(2 * scale));
++
++    int ww, wh;
++    tabs_win_size(win, &ww, &wh);
++    const size_t n = tabs_group_len(term);
++    const int pw = tabs_pane_width(win, ww, n + 1);
++    const int lx = (int)roundf(tabs_sidebar_left_px(win) / scale) + (int)n * (pw + 4);
++    const int w = (int)roundf(pw * scale), h = (int)roundf(wh * scale);
++    if (w <= 0 || h <= 0)
++        return;
++
++    struct buffer *buf = shm_get_buffer(win->menu_chain, w, h);
++    pixman_image_set_clip_region32(buf->pix[0], NULL);
++    sidebar_fill(buf, accent, 0x3800, gamma, 0, 0, w, h);
++    sidebar_fill(buf, accent, 0xffff, gamma, 0, 0, w, line);
++    sidebar_fill(buf, accent, 0xffff, gamma, 0, h - line, w, line);
++    sidebar_fill(buf, accent, 0xffff, gamma, 0, 0, line, h);
++    sidebar_fill(buf, accent, 0xffff, gamma, w - line, 0, line, h);
++
++    const char32_t *label = U"⇥ split here";
++    const int tw = text_width(term, label);
++    const int rh = term->cell_height * 2;
++    sidebar_text(term, buf, label, max(line, (w - tw) / 2), (h - rh) / 2, rh, w,
++                 c->fg, gamma);
++
++    wl_subsurface_set_position(win->hint_surf.sub, lx, 0);
++    ui_commit(win, &win->hint_surf.surface, buf, w, h, false);
++    wl_surface_commit(win->surface.surf);
++}
++
++void
++render_tab_drag_icon(struct wayland *wayl)
++{
++    struct terminal *t = wayl->tab_dnd.tab;
++    struct wl_surface *icon = wayl->tab_dnd.icon;
++    if (t == NULL || icon == NULL)
++        return;
++
++    const struct colors *c = &t->colors;
++    const bool gamma = wayl_do_linear_blending(wayl, t->conf);
++    const int s = max(1, (int)ceilf(t->scale));
++    const uint32_t accent = (c->cursor_bg >> 31) ? c->cursor_bg : c->fg;
++
++    char32_t *label = ambstoc32(t->window_title != NULL ? t->window_title : "foot");
++    if (label == NULL)
++        label = xc32dup(U"foot");
++    const int pad = 8 * s;
++    const int rh = t->fonts[0]->height + 2 * pad;
++    int w = min(text_width(t, label) + 2 * pad, 360 * s);
++    w = (w + s - 1) / s * s;
++    const int h = (rh + s - 1) / s * s;
++
++    struct buffer *buf = shm_get_buffer(wayl->tab_dnd.icon_chain, w, h);
++    pixman_image_set_clip_region32(buf->pix[0], NULL);
++    sidebar_fill(buf, color_blend_towards(c->bg, c->fg, 1.15), 0xf000, gamma, 0, 0, w, h);
++    sidebar_fill(buf, accent, 0xffff, gamma, 0, 0, w, s);
++    sidebar_fill(buf, accent, 0xffff, gamma, 0, h - s, w, s);
++    sidebar_fill(buf, accent, 0xffff, gamma, 0, 0, s, h);
++    sidebar_fill(buf, accent, 0xffff, gamma, w - s, 0, s, h);
++    sidebar_text(t, buf, label, pad, 0, h, w - pad, c->fg, gamma);
++    free(label);
++
++    wl_surface_set_buffer_scale(icon, s);
++    wl_surface_attach(icon, buf->wl_buf, 0, 0);
++    wl_surface_damage_buffer(icon, 0, 0, w, h);
++    wl_surface_commit(icon);
++}
++
 +void
 +render_refresh_sidebar(struct wl_window *win)
 +{
@@ -2275,6 +2518,8 @@ index 72b68e1..9b851c4 100644
 +    const float scale = act->scale;
 +    const int W = roundf(win->layout_w * scale);
 +    const int H = roundf(win->layout_h * scale);
++    if (W <= 0 || H <= 0)
++        return;
 +    size_t n = 0;
 +
 +    tll_foreach(win->tabs, it) {
@@ -2305,6 +2550,12 @@ index 72b68e1..9b851c4 100644
 +    const bool gamma = wayl_do_linear_blending(act->wl, act->conf);
 +    const uint16_t alpha = win->is_fullscreen ? 0xffff : act->colors.alpha;
 +    sidebar_fill(buf, act->colors.bg, alpha, gamma, 0, 0, W, H);
++    /* Translucent panes would otherwise stack on a translucent background */
++    tll_foreach(win->tabs, it) {
++        const struct terminal *t = it->item;
++        if (t->pane.surface.surf != NULL)
++            sidebar_fill(buf, 0, 0, gamma, roundf(tabs_pane_x(t) * scale), 0, t->width, H);
++    }
 +    wayl_win_scale(win, buf);
 +    wl_surface_attach(win->surface.surf, buf->wl_buf, 0, 0);
 +    wl_surface_damage_buffer(win->surface.surf, 0, 0, W, H);
@@ -2321,7 +2572,7 @@ index 72b68e1..9b851c4 100644
  render_refresh(struct terminal *term)
  {
 diff --git a/render.h b/render.h
-index e6674ab..5b48190 100644
+index e6674ab..7a71c27 100644
 --- a/render.h
 +++ b/render.h
 @@ -15,6 +15,7 @@ enum resize_options {
@@ -2332,7 +2583,7 @@ index e6674ab..5b48190 100644
  };
  
  bool render_resize(
-@@ -24,6 +25,13 @@ void render_refresh(struct terminal *term);
+@@ -24,6 +25,15 @@ void render_refresh(struct terminal *term);
  void render_refresh_app_id(struct terminal *term);
  void render_refresh_icon(struct terminal *term);
  void render_refresh_csd(struct terminal *term);
@@ -2340,6 +2591,8 @@ index e6674ab..5b48190 100644
 +void render_sidebar(struct wl_window *win);
 +void render_sidebar_btn(struct wl_window *win);
 +void render_tab_menu(struct wl_window *win);
++void render_tab_drop_hint(struct wl_window *win);
++void render_tab_drag_icon(struct wayland *wayl);
 +void render_split_layout(struct wl_window *win);
 +void render_set_window_geometry(struct wl_window *win, float scale, int width,
 +                                int height, int min_width, int min_height);
@@ -2347,7 +2600,7 @@ index e6674ab..5b48190 100644
  void render_refresh_title(struct terminal *term);
  void render_refresh_urls(struct terminal *term);
 diff --git a/selection.c b/selection.c
-index 554d61b..db65d6d 100644
+index 554d61b..5137432 100644
 --- a/selection.c
 +++ b/selection.c
 @@ -24,6 +24,7 @@
@@ -2358,7 +2611,42 @@ index 554d61b..db65d6d 100644
  #include "search.h"
  #include "uri.h"
  #include "util.h"
-@@ -2743,7 +2744,8 @@ enter(void *data, struct wl_data_device *wl_data_device, uint32_t serial,
+@@ -2642,12 +2643,15 @@ data_offer_reset(struct wl_clipboard *clipboard)
+ 
+     clipboard->window = NULL;
+     clipboard->mime_type = DATA_OFFER_MIME_UNSET;
++    clipboard->tab_offer = false;
+ }
+ 
+ static void
+ offer(void *data, struct wl_data_offer *wl_data_offer, const char *mime_type)
+ {
+     struct seat *seat = data;
++    if (streq(mime_type, TAB_MIME))
++        seat->clipboard.tab_offer = true;
+     select_mime_type_for_offer(mime_type, &seat->clipboard.mime_type);
+ }
+ 
+@@ -2737,13 +2741,27 @@ enter(void *data, struct wl_data_device *wl_data_device, uint32_t serial,
+ 
+     xassert(offer == seat->clipboard.data_offer);
+ 
++    if (seat->clipboard.tab_offer) {
++        if (!tabs_dnd_enter(wayl, surface))
++            goto reject_offer;
++        wl_data_offer_accept(offer, serial, TAB_MIME);
++        wl_data_offer_set_actions(
++            offer,
++            WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE,
++            WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE);
++        seat->clipboard.window = wayl->tab_dnd.target;
++        tabs_dnd_motion(wayl, wl_fixed_to_double(x), wl_fixed_to_double(y));
++        return;
++    }
++
+     if (seat->clipboard.mime_type == DATA_OFFER_MIME_UNSET)
+         goto reject_offer;
+ 
      /* Remember _which_ terminal the current DnD offer is targeting */
      xassert(seat->clipboard.window == NULL);
      tll_foreach(wayl->terms, it) {
@@ -2368,8 +2656,42 @@ index 554d61b..db65d6d 100644
              !it->item->is_sending_paste_data)
          {
              wl_data_offer_accept(
+@@ -2773,6 +2791,8 @@ static void
+ leave(void *data, struct wl_data_device *wl_data_device)
+ {
+     struct seat *seat = data;
++    if (seat->clipboard.tab_offer)
++        tabs_dnd_leave(seat->wayl);
+     seat->clipboard.window = NULL;
+ }
+ 
+@@ -2780,6 +2800,9 @@ static void
+ motion(void *data, struct wl_data_device *wl_data_device, uint32_t time,
+        wl_fixed_t x, wl_fixed_t y)
+ {
++    struct seat *seat = data;
++    if (seat->clipboard.tab_offer && seat->clipboard.window != NULL)
++        tabs_dnd_motion(seat->wayl, wl_fixed_to_double(x), wl_fixed_to_double(y));
+ }
+ 
+ struct dnd_context {
+@@ -2810,6 +2833,14 @@ drop(void *data, struct wl_data_device *wl_data_device)
+ {
+     struct seat *seat = data;
+ 
++    if (seat->clipboard.tab_offer) {
++        tabs_dnd_drop(seat->wayl);
++        tabs_dnd_leave(seat->wayl);
++        wl_data_offer_finish(seat->clipboard.data_offer);
++        data_offer_reset(&seat->clipboard);
++        return;
++    }
++
+     xassert(seat->clipboard.window != NULL);
+     struct terminal *term = seat->clipboard.window->term;
+ 
 diff --git a/server.c b/server.c
-index 69be99d..892b6b2 100644
+index 69be99d..3142767 100644
 --- a/server.c
 +++ b/server.c
 @@ -20,6 +20,7 @@
@@ -2380,7 +2702,21 @@ index 69be99d..892b6b2 100644
  #include "terminal.h"
  #include "util.h"
  #include "wayland.h"
-@@ -394,11 +395,16 @@ fdm_client(struct fdm *fdm, int fd, int events, void *data)
+@@ -366,6 +367,13 @@ fdm_client(struct fdm *fdm, int fd, int events, void *data)
+ #undef CHECK_BUF_AND_NULL
+ #undef CHECK_BUF
+ 
++    if (cdata.focus) {
++        const bool found = cdata.argc == 1 &&
++            tabs_focus_pid(server->wayl, (pid_t)strtol(argv[0], NULL, 10), token);
++        client_send_exit_code(client, found ? 0 : 1);
++        goto shutdown;
++    }
++
+     struct terminal_instance *instance = xmalloc(sizeof(struct terminal_instance));
+ 
+     const bool need_to_clone_conf =
+@@ -394,11 +402,16 @@ fdm_client(struct fdm *fdm, int fd, int events, void *data)
          .conf = conf,
      };
  
@@ -2401,7 +2737,7 @@ index 69be99d..892b6b2 100644
  
      if (instance->terminal == NULL) {
          LOG_ERR("failed to instantiate new terminal");
-@@ -464,6 +470,15 @@ fdm_server(struct fdm *fdm, int fd, int events, void *data)
+@@ -464,6 +477,15 @@ fdm_server(struct fdm *fdm, int fd, int events, void *data)
          return false;
      }
  
@@ -2417,7 +2753,7 @@ index 69be99d..892b6b2 100644
      struct client *client = xmalloc(sizeof(*client));
      *client = (struct client) {
          .server = server,
-@@ -565,10 +580,10 @@ prepare_socket(int fd)
+@@ -565,10 +587,10 @@ prepare_socket(int fd)
      return true;
  }
  
@@ -2430,7 +2766,7 @@ index 69be99d..892b6b2 100644
  {
      struct server *server = data;
      struct terminal_instance *instance = xmalloc(sizeof(*instance));
-@@ -577,32 +592,79 @@ restore_window(void *data, struct session *session,
+@@ -577,32 +599,79 @@ restore_window(void *data, struct session *session,
      instance->terminal = term_init(
          server->conf, server->fdm, server->reaper, server->wayl, "footclient",
          cwd, NULL, session_window_name(w), NULL, 4, argv, NULL,
@@ -2517,7 +2853,7 @@ index 69be99d..892b6b2 100644
      {
          if (!prepare_socket(fd))
              goto err;
-@@ -664,13 +726,24 @@ server_init(struct config *conf, struct fdm *fdm, struct reaper *reaper,
+@@ -664,13 +733,24 @@ server_init(struct config *conf, struct fdm *fdm, struct reaper *reaper,
          .terminals = tll_init(),
      };
  
@@ -2532,12 +2868,12 @@ index 69be99d..892b6b2 100644
 +    wayl->tab_host.tab_moved = &tab_moved;
 +    wayl->tab_host.duplicate_script = &duplicate_script;
 +    wayl->tab_host.data = server;
-+
+ 
+-    LOG_INFO("accepting connections on %s", sock_path != NULL ? sock_path : "socket provided through socket activation");
 +    if (!embedded)
 +        server->session = session_init(
 +            conf, fdm, reaper, wayl, &restore_window, server);
- 
--    LOG_INFO("accepting connections on %s", sock_path != NULL ? sock_path : "socket provided through socket activation");
++
 +    if (sock_path != NULL && wayl->tab_sock_path == NULL)
 +        wayl->tab_sock_path = xstrdup(sock_path);
 +
@@ -2546,7 +2882,7 @@ index 69be99d..892b6b2 100644
  
      return server;
  
-@@ -705,7 +778,13 @@ server_destroy(struct server *server)
+@@ -705,7 +785,13 @@ server_destroy(struct server *server)
  
      tll_free(server->terminals);
  
@@ -2576,7 +2912,7 @@ index 683ad74..1ee55bc 100644
  
  void server_global_theme_switch_to_dark(struct server *server);
 diff --git a/session.c b/session.c
-index 4d2298b..10a976e 100644
+index 4d2298b..01b73cb 100644
 --- a/session.c
 +++ b/session.c
 @@ -4,6 +4,7 @@
@@ -2599,7 +2935,7 @@ index 4d2298b..10a976e 100644
  
  #define STATE_MAGIC "FOOT-SESSION"
 -#define STATE_VERSION 4
-+#define STATE_VERSION 6
++#define STATE_VERSION 7
  #define MAX_CHAIN_DEPTH 16
  #define RULE_TIMEOUT_SECS 5
  #define RULE_OUTPUT_MAX (64 * 1024)
@@ -2633,10 +2969,12 @@ index 4d2298b..10a976e 100644
      write_blob(f, w->cwd);
      write_blob(f, w->snapshot);
      write_argv(f, w->launch_argc, w->launch_argv);
-@@ -403,8 +415,30 @@ read_window(FILE *f, int version)
+@@ -403,8 +415,33 @@ read_window(FILE *f, int version)
      int cols, rows;
  
      w->name = version >= 4 ? read_blob(f) : toplevel_name_new();
+-
+-    bool ok = w->name != NULL && (w->cwd = read_blob(f)) != NULL &&
 +    w->current = true;
 +    w->sidebar_hidden = -1;
 +
@@ -2657,15 +2995,17 @@ index 4d2298b..10a976e 100644
 +        ok = fscanf(f, "%d %u %d %d %d\n", &w->pos, &w->group, &current,
 +                    &w->sidebar_w, &w->sidebar_hidden) == 5;
 +        w->current = current;
++        /* v6 saved the then-default visible sidebar for every window */
++        if (version == 6)
++            w->sidebar_hidden = -1;
 +    }
- 
--    bool ok = w->name != NULL && (w->cwd = read_blob(f)) != NULL &&
++
 +    ok = ok &&
 +        (w->cwd = read_blob(f)) != NULL &&
          (version > 2 || fscanf(f, "%d %d\n", &cols, &rows) == 2) &&
          (w->snapshot = read_blob(f)) != NULL &&
          read_argv(f, &w->launch_argc, &w->launch_argv) &&
-@@ -471,38 +505,94 @@ read_state(const char *path, window_list_t *out, char **xdg_id)
+@@ -471,38 +508,94 @@ read_state(const char *path, window_list_t *out, char **xdg_id)
      free(backup);
  }
  
@@ -2773,7 +3113,7 @@ index 4d2298b..10a976e 100644
  
      if (fclose(f) != 0) {
          free(buf);
-@@ -868,14 +958,15 @@ eval_envp(pid_t pid, const char *cwd)
+@@ -868,14 +961,15 @@ eval_envp(pid_t pid, const char *cwd)
      return envp;
  }
  
@@ -2793,7 +3133,7 @@ index 4d2298b..10a976e 100644
      }
      fcntl(fds[0], F_SETFL, O_NONBLOCK);
  
-@@ -887,7 +978,7 @@ eval_start(struct session *s, struct relaunch *r, const char *command,
+@@ -887,7 +981,7 @@ eval_start(struct session *s, struct relaunch *r, const char *command,
      for (size_t i = 0; i < argc; i++)
          sh_argv[3 + i] = argv[i];
  
@@ -2802,7 +3142,7 @@ index 4d2298b..10a976e 100644
  
      sigset_t mask;
      sigemptyset(&mask);
-@@ -920,9 +1011,22 @@ eval_start(struct session *s, struct relaunch *r, const char *command,
+@@ -920,9 +1014,22 @@ eval_start(struct session *s, struct relaunch *r, const char *command,
      if (child < 0) {
          LOG_ERRNO("failed to fork");
          close(fds[0]);
@@ -2826,7 +3166,7 @@ index 4d2298b..10a976e 100644
      struct rule_eval *ev = xmalloc(sizeof(*ev));
      *ev = (struct rule_eval){
          .session = s,
-@@ -930,13 +1034,13 @@ eval_start(struct session *s, struct relaunch *r, const char *command,
+@@ -930,13 +1037,13 @@ eval_start(struct session *s, struct relaunch *r, const char *command,
          .starttime = r->starttime,
          .program = xstrdup(r->program),
          .child = child,
@@ -2843,7 +3183,7 @@ index 4d2298b..10a976e 100644
          ev->fd = -1;
          ev->failed = true;
      }
-@@ -1033,6 +1137,19 @@ build_window(struct session *s, const struct session_tracked *t,
+@@ -1033,6 +1140,19 @@ build_window(struct session *s, const struct session_tracked *t,
          .commands = tll_init(),
      };
  
@@ -2863,7 +3203,7 @@ index 4d2298b..10a976e 100644
      if (w->cwd == NULL) {
          const char *home = getenv("HOME");
          w->cwd = xstrdup(t->term->cwd != NULL ? t->term->cwd
-@@ -1288,6 +1405,33 @@ static const struct xdg_session_v1_listener xdg_session_listener = {
+@@ -1288,6 +1408,33 @@ static const struct xdg_session_v1_listener xdg_session_listener = {
      .replaced = &xdg_session_replaced,
  };
  
@@ -2897,7 +3237,7 @@ index 4d2298b..10a976e 100644
  static void
  restore(struct session *s, session_restore_cb cb, void *data)
  {
-@@ -1304,22 +1448,185 @@ restore(struct session *s, session_restore_cb cb, void *data)
+@@ -1304,22 +1451,185 @@ restore(struct session *s, session_restore_cb cb, void *data)
          xdg_session_v1_add_listener(s->wayl->xdg_session, &xdg_session_listener, s);
      }
  
@@ -3084,7 +3424,7 @@ index 4d2298b..10a976e 100644
  }
  
  /* Public API */
-@@ -1432,6 +1739,7 @@ track(struct session *s, struct terminal *term, const struct config *conf,
+@@ -1432,6 +1742,7 @@ track(struct session *s, struct terminal *term, const struct config *conf,
      *t = (struct session_tracked){
          .session = s,
          .term = term,
@@ -3092,7 +3432,7 @@ index 4d2298b..10a976e 100644
          .conf = conf,
          .name = name,
          .launch_argc = launch_argc,
-@@ -1442,6 +1750,17 @@ track(struct session *s, struct terminal *term, const struct config *conf,
+@@ -1442,6 +1753,17 @@ track(struct session *s, struct terminal *term, const struct config *conf,
      return t;
  }
  
@@ -3110,7 +3450,7 @@ index 4d2298b..10a976e 100644
  struct session_tracked *
  session_track(struct session *s, struct terminal *term,
                const struct config *conf,
-@@ -1450,11 +1769,13 @@ session_track(struct session *s, struct terminal *term,
+@@ -1450,11 +1772,13 @@ session_track(struct session *s, struct terminal *term,
      if (s == NULL)
          return NULL;
  
@@ -3126,7 +3466,7 @@ index 4d2298b..10a976e 100644
          win->toplevel_session = xdg_session_v1_add_toplevel(
              s->wayl->xdg_session, win->xdg_toplevel, t->name);
      }
-@@ -1490,11 +1811,12 @@ session_untrack(struct session_tracked *t)
+@@ -1490,11 +1814,12 @@ session_untrack(struct session_tracked *t)
                  tll_remove(s->windows, it);
          }
  
@@ -3142,7 +3482,7 @@ index 4d2298b..10a976e 100644
      }
  
      window_free(t->saved);
-@@ -1504,6 +1826,48 @@ session_untrack(struct session_tracked *t)
+@@ -1504,6 +1829,48 @@ session_untrack(struct session_tracked *t)
      free(t);
  }
  
@@ -3218,12 +3558,26 @@ index b128b7e..6327439 100644
 +                       struct wl_window *dst);
  
  const char *session_window_name(const struct session_window *w);
+diff --git a/slave.c b/slave.c
+index 6289937..b385f1b 100644
+--- a/slave.c
++++ b/slave.c
+@@ -434,6 +434,9 @@ slave_spawn(int ptmx, int argc, const char *cwd, char *const *argv,
+ 
+         add_to_env(&custom_env, "TERM", term_env);
+         add_to_env(&custom_env, "COLORTERM", "truecolor");
++        char tab_id[16];
++        snprintf(tab_id, sizeof(tab_id), "%d", (int)getpid());
++        add_to_env(&custom_env, "FOOT_TAB_ID", tab_id);
+         add_to_env(&custom_env, "PWD", cwd);
+ 
+         del_from_env(&custom_env, "TERM_PROGRAM");            /* Wezterm, Ghostty */
 diff --git a/tabs.c b/tabs.c
 new file mode 100644
-index 0000000..c086f5a
+index 0000000..b44bfe5
 --- /dev/null
 +++ b/tabs.c
-@@ -0,0 +1,1563 @@
+@@ -0,0 +1,2041 @@
 +#include "tabs.h"
 +
 +#include <limits.h>
@@ -3284,7 +3638,7 @@ index 0000000..c086f5a
 +bool
 +tabs_sidebar_has_tabs(const struct wl_window *win)
 +{
-+    return tll_length(win->tabs) >= 2;
++    return tll_length(win->tabs) >= 1;
 +}
 +
 +bool
@@ -3598,6 +3952,7 @@ index 0000000..c086f5a
 +    for (size_t i = 0; i < nn; i++) {
 +        struct terminal *t = newv[i];
 +        t->tab_marker = t->tab_activity = false;
++        t->activity_lines = 0;
 +        t->tab_shown = true;
 +        if (t->scale != old->scale) {
 +            float o = t->scale;
@@ -3856,6 +4211,16 @@ index 0000000..c086f5a
 +    return 0;
 +}
 +
++void
++tabs_sidebar_sync(struct wl_window *win)
++{
++    if (win->closing || tll_length(win->tabs) == 0)
++        return;
++    sidebar_update(win);
++    sidebar_place(win);
++    render_refresh_sidebar(win);
++}
++
 +bool
 +tabs_layout(struct wl_window *win, int w, int h)
 +{
@@ -3883,6 +4248,12 @@ index 0000000..c086f5a
 +    } else if (w == 0 || h == 0) {
 +        w = win->layout_w;
 +        h = win->layout_h;
++        if (w == 0 || h == 0) {
++            /* Compositor lets us pick: use the default window size */
++            render_resize(act, 0, 0, RESIZE_FORCE);
++            w = (int)roundf(act->width / act->scale);
++            h = (int)roundf(act->height / act->scale);
++        }
 +    }
 +    win->layout_w = w;
 +    win->layout_h = h;
@@ -4154,6 +4525,7 @@ index 0000000..c086f5a
 +        arr[i]->group = g;
 +    for (size_t i = 0; i < len; i++) {
 +        row[i]->tab_marker = row[i]->tab_activity = false;
++        row[i]->activity_lines = 0;
 +        row[i]->tab_shown = true;
 +        float o = row[i]->scale;
 +        if (term_update_scale(row[i]))
@@ -4434,6 +4806,393 @@ index 0000000..c086f5a
 +menu_open(struct wl_window *win, struct terminal *t, enum tab_menu_kind kind,
 +          int x, int y);
 +
++static enum tab_hover
++sidebar_zone(const struct wl_window *win, int x, int y, int *row)
++{
++    const int w = tabs_sidebar_width_px(win);
++    const int h = tabs_sidebar_height_px(win);
++    const int row_h = tabs_sidebar_row_h(win);
++    *row = -1;
++
++    if (x < 0 || x >= w || y < 0 || y >= h)
++        return TAB_HOVER_NONE;
++    if (on_grip(win, x))
++        return TAB_HOVER_GRIP;
++    if (y >= h - row_h) {
++        if (x >= w - row_h)
++            return TAB_HOVER_HIDE;
++        if (x < 2 * row_h)
++            return TAB_HOVER_NEW;
++        return TAB_HOVER_NONE;
++    }
++    const int r = y / row_h + win->sidebar_scroll;
++    if (r >= tabs_row_count(win))
++        return TAB_HOVER_NONE;
++    *row = r;
++    return TAB_HOVER_ROW;
++}
++
++static void
++set_hover(struct seat *seat, struct wl_window *win, enum tab_hover what, int row)
++{
++    if (what == win->hover.what && row == win->hover.row)
++        return;
++    win->hover.what = what;
++    win->hover.row = row;
++    win->sidebar_resize.hover = what == TAB_HOVER_GRIP;
++    render_refresh_sidebar(win);
++    if (seat != NULL && seat->mouse_focus != NULL)
++        term_xcursor_update_for_seat(seat->mouse_focus, seat);
++}
++
++void
++tabs_sidebar_leave(struct wl_window *win)
++{
++    set_hover(NULL, win, TAB_HOVER_NONE, -1);
++}
++
++void
++tabs_sidebar_btn_hover(struct wl_window *win, bool hover)
++{
++    if (win->hover.btn == hover)
++        return;
++    win->hover.btn = hover;
++    render_refresh_sidebar(win);
++}
++
++/* Multi-select */
++
++static size_t
++selected_rows(struct wl_window *win, struct terminal **out, size_t max)
++{
++    size_t n = 0;
++    for (int r = 0, rows = tabs_row_count(win); r < rows; r++) {
++        struct terminal *t = tabs_row_term(win, r);
++        if (t->tab_selected && n < max)
++            out[n++] = t;
++    }
++    return n;
++}
++
++static void
++clear_selection(struct wl_window *win)
++{
++    bool any = false;
++    tll_foreach(win->tabs, it) {
++        any |= it->item->tab_selected;
++        it->item->tab_selected = false;
++    }
++    if (any)
++        render_refresh_sidebar(win);
++}
++
++static void
++select_click(struct wl_window *win, struct terminal *t, bool range)
++{
++    struct terminal *set[MAX_SET];
++    struct terminal *act = tabs_row_term(win, tabs_row_of(win, win->term));
++    if (selected_rows(win, set, MAX_SET) == 0)
++        act->tab_selected = true;
++
++    if (range) {
++        const int a = tabs_row_of(win, act), b = tabs_row_of(win, t);
++        for (int r = min(a, b); r <= max(a, b); r++)
++            tabs_row_term(win, r)->tab_selected = true;
++    } else
++        t->tab_selected = !t->tab_selected;
++    render_refresh_sidebar(win);
++}
++
++static void
++split_selected(struct wl_window *win)
++{
++    struct terminal *rows[MAX_SET];
++    const size_t n = selected_rows(win, rows, MAX_SET);
++    clear_selection(win);
++    if (n < 2)
++        return;
++    tabs_activate(win, rows[0]);
++    for (size_t i = 1; i < n; i++)
++        split_join(win, rows[i]);
++}
++
++static void
++close_selected(struct wl_window *win)
++{
++    struct terminal *rows[MAX_SET];
++    const size_t n = selected_rows(win, rows, MAX_SET);
++    clear_selection(win);
++    for (size_t i = 0; i < n; i++) {
++        struct terminal *set[MAX_SET];
++        const size_t m = visible_set(rows[i], set);
++        for (size_t k = 0; k < m; k++)
++            term_shutdown(set[k]);
++    }
++}
++
++/* Dragging tabs between windows uses Wayland DnD */
++
++static void
++dnd_cleanup(struct wayland *wayl)
++{
++    if (wayl->tab_dnd.source != NULL)
++        wl_data_source_destroy(wayl->tab_dnd.source);
++    if (wayl->tab_dnd.icon != NULL)
++        wl_surface_destroy(wayl->tab_dnd.icon);
++    if (wayl->tab_dnd.icon_chain != NULL) {
++        shm_purge(wayl->tab_dnd.icon_chain);
++        shm_chain_free(wayl->tab_dnd.icon_chain);
++    }
++    struct wl_window *target = wayl->tab_dnd.target;
++    if (target != NULL) {
++        target->drop_row = -1;
++        target->drop_split = false;
++        render_tab_drop_hint(target);
++        render_refresh_sidebar(target);
++    }
++    wayl->tab_dnd.source = NULL;
++    wayl->tab_dnd.icon = NULL;
++    wayl->tab_dnd.icon_chain = NULL;
++    wayl->tab_dnd.target = NULL;
++    wayl->tab_dnd.surface = NULL;
++}
++
++static void
++dnd_src_target(void *data, struct wl_data_source *src, const char *mime) {}
++
++static void
++dnd_src_send(void *data, struct wl_data_source *src, const char *mime, int fd)
++{
++    close(fd);
++}
++
++static void
++dnd_src_cancelled(void *data, struct wl_data_source *src)
++{
++    struct wayland *wayl = data;
++    if (wayl->tab_dnd.action == TAB_DND_NONE && wayl->tab_dnd.tab != NULL)
++        wayl->tab_dnd.action = TAB_DND_DETACH;
++    dnd_cleanup(wayl);
++}
++
++static void
++dnd_src_performed(void *data, struct wl_data_source *src) {}
++
++static void
++dnd_src_finished(void *data, struct wl_data_source *src)
++{
++    dnd_cleanup(data);
++}
++
++static void
++dnd_src_action(void *data, struct wl_data_source *src, uint32_t action) {}
++
++static const struct wl_data_source_listener dnd_source_listener = {
++    .target = &dnd_src_target,
++    .send = &dnd_src_send,
++    .cancelled = &dnd_src_cancelled,
++    .dnd_drop_performed = &dnd_src_performed,
++    .dnd_finished = &dnd_src_finished,
++    .action = &dnd_src_action,
++};
++
++static bool
++dnd_start(struct seat *seat, struct wl_window *win, struct terminal *t)
++{
++    struct wayland *wayl = t->wl;
++    if (wayl->data_device_manager == NULL || seat->data_device == NULL ||
++        wayl->tab_dnd.source != NULL || wayl->tab_dnd.action != TAB_DND_NONE)
++    {
++        return false;
++    }
++
++    struct wl_data_source *src =
++        wl_data_device_manager_create_data_source(wayl->data_device_manager);
++    if (src == NULL)
++        return false;
++    wl_data_source_offer(src, TAB_MIME);
++    wl_data_source_set_actions(src, WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE);
++    wl_data_source_add_listener(src, &dnd_source_listener, wayl);
++
++    wayl->tab_dnd.tab = t;
++    wayl->tab_dnd.source = src;
++    wayl->tab_dnd.icon = wl_compositor_create_surface(wayl->compositor);
++    wayl->tab_dnd.icon_chain = shm_chain_new(wayl, false, 1, SHM_BITS_8, NULL, NULL);
++    wayl->tab_dnd.row = -1;
++
++    wl_data_device_start_drag(
++        seat->data_device, src, win->sidebar.surface.surf,
++        wayl->tab_dnd.icon, seat->pointer.serial);
++    render_tab_drag_icon(wayl);
++    seat_forget_buttons(seat);
++    return true;
++}
++
++static bool
++dnd_owns_surface(const struct wl_window *w, const struct wl_surface *surface,
++                 int *x_ofs)
++{
++    *x_ofs = 0;
++    if (surface == w->surface.surf || surface == w->sidebar_btn.surface.surf)
++        return true;
++    if (surface == w->sidebar.surface.surf) {
++        *x_ofs = sidebar_origin_px(w);
++        return true;
++    }
++    tll_foreach(w->tabs, it) {
++        if (surface == it->item->pane.surface.surf) {
++            *x_ofs = (int)roundf(tabs_pane_x(it->item) * w->term->scale);
++            return true;
++        }
++    }
++    return false;
++}
++
++bool
++tabs_dnd_enter(struct wayland *wayl, struct wl_surface *surface)
++{
++    if (wayl->tab_dnd.tab == NULL || wayl->tab_dnd.source == NULL)
++        return false;
++    tll_foreach(wayl->windows, it) {
++        int ofs;
++        if (!it->item->closing && dnd_owns_surface(it->item, surface, &ofs)) {
++            wayl->tab_dnd.target = it->item;
++            wayl->tab_dnd.surface = surface;
++            return true;
++        }
++    }
++    return false;
++}
++
++void
++tabs_dnd_motion(struct wayland *wayl, double sx, double sy)
++{
++    struct wl_window *w = wayl->tab_dnd.target;
++    struct terminal *t = wayl->tab_dnd.tab;
++    if (w == NULL || t == NULL)
++        return;
++
++    int ofs;
++    if (!dnd_owns_surface(w, wayl->tab_dnd.surface, &ofs))
++        return;
++    const float scale = w->term->scale;
++    const int x = ofs + (int)roundf(sx * scale);
++    const int y = (int)roundf(sy * scale);
++    const int sb_x = sidebar_origin_px(w);
++    const int sb_w = tabs_sidebar_width_px(w);
++
++    int row = -1;
++    bool split = false;
++    if (sb_w > 0 && x >= sb_x && x < sb_x + sb_w) {
++        const int row_h = tabs_sidebar_row_h(w);
++        row = max(0, min((y + row_h / 2) / row_h + w->sidebar_scroll, tabs_row_count(w)));
++    } else {
++        const bool shown = t->window == w &&
++            (t->group != 0 ? t->group == w->term->group : t == w->term);
++        split = !shown && split_fits(w, tabs_group_len(w->term) + tabs_group_len(t));
++    }
++
++    wayl->tab_dnd.row = row;
++    if (w->drop_row != row || w->drop_split != split) {
++        w->drop_row = row;
++        w->drop_split = split;
++        render_tab_drop_hint(w);
++        render_refresh_sidebar(w);
++    }
++}
++
++void
++tabs_dnd_leave(struct wayland *wayl)
++{
++    struct wl_window *w = wayl->tab_dnd.target;
++    if (w != NULL) {
++        w->drop_row = -1;
++        w->drop_split = false;
++        render_tab_drop_hint(w);
++        render_refresh_sidebar(w);
++    }
++    wayl->tab_dnd.target = NULL;
++    wayl->tab_dnd.surface = NULL;
++}
++
++void
++tabs_dnd_drop(struct wayland *wayl)
++{
++    struct wl_window *w = wayl->tab_dnd.target;
++    if (w == NULL || wayl->tab_dnd.tab == NULL)
++        return;
++    wayl->tab_dnd.dest = w;
++    if (w->drop_row >= 0 || w->drop_split)
++        wayl->tab_dnd.action = TAB_DND_MOVE;
++    else if (w != wayl->tab_dnd.tab->window) {
++        wayl->tab_dnd.row = tabs_row_count(w);
++        wayl->tab_dnd.action = TAB_DND_MOVE;
++    } else
++        wayl->tab_dnd.action = TAB_DND_KEEP;
++}
++
++static void
++move_to_window(struct terminal *t, struct wl_window *dst, int row)
++{
++    struct wl_window *src = t->window;
++    struct terminal *set[MAX_SET];
++    const size_t n = visible_set(t, set);
++    struct terminal *keep = dst->term;
++
++    if (n >= tll_length(src->tabs))
++        tabs_merge_into(src, dst);
++    else {
++        if (in_set(src->term, set, n))
++            tabs_activate(src, outside_neighbour(src, set, n));
++        for (size_t i = 0; i < n; i++)
++            tabs_transfer(set[i], dst, false);
++        tabs_relayout(src);
++    }
++
++    if (row >= 0) {
++        move_row(dst, set[0], row - tabs_row_of(dst, set[0]));
++        tabs_activate(dst, set[0]);
++    } else {
++        tabs_activate(dst, keep);
++        move_row(dst, set[0], tabs_row_of(dst, keep) + 1 - tabs_row_of(dst, set[0]));
++        split_join(dst, set[0]);
++    }
++    tabs_relayout(dst);
++}
++
++void
++tabs_dnd_run(struct wayland *wayl)
++{
++    const int action = wayl->tab_dnd.action;
++    struct terminal *t = wayl->tab_dnd.tab;
++    struct wl_window *dst = wayl->tab_dnd.dest;
++    const int row = wayl->tab_dnd.row;
++
++    if (action == TAB_DND_NONE || wayl->tab_dnd.source != NULL)
++        return;
++    wayl->tab_dnd.action = TAB_DND_NONE;
++    wayl->tab_dnd.tab = NULL;
++    wayl->tab_dnd.dest = NULL;
++    if (t == NULL || t->window == NULL || t->window->closing || action == TAB_DND_KEEP)
++        return;
++
++    if (action == TAB_DND_DETACH) {
++        tabs_detach_window(t, true);
++        return;
++    }
++    if (dst == NULL || dst->closing)
++        return;
++
++    if (dst != t->window)
++        move_to_window(t, dst, row);
++    else if (row < 0)
++        split_join(dst, t);
++    else {
++        const int cur = tabs_row_of(dst, t);
++        move_row(dst, t, (row > cur ? row - 1 : row) - cur);
++    }
++}
++
 +void
 +tabs_sidebar_button(struct seat *seat, struct wl_window *win, int button, bool pressed)
 +{
@@ -4447,7 +5206,6 @@ index 0000000..c086f5a
 +            if (win->term->conf->tabs.right)
 +                sidebar_resize_to(win, x);
 +            win->sidebar_resize.seat = NULL;
-+            win->sidebar_resize.hover = on_grip(win, x);
 +            render_refresh_sidebar(win);
 +            return;
 +        }
@@ -4457,6 +5215,8 @@ index 0000000..c086f5a
 +        const bool dragging = win->sidebar_drag.dragging;
 +        const enum tab_drop drop = win->sidebar_drag.drop;
 +        tabs_sidebar_cancel_drag(win);
++        if (seat->mouse_focus != NULL)
++            term_xcursor_update_for_seat(seat->mouse_focus, seat);
 +        if (!dragging)
 +            tabs_activate(win, t);
 +        else if (drop == TAB_DROP_DETACH)
@@ -4468,27 +5228,24 @@ index 0000000..c086f5a
 +
 +    tabs_menu_close(win);
 +
-+    if (button == BTN_LEFT && on_grip(win, x)) {
++    int row;
++    const enum tab_hover zone = sidebar_zone(win, x, y, &row);
++
++    if (button == BTN_LEFT && zone == TAB_HOVER_GRIP) {
 +        win->sidebar_resize.seat = seat;
 +        return;
 +    }
-+
-+    const int w = tabs_sidebar_width_px(win);
-+    const int h = tabs_sidebar_height_px(win);
-+    const int row_h = tabs_sidebar_row_h(win);
-+
-+    if (y >= h - row_h) {
++    if (zone == TAB_HOVER_HIDE || zone == TAB_HOVER_NEW) {
 +        if (button != BTN_LEFT)
 +            return;
-+        if (x >= w - row_h)
++        clear_selection(win);
++        if (zone == TAB_HOVER_HIDE)
 +            tabs_toggle_sidebar(win);
-+        else if (x < 2 * row_h)
++        else
 +            tabs_new(win->term, false);
 +        return;
 +    }
-+
-+    const int row = y / row_h + win->sidebar_scroll;
-+    if (y < 0 || row >= tabs_row_count(win))
++    if (zone != TAB_HOVER_ROW)
 +        return;
 +
 +    struct terminal *t = tabs_row_term(win, row);
@@ -4499,11 +5256,23 @@ index 0000000..c086f5a
 +        term_shutdown(pane);
 +        return;
 +
-+    case BTN_RIGHT:
++    case BTN_RIGHT: {
++        struct terminal *sel[MAX_SET];
++        if (t->tab_selected && selected_rows(win, sel, MAX_SET) >= 2) {
++            menu_open(win, t, TAB_MENU_SELECTION, sidebar_origin_px(win) + x, y);
++            return;
++        }
++        clear_selection(win);
 +        menu_open(win, pane, TAB_MENU_ACTIONS, sidebar_origin_px(win) + x, y);
 +        return;
++    }
 +
 +    case BTN_LEFT:
++        if (seat->kbd.ctrl || seat->kbd.shift) {
++            select_click(win, t, seat->kbd.shift);
++            return;
++        }
++        clear_selection(win);
 +        memset(&win->sidebar_drag, 0, sizeof(win->sidebar_drag));
 +        win->sidebar_drag.seat = seat;
 +        win->sidebar_drag.tab = t;
@@ -4544,22 +5313,36 @@ index 0000000..c086f5a
 +    }
 +
 +    if (win->sidebar_drag.seat != seat || win->sidebar_drag.tab == NULL) {
-+        const bool hover = on_grip(win, x);
-+        if (hover != win->sidebar_resize.hover) {
-+            win->sidebar_resize.hover = hover;
-+            render_refresh_sidebar(win);
-+            if (seat->mouse_focus != NULL)
-+                term_xcursor_update_for_seat(seat->mouse_focus, seat);
-+        }
++        int row;
++        const enum tab_hover zone = sidebar_zone(win, x, y, &row);
++        set_hover(seat, win, zone, row);
 +        return;
 +    }
 +
 +    const int row_h = tabs_sidebar_row_h(win);
++    const int w = tabs_sidebar_width_px(win);
 +    const int h = tabs_sidebar_height_px(win);
 +
-+    if (!win->sidebar_drag.dragging && abs(y - win->sidebar_drag.start_y) < row_h / 2)
++    if (!win->sidebar_drag.dragging && abs(y - win->sidebar_drag.start_y) < row_h / 2 &&
++        x >= 0 && x < w)
++    {
 +        return;
-+    win->sidebar_drag.dragging = true;
++    }
++    if (!win->sidebar_drag.dragging) {
++        win->sidebar_drag.dragging = true;
++        set_hover(seat, win, TAB_HOVER_NONE, -1);
++        render_refresh_sidebar(win);
++        if (seat->mouse_focus != NULL)
++            term_xcursor_update_for_seat(seat->mouse_focus, seat);
++    }
++
++    struct terminal *t = win->sidebar_drag.tab;
++    const bool outside = x < 0 || x >= w || y < 0 || y >= h;
++    if (outside && dnd_start(seat, win, t)) {
++        memset(&win->sidebar_drag, 0, sizeof(win->sidebar_drag));
++        render_refresh_sidebar(win);
++        return;
++    }
 +
 +    const enum tab_drop drop = drop_at(win, x, y);
 +    if (drop != win->sidebar_drag.drop) {
@@ -4569,7 +5352,6 @@ index 0000000..c086f5a
 +    if (drop != TAB_DROP_NONE || y >= h - row_h - 1)
 +        return;
 +
-+    struct terminal *t = win->sidebar_drag.tab;
 +    const int target = min(y / row_h + win->sidebar_scroll, tabs_row_count(win) - 1);
 +    for (int cur = tabs_row_of(win, t); cur != target;) {
 +        move_row(win, t, target > cur ? 1 : -1);
@@ -4585,6 +5367,43 @@ index 0000000..c086f5a
 +{
 +    if (pressed && button == BTN_LEFT)
 +        tabs_toggle_sidebar(win);
++}
++
++/* Focus a tab by the PID of its shell, or of any process below it */
++
++static pid_t
++parent_pid(pid_t pid)
++{
++    char path[64], buf[512];
++    snprintf(path, sizeof(path), "/proc/%d/stat", (int)pid);
++    FILE *f = fopen(path, "re");
++    if (f == NULL)
++        return -1;
++    size_t n = fread(buf, 1, sizeof(buf) - 1, f);
++    fclose(f);
++    buf[n] = '\0';
++    const char *p = strrchr(buf, ')');
++    int ppid;
++    return p != NULL && sscanf(p + 1, " %*c %d", &ppid) == 1 ? ppid : -1;
++}
++
++bool
++tabs_focus_pid(struct wayland *wayl, pid_t pid, const char *token)
++{
++    for (int depth = 0; pid > 1 && depth < 64; depth++, pid = parent_pid(pid)) {
++        tll_foreach(wayl->terms, it) {
++            struct terminal *t = it->item;
++            if (t->slave != pid || t->window == NULL || t->window->closing)
++                continue;
++            tabs_activate(t->window, t);
++            if (token != NULL)
++                wayl_activate(wayl, t->window, token);
++            else
++                wayl_win_set_urgent(t->window);
++            return true;
++        }
++    }
++    return false;
 +}
 +
 +/* Duplicate, kill */
@@ -4626,7 +5445,10 @@ index 0000000..c086f5a
 +
 +/* Context menu */
 +
-+enum { MI_CLOSE, MI_KILL, MI_DUPLICATE, MI_SPLIT, MI_UNSPLIT, MI_NO, MI_YES };
++enum {
++    MI_CLOSE, MI_KILL, MI_DUPLICATE, MI_SPLIT, MI_UNSPLIT, MI_NO, MI_YES,
++    MI_SPLIT_SELECTED, MI_CLOSE_SELECTED, MI_CLEAR_SELECTION,
++};
 +
 +static const char *const menu_labels[] = {
 +    [MI_CLOSE] = "Close",
@@ -4636,6 +5458,9 @@ index 0000000..c086f5a
 +    [MI_UNSPLIT] = "Unsplit",
 +    [MI_NO] = "No",
 +    [MI_YES] = "Yes, kill",
++    [MI_SPLIT_SELECTED] = "Split selected",
++    [MI_CLOSE_SELECTED] = "Close selected",
++    [MI_CLEAR_SELECTION] = "Clear selection",
 +};
 +
 +const char *
@@ -4664,6 +5489,10 @@ index 0000000..c086f5a
 +            it[n++] = MI_UNSPLIT;
 +        else if (t != win->term)
 +            it[n++] = MI_SPLIT;
++    } else if (kind == TAB_MENU_SELECTION) {
++        it[n++] = MI_SPLIT_SELECTED;
++        it[n++] = MI_CLOSE_SELECTED;
++        it[n++] = MI_CLEAR_SELECTION;
 +    } else {
 +        it[n++] = MI_NO;
 +        it[n++] = MI_YES;
@@ -4706,6 +5535,9 @@ index 0000000..c086f5a
 +    case MI_SPLIT:     tabs_split_with(t); break;
 +    case MI_UNSPLIT:   tabs_unsplit(win); break;
 +    case MI_NO:        break;
++    case MI_SPLIT_SELECTED:  split_selected(win); break;
++    case MI_CLOSE_SELECTED:  close_selected(win); break;
++    case MI_CLEAR_SELECTION: clear_selection(win); break;
 +    }
 +}
 +
@@ -4789,15 +5621,16 @@ index 0000000..c086f5a
 +}
 diff --git a/tabs.h b/tabs.h
 new file mode 100644
-index 0000000..1401b99
+index 0000000..f6111ae
 --- /dev/null
 +++ b/tabs.h
-@@ -0,0 +1,79 @@
+@@ -0,0 +1,92 @@
 +#pragma once
 +
 +#include <stdbool.h>
 +#include <stddef.h>
 +#include <stdint.h>
++#include <sys/types.h>
 +
 +#include <xkbcommon/xkbcommon.h>
 +
@@ -4844,6 +5677,7 @@ index 0000000..1401b99
 +int tabs_pane_width(const struct wl_window *win, int w, size_t n);
 +int tabs_pane_x(const struct terminal *t);
 +void tabs_relayout(struct wl_window *win);
++void tabs_sidebar_sync(struct wl_window *win);
 +void tabs_win_size(const struct wl_window *win, int *w, int *h);
 +void tabs_close_window(struct wl_window *win);
 +int tabs_row_count(const struct wl_window *win);
@@ -4867,13 +5701,24 @@ index 0000000..1401b99
 +void tabs_sidebar_btn_button(struct seat *seat, struct wl_window *win, int button, bool pressed);
 +void tabs_split_with(struct terminal *t);
 +
++void tabs_sidebar_leave(struct wl_window *win);
++void tabs_sidebar_btn_hover(struct wl_window *win, bool hover);
++
++bool tabs_dnd_enter(struct wayland *wayl, struct wl_surface *surface);
++void tabs_dnd_motion(struct wayland *wayl, double sx, double sy);
++void tabs_dnd_leave(struct wayland *wayl);
++void tabs_dnd_drop(struct wayland *wayl);
++void tabs_dnd_run(struct wayland *wayl);
++
++bool tabs_focus_pid(struct wayland *wayl, pid_t pid, const char *token);
++
 +void tabs_menu_close(struct wl_window *win);
 +bool tabs_menu_key(struct seat *seat, struct wl_window *win, xkb_keysym_t sym);
 +void tabs_menu_button(struct seat *seat, struct wl_window *win, int button, bool pressed);
 +void tabs_menu_motion(struct seat *seat, struct wl_window *win);
 +const char *tabs_menu_label(const struct wl_window *win, int i);
 diff --git a/terminal.c b/terminal.c
-index 555b88f..23f04c8 100644
+index 555b88f..67efb6d 100644
 --- a/terminal.c
 +++ b/terminal.c
 @@ -1,4 +1,5 @@
@@ -4882,15 +5727,16 @@ index 555b88f..23f04c8 100644
  
  #if defined(__GLIBC__)
  #include <malloc.h>
-@@ -274,6 +275,7 @@ fdm_ptmx(struct fdm *fdm, int fd, int events, void *data)
+@@ -274,6 +275,8 @@ fdm_ptmx(struct fdm *fdm, int fd, int events, void *data)
  
      uint8_t buf[24 * 1024];
      const size_t max_iterations = !hup ? 10 : SIZE_MAX;
 +    bool got = false;
++    const int offset_before = term->normal.offset;
  
      for (size_t i = 0; i < max_iterations && pollin; i++) {
          xassert(pollin);
-@@ -297,6 +299,19 @@ fdm_ptmx(struct fdm *fdm, int fd, int events, void *data)
+@@ -297,6 +300,25 @@ fdm_ptmx(struct fdm *fdm, int fd, int events, void *data)
  
          xassert(term->interactive_resizing.grid == NULL);
          vt_from_slave(term, buf, count);
@@ -4901,8 +5747,14 @@ index 555b88f..23f04c8 100644
 +        tll_free(term->normal.scroll_damage);
 +        tll_free(term->alt.scroll_damage);
 +        term_damage_view(term);
++
++        /* In-place redraws (spinners, status lines) aren't activity; new lines are */
++        const int rows = term->normal.num_rows;
++        if (rows > 0 && tabs_now_ms() >= term->activity_mute_until)
++            term->activity_lines += (term->normal.offset - offset_before + rows) % rows;
++
 +        if (term->conf->tabs.activity && term->tab_shown &&
-+            !term->tab_activity && tabs_now_ms() >= term->activity_mute_until)
++            !term->tab_activity && term->activity_lines >= 3)
 +        {
 +            term->tab_activity = true;
 +            render_refresh_sidebar(term->window);
@@ -4910,7 +5762,7 @@ index 555b88f..23f04c8 100644
      }
  
      if (!term->render.app_sync_updates.enabled) {
-@@ -429,6 +444,8 @@ fdm_flash(struct fdm *fdm, int fd, int events, void *data)
+@@ -429,6 +451,8 @@ fdm_flash(struct fdm *fdm, int fd, int events, void *data)
              (unsigned long long)expiration_count);
  
      term->flash.active = false;
@@ -4919,7 +5771,7 @@ index 555b88f..23f04c8 100644
      render_overlay(term);
  
      // since the overlay surface is synced with the main window surface, we have
-@@ -1012,7 +1029,7 @@ font_loader_thread(void *_data)
+@@ -1012,7 +1036,7 @@ font_loader_thread(void *_data)
      return *data->font != NULL;
  }
  
@@ -4928,7 +5780,7 @@ index 555b88f..23f04c8 100644
  reload_fonts(struct terminal *term, bool resize_grid)
  {
      const struct config *conf = term->conf;
-@@ -1175,7 +1192,8 @@ term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
+@@ -1175,7 +1199,8 @@ term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
            struct wayland *wayl, const char *foot_exe, const char *cwd,
            const char *token, const char *toplevel_name, const char *pty_path,
            int argc, char *const *argv, const char *const *envp,
@@ -4938,7 +5790,7 @@ index 555b88f..23f04c8 100644
  {
      int ptmx = -1;
      int flash_fd = -1;
-@@ -1452,14 +1470,20 @@ term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
+@@ -1452,14 +1477,20 @@ term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
          reaper_add(term->reaper, term->slave, &fdm_client_terminated, term);
      }
  
@@ -4966,7 +5818,7 @@ index 555b88f..23f04c8 100644
  
      /* Load fonts */
      if (!term_font_dpi_changed(term, 0.))
-@@ -1472,7 +1496,7 @@ term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
+@@ -1472,7 +1503,7 @@ term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
      /* Let the Wayland backend know we exist */
      tll_push_back(wayl->terms, term);
  
@@ -4975,7 +5827,7 @@ index 555b88f..23f04c8 100644
      case STARTUP_WINDOWED:
          break;
  
-@@ -1488,6 +1512,17 @@ term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
+@@ -1488,6 +1519,17 @@ term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
      if (!initialize_render_workers(term))
          goto err;
  
@@ -4993,7 +5845,7 @@ index 555b88f..23f04c8 100644
      return term;
  
  err:
-@@ -1513,9 +1548,9 @@ void
+@@ -1513,9 +1555,9 @@ void
  term_window_configured(struct terminal *term)
  {
      /* Enable ptmx FDM callback */
@@ -5005,7 +5857,7 @@ index 555b88f..23f04c8 100644
  
          const bool gamma_correct = wayl_do_linear_blending(term->wl, term->conf);
          LOG_INFO("gamma-correct blending: %s", gamma_correct ? "enabled" : "disabled");
-@@ -1629,6 +1664,26 @@ fdm_client_terminated(struct reaper *reaper, pid_t pid, int status, void *data)
+@@ -1629,6 +1671,28 @@ fdm_client_terminated(struct reaper *reaper, pid_t pid, int status, void *data)
          term_shutdown(term);
  }
  
@@ -5013,6 +5865,8 @@ index 555b88f..23f04c8 100644
 +term_release_window(struct terminal *term)
 +{
 +    struct wl_window *win = term->window;
++    if (term->wl->tab_dnd.tab == term)
++        term->wl->tab_dnd.tab = NULL;
 +    bool member = false;
 +    if (win != NULL) {
 +        tll_foreach(win->tabs, it)
@@ -5032,7 +5886,7 @@ index 555b88f..23f04c8 100644
  static bool
  fdm_shutdown(struct fdm *fdm, int fd, int events, void *data)
  {
-@@ -1637,8 +1692,7 @@ fdm_shutdown(struct fdm *fdm, int fd, int events, void *data)
+@@ -1637,8 +1701,7 @@ fdm_shutdown(struct fdm *fdm, int fd, int events, void *data)
      /* Kill the event FD */
      fdm_del(term->fdm, fd);
  
@@ -5042,7 +5896,7 @@ index 555b88f..23f04c8 100644
  
      struct wayland *wayl = term->wl;
  
-@@ -1735,7 +1789,7 @@ term_shutdown(struct terminal *term)
+@@ -1735,7 +1798,7 @@ term_shutdown(struct terminal *term)
  
      del_utmp_record(term->conf, term->reaper, term->ptmx);
  
@@ -5051,7 +5905,7 @@ index 555b88f..23f04c8 100644
          fdm_del(term->fdm, term->ptmx);
      else
          close(term->ptmx);
-@@ -1977,10 +2031,7 @@ term_destroy(struct terminal *term)
+@@ -1977,10 +2040,7 @@ term_destroy(struct terminal *term)
      if (term->shutdown.terminate_timeout_fd >= 0)
          fdm_del(term->fdm, term->shutdown.terminate_timeout_fd);
  
@@ -5063,23 +5917,29 @@ index 555b88f..23f04c8 100644
  
      mtx_lock(&term->render.workers.lock);
      xassert(tll_length(term->render.workers.queue) == 0);
-@@ -3778,7 +3829,15 @@ term_xcursor_update_for_seat(struct terminal *term, struct seat *seat)
+@@ -3778,6 +3838,21 @@ term_xcursor_update_for_seat(struct terminal *term, struct seat *seat)
              shape = CURSOR_SHAPE_LEFT_PTR;
          break;
  
-+    case TERM_SURF_SIDEBAR:
-+        shape = term->window->sidebar_resize.hover || term->window->sidebar_resize.seat != NULL
++    case TERM_SURF_SIDEBAR: {
++        const struct wl_window *w = term->window;
++        shape = w->sidebar_resize.hover || w->sidebar_resize.seat != NULL
 +            ? term->conf->tabs.right ? CURSOR_SHAPE_LEFT_SIDE : CURSOR_SHAPE_RIGHT_SIDE
++            : w->sidebar_drag.dragging ? CURSOR_SHAPE_GRABBING
++            : w->hover.what != TAB_HOVER_NONE ? CURSOR_SHAPE_POINTER
 +            : CURSOR_SHAPE_LEFT_PTR;
++        break;
++    }
++
++    case TERM_SURF_SIDEBAR_BUTTON:
++    case TERM_SURF_TAB_MENU:
++        shape = CURSOR_SHAPE_POINTER;
 +        break;
 +
      case TERM_SURF_TITLE:
-+    case TERM_SURF_SIDEBAR_BUTTON:
-+    case TERM_SURF_TAB_MENU:
      case TERM_SURF_BUTTON_MINIMIZE:
      case TERM_SURF_BUTTON_MAXIMIZE:
-     case TERM_SURF_BUTTON_CLOSE:
-@@ -3911,7 +3970,16 @@ term_bell(struct terminal *term)
+@@ -3911,7 +3986,16 @@ term_bell(struct terminal *term)
      if (!term->bell_action_enabled)
          return;
  
@@ -5097,7 +5957,7 @@ index 555b88f..23f04c8 100644
          if (!wayl_win_set_urgent(term->window)) {
              /*
               * Urgency (xdg-activation) is relatively new in
-@@ -4589,8 +4657,16 @@ out:
+@@ -4589,8 +4673,16 @@ out:
  enum term_surface
  term_surface_kind(const struct terminal *term, const struct wl_surface *surface)
  {
@@ -5115,7 +5975,7 @@ index 555b88f..23f04c8 100644
      else if (surface == term->window->csd.surface[CSD_SURF_TITLE].surface.surf)
          return TERM_SURF_TITLE;
      else if (surface == term->window->csd.surface[CSD_SURF_LEFT].surface.surf)
-@@ -4931,6 +5007,7 @@ term_theme_switch_to_dark(struct terminal *term)
+@@ -4931,6 +5023,7 @@ term_theme_switch_to_dark(struct terminal *term)
  
      if (term->report_theme_changes)
          term_to_slave(term, "\033[?997;1n", 9);
@@ -5123,7 +5983,7 @@ index 555b88f..23f04c8 100644
  
      term_damage_view(term);
      term_damage_margins(term);
-@@ -4951,6 +5028,7 @@ term_theme_switch_to_light(struct terminal *term)
+@@ -4951,6 +5044,7 @@ term_theme_switch_to_light(struct terminal *term)
  
      if (term->report_theme_changes)
          term_to_slave(term, "\033[?997;2n", 9);
@@ -5131,7 +5991,7 @@ index 555b88f..23f04c8 100644
  
      term_damage_view(term);
      term_damage_margins(term);
-@@ -4966,12 +5044,14 @@ term_theme_toggle(struct terminal *term)
+@@ -4966,12 +5060,14 @@ term_theme_toggle(struct terminal *term)
  
          if (term->report_theme_changes)
              term_to_slave(term, "\033[?997;2n", 9);
@@ -5147,7 +6007,7 @@ index 555b88f..23f04c8 100644
  
      wayl_win_alpha_changed(term->window);
 diff --git a/terminal.h b/terminal.h
-index 7566e95..f2dbc55 100644
+index 7566e95..1f0164a 100644
 --- a/terminal.h
 +++ b/terminal.h
 @@ -362,6 +362,9 @@ enum term_surface {
@@ -5160,11 +6020,13 @@ index 7566e95..f2dbc55 100644
  };
  
  enum overlay_style {
-@@ -635,6 +638,14 @@ struct terminal {
+@@ -635,6 +638,16 @@ struct terminal {
  
      struct wayland *wl;
      struct wl_window *window;
 +    bool tab_marker;
++    bool tab_selected;
++    int activity_lines;
 +    bool tab_activity;
 +    bool tab_shown;
 +    uint64_t activity_mute_until;
@@ -5175,7 +6037,7 @@ index 7566e95..f2dbc55 100644
      bool visual_focus;
      bool kbd_focus;
      enum term_surface active_surface;
-@@ -844,7 +855,8 @@ struct terminal *term_init(
+@@ -844,7 +857,8 @@ struct terminal *term_init(
      struct wayland *wayl, const char *foot_exe, const char *cwd,
      const char *token, const char *toplevel_name, const char *pty_path,
      int argc, char *const *argv, const char *const *envp,
@@ -5185,7 +6047,7 @@ index 7566e95..f2dbc55 100644
  
  bool term_shutdown(struct terminal *term);
  int term_destroy(struct terminal *term);
-@@ -866,6 +878,7 @@ bool term_font_size_increase(struct terminal *term);
+@@ -866,6 +880,7 @@ bool term_font_size_increase(struct terminal *term);
  bool term_font_size_decrease(struct terminal *term);
  bool term_font_size_reset(struct terminal *term);
  bool term_font_dpi_changed(struct terminal *term, float old_scale);
@@ -5270,7 +6132,7 @@ index d3e1fbb..45dbc6f 100644
      };
  
 diff --git a/wayland.c b/wayland.c
-index a2c255a..4f0c88f 100644
+index a2c255a..3020f88 100644
 --- a/wayland.c
 +++ b/wayland.c
 @@ -32,6 +32,7 @@
@@ -5292,7 +6154,7 @@ index a2c255a..4f0c88f 100644
  
      for (size_t i = 0; i < ALEN(win->csd.surface); i++)
          wayl_win_subsurface_destroy(&win->csd.surface[i]);
-@@ -410,6 +411,32 @@ static const struct wl_seat_listener seat_listener = {
+@@ -410,6 +411,33 @@ static const struct wl_seat_listener seat_listener = {
      .name = seat_handle_name,
  };
  
@@ -5303,6 +6165,7 @@ index a2c255a..4f0c88f 100644
 +{
 +    if (tll_length(win->tabs) <= 1) {
 +        update_term_for_output_change(win->term);
++        tabs_sidebar_sync(win);
 +        return;
 +    }
 +
@@ -5325,7 +6188,7 @@ index a2c255a..4f0c88f 100644
  static void
  update_term_for_output_change(struct terminal *term)
  {
-@@ -464,10 +491,12 @@ update_terms_on_monitor(struct monitor *mon)
+@@ -464,10 +492,12 @@ update_terms_on_monitor(struct monitor *mon)
  
      tll_foreach(wayl->terms, it) {
          struct terminal *term = it->item;
@@ -5339,7 +6202,7 @@ index a2c255a..4f0c88f 100644
                  break;
              }
          }
-@@ -793,8 +822,8 @@ surface_enter(void *data, struct wl_surface *wl_surface,
+@@ -793,8 +823,8 @@ surface_enter(void *data, struct wl_surface *wl_surface,
      tll_foreach(term->wl->monitors, it) {
          if (it->item.output == wl_output) {
              LOG_DBG("mapped on %s", it->item.name);
@@ -5350,7 +6213,7 @@ index a2c255a..4f0c88f 100644
              return;
          }
      }
-@@ -807,15 +836,14 @@ surface_leave(void *data, struct wl_surface *wl_surface,
+@@ -807,15 +837,14 @@ surface_leave(void *data, struct wl_surface *wl_surface,
                struct wl_output *wl_output)
  {
      struct wl_window *win = data;
@@ -5369,7 +6232,7 @@ index a2c255a..4f0c88f 100644
          return;
      }
  
-@@ -835,7 +863,7 @@ surface_preferred_buffer_scale(void *data, struct wl_surface *surface,
+@@ -835,7 +864,7 @@ surface_preferred_buffer_scale(void *data, struct wl_surface *surface,
      LOG_DBG("wl_surface preferred scale: %d -> %d", win->preferred_buffer_scale, scale);
  
      win->preferred_buffer_scale = scale;
@@ -5378,7 +6241,7 @@ index a2c255a..4f0c88f 100644
  }
  
  static void
-@@ -971,9 +999,8 @@ static void
+@@ -971,9 +1000,8 @@ static void
  xdg_toplevel_close(void *data, struct xdg_toplevel *xdg_toplevel)
  {
      struct wl_window *win = data;
@@ -5389,7 +6252,7 @@ index a2c255a..4f0c88f 100644
  }
  
  #if defined(XDG_TOPLEVEL_CONFIGURE_BOUNDS_SINCE_VERSION)
-@@ -1144,7 +1171,9 @@ xdg_surface_configure(void *data, struct xdg_surface *xdg_surface,
+@@ -1144,7 +1172,11 @@ xdg_surface_configure(void *data, struct xdg_surface *xdg_surface,
          opts |= RESIZE_FORCE;
  #endif
  
@@ -5397,10 +6260,12 @@ index a2c255a..4f0c88f 100644
 +    bool resized = tll_length(win->tabs) > 1
 +        ? tabs_layout(win, new_width, new_height)
 +        : render_resize(term, new_width, new_height, opts);
++    if (tll_length(win->tabs) <= 1)
++        tabs_sidebar_sync(win);
  
      if (win->configure.is_activated)
          term_visual_focus_in(term);
-@@ -1162,6 +1191,7 @@ xdg_surface_configure(void *data, struct xdg_surface *xdg_surface,
+@@ -1162,6 +1194,7 @@ xdg_surface_configure(void *data, struct xdg_surface *xdg_surface,
      if (was_fullscreen != win->is_fullscreen) {
          wayl_win_alpha_changed(win);
          render_refresh(term);
@@ -5408,7 +6273,7 @@ index a2c255a..4f0c88f 100644
      }
  
      const bool will_render_soon = resized ||
-@@ -1178,8 +1208,10 @@ xdg_surface_configure(void *data, struct xdg_surface *xdg_surface,
+@@ -1178,8 +1211,10 @@ xdg_surface_configure(void *data, struct xdg_surface *xdg_surface,
          wl_surface_commit(win->surface.surf);
      }
  
@@ -5421,7 +6286,7 @@ index a2c255a..4f0c88f 100644
  }
  
  static const struct xdg_surface_listener xdg_surface_listener = {
-@@ -1793,6 +1825,11 @@ static void
+@@ -1793,6 +1828,12 @@ static void
  fdm_hook(struct fdm *fdm, void *data)
  {
      struct wayland *wayl = data;
@@ -5430,10 +6295,11 @@ index a2c255a..4f0c88f 100644
 +        wayl->merge_src = NULL;
 +        tabs_merge_into(src, tabs_merge_target(src));
 +    }
++    tabs_dnd_run(wayl);
      wayl_flush(wayl);
  }
  
-@@ -1974,14 +2011,10 @@ wayl_destroy(struct wayland *wayl)
+@@ -1974,14 +2015,10 @@ wayl_destroy(struct wayland *wayl)
      if (wayl == NULL)
          return;
  
@@ -5452,7 +6318,7 @@ index a2c255a..4f0c88f 100644
  
      tll_free(wayl->terms);
  
-@@ -2088,7 +2121,7 @@ fractional_scale_preferred_scale(
+@@ -2088,7 +2125,7 @@ fractional_scale_preferred_scale(
      LOG_DBG("fractional scale: %.2f -> %.2f", win->scale, new_scale);
  
      win->scale = new_scale;
@@ -5461,7 +6327,7 @@ index a2c255a..4f0c88f 100644
  }
  
  static const struct wp_fractional_scale_v1_listener fractional_scale_listener = {
-@@ -2108,6 +2141,17 @@ wayl_win_init(struct terminal *term, const char *token, const char *toplevel_nam
+@@ -2108,6 +2145,18 @@ wayl_win_init(struct terminal *term, const char *token, const char *toplevel_nam
      }
  
      win->term = term;
@@ -5475,11 +6341,12 @@ index a2c255a..4f0c88f 100644
 +        win->bg_chain = shm_chain_new(wayl, false, 1, bd, NULL, NULL);
 +    }
 +    win->sidebar_w = conf->tabs.width;
++    win->drop_row = -1;
 +    win->sidebar_hidden = !conf->tabs.show;
      win->csd_mode = CSD_UNKNOWN;
      win->csd.move_timeout_fd = -1;
      win->resize_timeout_fd = -1;
-@@ -2277,6 +2321,17 @@ wayl_win_destroy(struct wl_window *win)
+@@ -2277,6 +2326,23 @@ wayl_win_destroy(struct wl_window *win)
          return;
  
      struct terminal *term = win->term;
@@ -5488,6 +6355,12 @@ index a2c255a..4f0c88f 100644
 +    win->closing = true;
 +    if (wayl->merge_src == win)
 +        wayl->merge_src = NULL;
++    if (wayl->tab_dnd.target == win) {
++        wayl->tab_dnd.target = NULL;
++        wayl->tab_dnd.surface = NULL;
++    }
++    if (wayl->tab_dnd.dest == win)
++        wayl->tab_dnd.dest = NULL;
 +    tll_foreach(wayl->windows, it) {
 +        if (it->item == win) {
 +            tll_remove(wayl->windows, it);
@@ -5497,7 +6370,7 @@ index a2c255a..4f0c88f 100644
  
      if (win->csd.move_timeout_fd != -1)
          close(win->csd.move_timeout_fd);
-@@ -2359,6 +2414,12 @@ wayl_win_destroy(struct wl_window *win)
+@@ -2359,6 +2425,13 @@ wayl_win_destroy(struct wl_window *win)
  
      render_wait_for_preapply_damage(term);
  
@@ -5506,11 +6379,12 @@ index a2c255a..4f0c88f 100644
 +    wayl_win_subsurface_destroy(&win->sidebar);
 +    wayl_win_subsurface_destroy(&win->sidebar_btn);
 +    wayl_win_subsurface_destroy(&win->menu_surf);
++    wayl_win_subsurface_destroy(&win->hint_surf);
 +
      csd_destroy(win);
      wayl_win_subsurface_destroy(&win->search);
      wayl_win_subsurface_destroy(&win->scrollback_indicator);
-@@ -2407,6 +2468,20 @@ wayl_win_destroy(struct wl_window *win)
+@@ -2407,6 +2480,20 @@ wayl_win_destroy(struct wl_window *win)
  
      if (win->resize_timeout_fd >= 0)
          fdm_del(win->term->wl->fdm, win->resize_timeout_fd);
@@ -5532,16 +6406,32 @@ index a2c255a..4f0c88f 100644
  }
  
 diff --git a/wayland.h b/wayland.h
-index 3ed68b2..9873309 100644
+index 3ed68b2..4d48c6f 100644
 --- a/wayland.h
 +++ b/wayland.h
-@@ -368,9 +368,48 @@ struct xdg_activation_token_context {
+@@ -84,6 +84,7 @@ struct wl_clipboard {
+     struct wl_data_source *data_source;
+     struct wl_data_offer *data_offer;
+     enum data_offer_mime_type mime_type;
++    bool tab_offer;
+     char *text;
+     uint32_t serial;
+ };
+@@ -368,9 +369,64 @@ struct xdg_activation_token_context {
      void *cb_data;                                /* Callback user pointer */
  };
  
 +enum tab_drop { TAB_DROP_NONE, TAB_DROP_SPLIT, TAB_DROP_DETACH };
 +
-+enum tab_menu_kind { TAB_MENU_NONE, TAB_MENU_ACTIONS, TAB_MENU_CONFIRM_KILL };
++enum tab_menu_kind {
++    TAB_MENU_NONE, TAB_MENU_ACTIONS, TAB_MENU_CONFIRM_KILL, TAB_MENU_SELECTION
++};
++
++enum tab_hover {
++    TAB_HOVER_NONE, TAB_HOVER_ROW, TAB_HOVER_NEW, TAB_HOVER_HIDE, TAB_HOVER_GRIP
++};
++
++#define TAB_MIME "application/x-foot-tab"
 +
  struct wayland;
  struct wl_window {
@@ -5550,6 +6440,7 @@ index 3ed68b2..9873309 100644
 +    struct wayl_sub_surface sidebar;
 +    struct wayl_sub_surface sidebar_btn;
 +    struct wayl_sub_surface menu_surf;
++    struct wayl_sub_surface hint_surf;
 +    struct buffer_chain *sidebar_chain;
 +    struct buffer_chain *menu_chain;
 +    struct buffer_chain *bg_chain;
@@ -5572,6 +6463,13 @@ index 3ed68b2..9873309 100644
 +        bool hover;
 +    } sidebar_resize;
 +    struct {
++        enum tab_hover what;
++        int row;
++        bool btn;
++    } hover;
++    int drop_row;      /* insertion line while a tab is dragged over the sidebar, or -1 */
++    bool drop_split;   /* split hint while a tab is dragged over the terminal */
++    struct {
 +        enum tab_menu_kind kind;
 +        struct terminal *target;
 +        int sel;
@@ -5584,7 +6482,7 @@ index 3ed68b2..9873309 100644
      struct wayl_surface surface;
      struct xdg_surface *xdg_surface;
      struct xdg_toplevel *xdg_toplevel;
-@@ -524,6 +563,22 @@ struct wayland {
+@@ -524,6 +580,34 @@ struct wayland {
      tll(struct seat) seats;
  
      tll(struct terminal *) terms;
@@ -5604,6 +6502,18 @@ index 3ed68b2..9873309 100644
 +
 +    /* Merging destroys a window; doing it mid-dispatch unbalances the Wayland read lock */
 +    struct wl_window *merge_src;
++
++    struct {
++        struct terminal *tab;
++        struct wl_data_source *source;
++        struct wl_surface *icon;
++        struct buffer_chain *icon_chain;
++        struct wl_window *target;
++        struct wl_window *dest;
++        struct wl_surface *surface;
++        int row;
++        enum { TAB_DND_NONE, TAB_DND_MOVE, TAB_DND_DETACH, TAB_DND_KEEP } action;
++    } tab_dnd;
  
      /* WL_SHM >= 2 */
      bool use_shm_release;
