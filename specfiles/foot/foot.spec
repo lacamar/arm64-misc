@@ -3,7 +3,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        15%{?dist}
+Release:        16%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -149,6 +149,19 @@ desktop-file-validate \
 
 
 %changelog
+* Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-16
+- Sidebar lists split panes on their own lines
+- Split to any side; vertical splits
+- Drop in a pane's middle to add as a tab
+- Scrollable tab list
+- Middle-elide long tab titles
+- Collapse hidden-sidebar button to an edge sliver
+- Compositor close closes the current tab
+- Smaller + hover zone
+- Lighter layout during live resize
+- Fix touchpad scroll speed at fractional/2x scale
+- Fix drops into split gaps
+
 * Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-15
 - Sidebar on every window, hidden by default
 - Drag tabs between windows, with drag label and drop hints
