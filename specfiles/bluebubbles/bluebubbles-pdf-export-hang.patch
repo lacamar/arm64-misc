@@ -1,5 +1,5 @@
 diff --git a/lib/app/layouts/conversation_details/material/material_chat_options.dart b/lib/app/layouts/conversation_details/material/material_chat_options.dart
-index 761acc9..8bf70db 100644
+index 761acc9..0f996c9 100644
 --- a/lib/app/layouts/conversation_details/material/material_chat_options.dart
 +++ b/lib/app/layouts/conversation_details/material/material_chat_options.dart
 @@ -610,73 +610,48 @@ class ExpressiveChatOptions extends StatelessWidget {
@@ -22,7 +22,7 @@ index 761acc9..8bf70db 100644
 +    final List<pw.Widget> entries = [];
 +    try {
 +      final font = await PdfGoogleFonts.openSansRegular();
-+      final style = pw.TextStyle(font: font);
++      final style = pw.TextStyle(font: font, fontFallback: [await PdfGoogleFonts.notoColorEmoji()]);
 +      for (Message m in messages) {
 +        final readStr = m.dateRead != null ? "Read: ${buildFullDate(m.dateRead!)}, " : "";
 +        final deliveredStr = m.dateDelivered != null ? "Delivered: ${buildFullDate(m.dateDelivered!)}, " : "";
@@ -115,7 +115,7 @@ index 761acc9..8bf70db 100644
    }
  }
 diff --git a/lib/app/layouts/conversation_details/widgets/chat_options.dart b/lib/app/layouts/conversation_details/widgets/chat_options.dart
-index 76a4bbf..9f3c47d 100644
+index 76a4bbf..9346e9b 100644
 --- a/lib/app/layouts/conversation_details/widgets/chat_options.dart
 +++ b/lib/app/layouts/conversation_details/widgets/chat_options.dart
 @@ -591,99 +591,49 @@ class _ChatOptionsState extends State<ChatOptions> with ThemeHelpers {
@@ -141,7 +141,7 @@ index 76a4bbf..9f3c47d 100644
 +            final List<pw.Widget> entries = [];
 +            try {
 +              final font = await PdfGoogleFonts.openSansRegular();
-+              final style = pw.TextStyle(font: font);
++              final style = pw.TextStyle(font: font, fontFallback: [await PdfGoogleFonts.notoColorEmoji()]);
 +              for (Message m in messages) {
 +                final readStr = m.dateRead != null ? "Read: ${buildFullDate(m.dateRead!)}, " : "";
 +                final deliveredStr = m.dateDelivered != null ? "Delivered: ${buildFullDate(m.dateDelivered!)}, " : "";
