@@ -2935,10 +2935,10 @@ index b128b7e..50417bc 100644
  const char *session_window_name(const struct session_window *w);
 diff --git a/tabs.c b/tabs.c
 new file mode 100644
-index 0000000..3143d77
+index 0000000..7642a7b
 --- /dev/null
 +++ b/tabs.c
-@@ -0,0 +1,1564 @@
+@@ -0,0 +1,1566 @@
 +#include "tabs.h"
 +
 +#include <limits.h>
@@ -3822,6 +3822,8 @@ index 0000000..3143d77
 +            break;
 +        struct tab_ws *sw = it->item;
 +        struct tab_ws *dw = tabs_ws_find(dst, sw->name);
++        if (dw == NULL && sw->name == NULL && tll_length(src->workspaces) == 1)
++            dw = dst->ws;
 +        if (dw == NULL) {
 +            dw = tabs_ws_add(dst, sw->name);
 +            dw->active = sw->active;
