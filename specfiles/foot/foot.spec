@@ -3,7 +3,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        13%{?dist}
+Release:        14%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -149,6 +149,17 @@ desktop-file-validate \
 
 
 %changelog
+* Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-14
+- Drop workspaces; restore v5 sessions as flat tabs
+- Add resizable sidebar
+- Add sidebar hide/show arrow, [tabs] show
+- Add [tabs] position=left|right
+- Add tab context menu: close, kill, duplicate, split, unsplit
+- Add [session-duplicate] rules
+- Add drag tab onto terminal to split
+- Add toggle-sidebar action
+- Fix crash entering split view background
+
 * Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-13
 - Merge unnamed workspace into current one
 
