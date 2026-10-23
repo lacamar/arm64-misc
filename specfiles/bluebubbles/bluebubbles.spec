@@ -12,12 +12,13 @@
 
 Name:       bluebubbles
 Version:    %{tag}
-Release:    1%{?dist}
+Release:    2%{?dist}
 Summary:    iMessage client for Linux, part of the BlueBubbles ecosystem
 
 License:    Apache-2.0
 URL:        https://bluebubbles.app
 Source0:    https://github.com/BlueBubblesApp/bluebubbles-app/archive/refs/tags/v%{appver}+desktop.%{build_num}.tar.gz
+Patch0:     bluebubbles-pdf-export-hang.patch
 
 ExclusiveArch:  aarch64
 
@@ -53,7 +54,7 @@ Mac. This package builds the Flutter-based desktop client from source for
 Linux.
 
 %prep
-%autosetup -n bluebubbles-app-%{dirtag}
+%autosetup -p1 -n bluebubbles-app-%{dirtag}
 
 echo 'KLIPY_API_KEY=' > .env
 
@@ -111,6 +112,9 @@ install -Dpm0644 flatpak/%{appid}.metainfo.xml \
 %{_metainfodir}/%{appid}.metainfo.xml
 
 %changelog
+* Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 2.1.3.93-2
+- Fix PDF transcript export hang
+
 * Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 2.1.3.93-1
 - Update to 2.1.3.93
 - Follow +desktop tag scheme

@@ -1,0 +1,260 @@
+diff --git a/lib/app/layouts/conversation_details/material/material_chat_options.dart b/lib/app/layouts/conversation_details/material/material_chat_options.dart
+index 761acc9..773520c 100644
+--- a/lib/app/layouts/conversation_details/material/material_chat_options.dart
++++ b/lib/app/layouts/conversation_details/material/material_chat_options.dart
+@@ -610,73 +610,49 @@ class ExpressiveChatOptions extends StatelessWidget {
+       return;
+     }
+ 
+-    final doc = pw.Document();
+-    final List<String> timestamps = [];
+-    final List<dynamic> content = [];
+-    final List<Size?> dimensions = [];
+-    for (Message m in messages) {
+-      final readStr = m.dateRead != null ? "Read: ${buildFullDate(m.dateRead!)}, " : "";
+-      final deliveredStr = m.dateDelivered != null ? "Delivered: ${buildFullDate(m.dateDelivered!)}, " : "";
+-      final sentStr = "Sent: ${buildFullDate(m.dateCreated!)}";
+-      if (m.hasAttachments) {
+-        final attachments =
+-            m.dbAttachments.where((e) => e.guid != null && ["image/png", "image/jpg", "image/jpeg"].contains(e.mimeType));
+-        final files = attachments.map((e) => AttachmentsSvc.getContent(e, autoDownload: false)).whereType<PlatformFile>();
+-        if (files.isNotEmpty) {
++    final List<pw.Widget> entries = [];
++    try {
++      final font = await PdfGoogleFonts.openSansRegular();
++      final style = pw.TextStyle(font: font);
++      for (Message m in messages) {
++        final readStr = m.dateRead != null ? "Read: ${buildFullDate(m.dateRead!)}, " : "";
++        final deliveredStr = m.dateDelivered != null ? "Delivered: ${buildFullDate(m.dateDelivered!)}, " : "";
++        final sentStr = "Sent: ${buildFullDate(m.dateCreated!)}";
++        entries.add(pw.SizedBox(height: 10));
++        entries.add(pw.Text(readStr + deliveredStr + sentStr, style: style.copyWith(fontSize: 8)));
++        if (m.hasAttachments) {
++          final files = m.dbAttachments
++              .where((e) => e.guid != null && ["image/png", "image/jpg", "image/jpeg"].contains(e.mimeType))
++              .map((e) => AttachmentsSvc.getContent(e, autoDownload: false))
++              .whereType<PlatformFile>();
+           for (PlatformFile f in files) {
+-            final a = attachments.firstWhere((e) => e.transferName == f.name);
+-            timestamps.add(readStr + deliveredStr + sentStr);
+-            content.add(pw.MemoryImage(await File(f.path!).readAsBytes()));
+-            final aspectRatio = (a.width ?? 150.0) / (a.height ?? 150.0);
+-            dimensions.add(Size(400, aspectRatio * 400));
++            entries.add(pw.ConstrainedBox(
++                constraints: const pw.BoxConstraints(maxWidth: 400, maxHeight: 400),
++                child: pw.Image(pw.MemoryImage(await File(f.path!).readAsBytes()))));
+           }
+         }
+-        timestamps.add(readStr + deliveredStr + sentStr);
+-        content.add(m.getNotificationText(withSender: true));
+-        dimensions.add(null);
+-      } else {
+-        timestamps.add(readStr + deliveredStr + sentStr);
+-        content.add(m.getNotificationText(withSender: true));
+-        dimensions.add(null);
++        entries.add(pw.Text(m.getNotificationText(withSender: true), style: style, overflow: pw.TextOverflow.span));
+       }
++      final doc = pw.Document();
++      doc.addPage(pw.MultiPage(
++          maxPages: 1000,
++          header: (pw.Context context) => pw.Padding(
++              padding: const pw.EdgeInsets.only(bottom: 10),
++              child: pw.Text(chat.getTitle(),
++                  textScaleFactor: 2, style: style.copyWith(fontWeight: pw.FontWeight.bold))),
++          build: (pw.Context context) => entries));
++      final now = DateTime.now().toLocal();
++      final filePath = p.join(await FilesystemSvc.downloadsDirectory,
++          "${chat.getTitle().replaceAll(RegExp(r'[<>:"/\\|?*]'), "")}-transcript-${now.year}${now.month}${now.day}_${now.hour}${now.minute}${now.second}.pdf");
++      File file = File(filePath);
++      await file.create(recursive: true);
++      await file.writeAsBytes(await doc.save());
++      if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
++      showSnackbar("Success", "Saved transcript to the downloads folder", type: SnackbarType.success);
++    } catch (e, s) {
++      Logger.error("Failed to generate PDF transcript", error: e, trace: s);
++      if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
++      showSnackbar("Error", "Failed to generate PDF: $e", type: SnackbarType.error);
+     }
+-    final font = await PdfGoogleFonts.openSansRegular();
+-    doc.addPage(pw.MultiPage(
+-        maxPages: 1000,
+-        header: (pw.Context context) => pw.Padding(
+-            padding: const pw.EdgeInsets.only(bottom: 10),
+-            child: pw.Text(chat.getTitle(),
+-                textScaleFactor: 2,
+-                style: pw.Theme.of(context).defaultTextStyle.copyWith(fontWeight: pw.FontWeight.bold, font: font))),
+-        build: (pw.Context context) => [
+-              pw.Partitions(children: [
+-                pw.Partition(
+-                    child: pw.Table(
+-                        children: List.generate(
+-                            timestamps.length,
+-                            (index) => pw.TableRow(children: [
+-                                  pw.Padding(
+-                                    padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 10),
+-                                    child: pw.Text(timestamps[index],
+-                                        style: pw.Theme.of(context).defaultTextStyle.copyWith(font: font)),
+-                                  ),
+-                                  pw.Container(
+-                                      child: pw.Padding(
+-                                          padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 10),
+-                                          child: content[index] is pw.MemoryImage
+-                                              ? pw.Image(content[index],
+-                                                  width: dimensions[index]!.width, height: dimensions[index]!.height)
+-                                              : pw.Text(content[index].toString(), style: pw.TextStyle(font: font))))
+-                                ])))),
+-              ]),
+-            ]));
+-    final now = DateTime.now().toLocal();
+-    final filePath = p.join(await FilesystemSvc.downloadsDirectory,
+-        "${chat.getTitle().replaceAll(RegExp(r'[<>:"/\\|?*]'), "")}-transcript-${now.year}${now.month}${now.day}_${now.hour}${now.minute}${now.second}.pdf");
+-    File file = File(filePath);
+-    await file.create(recursive: true);
+-    await file.writeAsBytes(await doc.save());
+-    if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
+-    showSnackbar("Success", "Saved transcript to the downloads folder", type: SnackbarType.success);
+   }
+ }
+diff --git a/lib/app/layouts/conversation_details/widgets/chat_options.dart b/lib/app/layouts/conversation_details/widgets/chat_options.dart
+index 76a4bbf..5b878c6 100644
+--- a/lib/app/layouts/conversation_details/widgets/chat_options.dart
++++ b/lib/app/layouts/conversation_details/widgets/chat_options.dart
+@@ -591,99 +591,50 @@ class _ChatOptionsState extends State<ChatOptions> with ThemeHelpers {
+               showSnackbar("Error", "No messages found!", type: SnackbarType.error);
+               return;
+             }
+-            final doc = pw.Document();
+-            final List<String> timestamps = [];
+-            final List<dynamic> content = [];
+-            final List<Size?> dimensions = [];
+-            for (Message m in messages) {
+-              final readStr = m.dateRead != null ? "Read: ${buildFullDate(m.dateRead!)}, " : "";
+-              final deliveredStr = m.dateDelivered != null ? "Delivered: ${buildFullDate(m.dateDelivered!)}, " : "";
+-              final sentStr = "Sent: ${buildFullDate(m.dateCreated!)}";
+-              if (m.hasAttachments) {
+-                final attachments = m.dbAttachments.where(
+-                  (e) => e.guid != null && ["image/png", "image/jpg", "image/jpeg"].contains(e.mimeType),
+-                );
+-                final files = attachments
+-                    .map((e) => AttachmentsSvc.getContent(e, autoDownload: false))
+-                    .whereType<PlatformFile>();
+-                if (files.isNotEmpty) {
++            final List<pw.Widget> entries = [];
++            try {
++              final font = await PdfGoogleFonts.openSansRegular();
++              final style = pw.TextStyle(font: font);
++              for (Message m in messages) {
++                final readStr = m.dateRead != null ? "Read: ${buildFullDate(m.dateRead!)}, " : "";
++                final deliveredStr = m.dateDelivered != null ? "Delivered: ${buildFullDate(m.dateDelivered!)}, " : "";
++                final sentStr = "Sent: ${buildFullDate(m.dateCreated!)}";
++                entries.add(pw.SizedBox(height: 10));
++                entries.add(pw.Text(readStr + deliveredStr + sentStr, style: style.copyWith(fontSize: 8)));
++                if (m.hasAttachments) {
++                  final files = m.dbAttachments
++                      .where((e) => e.guid != null && ["image/png", "image/jpg", "image/jpeg"].contains(e.mimeType))
++                      .map((e) => AttachmentsSvc.getContent(e, autoDownload: false))
++                      .whereType<PlatformFile>();
+                   for (PlatformFile f in files) {
+-                    final a = attachments.firstWhere((e) => e.transferName == f.name);
+-                    timestamps.add(readStr + deliveredStr + sentStr);
+-                    content.add(pw.MemoryImage(await File(f.path!).readAsBytes()));
+-                    final aspectRatio = (a.width ?? 150.0) / (a.height ?? 150.0);
+-                    dimensions.add(Size(400, aspectRatio * 400));
++                    entries.add(pw.ConstrainedBox(
++                        constraints: const pw.BoxConstraints(maxWidth: 400, maxHeight: 400),
++                        child: pw.Image(pw.MemoryImage(await File(f.path!).readAsBytes()))));
+                   }
+                 }
+-                timestamps.add(readStr + deliveredStr + sentStr);
+-                content.add(m.getNotificationText(withSender: true));
+-                dimensions.add(null);
+-              } else {
+-                timestamps.add(readStr + deliveredStr + sentStr);
+-                content.add(m.getNotificationText(withSender: true));
+-                dimensions.add(null);
++                entries.add(pw.Text(m.getNotificationText(withSender: true), style: style, overflow: pw.TextOverflow.span));
+               }
++              final doc = pw.Document();
++              doc.addPage(pw.MultiPage(
++                  maxPages: 1000,
++                  header: (pw.Context context) => pw.Padding(
++                      padding: const pw.EdgeInsets.only(bottom: 10),
++                      child: pw.Text(chat.getTitle(),
++                          textScaleFactor: 2, style: style.copyWith(fontWeight: pw.FontWeight.bold))),
++                  build: (pw.Context context) => entries));
++              final now = DateTime.now().toLocal();
++              final filePath = p.join(await FilesystemSvc.downloadsDirectory,
++                  "${chat.getTitle().replaceAll(RegExp(r'[<>:"/\\|?*]'), "")}-transcript-${now.year}${now.month}${now.day}_${now.hour}${now.minute}${now.second}.pdf");
++              File file = File(filePath);
++              await file.create(recursive: true);
++              await file.writeAsBytes(await doc.save());
++              if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
++              showSnackbar("Success", "Saved transcript to the downloads folder", type: SnackbarType.success);
++            } catch (e, s) {
++              Logger.error("Failed to generate PDF transcript", error: e, trace: s);
++              if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
++              showSnackbar("Error", "Failed to generate PDF: $e", type: SnackbarType.error);
+             }
+-            final font = await PdfGoogleFonts.openSansRegular();
+-            doc.addPage(
+-              pw.MultiPage(
+-                maxPages: 1000,
+-                header: (pw.Context context) => pw.Padding(
+-                  padding: const pw.EdgeInsets.only(bottom: 10),
+-                  child: pw.Text(
+-                    chat.getTitle(),
+-                    textScaleFactor: 2,
+-                    style: pw.Theme.of(context).defaultTextStyle.copyWith(fontWeight: pw.FontWeight.bold, font: font),
+-                  ),
+-                ),
+-                build: (pw.Context context) => [
+-                  pw.Partitions(
+-                    children: [
+-                      pw.Partition(
+-                        child: pw.Table(
+-                          children: List.generate(
+-                            timestamps.length,
+-                            (index) => pw.TableRow(
+-                              children: [
+-                                pw.Padding(
+-                                  padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 10),
+-                                  child: pw.Text(
+-                                    timestamps[index],
+-                                    style: pw.Theme.of(context).defaultTextStyle.copyWith(font: font),
+-                                  ),
+-                                ),
+-                                pw.Container(
+-                                  child: pw.Padding(
+-                                    padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 10),
+-                                    child: content[index] is pw.MemoryImage
+-                                        ? pw.Image(
+-                                            content[index],
+-                                            width: dimensions[index]!.width,
+-                                            height: dimensions[index]!.height,
+-                                          )
+-                                        : pw.Text(content[index].toString(), style: pw.TextStyle(font: font)),
+-                                  ),
+-                                ),
+-                              ],
+-                            ),
+-                          ),
+-                        ),
+-                      ),
+-                    ],
+-                  ),
+-                ],
+-              ),
+-            );
+-            final now = DateTime.now().toLocal();
+-            final filePath = p.join(
+-              await FilesystemSvc.downloadsDirectory,
+-              "${chat.getTitle().replaceAll(RegExp(r'[<>:"/\\|?*]'), "")}-transcript-${now.year}${now.month}${now.day}_${now.hour}${now.minute}${now.second}.pdf",
+-            );
+-            File file = File(filePath);
+-            await file.create(recursive: true);
+-            await file.writeAsBytes(await doc.save());
+-            Navigator.of(context, rootNavigator: true).pop();
+-            showSnackbar("Success", "Saved transcript to the downloads folder", type: SnackbarType.success);
+           },
+         ),
+       ),
