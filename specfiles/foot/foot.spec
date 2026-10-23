@@ -3,7 +3,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        16%{?dist}
+Release:        17%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -149,6 +149,20 @@ desktop-file-validate \
 
 
 %changelog
+* Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-17
+- Hover close button on tabs
+- Rename tabs (double-click), pin tabs
+- Quick switcher (Ctrl+Shift+Space)
+- Reopen closed tab (Ctrl+Shift+Y, last 10)
+- Done marks and notifications for long commands
+- Broadcast input to split panes
+- Draggable pane dividers
+- Draggable sidebar scrollbar on the outer edge
+- Subtle sidebar animations ([tabs] animations)
+- Synced pane updates during resize
+- Fix activity never marking restored tabs
+- Fix sidebar button staying expanded
+
 * Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-16
 - Sidebar lists split panes on their own lines
 - Split to any side; vertical splits
