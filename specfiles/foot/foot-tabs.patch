@@ -500,10 +500,10 @@ index 24d81b5..22e8893 100644
  
  The following keyboard shortcuts are available by default. They can be
 diff --git a/doc/foot.ini.5.scd b/doc/foot.ini.5.scd
-index e65729b..9e0c555 100644
+index e65729b..0725116 100644
 --- a/doc/foot.ini.5.scd
 +++ b/doc/foot.ini.5.scd
-@@ -937,6 +937,97 @@ _"$@"_ to keep its original arguments. Rules also apply to the
+@@ -937,6 +937,100 @@ _"$@"_ to keep its original arguments. Rules also apply to the
  program foot's own child is running, so a window launched as
  *footclient claude* is resumed rather than restarted.
  
@@ -533,8 +533,11 @@ index e65729b..9e0c555 100644
 +are joined by a bracket. Mouse actions: left-click a tab to select it
 +(or focus that pane of a split); *Control*-click or *Shift*-click to
 +select several (right-click a selected tab to split or close them
-+together); scroll to move through a long list; middle-click to
-+close; right-click for a menu (close, kill, duplicate, split, move
++together); scroll the wheel to switch to the previous/next tab (drag
++the scrollbar on the outer edge to move through a long list);
++right-click the empty part of the sidebar to sort the tabs by name,
++most recent use, program or opening order (pinned tabs stay first);
++middle-click to close; right-click for a menu (close, kill, duplicate, split, move
 +out of split, unsplit all) driven by mouse or
 +*Up*/*Down*/*Return*/*Escape*.
 +
@@ -601,7 +604,7 @@ index e65729b..9e0c555 100644
  # SECTION: url
  
  Note that you can also add custom regular expressions, see the 'regex'
-@@ -1587,6 +1678,60 @@ e.g. *search-start=none*.
+@@ -1587,6 +1681,60 @@ e.g. *search-start=none*.
  *quit*
  	Quit foot. Default: _none_.
  
@@ -764,7 +767,7 @@ index fa0e2ce..f896d02 100644
          seat->ime.cursor_rect.pending.height / term->scale);
  
 diff --git a/input.c b/input.c
-index f6ba9de..87342a9 100644
+index f6ba9de..3f8fd11 100644
 --- a/input.c
 +++ b/input.c
 @@ -26,12 +26,14 @@
@@ -1139,13 +1142,14 @@ index f6ba9de..87342a9 100644
          break;
  
      }
-@@ -3329,6 +3556,14 @@ mouse_scroll(struct seat *seat, int amount, enum wl_pointer_axis axis)
+@@ -3329,6 +3556,15 @@ mouse_scroll(struct seat *seat, int amount, enum wl_pointer_axis axis)
      struct terminal *term = seat->mouse_focus;
      xassert(term != NULL);
  
 +    if (term->active_surface == TERM_SURF_SIDEBAR) {
++        /* The wheel switches tabs; the list scrolls by dragging its scrollbar */
 +        if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL)
-+            tabs_sidebar_scroll(term->window, amount);
++            tabs_cycle_lines(term->window, amount);
 +        return;
 +    }
 +    if (term->active_surface != TERM_SURF_GRID)
@@ -1154,7 +1158,7 @@ index f6ba9de..87342a9 100644
      int button = axis == WL_POINTER_AXIS_VERTICAL_SCROLL
          ? amount < 0 ? BTN_WHEEL_BACK : BTN_WHEEL_FORWARD
          : amount < 0 ? BTN_WHEEL_LEFT : BTN_WHEEL_RIGHT;
-@@ -3398,14 +3633,16 @@ wl_pointer_axis(void *data, struct wl_pointer *wl_pointer,
+@@ -3398,14 +3634,16 @@ wl_pointer_axis(void *data, struct wl_pointer *wl_pointer,
       * Without this, very slow scrolling will never actually scroll
       * anything.
       */
@@ -1174,7 +1178,7 @@ index f6ba9de..87342a9 100644
  }
  
  static void
-@@ -3554,7 +3791,7 @@ wl_touch_down(void *data, struct wl_touch *wl_touch, uint32_t serial,
+@@ -3554,7 +3792,7 @@ wl_touch_down(void *data, struct wl_touch *wl_touch, uint32_t serial,
          return;
  
      struct wl_window *win = wl_surface_get_user_data(surface);
@@ -1183,7 +1187,7 @@ index f6ba9de..87342a9 100644
  
      LOG_DBG("touch_down: touch=%p, x=%d, y=%d", (void *)wl_touch,
              wl_fixed_to_int(surface_x), wl_fixed_to_int(surface_y));
-@@ -3586,7 +3823,7 @@ wl_touch_up(void *data, struct wl_touch *wl_touch, uint32_t serial,
+@@ -3586,7 +3824,7 @@ wl_touch_up(void *data, struct wl_touch *wl_touch, uint32_t serial,
      LOG_DBG("touch_up: touch=%p", (void *)wl_touch);
  
      struct wl_window *win = wl_surface_get_user_data(seat->touch.surface);
@@ -1192,7 +1196,7 @@ index f6ba9de..87342a9 100644
  
      struct terminal *old_term = seat->mouse_focus;
      enum term_surface old_active_surface = term->active_surface;
-@@ -3613,8 +3850,10 @@ wl_touch_up(void *data, struct wl_touch *wl_touch, uint32_t serial,
+@@ -3613,8 +3851,10 @@ wl_touch_up(void *data, struct wl_touch *wl_touch, uint32_t serial,
          break;
      }
  
@@ -1205,7 +1209,7 @@ index f6ba9de..87342a9 100644
  }
  
  static void
-@@ -3629,7 +3868,7 @@ wl_touch_motion(void *data, struct wl_touch *wl_touch, uint32_t time,
+@@ -3629,7 +3869,7 @@ wl_touch_motion(void *data, struct wl_touch *wl_touch, uint32_t time,
              wl_fixed_to_int(surface_x), wl_fixed_to_int(surface_y));
  
      struct wl_window *win = wl_surface_get_user_data(seat->touch.surface);
@@ -1214,7 +1218,7 @@ index f6ba9de..87342a9 100644
  
      struct terminal *old_term = seat->mouse_focus;
      enum term_surface old_active_surface = term->active_surface;
-@@ -3661,8 +3900,10 @@ wl_touch_motion(void *data, struct wl_touch *wl_touch, uint32_t time,
+@@ -3661,8 +3901,10 @@ wl_touch_motion(void *data, struct wl_touch *wl_touch, uint32_t time,
          break;
      }
  
@@ -4012,10 +4016,10 @@ index 6289937..b385f1b 100644
          del_from_env(&custom_env, "TERM_PROGRAM");            /* Wezterm, Ghostty */
 diff --git a/tabs.c b/tabs.c
 new file mode 100644
-index 0000000..967c93c
+index 0000000..edc2c8a
 --- /dev/null
 +++ b/tabs.c
-@@ -0,0 +1,2969 @@
+@@ -0,0 +1,3110 @@
 +#include "tabs.h"
 +
 +#include <limits.h>
@@ -4395,6 +4399,7 @@ index 0000000..967c93c
 +
 +    hide_overlays(win, old);
 +    win->term = t;
++    t->tab_last_active = tabs_now_ms();
 +
 +    focus_handover(win, old, t, NULL, 0);
 +    render_refresh(old);
@@ -4434,6 +4439,7 @@ index 0000000..967c93c
 +    }
 +
 +    win->term = new;
++    new->tab_last_active = tabs_now_ms();
 +
 +    struct terminal *newv[MAX_SET];
 +    size_t nn = visible_set(new, newv);
@@ -4466,6 +4472,8 @@ index 0000000..967c93c
 +tabs_attach(struct wl_window *win, struct terminal *term,
 +            struct terminal *after, bool split)
 +{
++    if (term->tab_created == 0)
++        term->tab_created = term->tab_last_active = tabs_now_ms();
 +    struct terminal **arr;
 +    size_t n = to_arr(win, &arr);
 +    arr = xrealloc(arr, (n + 1) * sizeof(arr[0]));
@@ -6124,6 +6132,10 @@ index 0000000..967c93c
 +        tabs_reopen(win);
 +        return;
 +    }
++    if (zone == TAB_HOVER_NONE && button == BTN_RIGHT) {
++        menu_open(win, win->term, TAB_MENU_SORT, sidebar_origin_px(win) + x, y);
++        return;
++    }
 +    if (zone == TAB_HOVER_HIDE || zone == TAB_HOVER_NEW) {
 +        if (button != BTN_LEFT)
 +            return;
@@ -6429,6 +6441,121 @@ index 0000000..967c93c
 +    return false;
 +}
 +
++/* Sorting: pinned tabs stay first, splits move as one row */
++
++enum { SORT_NAME, SORT_RECENT, SORT_PROGRAM, SORT_AGE };
++
++struct sort_row {
++    size_t start, len;
++    bool pinned;
++    char *name;
++    char *program;
++    uint64_t recent, created;
++    size_t order;
++};
++
++static int sort_mode;
++
++static char *
++program_of(const struct terminal *t)
++{
++    pid_t pid = t->ptmx >= 0 ? tcgetpgrp(t->ptmx) : -1;
++    if (pid <= 0)
++        pid = t->slave;
++    char path[64], buf[64] = {0};
++    snprintf(path, sizeof(path), "/proc/%d/comm", (int)pid);
++    FILE *f = fopen(path, "re");
++    if (f != NULL) {
++        if (fgets(buf, sizeof(buf), f) != NULL)
++            buf[strcspn(buf, "\n")] = '\0';
++        fclose(f);
++    }
++    return xstrdup(buf);
++}
++
++static int
++sort_cmp(const void *_a, const void *_b)
++{
++    const struct sort_row *a = _a, *b = _b;
++    if (a->pinned != b->pinned)
++        return a->pinned ? -1 : 1;
++    int r = 0;
++    switch (sort_mode) {
++    case SORT_NAME:
++        r = strcasecmp(a->name, b->name);
++        break;
++    case SORT_RECENT:
++        r = (a->recent < b->recent) - (a->recent > b->recent);
++        break;
++    case SORT_PROGRAM:
++        r = strcasecmp(a->program, b->program);
++        if (r == 0)
++            r = strcasecmp(a->name, b->name);
++        break;
++    case SORT_AGE:
++        r = (a->created > b->created) - (a->created < b->created);
++        break;
++    }
++    return r != 0 ? r : (a->order > b->order) - (a->order < b->order);
++}
++
++static void
++tabs_sort(struct wl_window *win, int mode)
++{
++    struct terminal **arr;
++    const size_t n = to_arr(win, &arr);
++    struct sort_row *rows = xcalloc(n + 1, sizeof(rows[0]));
++    size_t nr = 0;
++    for (size_t i = 0; i < n;) {
++        size_t s, e;
++        row_extent(arr, n, i, &s, &e);
++        struct terminal *t = arr[s];
++        struct sort_row *r = &rows[nr];
++        *r = (struct sort_row){.start = s, .len = e - s, .order = nr, .created = UINT64_MAX};
++        for (size_t k = s; k < e; k++) {
++            r->pinned |= arr[k]->tab_pinned;
++            r->recent = max(r->recent, arr[k]->tab_last_active);
++            r->created = min(r->created, arr[k]->tab_created);
++        }
++        r->name = xstrdup(t->tab_label != NULL ? t->tab_label
++                          : t->window_title != NULL ? t->window_title : "");
++        r->program = program_of(t);
++        nr++;
++        i = e;
++    }
++
++    sort_mode = mode;
++    qsort(rows, nr, sizeof(rows[0]), &sort_cmp);
++
++    struct terminal **out = xmalloc((n + 1) * sizeof(out[0]));
++    size_t k = 0;
++    for (size_t i = 0; i < nr; i++) {
++        memcpy(&out[k], &arr[rows[i].start], rows[i].len * sizeof(out[0]));
++        k += rows[i].len;
++        free(rows[i].name);
++        free(rows[i].program);
++    }
++    free(rows);
++    free(arr);
++    from_arr(win, out, n);
++    render_refresh_sidebar(win);
++}
++
++/* The wheel over the sidebar walks through the tabs, one line at a time */
++void
++tabs_cycle_lines(struct wl_window *win, int delta)
++{
++    const int n = tabs_line_count(win);
++    if (n < 2 || delta == 0)
++        return;
++    const int l = tabs_line_of(win, win->term);
++    struct terminal *t = tabs_line_term(win, ((l + (delta > 0 ? 1 : -1)) % n + n) % n);
++    if (tabs_is_visible(t))
++        tabs_focus_pane(win, t);
++    else
++        tabs_activate(win, t);
++}
++
 +/* Duplicate, kill */
 +
 +void
@@ -6472,7 +6599,7 @@ index 0000000..967c93c
 +    MI_CLOSE, MI_KILL, MI_DUPLICATE, MI_SPLIT, MI_UNSPLIT, MI_NO, MI_YES,
 +    MI_SPLIT_SELECTED, MI_CLOSE_SELECTED, MI_CLEAR_SELECTION, MI_POP,
 +    MI_RENAME, MI_PIN, MI_UNPIN, MI_BROADCAST, MI_UNBROADCAST, MI_YES_CLOSE,
-+    MI_REOPEN,
++    MI_REOPEN, MI_SORT_NAME, MI_SORT_RECENT, MI_SORT_PROGRAM, MI_SORT_AGE,
 +};
 +
 +static const char *const menu_labels[] = {
@@ -6494,6 +6621,10 @@ index 0000000..967c93c
 +    [MI_BROADCAST] = "Broadcast input",
 +    [MI_UNBROADCAST] = "Stop broadcasting",
 +    [MI_REOPEN] = "Reopen closed tab",
++    [MI_SORT_NAME] = "By name",
++    [MI_SORT_RECENT] = "By most recently used",
++    [MI_SORT_PROGRAM] = "By program",
++    [MI_SORT_AGE] = "By opening order",
 +};
 +
 +static bool
@@ -6530,6 +6661,9 @@ index 0000000..967c93c
 +        break;
 +    case TAB_MENU_SWITCHER:
 +        h = xstrdup("Go to tab");
++        break;
++    case TAB_MENU_SORT:
++        h = xstrdup("Sort tabs");
 +        break;
 +    default:
 +        return NULL;
@@ -6657,6 +6791,13 @@ index 0000000..967c93c
 +        break;
 +    }
 +    case TAB_MENU_SWITCHER:
++        break;
++    case TAB_MENU_SORT:
++        it[n++] = MI_SORT_NAME;
++        it[n++] = MI_SORT_RECENT;
++        it[n++] = MI_SORT_PROGRAM;
++        it[n++] = MI_SORT_AGE;
++        it[n++] = MI_REOPEN;
 +        break;
 +    case TAB_MENU_NONE:
 +        return;
@@ -6847,6 +6988,10 @@ index 0000000..967c93c
 +    case MI_BROADCAST:
 +    case MI_UNBROADCAST: tabs_toggle_broadcast(win); break;
 +    case MI_REOPEN:    tabs_reopen(win); break;
++    case MI_SORT_NAME:    tabs_sort(win, SORT_NAME); break;
++    case MI_SORT_RECENT:  tabs_sort(win, SORT_RECENT); break;
++    case MI_SORT_PROGRAM: tabs_sort(win, SORT_PROGRAM); break;
++    case MI_SORT_AGE:     tabs_sort(win, SORT_AGE); break;
 +    case MI_SPLIT_SELECTED:  split_selected(win); break;
 +    case MI_CLOSE_SELECTED:  close_selected(win); break;
 +    case MI_CLEAR_SELECTION: clear_selection(win); break;
@@ -6987,10 +7132,10 @@ index 0000000..967c93c
 +}
 diff --git a/tabs.h b/tabs.h
 new file mode 100644
-index 0000000..ca56aa3
+index 0000000..24ce5c9
 --- /dev/null
 +++ b/tabs.h
-@@ -0,0 +1,118 @@
+@@ -0,0 +1,119 @@
 +#pragma once
 +
 +#include <stdbool.h>
@@ -7080,6 +7225,7 @@ index 0000000..ca56aa3
 +void tabs_sidebar_leave(struct wl_window *win);
 +void tabs_sidebar_scroll(struct wl_window *win, int lines);
 +float tabs_anim_line(struct wl_window *win, int line);
++void tabs_cycle_lines(struct wl_window *win, int delta);
 +void tabs_sidebar_btn_hover(struct wl_window *win, bool hover);
 +
 +bool tabs_dnd_enter(struct wayland *wayl, struct wl_surface *surface);
@@ -7461,7 +7607,7 @@ index 555b88f..488b95c 100644
  
      wayl_win_alpha_changed(term->window);
 diff --git a/terminal.h b/terminal.h
-index 7566e95..64b49d6 100644
+index 7566e95..1c77ef7 100644
 --- a/terminal.h
 +++ b/terminal.h
 @@ -362,6 +362,9 @@ enum term_surface {
@@ -7474,7 +7620,7 @@ index 7566e95..64b49d6 100644
  };
  
  enum overlay_style {
-@@ -635,6 +638,24 @@ struct terminal {
+@@ -635,6 +638,26 @@ struct terminal {
  
      struct wayland *wl;
      struct wl_window *window;
@@ -7486,6 +7632,8 @@ index 7566e95..64b49d6 100644
 +    char *tab_label;
 +    float pane_weight;
 +    uint64_t cmd_started;
++    uint64_t tab_created;
++    uint64_t tab_last_active;
 +    int activity_lines;
 +    uint64_t scrolled_lines;
 +    uint64_t activity_since;
@@ -7499,7 +7647,7 @@ index 7566e95..64b49d6 100644
      bool visual_focus;
      bool kbd_focus;
      enum term_surface active_surface;
-@@ -844,7 +865,8 @@ struct terminal *term_init(
+@@ -844,7 +867,8 @@ struct terminal *term_init(
      struct wayland *wayl, const char *foot_exe, const char *cwd,
      const char *token, const char *toplevel_name, const char *pty_path,
      int argc, char *const *argv, const char *const *envp,
@@ -7509,7 +7657,7 @@ index 7566e95..64b49d6 100644
  
  bool term_shutdown(struct terminal *term);
  int term_destroy(struct terminal *term);
-@@ -866,6 +888,7 @@ bool term_font_size_increase(struct terminal *term);
+@@ -866,6 +890,7 @@ bool term_font_size_increase(struct terminal *term);
  bool term_font_size_decrease(struct terminal *term);
  bool term_font_size_reset(struct terminal *term);
  bool term_font_dpi_changed(struct terminal *term, float old_scale);
@@ -7875,7 +8023,7 @@ index a2c255a..b1db8e7 100644
  }
  
 diff --git a/wayland.h b/wayland.h
-index 3ed68b2..cf7b9e9 100644
+index 3ed68b2..1f32de2 100644
 --- a/wayland.h
 +++ b/wayland.h
 @@ -84,6 +84,7 @@ struct wl_clipboard {
@@ -7894,7 +8042,7 @@ index 3ed68b2..cf7b9e9 100644
 +
 +enum tab_menu_kind {
 +    TAB_MENU_NONE, TAB_MENU_ACTIONS, TAB_MENU_CONFIRM_KILL, TAB_MENU_SELECTION,
-+    TAB_MENU_CONFIRM_CLOSE, TAB_MENU_RENAME, TAB_MENU_SWITCHER,
++    TAB_MENU_CONFIRM_CLOSE, TAB_MENU_RENAME, TAB_MENU_SWITCHER, TAB_MENU_SORT,
 +};
 +
 +enum tab_hover {
