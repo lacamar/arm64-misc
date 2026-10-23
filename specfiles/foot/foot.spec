@@ -3,7 +3,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        11%{?dist}
+Release:        12%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -149,6 +149,9 @@ desktop-file-validate \
 
 
 %changelog
+* Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-12
+- Fix merge-window hang
+
 * Tue Oct 20 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-11
 - Add vertical tabs with sidebar
 - Add workspaces

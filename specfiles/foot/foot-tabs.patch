@@ -584,7 +584,7 @@ index fa0e2ce..2c3f785 100644
          seat->ime.cursor_rect.pending.width / term->scale,
          seat->ime.cursor_rect.pending.height / term->scale);
 diff --git a/input.c b/input.c
-index f6ba9de..df56bf9 100644
+index f6ba9de..54b885f 100644
 --- a/input.c
 +++ b/input.c
 @@ -26,12 +26,14 @@
@@ -649,7 +649,7 @@ index f6ba9de..df56bf9 100644
 +        return true;
 +
 +    case BIND_ACTION_MERGE_WINDOW:
-+        tabs_merge_into(term->window, tabs_merge_target(term->window));
++        term->wl->merge_src = term->window;
 +        return true;
 +
 +    case BIND_ACTION_DETACH_TAB:
@@ -4984,7 +4984,7 @@ index d3e1fbb..45dbc6f 100644
      };
  
 diff --git a/wayland.c b/wayland.c
-index a2c255a..7dfa1b8 100644
+index a2c255a..4e75b3c 100644
 --- a/wayland.c
 +++ b/wayland.c
 @@ -32,6 +32,7 @@
@@ -5135,7 +5135,19 @@ index a2c255a..7dfa1b8 100644
  }
  
  static const struct xdg_surface_listener xdg_surface_listener = {
-@@ -1974,14 +2006,10 @@ wayl_destroy(struct wayland *wayl)
+@@ -1793,6 +1825,11 @@ static void
+ fdm_hook(struct fdm *fdm, void *data)
+ {
+     struct wayland *wayl = data;
++    struct wl_window *src = wayl->merge_src;
++    if (src != NULL) {
++        wayl->merge_src = NULL;
++        tabs_merge_into(src, tabs_merge_target(src));
++    }
+     wayl_flush(wayl);
+ }
+ 
+@@ -1974,14 +2011,10 @@ wayl_destroy(struct wayland *wayl)
      if (wayl == NULL)
          return;
  
@@ -5154,7 +5166,7 @@ index a2c255a..7dfa1b8 100644
  
      tll_free(wayl->terms);
  
-@@ -2088,7 +2116,7 @@ fractional_scale_preferred_scale(
+@@ -2088,7 +2121,7 @@ fractional_scale_preferred_scale(
      LOG_DBG("fractional scale: %.2f -> %.2f", win->scale, new_scale);
  
      win->scale = new_scale;
@@ -5163,7 +5175,7 @@ index a2c255a..7dfa1b8 100644
  }
  
  static const struct wp_fractional_scale_v1_listener fractional_scale_listener = {
-@@ -2108,6 +2136,14 @@ wayl_win_init(struct terminal *term, const char *token, const char *toplevel_nam
+@@ -2108,6 +2141,14 @@ wayl_win_init(struct terminal *term, const char *token, const char *toplevel_nam
      }
  
      win->term = term;
@@ -5178,13 +5190,15 @@ index a2c255a..7dfa1b8 100644
      win->csd_mode = CSD_UNKNOWN;
      win->csd.move_timeout_fd = -1;
      win->resize_timeout_fd = -1;
-@@ -2277,6 +2313,16 @@ wayl_win_destroy(struct wl_window *win)
+@@ -2277,6 +2318,18 @@ wayl_win_destroy(struct wl_window *win)
          return;
  
      struct terminal *term = win->term;
 +    struct wayland *wayl = term->wl;
 +
 +    win->closing = true;
++    if (wayl->merge_src == win)
++        wayl->merge_src = NULL;
 +    tll_foreach(wayl->windows, it) {
 +        if (it->item == win) {
 +            tll_remove(wayl->windows, it);
@@ -5195,7 +5209,7 @@ index a2c255a..7dfa1b8 100644
  
      if (win->csd.move_timeout_fd != -1)
          close(win->csd.move_timeout_fd);
-@@ -2359,6 +2405,10 @@ wayl_win_destroy(struct wl_window *win)
+@@ -2359,6 +2412,10 @@ wayl_win_destroy(struct wl_window *win)
  
      render_wait_for_preapply_damage(term);
  
@@ -5206,7 +5220,7 @@ index a2c255a..7dfa1b8 100644
      csd_destroy(win);
      wayl_win_subsurface_destroy(&win->search);
      wayl_win_subsurface_destroy(&win->scrollback_indicator);
-@@ -2407,6 +2457,21 @@ wayl_win_destroy(struct wl_window *win)
+@@ -2407,6 +2464,21 @@ wayl_win_destroy(struct wl_window *win)
  
      if (win->resize_timeout_fd >= 0)
          fdm_del(win->term->wl->fdm, win->resize_timeout_fd);
@@ -5229,7 +5243,7 @@ index a2c255a..7dfa1b8 100644
  }
  
 diff --git a/wayland.h b/wayland.h
-index 3ed68b2..01e080c 100644
+index 3ed68b2..ecc1beb 100644
 --- a/wayland.h
 +++ b/wayland.h
 @@ -368,9 +368,37 @@ struct xdg_activation_token_context {
@@ -5270,7 +5284,7 @@ index 3ed68b2..01e080c 100644
      struct wayl_surface surface;
      struct xdg_surface *xdg_surface;
      struct xdg_toplevel *xdg_toplevel;
-@@ -524,6 +552,18 @@ struct wayland {
+@@ -524,6 +552,21 @@ struct wayland {
      tll(struct seat) seats;
  
      tll(struct terminal *) terms;
@@ -5286,6 +5300,9 @@ index 3ed68b2..01e080c 100644
 +        void (*tab_moved)(void *data, struct terminal *term, struct wl_window *dst);
 +        void *data;
 +    } tab_host;
++
++    /* Merging destroys a window; doing it mid-dispatch unbalances the Wayland read lock */
++    struct wl_window *merge_src;
  
      /* WL_SHM >= 2 */
      bool use_shm_release;
