@@ -3,7 +3,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        22%{?dist}
+Release:        23%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -149,6 +149,9 @@ desktop-file-validate \
 
 
 %changelog
+* Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-23
+- Make name prefix per window
+
 * Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-22
 - Add tab name prefix
 - Keep sorted tab lists sorted
