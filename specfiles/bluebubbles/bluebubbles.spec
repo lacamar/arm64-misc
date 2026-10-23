@@ -12,13 +12,14 @@
 
 Name:       bluebubbles
 Version:    %{tag}
-Release:    4%{?dist}
+Release:    5%{?dist}
 Summary:    iMessage client for Linux, part of the BlueBubbles ecosystem
 
 License:    Apache-2.0
 URL:        https://bluebubbles.app
 Source0:    https://github.com/BlueBubblesApp/bluebubbles-app/archive/refs/tags/v%{appver}+desktop.%{build_num}.tar.gz
 Patch0:     bluebubbles-pdf-export-hang.patch
+Patch1:     bluebubbles-unlimited-date-range.patch
 
 ExclusiveArch:  aarch64
 
@@ -112,6 +113,9 @@ install -Dpm0644 flatpak/%{appid}.metainfo.xml \
 %{_metainfodir}/%{appid}.metainfo.xml
 
 %changelog
+* Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 2.1.3.93-5
+- Allow custom dates back to 2000
+
 * Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 2.1.3.93-4
 - Emoji font fallback in PDF transcript
 

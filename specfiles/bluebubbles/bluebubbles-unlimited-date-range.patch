@@ -1,0 +1,13 @@
+diff --git a/lib/app/layouts/conversation_details/dialogs/timeframe_picker.dart b/lib/app/layouts/conversation_details/dialogs/timeframe_picker.dart
+index cf5ded6..e2248f7 100644
+--- a/lib/app/layouts/conversation_details/dialogs/timeframe_picker.dart
++++ b/lib/app/layouts/conversation_details/dialogs/timeframe_picker.dart
+@@ -100,7 +100,7 @@ Future<DateTime?> showTimeframePicker(String title, BuildContext context,
+             DateTime? finalDate = await showDatePicker(
+                 context: dialogContext,
+                 initialDate: DateTime.now().toLocal(),
+-                firstDate: DateTime.now().toLocal().subtract(const Duration(days: 365)),
++                firstDate: DateTime(2000),
+                 lastDate: DateTime.now().toLocal().add(const Duration(days: 365)));
+ 
+             // If the user selected a date and the time picker is enabled, show the time picker
