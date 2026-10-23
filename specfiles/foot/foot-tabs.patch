@@ -504,10 +504,10 @@ index 24d81b5..22e8893 100644
  
  The following keyboard shortcuts are available by default. They can be
 diff --git a/doc/foot.ini.5.scd b/doc/foot.ini.5.scd
-index e65729b..fe99357 100644
+index e65729b..27985f0 100644
 --- a/doc/foot.ini.5.scd
 +++ b/doc/foot.ini.5.scd
-@@ -937,6 +937,112 @@ _"$@"_ to keep its original arguments. Rules also apply to the
+@@ -937,6 +937,111 @@ _"$@"_ to keep its original arguments. Rules also apply to the
  program foot's own child is running, so a window launched as
  *footclient claude* is resumed rather than restarted.
  
@@ -541,11 +541,10 @@ index e65729b..fe99357 100644
 +the scrollbar on the outer edge to move through a long list);
 +right-click the empty part of the sidebar to keep the tabs sorted by
 +name, most recent use, program or opening order, or in manual order
-+(pinned tabs stay first; a sorted list can't be reordered by hand);
-+middle-click to close; right-click for a menu (close, kill, duplicate,
-+rename, set a window prefix shown in the window title as
-+_prefix | title_ whichever tab is active, split, move out of split,
-+unsplit all) driven by mouse or
++(pinned tabs stay first; a sorted list can't be reordered by hand), or
++to set a window prefix shown in the window title as _prefix | title_
++whichever tab is active; middle-click to close; right-click for a menu
++(close, kill, duplicate, rename, split, move out of split, unsplit all) driven by mouse or
 +*Up*/*Down*/*Return*/*Escape*.
 +
 +Drag a tab to reorder it, onto the inner end of another tab's row to
@@ -620,7 +619,7 @@ index e65729b..fe99357 100644
  # SECTION: url
  
  Note that you can also add custom regular expressions, see the 'regex'
-@@ -1587,6 +1693,60 @@ e.g. *search-start=none*.
+@@ -1587,6 +1692,60 @@ e.g. *search-start=none*.
  *quit*
  	Quit foot. Default: _none_.
  
@@ -1597,7 +1596,7 @@ index 05281d0..0a1d61a 100644
  
          case 'D':
 diff --git a/render.c b/render.c
-index 72b68e1..93bca4a 100644
+index 72b68e1..74ee541 100644
 --- a/render.c
 +++ b/render.c
 @@ -43,6 +43,7 @@
@@ -2328,7 +2327,7 @@ index 72b68e1..93bca4a 100644
      const char *icon_name = term_icon(term);
      LOG_DBG("setting toplevel icon: %s", icon_name);
  
-@@ -5357,6 +5468,710 @@ render_refresh_icon(struct terminal *term)
+@@ -5357,6 +5468,722 @@ render_refresh_icon(struct terminal *term)
      term->render.icon.last_update = now;
  }
  
@@ -2570,17 +2569,17 @@ index 72b68e1..93bca4a 100644
 +                text_end = w - 2 * pad - cw2;
 +            }
 +        }
-+        if (hovered && !grabbed) {
-+            if (win->hover.what == TAB_HOVER_CLOSE)
-+                sidebar_fill(buf, color_blend_towards(c->bg, c->fg, 1.5), 0xffff, gamma,
-+                             cx, y, row_h, row_h);
-+            const int xw = text_width(term, U"×");
-+            sidebar_text(term, buf, U"×", cx + (row_h - xw) / 2, y, row_h, cx + row_h,
-+                         focused || shown ? sel_fg : c->fg, gamma);
-+            if (right)
-+                x = cx + row_h;
-+            else
-+                text_end = cx;
++        const bool close_btn = hovered && !grabbed;
++        if (close_btn) {
++            /* The × covers the title instead of pushing it aside */
++            const int gap = pad / 2;
++            pixman_region32_t row_clip, btn;
++            pixman_region32_init_rect(&row_clip, 0, 0, w, list_h);
++            pixman_region32_init_rect(&btn, cx - (right ? 0 : gap), y, row_h + gap, row_h);
++            pixman_region32_subtract(&row_clip, &row_clip, &btn);
++            pixman_image_set_clip_region32(buf->pix[0], &row_clip);
++            pixman_region32_fini(&row_clip);
++            pixman_region32_fini(&btn);
 +        }
 +        if (t->group != 0) {
 +            /* Bracket joining the panes of a split */
@@ -2620,6 +2619,18 @@ index 72b68e1..93bca4a 100644
 +            sidebar_text(term, buf, mark, x, y, row_h, text_end,
 +                         bell ? c->table[3] : done ? c->table[2] : c->table[4], gamma);
 +        free(label);
++
++        if (close_btn) {
++            pixman_region32_init_rect(&clip, 0, 0, w, list_h);
++            pixman_image_set_clip_region32(buf->pix[0], &clip);
++            pixman_region32_fini(&clip);
++            if (win->hover.what == TAB_HOVER_CLOSE)
++                sidebar_fill(buf, color_blend_towards(c->bg, c->fg, 1.5), 0xffff, gamma,
++                             cx, y, row_h, row_h);
++            const int xw = text_width(term, U"×");
++            sidebar_text(term, buf, U"×", cx + (row_h - xw) / 2, y, row_h, cx + row_h,
++                         focused || shown ? sel_fg : c->fg, gamma);
++        }
 +    }
 +
 +    {
@@ -4206,10 +4217,10 @@ index 6289937..b385f1b 100644
          del_from_env(&custom_env, "TERM_PROGRAM");            /* Wezterm, Ghostty */
 diff --git a/tabs.c b/tabs.c
 new file mode 100644
-index 0000000..425ef31
+index 0000000..2d230c0
 --- /dev/null
 +++ b/tabs.c
-@@ -0,0 +1,3581 @@
+@@ -0,0 +1,3582 @@
 +#include "tabs.h"
 +
 +#include <limits.h>
@@ -7112,7 +7123,7 @@ index 0000000..425ef31
 +        h = xasprintf("Go to tab (%d)", win->menu.n);
 +        break;
 +    case TAB_MENU_SORT:
-+        h = xstrdup("Sort tabs");
++        h = xstrdup("Window");
 +        break;
 +    case TAB_MENU_PREFIX:
 +        h = xstrdup("Window prefix (empty: none)");
@@ -7138,10 +7149,11 @@ index 0000000..425ef31
 +        static const int modes[] = {
 +            [MI_SORT_NONE] = SORT_NONE, [MI_SORT_NAME] = SORT_NAME,
 +            [MI_SORT_RECENT] = SORT_RECENT, [MI_SORT_PROGRAM] = SORT_PROGRAM,
-+            [MI_SORT_AGE] = SORT_AGE, [MI_REOPEN] = -1,
++            [MI_SORT_AGE] = SORT_AGE,
 +        };
 +        const int item = win->menu.items[i];
-+        char *s = xasprintf("%s %s", modes[item] == win->sort_mode ? "✓" : " ",
++        const bool sort = item >= MI_SORT_NAME && item <= MI_SORT_NONE;
++        char *s = xasprintf("%s %s", sort && modes[item] == win->sort_mode ? "✓" : " ",
 +                            menu_labels[item]);
 +        char32_t *r = ambstoc32(s);
 +        free(s);
@@ -7225,7 +7237,6 @@ index 0000000..425ef31
 +        it[n++] = MI_KILL;
 +        it[n++] = MI_DUPLICATE;
 +        it[n++] = MI_RENAME;
-+        it[n++] = MI_PREFIX;
 +        it[n++] = t->tab_pinned ? MI_UNPIN : MI_PIN;
 +        if (t->group != 0 && t->group == win->term->group) {
 +            it[n++] = MI_POP;
@@ -7269,6 +7280,7 @@ index 0000000..425ef31
 +        it[n++] = MI_SORT_RECENT;
 +        it[n++] = MI_SORT_PROGRAM;
 +        it[n++] = MI_SORT_AGE;
++        it[n++] = MI_PREFIX;
 +        it[n++] = MI_REOPEN;
 +        break;
 +    case TAB_MENU_NONE:
