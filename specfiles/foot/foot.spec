@@ -3,7 +3,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        20%{?dist}
+Release:        21%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -149,6 +149,11 @@ desktop-file-validate \
 
 
 %changelog
+* Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-21
+- Fix window resizing when splits change
+- Fix crash splitting after unsplit
+- Separate confirm dialog buttons
+
 * Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-20
 - GUI-style confirm dialogs
 - Centered modals; fixed [tabs] switcher-width

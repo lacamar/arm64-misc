@@ -1594,7 +1594,7 @@ index 05281d0..0a1d61a 100644
  
          case 'D':
 diff --git a/render.c b/render.c
-index 72b68e1..a23abc4 100644
+index 72b68e1..bced2f5 100644
 --- a/render.c
 +++ b/render.c
 @@ -43,6 +43,7 @@
@@ -2305,7 +2305,7 @@ index 72b68e1..a23abc4 100644
      const char *icon_name = term_icon(term);
      LOG_DBG("setting toplevel icon: %s", icon_name);
  
-@@ -5357,6 +5464,710 @@ render_refresh_icon(struct terminal *term)
+@@ -5357,6 +5464,708 @@ render_refresh_icon(struct terminal *term)
      term->render.icon.last_update = now;
  }
  
@@ -2770,14 +2770,13 @@ index 72b68e1..a23abc4 100644
 +                         color_blend_towards(c->fg, c->bg, 1.4), gamma);
 +        free(message);
 +
-+        /* [ Cancel ]  [ Close ], right-aligned; the destructive one in red */
++        /* Cancel at the left edge, the destructive one in red at the right */
 +        const int by = ry + 4 * ch;
-+        int bx = w - 2 * cw;
 +        for (int i = 1; i >= 0; i--) {
 +            char32_t *label = tabs_menu_line(win, i);
 +            const int lw = text_width(term, label);
 +            const int bw = lw + 2 * cw;
-+            bx -= bw;
++            const int bx = i == 1 ? w - 2 * cw - bw : 2 * cw;
 +            win->menu.btn_x[i] = bx;
 +            win->menu.btn_w[i] = bw;
 +            win->menu.btn_y = by;
@@ -2792,7 +2791,6 @@ index 72b68e1..a23abc4 100644
 +            sidebar_text(term, buf, label, bx + cw, by, ch, bx + bw,
 +                         sel ? c->bg : edge, gamma);
 +            free(label);
-+            bx -= cw;
 +        }
 +    }
 +    if (!confirm && header != NULL) {
@@ -4157,7 +4155,7 @@ index 6289937..b385f1b 100644
          del_from_env(&custom_env, "TERM_PROGRAM");            /* Wezterm, Ghostty */
 diff --git a/tabs.c b/tabs.c
 new file mode 100644
-index 0000000..8826a0b
+index 0000000..e5e69ef
 --- /dev/null
 +++ b/tabs.c
 @@ -0,0 +1,3513 @@
@@ -5207,7 +5205,7 @@ index 0000000..8826a0b
 +tabs_win_size(const struct wl_window *win, int *w, int *h)
 +{
 +    const struct terminal *t = win->term;
-+    if (t->group != 0 && t->pane.surface.surf != NULL) {
++    if (win->layout_w > 0 && win->layout_h > 0) {
 +        *w = win->layout_w;
 +        *h = win->layout_h;
 +    } else {
@@ -7807,7 +7805,7 @@ index 0000000..dbb3b59
 +void tabs_open_switcher(struct wl_window *win);
 +void tabs_open_rename(struct wl_window *win, struct terminal *t);
 diff --git a/terminal.c b/terminal.c
-index 555b88f..488b95c 100644
+index 555b88f..b931fc4 100644
 --- a/terminal.c
 +++ b/terminal.c
 @@ -1,4 +1,5 @@
@@ -7950,8 +7948,8 @@ index 555b88f..488b95c 100644
 +        tabs_attach(win, term, after, split);
 +        if (win->is_configured)
 +            term_window_configured(term);
-+        tabs_activate(win, term);
 +        tabs_relayout(win);
++        tabs_activate(win, term);
 +    } else
 +        tabs_attach(win, term, NULL, false);
 +
@@ -8295,7 +8293,7 @@ index d3e1fbb..45dbc6f 100644
      };
  
 diff --git a/wayland.c b/wayland.c
-index a2c255a..3a4318b 100644
+index a2c255a..2a590ec 100644
 --- a/wayland.c
 +++ b/wayland.c
 @@ -32,6 +32,7 @@
@@ -8416,11 +8414,15 @@ index a2c255a..3a4318b 100644
  }
  
  #if defined(XDG_TOPLEVEL_CONFIGURE_BOUNDS_SINCE_VERSION)
-@@ -1144,7 +1173,11 @@ xdg_surface_configure(void *data, struct xdg_surface *xdg_surface,
+@@ -1144,7 +1173,15 @@ xdg_surface_configure(void *data, struct xdg_surface *xdg_surface,
          opts |= RESIZE_FORCE;
  #endif
  
 -    bool resized = render_resize(term, new_width, new_height, opts);
++    if (new_width > 0 && new_height > 0) {
++        win->layout_w = new_width;
++        win->layout_h = new_height;
++    }
 +    bool resized = tll_length(win->tabs) > 1
 +        ? tabs_layout(win, new_width, new_height)
 +        : render_resize(term, new_width, new_height, opts);
@@ -8429,7 +8431,7 @@ index a2c255a..3a4318b 100644
  
      if (win->configure.is_activated)
          term_visual_focus_in(term);
-@@ -1162,6 +1195,7 @@ xdg_surface_configure(void *data, struct xdg_surface *xdg_surface,
+@@ -1162,6 +1199,7 @@ xdg_surface_configure(void *data, struct xdg_surface *xdg_surface,
      if (was_fullscreen != win->is_fullscreen) {
          wayl_win_alpha_changed(win);
          render_refresh(term);
@@ -8437,7 +8439,7 @@ index a2c255a..3a4318b 100644
      }
  
      const bool will_render_soon = resized ||
-@@ -1178,8 +1212,10 @@ xdg_surface_configure(void *data, struct xdg_surface *xdg_surface,
+@@ -1178,8 +1216,10 @@ xdg_surface_configure(void *data, struct xdg_surface *xdg_surface,
          wl_surface_commit(win->surface.surf);
      }
  
@@ -8450,7 +8452,7 @@ index a2c255a..3a4318b 100644
  }
  
  static const struct xdg_surface_listener xdg_surface_listener = {
-@@ -1793,6 +1829,12 @@ static void
+@@ -1793,6 +1833,12 @@ static void
  fdm_hook(struct fdm *fdm, void *data)
  {
      struct wayland *wayl = data;
@@ -8463,7 +8465,7 @@ index a2c255a..3a4318b 100644
      wayl_flush(wayl);
  }
  
-@@ -1974,14 +2016,10 @@ wayl_destroy(struct wayland *wayl)
+@@ -1974,14 +2020,10 @@ wayl_destroy(struct wayland *wayl)
      if (wayl == NULL)
          return;
  
@@ -8482,7 +8484,7 @@ index a2c255a..3a4318b 100644
  
      tll_free(wayl->terms);
  
-@@ -2088,7 +2126,7 @@ fractional_scale_preferred_scale(
+@@ -2088,7 +2130,7 @@ fractional_scale_preferred_scale(
      LOG_DBG("fractional scale: %.2f -> %.2f", win->scale, new_scale);
  
      win->scale = new_scale;
@@ -8491,7 +8493,7 @@ index a2c255a..3a4318b 100644
  }
  
  static const struct wp_fractional_scale_v1_listener fractional_scale_listener = {
-@@ -2108,6 +2146,22 @@ wayl_win_init(struct terminal *term, const char *token, const char *toplevel_nam
+@@ -2108,6 +2150,22 @@ wayl_win_init(struct terminal *term, const char *token, const char *toplevel_nam
      }
  
      win->term = term;
@@ -8514,7 +8516,7 @@ index a2c255a..3a4318b 100644
      win->csd_mode = CSD_UNKNOWN;
      win->csd.move_timeout_fd = -1;
      win->resize_timeout_fd = -1;
-@@ -2277,6 +2331,23 @@ wayl_win_destroy(struct wl_window *win)
+@@ -2277,6 +2335,23 @@ wayl_win_destroy(struct wl_window *win)
          return;
  
      struct terminal *term = win->term;
@@ -8538,7 +8540,7 @@ index a2c255a..3a4318b 100644
  
      if (win->csd.move_timeout_fd != -1)
          close(win->csd.move_timeout_fd);
-@@ -2359,6 +2430,15 @@ wayl_win_destroy(struct wl_window *win)
+@@ -2359,6 +2434,15 @@ wayl_win_destroy(struct wl_window *win)
  
      render_wait_for_preapply_damage(term);
  
@@ -8554,7 +8556,7 @@ index a2c255a..3a4318b 100644
      csd_destroy(win);
      wayl_win_subsurface_destroy(&win->search);
      wayl_win_subsurface_destroy(&win->scrollback_indicator);
-@@ -2407,6 +2487,20 @@ wayl_win_destroy(struct wl_window *win)
+@@ -2407,6 +2491,20 @@ wayl_win_destroy(struct wl_window *win)
  
      if (win->resize_timeout_fd >= 0)
          fdm_del(win->term->wl->fdm, win->resize_timeout_fd);
