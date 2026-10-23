@@ -3,7 +3,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        18%{?dist}
+Release:        19%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -149,6 +149,15 @@ desktop-file-validate \
 
 
 %changelog
+* Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-19
+- Menus highlight only the item under the pointer
+- Gap between pinned and unpinned tabs
+- Drop a tab on another tab's row edge to split them
+- Search button in sidebar footer
+- Scrolling quick switcher list; key repeat in menus
+- Fix broadcast input with key repeat
+- Commit split panes together per frame
+
 * Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-18
 - Sort menu: name, recent use, program, opening order
 - Mouse wheel over sidebar switches tabs

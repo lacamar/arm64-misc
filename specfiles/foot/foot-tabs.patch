@@ -500,10 +500,10 @@ index 24d81b5..22e8893 100644
  
  The following keyboard shortcuts are available by default. They can be
 diff --git a/doc/foot.ini.5.scd b/doc/foot.ini.5.scd
-index e65729b..0725116 100644
+index e65729b..7b08a06 100644
 --- a/doc/foot.ini.5.scd
 +++ b/doc/foot.ini.5.scd
-@@ -937,6 +937,100 @@ _"$@"_ to keep its original arguments. Rules also apply to the
+@@ -937,6 +937,101 @@ _"$@"_ to keep its original arguments. Rules also apply to the
  program foot's own child is running, so a window launched as
  *footclient claude* is resumed rather than restarted.
  
@@ -541,8 +541,8 @@ index e65729b..0725116 100644
 +out of split, unsplit all) driven by mouse or
 +*Up*/*Down*/*Return*/*Escape*.
 +
-+Drag a tab to reorder it, or out of the sidebar onto any foot
-+window: near a pane's left, right, top or bottom edge it is split in
++Drag a tab to reorder it, onto the inner end of another tab's row to
++split the two, or out of the sidebar onto any foot window: near a pane's left, right, top or bottom edge it is split in
 +on that side (top and bottom stack the panes vertically); in the
 +middle of a pane it is added as a tab; over a sidebar it is inserted
 +where the line shows. Dropped anywhere else it opens in its own
@@ -550,7 +550,8 @@ index e65729b..0725116 100644
 +split, or out of it when dropped in the middle.
 +
 +Drag the sidebar's inner edge to resize it. The bottom row has *+*
-+for a new tab and an arrow that hides the sidebar; a hidden sidebar
++for a new tab, *⌕* for the quick switcher and an arrow that hides the
++sidebar; a hidden sidebar
 +leaves a sliver at the bottom corner that grows into an arrow on
 +hover and shows the sidebar again.
 +
@@ -604,7 +605,7 @@ index e65729b..0725116 100644
  # SECTION: url
  
  Note that you can also add custom regular expressions, see the 'regex'
-@@ -1587,6 +1681,60 @@ e.g. *search-start=none*.
+@@ -1587,6 +1682,60 @@ e.g. *search-start=none*.
  *quit*
  	Quit foot. Default: _none_.
  
@@ -767,7 +768,7 @@ index fa0e2ce..f896d02 100644
          seat->ime.cursor_rect.pending.height / term->scale);
  
 diff --git a/input.c b/input.c
-index f6ba9de..3f8fd11 100644
+index f6ba9de..573ac32 100644
 --- a/input.c
 +++ b/input.c
 @@ -26,12 +26,14 @@
@@ -892,7 +893,7 @@ index f6ba9de..3f8fd11 100644
  
      LOG_DBG("%s: keyboard_enter: keyboard=%p, serial=%u, surface=%p",
              seat->name, (void *)wl_keyboard, serial, (void *)surface);
-@@ -1645,6 +1731,17 @@ key_press_release(struct seat *seat, struct terminal *term, uint32_t serial,
+@@ -1645,6 +1731,19 @@ key_press_release(struct seat *seat, struct terminal *term, uint32_t serial,
          seat->wayl->key_binding_manager, term->conf, seat);
      xassert(bindings != NULL);
  
@@ -900,6 +901,8 @@ index f6ba9de..3f8fd11 100644
 +        !keysym_is_modifier(sym))
 +    {
 +        if (pressed) {
++            if (should_repeat)
++                start_repeater(seat, key);
 +            char utf8[64] = {0};
 +            xkb_state_key_get_utf8(seat->kbd.xkb_state, key, utf8, sizeof(utf8));
 +            tabs_menu_key(seat, term->window, sym, utf8);
@@ -910,7 +913,7 @@ index f6ba9de..3f8fd11 100644
      if (term->unicode_mode.active) {
          if (pressed)
              unicode_mode_input(seat, term, sym);
-@@ -1856,7 +1953,19 @@ keyboard_key(void *data, struct wl_keyboard *wl_keyboard, uint32_t serial,
+@@ -1856,7 +1955,19 @@ keyboard_key(void *data, struct wl_keyboard *wl_keyboard, uint32_t serial,
               uint32_t time, uint32_t key, uint32_t state)
  {
      struct seat *seat = data;
@@ -931,7 +934,17 @@ index f6ba9de..3f8fd11 100644
  }
  
  static void
-@@ -2415,6 +2524,54 @@ mouse_button_state_reset(struct seat *seat)
+@@ -2331,7 +2442,9 @@ input_repeat(struct seat *seat, uint32_t key)
+     xassert(seat->kbd_focus != NULL);
+     struct terminal *term = seat->kbd_focus;
+ 
++    seat->wayl->key_target = term;
+     key_press_release(seat, term, seat->kbd.serial, key, XKB_KEY_DOWN);
++    seat->wayl->key_target = NULL;
+ }
+ 
+ static bool
+@@ -2415,6 +2528,54 @@ mouse_button_state_reset(struct seat *seat)
      memset(&seat->mouse.last_time, 0, sizeof(seat->mouse.last_time));
  }
  
@@ -986,7 +999,7 @@ index f6ba9de..3f8fd11 100644
   void
  mouse_coord_pixel_to_cell(struct seat *seat, const struct terminal *term,
                            int x, int y)
-@@ -2475,7 +2632,7 @@ wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
+@@ -2475,7 +2636,7 @@ wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
      struct seat *seat = data;
  
      struct wl_window *win = wl_surface_get_user_data(surface);
@@ -995,7 +1008,7 @@ index f6ba9de..3f8fd11 100644
  
      seat->mouse_focus = term;
      term->active_surface = term_surface_kind(term, surface);
-@@ -2507,6 +2664,18 @@ wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
+@@ -2507,6 +2668,18 @@ wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
          break;
      }
  
@@ -1014,7 +1027,7 @@ index f6ba9de..3f8fd11 100644
      case TERM_SURF_TITLE:
      case TERM_SURF_BORDER_LEFT:
      case TERM_SURF_BORDER_RIGHT:
-@@ -2521,7 +2690,7 @@ wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
+@@ -2521,7 +2694,7 @@ wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
          break;
  
      case TERM_SURF_NONE:
@@ -1023,7 +1036,7 @@ index f6ba9de..3f8fd11 100644
          break;
      }
  }
-@@ -2584,7 +2753,7 @@ wl_pointer_leave(void *data, struct wl_pointer *wl_pointer,
+@@ -2584,7 +2757,7 @@ wl_pointer_leave(void *data, struct wl_pointer *wl_pointer,
          if (surface != NULL) {
              /* Sway 1.4 sends this event with a NULL surface when we destroy the window */
              const struct wl_window UNUSED *win = wl_surface_get_user_data(surface);
@@ -1032,7 +1045,7 @@ index f6ba9de..3f8fd11 100644
          }
  
          enum term_surface active_surface = old_moused->active_surface;
-@@ -2605,7 +2774,22 @@ wl_pointer_leave(void *data, struct wl_pointer *wl_pointer,
+@@ -2605,7 +2778,26 @@ wl_pointer_leave(void *data, struct wl_pointer *wl_pointer,
              selection_finalize(seat, old_moused, seat->pointer.serial);
              break;
  
@@ -1052,10 +1065,14 @@ index f6ba9de..3f8fd11 100644
 +            break;
 +
 +        case TERM_SURF_TAB_MENU:
++            if (old_moused->window != NULL)
++                tabs_menu_leave(old_moused->window);
++            break;
++
          case TERM_SURF_TITLE:
          case TERM_SURF_BORDER_LEFT:
          case TERM_SURF_BORDER_RIGHT:
-@@ -2691,6 +2875,9 @@ wl_pointer_motion(void *data, struct wl_pointer *wl_pointer,
+@@ -2691,6 +2883,9 @@ wl_pointer_motion(void *data, struct wl_pointer *wl_pointer,
      case TERM_SURF_NONE:
      case TERM_SURF_GRID:
      case TERM_SURF_TITLE:
@@ -1065,7 +1082,7 @@ index f6ba9de..3f8fd11 100644
      case TERM_SURF_BORDER_LEFT:
      case TERM_SURF_BORDER_RIGHT:
      case TERM_SURF_BORDER_TOP:
-@@ -2713,6 +2900,18 @@ wl_pointer_motion(void *data, struct wl_pointer *wl_pointer,
+@@ -2713,6 +2908,18 @@ wl_pointer_motion(void *data, struct wl_pointer *wl_pointer,
  
      switch (surf_kind) {
      case TERM_SURF_NONE:
@@ -1084,7 +1101,7 @@ index f6ba9de..3f8fd11 100644
          break;
  
      case TERM_SURF_BUTTON_MINIMIZE:
-@@ -3108,7 +3307,30 @@ wl_pointer_button(void *data, struct wl_pointer *wl_pointer,
+@@ -3108,7 +3315,30 @@ wl_pointer_button(void *data, struct wl_pointer *wl_pointer,
          seat->mouse.last_released_button = button;
      }
  
@@ -1115,7 +1132,7 @@ index f6ba9de..3f8fd11 100644
      case TERM_SURF_TITLE:
          if (state == WL_POINTER_BUTTON_STATE_PRESSED) {
  
-@@ -3241,11 +3463,16 @@ wl_pointer_button(void *data, struct wl_pointer *wl_pointer,
+@@ -3241,11 +3471,16 @@ wl_pointer_button(void *data, struct wl_pointer *wl_pointer,
              pointer_is_on_button(term, seat, CSD_SURF_CLOSE) &&
              state == WL_POINTER_BUTTON_STATE_RELEASED)
          {
@@ -1133,7 +1150,7 @@ index f6ba9de..3f8fd11 100644
          search_cancel(term);
          urls_reset(term);
  
-@@ -3297,7 +3524,7 @@ wl_pointer_button(void *data, struct wl_pointer *wl_pointer,
+@@ -3297,7 +3532,7 @@ wl_pointer_button(void *data, struct wl_pointer *wl_pointer,
      }
  
      case TERM_SURF_NONE:
@@ -1142,7 +1159,7 @@ index f6ba9de..3f8fd11 100644
          break;
  
      }
-@@ -3329,6 +3556,15 @@ mouse_scroll(struct seat *seat, int amount, enum wl_pointer_axis axis)
+@@ -3329,6 +3564,15 @@ mouse_scroll(struct seat *seat, int amount, enum wl_pointer_axis axis)
      struct terminal *term = seat->mouse_focus;
      xassert(term != NULL);
  
@@ -1158,7 +1175,7 @@ index f6ba9de..3f8fd11 100644
      int button = axis == WL_POINTER_AXIS_VERTICAL_SCROLL
          ? amount < 0 ? BTN_WHEEL_BACK : BTN_WHEEL_FORWARD
          : amount < 0 ? BTN_WHEEL_LEFT : BTN_WHEEL_RIGHT;
-@@ -3398,14 +3634,16 @@ wl_pointer_axis(void *data, struct wl_pointer *wl_pointer,
+@@ -3398,14 +3642,16 @@ wl_pointer_axis(void *data, struct wl_pointer *wl_pointer,
       * Without this, very slow scrolling will never actually scroll
       * anything.
       */
@@ -1178,7 +1195,7 @@ index f6ba9de..3f8fd11 100644
  }
  
  static void
-@@ -3554,7 +3792,7 @@ wl_touch_down(void *data, struct wl_touch *wl_touch, uint32_t serial,
+@@ -3554,7 +3800,7 @@ wl_touch_down(void *data, struct wl_touch *wl_touch, uint32_t serial,
          return;
  
      struct wl_window *win = wl_surface_get_user_data(surface);
@@ -1187,7 +1204,7 @@ index f6ba9de..3f8fd11 100644
  
      LOG_DBG("touch_down: touch=%p, x=%d, y=%d", (void *)wl_touch,
              wl_fixed_to_int(surface_x), wl_fixed_to_int(surface_y));
-@@ -3586,7 +3824,7 @@ wl_touch_up(void *data, struct wl_touch *wl_touch, uint32_t serial,
+@@ -3586,7 +3832,7 @@ wl_touch_up(void *data, struct wl_touch *wl_touch, uint32_t serial,
      LOG_DBG("touch_up: touch=%p", (void *)wl_touch);
  
      struct wl_window *win = wl_surface_get_user_data(seat->touch.surface);
@@ -1196,7 +1213,7 @@ index f6ba9de..3f8fd11 100644
  
      struct terminal *old_term = seat->mouse_focus;
      enum term_surface old_active_surface = term->active_surface;
-@@ -3613,8 +3851,10 @@ wl_touch_up(void *data, struct wl_touch *wl_touch, uint32_t serial,
+@@ -3613,8 +3859,10 @@ wl_touch_up(void *data, struct wl_touch *wl_touch, uint32_t serial,
          break;
      }
  
@@ -1209,7 +1226,7 @@ index f6ba9de..3f8fd11 100644
  }
  
  static void
-@@ -3629,7 +3869,7 @@ wl_touch_motion(void *data, struct wl_touch *wl_touch, uint32_t time,
+@@ -3629,7 +3877,7 @@ wl_touch_motion(void *data, struct wl_touch *wl_touch, uint32_t time,
              wl_fixed_to_int(surface_x), wl_fixed_to_int(surface_y));
  
      struct wl_window *win = wl_surface_get_user_data(seat->touch.surface);
@@ -1218,7 +1235,7 @@ index f6ba9de..3f8fd11 100644
  
      struct terminal *old_term = seat->mouse_focus;
      enum term_surface old_active_surface = term->active_surface;
-@@ -3661,8 +3901,10 @@ wl_touch_motion(void *data, struct wl_touch *wl_touch, uint32_t time,
+@@ -3661,8 +3909,10 @@ wl_touch_motion(void *data, struct wl_touch *wl_touch, uint32_t time,
          break;
      }
  
@@ -1559,7 +1576,7 @@ index 05281d0..0a1d61a 100644
  
          case 'D':
 diff --git a/render.c b/render.c
-index 72b68e1..749d26f 100644
+index 72b68e1..5a0e4eb 100644
 --- a/render.c
 +++ b/render.c
 @@ -43,6 +43,7 @@
@@ -1837,7 +1854,7 @@ index 72b68e1..749d26f 100644
 +    wl_surface_attach(term_surf(term), buf->wl_buf, 0, 0);
 +    wl_surface_commit(term_surf(term));
 +    if (pane)
-+        wl_surface_commit(term->window->surface.surf);
++        term->window->commit_parent = true;
  }
  
  static void
@@ -1875,7 +1892,7 @@ index 72b68e1..749d26f 100644
      const char *title = term->window_title != NULL ? term->window_title : "foot";
      char *copy = NULL;
  
-@@ -4360,17 +4401,39 @@ render_update_title(struct terminal *term)
+@@ -4360,17 +4401,43 @@ render_update_title(struct terminal *term)
  
      xdg_toplevel_set_title(term->window->xdg_toplevel, title);
      free(copy);
@@ -1909,6 +1926,10 @@ index 72b68e1..749d26f 100644
 -    term->window->frame_callback = NULL;
 +    term->pane_cb = NULL;
 +    frame_done(term);
++    if (term->window->commit_parent) {
++        term->window->commit_parent = false;
++        wl_surface_commit(term->window->surface.surf);
++    }
 +}
  
 +static void
@@ -1917,7 +1938,7 @@ index 72b68e1..749d26f 100644
      bool grid = term->render.pending.grid;
      bool csd = term->render.pending.csd;
      bool search = term->is_searching && term->render.pending.search;
-@@ -4393,6 +4456,9 @@ frame_callback(void *data, struct wl_callback *wl_callback, uint32_t callback_da
+@@ -4393,6 +4460,9 @@ frame_callback(void *data, struct wl_callback *wl_callback, uint32_t callback_da
          quirk_weston_csd_off(term);
      }
  
@@ -1927,7 +1948,7 @@ index 72b68e1..749d26f 100644
      if (search)
          render_search_box(term);
  
-@@ -4413,6 +4479,7 @@ frame_callback(void *data, struct wl_callback *wl_callback, uint32_t callback_da
+@@ -4413,6 +4483,7 @@ frame_callback(void *data, struct wl_callback *wl_callback, uint32_t callback_da
  static void
  tiocswinsz(struct terminal *term)
  {
@@ -1935,7 +1956,7 @@ index 72b68e1..749d26f 100644
      if (term->ptmx >= 0) {
          if (ioctl(term->ptmx, (unsigned int)TIOCSWINSZ,
                       &(struct winsize){
-@@ -4488,16 +4555,18 @@ delayed_reflow_of_normal_grid(struct terminal *term)
+@@ -4488,16 +4559,18 @@ delayed_reflow_of_normal_grid(struct terminal *term)
  static bool
  fdm_tiocswinsz(struct fdm *fdm, int fd, int events, void *data)
  {
@@ -1960,7 +1981,7 @@ index 72b68e1..749d26f 100644
      }
      return true;
  }
-@@ -4530,7 +4599,7 @@ send_dimensions_to_client(struct terminal *term)
+@@ -4530,7 +4603,7 @@ send_dimensions_to_client(struct terminal *term)
              fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
              if (fd < 0)
                  LOG_ERRNO("failed to create TIOCSWINSZ timer");
@@ -1969,7 +1990,7 @@ index 72b68e1..749d26f 100644
                  close(fd);
                  fd = -1;
              }
-@@ -4585,6 +4654,53 @@ set_size_from_grid(struct terminal *term, int *width, int *height, int cols, int
+@@ -4585,6 +4658,53 @@ set_size_from_grid(struct terminal *term, int *width, int *height, int cols, int
          *height = new_height;
  }
  
@@ -2023,7 +2044,7 @@ index 72b68e1..749d26f 100644
  /* Move to terminal.c? */
  bool
  render_resize(struct terminal *term, int width, int height, uint8_t opts)
-@@ -4605,19 +4721,23 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
+@@ -4605,19 +4725,23 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
  
      /* Convert logical size to physical size */
      const float scale = term->scale;
@@ -2050,7 +2071,7 @@ index 72b68e1..749d26f 100644
          } else {
              /* Otherwise, use a user-configured size */
              switch (term->conf->size.type) {
-@@ -4633,12 +4753,13 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
+@@ -4633,12 +4757,13 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
              case CONF_SIZE_CELLS:
                  set_size_from_grid(term, &width, NULL,
                                     term->conf->size.width, term->conf->size.height);
@@ -2065,7 +2086,7 @@ index 72b68e1..749d26f 100644
          /* The compositor is letting us choose the height */
          if (term->stashed_height != 0) {
              /* If a default size is requested, prefer the "last used" size */
-@@ -4672,7 +4793,7 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
+@@ -4672,7 +4797,7 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
      const int min_rows = 1;
  
      /* Minimum window size (must be divisible by the scaling factor)*/
@@ -2074,7 +2095,7 @@ index 72b68e1..749d26f 100644
      const int min_height = roundf(scale * ceilf((min_rows * term->cell_height) / scale));
  
      width = max(width, min_width);
-@@ -4687,12 +4808,12 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
+@@ -4687,12 +4812,12 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
      const int pad_bottom= min(max_pad_y, scale * term->conf->pad_bottom);
  
      if (is_floating &&
@@ -2090,7 +2111,7 @@ index 72b68e1..749d26f 100644
          width = max(min_width, roundf(scale * roundf(width / scale)));
  
          height = ((height - (pad_top + pad_bottom)) / term->cell_height)
-@@ -4724,7 +4845,7 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
+@@ -4724,7 +4849,7 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
  
      /* Screen rows/cols after resize */
      const int new_cols =
@@ -2099,7 +2120,7 @@ index 72b68e1..749d26f 100644
      const int new_rows =
          (term->height - (pad_top + pad_bottom)) / term->cell_height;
  
-@@ -4765,7 +4886,7 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
+@@ -4765,7 +4890,7 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
      /* Margins */
      const int grid_width = new_cols * term->cell_width;
      const int grid_height = new_rows * term->cell_height;
@@ -2108,7 +2129,7 @@ index 72b68e1..749d26f 100644
      const int total_y_pad = term->height - grid_height;
  
      const enum center_when center = term->conf->center_when;
-@@ -4776,16 +4897,16 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
+@@ -4776,16 +4901,16 @@ render_resize(struct terminal *term, int width, int height, uint8_t opts)
          (center == CENTER_FULLSCREEN && term->window->is_fullscreen);
  
      if (centered_padding && !term->window->is_resizing) {
@@ -2129,7 +2150,7 @@ index 72b68e1..749d26f 100644
      xassert(term->margins.right >= pad_right);
      xassert(term->margins.top >= pad_top);
      xassert(term->margins.bottom >= pad_bottom);
-@@ -5004,55 +5125,16 @@ damage_view:
+@@ -5004,55 +5129,16 @@ damage_view:
      /* Signal TIOCSWINSZ */
      send_dimensions_to_client(term);
  
@@ -2190,7 +2211,7 @@ index 72b68e1..749d26f 100644
  
      tll_free(term->normal.scroll_damage);
      tll_free(term->alt.scroll_damage);
-@@ -5061,8 +5143,10 @@ damage_view:
+@@ -5061,8 +5147,10 @@ damage_view:
      shm_unref(term->render.last_buf);
      term->render.last_buf = NULL;
      term_damage_view(term);
@@ -2203,7 +2224,7 @@ index 72b68e1..749d26f 100644
      render_refresh(term);
  
      return true;
-@@ -5207,6 +5291,9 @@ fdm_hook_refresh_pending_terminals(struct fdm *fdm, void *data)
+@@ -5207,6 +5295,9 @@ fdm_hook_refresh_pending_terminals(struct fdm *fdm, void *data)
          if (unlikely(term->shutdown.in_progress || !term->window->is_configured))
              continue;
  
@@ -2213,7 +2234,7 @@ index 72b68e1..749d26f 100644
          bool grid = term->render.refresh.grid;
          bool csd = term->render.refresh.csd;
          bool search = term->is_searching && term->render.refresh.search;
-@@ -5223,7 +5310,7 @@ fdm_hook_refresh_pending_terminals(struct fdm *fdm, void *data)
+@@ -5223,7 +5314,7 @@ fdm_hook_refresh_pending_terminals(struct fdm *fdm, void *data)
          term->render.refresh.search = false;
          term->render.refresh.urls = false;
  
@@ -2222,7 +2243,7 @@ index 72b68e1..749d26f 100644
              struct grid *original_grid = term->grid;
              if (urls_mode_is_active(term)) {
                  xassert(term->url.grid_snapshot != NULL);
-@@ -5235,6 +5322,8 @@ fdm_hook_refresh_pending_terminals(struct fdm *fdm, void *data)
+@@ -5235,6 +5326,8 @@ fdm_hook_refresh_pending_terminals(struct fdm *fdm, void *data)
                  render_csd(term);
                  quirk_weston_csd_off(term);
              }
@@ -2231,7 +2252,22 @@ index 72b68e1..749d26f 100644
              if (search)
                  render_search_box(term);
              if (urls)
-@@ -5312,6 +5401,9 @@ render_refresh_app_id(struct terminal *term)
+@@ -5257,6 +5350,14 @@ fdm_hook_refresh_pending_terminals(struct fdm *fdm, void *data)
+         }
+     }
+ 
++    /* All panes rendered in this pass appear in one parent commit */
++    tll_foreach(wayl->windows, it) {
++        if (it->item->commit_parent) {
++            it->item->commit_parent = false;
++            wl_surface_commit(it->item->surface.surf);
++        }
++    }
++
+     tll_foreach(wayl->seats, it) {
+         if (it->item.pointer.xcursor_pending) {
+             if (it->item.pointer.xcursor_callback == NULL) {
+@@ -5312,6 +5413,9 @@ render_refresh_app_id(struct terminal *term)
          return;
      }
  
@@ -2241,7 +2277,7 @@ index 72b68e1..749d26f 100644
      const char *app_id =
          term->app_id != NULL ? term->app_id : term->conf->app_id;
  
-@@ -5344,6 +5436,9 @@ render_refresh_icon(struct terminal *term)
+@@ -5344,6 +5448,9 @@ render_refresh_icon(struct terminal *term)
          return;
      }
  
@@ -2251,7 +2287,7 @@ index 72b68e1..749d26f 100644
      const char *icon_name = term_icon(term);
      LOG_DBG("setting toplevel icon: %s", icon_name);
  
-@@ -5357,6 +5452,623 @@ render_refresh_icon(struct terminal *term)
+@@ -5357,6 +5464,652 @@ render_refresh_icon(struct terminal *term)
      term->render.icon.last_update = now;
  }
  
@@ -2429,14 +2465,14 @@ index 72b68e1..749d26f 100644
 +
 +    {
 +        const float al = tabs_anim_line(win, tabs_line_of(win, term));
-+        const int hy = (int)roundf((al - win->sidebar_scroll) * row_h);
++        const int hy = tabs_line_y(win, al);
 +        sidebar_fill(buf, sel_bg, 0xffff, gamma, 0, hy, w, row_h);
 +        sidebar_fill(buf, sel_accent, 0xffff, gamma, right ? w - bar : 0, hy, bar, row_h);
 +    }
 +
 +    tll_foreach(win->tabs, it) {
 +        struct terminal *t = it->item;
-+        const int y = (l - win->sidebar_scroll) * row_h;
++        const int y = tabs_line_y(win, l);
 +        const bool first = t->group == 0 || prev == NULL || prev->group != t->group;
 +        const bool last = t->group == 0 || it->next == NULL || it->next->item->group != t->group;
 +        prev = t;
@@ -2473,6 +2509,25 @@ index 72b68e1..749d26f 100644
 +        const int cx = tabs_close_x(win);
 +        int x = pad;
 +        int text_end = w - pad;
++
++        if (win->split_cue_line == l - 1) {
++            /* Dropping here splits the dragged tab with this one */
++            const int o = 2 * line;
++            sidebar_fill(buf, accent, 0x5000, gamma, 0, y, w, row_h);
++            sidebar_fill(buf, accent, 0xffff, gamma, 0, y, w, o);
++            sidebar_fill(buf, accent, 0xffff, gamma, 0, y + row_h - o, w, o);
++            sidebar_fill(buf, accent, 0xffff, gamma, 0, y, o, row_h);
++            sidebar_fill(buf, accent, 0xffff, gamma, w - o, y, o, row_h);
++            const char32_t *cue = U"⇥ split";
++            const int cw2 = text_width(term, cue);
++            if (right) {
++                sidebar_text(term, buf, cue, pad, y, row_h, w, accent, gamma);
++                x = pad + cw2 + pad;
++            } else {
++                sidebar_text(term, buf, cue, w - pad - cw2, y, row_h, w, accent, gamma);
++                text_end = w - 2 * pad - cw2;
++            }
++        }
 +        if (hovered && !grabbed) {
 +            if (win->hover.what == TAB_HOVER_CLOSE)
 +                sidebar_fill(buf, color_blend_towards(c->bg, c->fg, 1.5), 0xffff, gamma,
@@ -2534,7 +2589,7 @@ index 72b68e1..749d26f 100644
 +    }
 +
 +    if (win->drop_row >= 0) {
-+        const int y = (win->drop_row - win->sidebar_scroll) * row_h;
++        const int y = tabs_line_y(win, win->drop_row);
 +        sidebar_fill(buf, accent, 0xffff, gamma, 0, max(0, y - line), w, 3 * line);
 +    }
 +
@@ -2543,6 +2598,12 @@ index 72b68e1..749d26f 100644
 +    sidebar_fill(buf, c->fg, 0x4000, gamma, 0, fy - 1, w, 1);
 +    if (win->hover.what == TAB_HOVER_NEW)
 +        sidebar_fill(buf, hover_bg, alpha, gamma, 0, fy, row_h, row_h);
++    if (win->hover.what == TAB_HOVER_SEARCH)
++        sidebar_fill(buf, hover_bg, alpha, gamma, row_h, fy, row_h, row_h);
++    {
++        const int sw = text_width(term, U"⌕");
++        sidebar_text(term, buf, U"⌕", row_h + (row_h - sw) / 2, fy, row_h, w, c->fg, gamma);
++    }
 +    if (win->hover.what == TAB_HOVER_HIDE)
 +        sidebar_fill(buf, hover_bg, alpha, gamma, w - row_h, fy, row_h, row_h);
 +    {
@@ -2636,20 +2697,21 @@ index 72b68e1..749d26f 100644
 +
 +    char32_t *header = tabs_menu_header(win);
 +    const char32_t *input = tabs_menu_input(win);
-+    char32_t *lines[ALEN(win->menu.items) > ALEN(win->menu.found)
-+                    ? ALEN(win->menu.items) : ALEN(win->menu.found)];
-+    for (int i = 0; i < win->menu.n; i++)
-+        lines[i] = tabs_menu_line(win, i);
++    const int nrows = tabs_menu_rows(win);
++    const int first = win->menu.scroll;
++    char32_t *lines[max(1, nrows)];
++    for (int i = 0; i < nrows; i++)
++        lines[i] = tabs_menu_line(win, first + i);
 +
 +    size_t cols = header != NULL ? c32len(header) : 0;
-+    for (int i = 0; i < win->menu.n; i++)
++    for (int i = 0; i < nrows; i++)
 +        cols = max(cols, c32len(lines[i]));
 +    if (input != NULL)
 +        cols = max(cols, (size_t)40);
 +    cols = min(cols, (size_t)60) + 4;
 +
 +    win->menu.header = (header != NULL) + (input != NULL);
-+    const int rows = max(win->menu.n, input != NULL ? 1 : 0) + win->menu.header + 2;
++    const int rows = max(nrows, input != NULL ? 1 : 0) + win->menu.header + 2;
 +    /* Buffer size must be a multiple of the scale */
 +    const int w = (int)(ceilf(cols * cw / scale) * scale);
 +    const int h = (int)(ceilf(rows * ch / scale) * scale);
@@ -2684,13 +2746,17 @@ index 72b68e1..749d26f 100644
 +        sidebar_fill(buf, color_blend_towards(c->bg, c->fg, 1.15), 0xffff, gamma,
 +                     cw, ry, w - 2 * cw, ch);
 +        int tx = sidebar_text(term, buf, U"› ", 2 * cw, ry, ch, w - 2 * cw, accent, gamma);
-+        tx = sidebar_text(term, buf, input, tx, ry, ch, w - 2 * cw, c->fg, gamma);
++        /* Long input: show its end, where the cursor is */
++        const char32_t *shown = input;
++        while (*shown != U'\0' && tx + text_width(term, shown) > w - 3 * cw)
++            shown++;
++        tx = sidebar_text(term, buf, shown, tx, ry, ch, w - 2 * cw, c->fg, gamma);
 +        sidebar_fill(buf, accent, 0xffff, gamma, tx, ry + line * 2, max(1, 2 * line), ch - 4 * line);
 +        ry += ch;
 +    }
 +
-+    for (int i = 0; i < win->menu.n; i++, ry += ch) {
-+        const bool sel = i == win->menu.sel;
++    for (int i = 0; i < nrows; i++, ry += ch) {
++        const bool sel = first + i == win->menu.sel;
 +        if (sel)
 +            sidebar_fill(buf, c->fg, 0xffff, gamma, cw, ry, w - 2 * cw, ch);
 +        sidebar_text_mid(term, buf, lines[i], 2 * cw, ry, ch, w - 2 * cw,
@@ -2867,9 +2933,8 @@ index 72b68e1..749d26f 100644
 +    render_set_window_geometry(win, scale, W, H, min_w, min_h);
 +    render_refresh_csd(act);
 +    render_refresh_sidebar(win);
-+    /* Mid-resize, the panes' own renders commit this along with their new buffers */
-+    if (!win->is_resizing)
-+        wl_surface_commit(win->surface.surf);
++    /* Committed with the panes' new buffers, at the end of the render pass */
++    win->commit_parent = true;
 +}
 +
  void
@@ -4016,10 +4081,10 @@ index 6289937..b385f1b 100644
          del_from_env(&custom_env, "TERM_PROGRAM");            /* Wezterm, Ghostty */
 diff --git a/tabs.c b/tabs.c
 new file mode 100644
-index 0000000..edc2c8a
+index 0000000..8d3d770
 --- /dev/null
 +++ b/tabs.c
-@@ -0,0 +1,3110 @@
+@@ -0,0 +1,3261 @@
 +#include "tabs.h"
 +
 +#include <limits.h>
@@ -4225,6 +4290,81 @@ index 0000000..edc2c8a
 +        i++;
 +    }
 +    return -1;
++}
++
++/* Pinned tabs lead the list, set apart by a small gap */
++
++static int
++pinned_lines(const struct wl_window *win)
++{
++    int n = 0;
++    tll_foreach(win->tabs, it) {
++        if (!it->item->tab_pinned)
++            break;
++        n++;
++    }
++    return n;
++}
++
++static int
++pin_gap(const struct wl_window *win)
++{
++    const int p = pinned_lines(win);
++    return p > 0 && p < tabs_line_count(win) ? (int)roundf(6 * win->term->scale) : 0;
++}
++
++static float
++line_abs_y(const struct wl_window *win, float line)
++{
++    const int row_h = tabs_sidebar_row_h(win);
++    return line * row_h + (line >= pinned_lines(win) ? pin_gap(win) : 0);
++}
++
++/* Pixel offset of a line from the top of the visible list */
++int
++tabs_line_y(const struct wl_window *win, float line)
++{
++    return (int)roundf(line_abs_y(win, line) - line_abs_y(win, win->sidebar_scroll));
++}
++
++/* Line under a pixel offset from the top of the visible list (may be past the end) */
++int
++tabs_line_at(const struct wl_window *win, int y)
++{
++    const int row_h = tabs_sidebar_row_h(win);
++    const int p = pinned_lines(win), gap = pin_gap(win);
++    const int abs_y = y + (int)line_abs_y(win, win->sidebar_scroll);
++    if (abs_y < p * row_h)
++        return abs_y / row_h;
++    return max(p, (abs_y - gap) / row_h);
++}
++
++/* The inner part of a row, next to the terminal, is a "split with this tab" target */
++static struct terminal *
++split_target_at(const struct wl_window *win, int x, int y, const struct terminal *dragged)
++{
++    const int w = tabs_sidebar_width_px(win);
++    const bool inner = win->term->conf->tabs.right ? x < w * 2 / 5 : x >= w * 3 / 5;
++    if (!inner || y < 0)
++        return NULL;
++    const int l = tabs_line_at(win, y);
++    struct terminal *t = l < tabs_line_count(win) ? tabs_line_term(win, l) : NULL;
++    if (t == NULL || t == dragged ||
++        (t->group != 0 && t->group == dragged->group && t->window == dragged->window))
++    {
++        return NULL;
++    }
++    return t;
++}
++
++static void
++set_split_cue(struct wl_window *win, struct terminal *target)
++{
++    const int line = target != NULL ? tabs_line_of(win, target) : -1;
++    if (line != win->split_cue_line) {
++        win->split_cue_line = line;
++        render_refresh_sidebar(win);
++    }
 +}
 +
 +/* Row index that a sidebar line insertion point falls in front of */
@@ -5462,12 +5602,15 @@ index 0000000..edc2c8a
 +    return win->term;
 +}
 +
++static void set_split_cue(struct wl_window *win, struct terminal *target);
++
 +void
 +tabs_sidebar_cancel_drag(struct wl_window *win)
 +{
 +    if (win->sidebar_drag.tab == NULL)
 +        return;
 +    memset(&win->sidebar_drag, 0, sizeof(win->sidebar_drag));
++    set_split_cue(win, NULL);
 +    render_refresh_sidebar(win);
 +}
 +
@@ -5597,9 +5740,11 @@ index 0000000..edc2c8a
 +            return TAB_HOVER_HIDE;
 +        if (x < row_h)
 +            return TAB_HOVER_NEW;
++        if (x < 2 * row_h)
++            return TAB_HOVER_SEARCH;
 +        return TAB_HOVER_NONE;
 +    }
-+    const int r = y / row_h + win->sidebar_scroll;
++    const int r = tabs_line_at(win, y);
 +    if (r >= tabs_line_count(win))
 +        return TAB_HOVER_NONE;
 +    *row = r;
@@ -5756,6 +5901,7 @@ index 0000000..edc2c8a
 +        target->drop_row = -1;
 +        target->drop_split = false;
 +        target->drop_center = false;
++        set_split_cue(target, NULL);
 +        render_tab_drop_hint(target);
 +        render_refresh_sidebar(target);
 +    }
@@ -5899,9 +6045,12 @@ index 0000000..edc2c8a
 +
 +    int row = -1, pos = 0, n_new = 0;
 +    bool split = false, vertical = false, center = false;
++    struct terminal *st = NULL;
 +    if (sb_w > 0 && x >= sb_x && x < sb_x + sb_w) {
 +        const int row_h = tabs_sidebar_row_h(w);
-+        row = max(0, min((y + row_h / 2) / row_h + w->sidebar_scroll, tabs_line_count(w)));
++        st = split_target_at(w, x - sb_x, y, t);
++        if (st == NULL)
++            row = max(0, min(tabs_line_at(w, y + row_h / 2), tabs_line_count(w)));
 +    } else {
 +        /* The edge of the pane under the pointer picks the side and orientation */
 +        struct terminal *set[MAX_SET];
@@ -5948,6 +6097,8 @@ index 0000000..edc2c8a
 +    wayl->tab_dnd.row = row;
 +    wayl->tab_dnd.pos = pos;
 +    wayl->tab_dnd.vertical = vertical;
++    wayl->tab_dnd.split_target = st;
++    set_split_cue(w, st);
 +    if (center)
 +        row = -1;
 +    if (w->drop_row != row || w->drop_split != split || w->drop_center != center ||
@@ -5972,6 +6123,7 @@ index 0000000..edc2c8a
 +        w->drop_row = -1;
 +        w->drop_split = false;
 +        w->drop_center = false;
++        set_split_cue(w, NULL);
 +        render_tab_drop_hint(w);
 +        render_refresh_sidebar(w);
 +    }
@@ -5986,7 +6138,7 @@ index 0000000..edc2c8a
 +    if (w == NULL || wayl->tab_dnd.tab == NULL)
 +        return;
 +    wayl->tab_dnd.dest = w;
-+    if (w->drop_row >= 0 || w->drop_split || w->drop_center)
++    if (w->drop_row >= 0 || w->drop_split || w->drop_center || wayl->tab_dnd.split_target != NULL)
 +        wayl->tab_dnd.action = TAB_DND_MOVE;
 +    else if (w != wayl->tab_dnd.tab->window) {
 +        wayl->tab_dnd.row = tabs_line_count(w);
@@ -6050,6 +6202,20 @@ index 0000000..edc2c8a
 +    if (dst == NULL || dst->closing)
 +        return;
 +
++    struct terminal *st = wayl->tab_dnd.split_target;
++    wayl->tab_dnd.split_target = NULL;
++    bool st_alive = false;
++    tll_foreach(dst->tabs, it)
++        st_alive |= it->item == st;
++    if (st != NULL && st_alive) {
++        tabs_activate(dst, st);
++        if (dst == t->window)
++            tabs_split_with(t);
++        else
++            move_to_window(t, dst, -1, -1, current_vertical(dst));
++        return;
++    }
++
 +    if (dst != t->window)
 +        move_to_window(t, dst, row, wayl->tab_dnd.pos, wayl->tab_dnd.vertical);
 +    else if (row < 0 && t->group != 0 && t->group == dst->term->group)
@@ -6088,9 +6254,15 @@ index 0000000..edc2c8a
 +        if (win->sidebar_drag.seat != seat)
 +            return;
 +        struct terminal *t = win->sidebar_drag.tab;
++        struct terminal *split_target = win->sidebar_drag.split_target;
 +        const bool dragging = win->sidebar_drag.dragging;
 +        const enum tab_drop drop = win->sidebar_drag.drop;
 +        tabs_sidebar_cancel_drag(win);
++        if (dragging && split_target != NULL) {
++            tabs_activate(win, split_target);
++            tabs_split_with(t);
++            return;
++        }
 +        if (seat->mouse_focus != NULL)
 +            term_xcursor_update_for_seat(seat->mouse_focus, seat);
 +        if (!dragging) {
@@ -6126,6 +6298,10 @@ index 0000000..edc2c8a
 +        win->sidebar_sb.seat = seat;
 +        win->sidebar_sb.start_y = y;
 +        win->sidebar_sb.start_scroll = win->sidebar_scroll;
++        return;
++    }
++    if (zone == TAB_HOVER_SEARCH && button == BTN_LEFT) {
++        tabs_open_switcher(win);
 +        return;
 +    }
 +    if (zone == TAB_HOVER_NEW && button == BTN_RIGHT) {
@@ -6262,10 +6438,19 @@ index 0000000..edc2c8a
 +        win->sidebar_drag.drop = drop;
 +        render_refresh_sidebar(win);
 +    }
-+    if (drop != TAB_DROP_NONE || y >= h - row_h - 1)
++    if (drop != TAB_DROP_NONE || y >= h - row_h - 1) {
++        win->sidebar_drag.split_target = NULL;
++        set_split_cue(win, NULL);
++        return;
++    }
++
++    struct terminal *st = split_target_at(win, x, y, t);
++    win->sidebar_drag.split_target = st;
++    set_split_cue(win, st);
++    if (st != NULL)
 +        return;
 +
-+    const int line = min(y / row_h + win->sidebar_scroll, tabs_line_count(win) - 1);
++    const int line = min(tabs_line_at(win, y), tabs_line_count(win) - 1);
 +    const int target = tabs_row_of(win, tabs_line_term(win, line));
 +    for (int cur = tabs_row_of(win, t); cur != target;) {
 +        move_row(win, t, target > cur ? 1 : -1);
@@ -6660,7 +6845,7 @@ index 0000000..edc2c8a
 +        h = xstrdup("Rename tab (empty: use the program's title)");
 +        break;
 +    case TAB_MENU_SWITCHER:
-+        h = xstrdup("Go to tab");
++        h = xasprintf("Go to tab (%d)", win->menu.n);
 +        break;
 +    case TAB_MENU_SORT:
 +        h = xstrdup("Sort tabs");
@@ -6803,8 +6988,12 @@ index 0000000..edc2c8a
 +        return;
 +    }
 +    win->menu.n = n;
-+    if (kind == TAB_MENU_SWITCHER)
++    /* Only the item under the pointer (or chosen by key) is highlighted */
++    win->menu.sel = -1;
++    if (kind == TAB_MENU_SWITCHER) {
++        win->menu.sel = 0;
 +        switcher_filter(win);
++    }
 +
 +    if (!wayl_win_subsurface_new(win, &win->menu_surf, true)) {
 +        memset(&win->menu, 0, sizeof(win->menu));
@@ -6998,12 +7187,31 @@ index 0000000..edc2c8a
 +    }
 +}
 +
++/* Long switcher lists show a window of rows that follows the selection */
++int
++tabs_menu_rows(const struct wl_window *win)
++{
++    return win->menu.kind == TAB_MENU_SWITCHER ? min(win->menu.n, 12) : win->menu.n;
++}
++
++static void
++menu_scroll_fix(struct wl_window *win)
++{
++    const int vis = max(1, tabs_menu_rows(win));
++    if (win->menu.sel >= 0 && win->menu.sel < win->menu.scroll)
++        win->menu.scroll = win->menu.sel;
++    if (win->menu.sel >= win->menu.scroll + vis)
++        win->menu.scroll = win->menu.sel - vis + 1;
++    win->menu.scroll = max(0, min(win->menu.scroll, win->menu.n - vis));
++}
++
 +static void
 +menu_select(struct wl_window *win, int sel)
 +{
 +    if (sel == win->menu.sel)
 +        return;
 +    win->menu.sel = sel;
++    menu_scroll_fix(win);
 +    render_tab_menu(win);
 +}
 +
@@ -7014,7 +7222,7 @@ index 0000000..edc2c8a
 +    if (x < 0 || x >= win->menu.w || y < 0 || ch <= 0)
 +        return -1;
 +    const int i = y / ch - 1 - win->menu.header;
-+    return i >= 0 && i < win->menu.n ? i : -1;
++    return i >= 0 && i < tabs_menu_rows(win) ? i + win->menu.scroll : -1;
 +}
 +
 +static bool
@@ -7063,6 +7271,7 @@ index 0000000..edc2c8a
 +    win->menu.text[*len] = U'\0';
 +    if (win->menu.kind == TAB_MENU_SWITCHER)
 +        switcher_filter(win);
++    menu_scroll_fix(win);
 +    render_tab_menu(win);
 +    return true;
 +}
@@ -7084,12 +7293,12 @@ index 0000000..edc2c8a
 +    case XKB_KEY_Up:
 +    case XKB_KEY_k:
 +    case XKB_KEY_ISO_Left_Tab:
-+        menu_select(win, (win->menu.sel + n - 1) % n);
++        menu_select(win, win->menu.sel < 0 ? n - 1 : (win->menu.sel + n - 1) % n);
 +        break;
 +    case XKB_KEY_Down:
 +    case XKB_KEY_j:
 +    case XKB_KEY_Tab:
-+        menu_select(win, (win->menu.sel + 1) % n);
++        menu_select(win, win->menu.sel < 0 ? 0 : (win->menu.sel + 1) % n);
 +        break;
 +    case XKB_KEY_Return:
 +    case XKB_KEY_KP_Enter:
@@ -7119,8 +7328,15 @@ index 0000000..edc2c8a
 +tabs_menu_motion(struct seat *seat, struct wl_window *win)
 +{
 +    const int i = menu_item_at(win, seat->mouse.x, seat->mouse.y);
-+    if (i >= 0)
++    if (i >= 0 || win->menu.kind != TAB_MENU_SWITCHER)
 +        menu_select(win, i);
++}
++
++void
++tabs_menu_leave(struct wl_window *win)
++{
++    if (win->menu.kind != TAB_MENU_NONE && win->menu.kind != TAB_MENU_SWITCHER)
++        menu_select(win, -1);
 +}
 +
 +void
@@ -7132,10 +7348,10 @@ index 0000000..edc2c8a
 +}
 diff --git a/tabs.h b/tabs.h
 new file mode 100644
-index 0000000..24ce5c9
+index 0000000..55c3052
 --- /dev/null
 +++ b/tabs.h
-@@ -0,0 +1,119 @@
+@@ -0,0 +1,123 @@
 +#pragma once
 +
 +#include <stdbool.h>
@@ -7202,6 +7418,8 @@ index 0000000..24ce5c9
 +int tabs_line_count(const struct wl_window *win);
 +struct terminal *tabs_line_term(const struct wl_window *win, int line);
 +int tabs_line_of(const struct wl_window *win, const struct terminal *t);
++int tabs_line_y(const struct wl_window *win, float line);
++int tabs_line_at(const struct wl_window *win, int y);
 +struct terminal *tabs_row_term(const struct wl_window *win, int row);
 +int tabs_row_of(const struct wl_window *win, const struct terminal *t);
 +size_t tabs_group_len(const struct terminal *t);
@@ -7245,9 +7463,11 @@ index 0000000..24ce5c9
 +                   const char *utf8);
 +void tabs_menu_button(struct seat *seat, struct wl_window *win, int button, bool pressed);
 +void tabs_menu_motion(struct seat *seat, struct wl_window *win);
++void tabs_menu_leave(struct wl_window *win);
 +char32_t *tabs_menu_header(const struct wl_window *win);
 +const char32_t *tabs_menu_input(const struct wl_window *win);
 +char32_t *tabs_menu_line(const struct wl_window *win, int i);
++int tabs_menu_rows(const struct wl_window *win);
 +
 +void tabs_rename(struct terminal *t, const char *label);
 +void tabs_pin(struct terminal *t, bool pin);
@@ -7743,7 +7963,7 @@ index d3e1fbb..45dbc6f 100644
      };
  
 diff --git a/wayland.c b/wayland.c
-index a2c255a..b1db8e7 100644
+index a2c255a..3a4318b 100644
 --- a/wayland.c
 +++ b/wayland.c
 @@ -32,6 +32,7 @@
@@ -7939,7 +8159,7 @@ index a2c255a..b1db8e7 100644
  }
  
  static const struct wp_fractional_scale_v1_listener fractional_scale_listener = {
-@@ -2108,6 +2146,21 @@ wayl_win_init(struct terminal *term, const char *token, const char *toplevel_nam
+@@ -2108,6 +2146,22 @@ wayl_win_init(struct terminal *term, const char *token, const char *toplevel_nam
      }
  
      win->term = term;
@@ -7954,6 +8174,7 @@ index a2c255a..b1db8e7 100644
 +    }
 +    win->sidebar_w = conf->tabs.width;
 +    win->drop_row = -1;
++    win->split_cue_line = -1;
 +    win->anim.fd = -1;
 +    win->pane_drag.hover = -1;
 +    win->anim.last_line = -1;
@@ -7961,7 +8182,7 @@ index a2c255a..b1db8e7 100644
      win->csd_mode = CSD_UNKNOWN;
      win->csd.move_timeout_fd = -1;
      win->resize_timeout_fd = -1;
-@@ -2277,6 +2330,23 @@ wayl_win_destroy(struct wl_window *win)
+@@ -2277,6 +2331,23 @@ wayl_win_destroy(struct wl_window *win)
          return;
  
      struct terminal *term = win->term;
@@ -7985,7 +8206,7 @@ index a2c255a..b1db8e7 100644
  
      if (win->csd.move_timeout_fd != -1)
          close(win->csd.move_timeout_fd);
-@@ -2359,6 +2429,15 @@ wayl_win_destroy(struct wl_window *win)
+@@ -2359,6 +2430,15 @@ wayl_win_destroy(struct wl_window *win)
  
      render_wait_for_preapply_damage(term);
  
@@ -8001,7 +8222,7 @@ index a2c255a..b1db8e7 100644
      csd_destroy(win);
      wayl_win_subsurface_destroy(&win->search);
      wayl_win_subsurface_destroy(&win->scrollback_indicator);
-@@ -2407,6 +2486,20 @@ wayl_win_destroy(struct wl_window *win)
+@@ -2407,6 +2487,20 @@ wayl_win_destroy(struct wl_window *win)
  
      if (win->resize_timeout_fd >= 0)
          fdm_del(win->term->wl->fdm, win->resize_timeout_fd);
@@ -8023,7 +8244,7 @@ index a2c255a..b1db8e7 100644
  }
  
 diff --git a/wayland.h b/wayland.h
-index 3ed68b2..1f32de2 100644
+index 3ed68b2..e6514a0 100644
 --- a/wayland.h
 +++ b/wayland.h
 @@ -84,6 +84,7 @@ struct wl_clipboard {
@@ -8034,7 +8255,7 @@ index 3ed68b2..1f32de2 100644
      char *text;
      uint32_t serial;
  };
-@@ -368,9 +369,90 @@ struct xdg_activation_token_context {
+@@ -368,9 +369,94 @@ struct xdg_activation_token_context {
      void *cb_data;                                /* Callback user pointer */
  };
  
@@ -8047,7 +8268,7 @@ index 3ed68b2..1f32de2 100644
 +
 +enum tab_hover {
 +    TAB_HOVER_NONE, TAB_HOVER_ROW, TAB_HOVER_NEW, TAB_HOVER_HIDE, TAB_HOVER_GRIP,
-+    TAB_HOVER_CLOSE, TAB_HOVER_SCROLLBAR,
++    TAB_HOVER_CLOSE, TAB_HOVER_SCROLLBAR, TAB_HOVER_SEARCH,
 +};
 +
 +#define TAB_MIME "application/x-foot-tab"
@@ -8071,12 +8292,14 @@ index 3ed68b2..1f32de2 100644
 +    bool sidebar_hidden;
 +    bool sidebar_dirty;
 +    bool closing;
++    bool commit_parent;  /* panes rendered: commit them together */
 +    struct {
 +        struct seat *seat;
 +        struct terminal *tab;
 +        int start_y;
 +        bool dragging;
 +        enum tab_drop drop;
++        struct terminal *split_target;  /* dropped on its row's inner edge: split with it */
 +    } sidebar_drag;
 +    struct {
 +        struct seat *seat;
@@ -8109,6 +8332,7 @@ index 3ed68b2..1f32de2 100644
 +    int drop_pos, drop_n;
 +    bool drop_vertical;
 +    bool drop_center;  /* "add as tab" hint over the terminal */
++    int split_cue_line;  /* row showing the "split with this tab" cue, or -1 */
 +    struct {
 +        enum tab_menu_kind kind;
 +        struct terminal *target;
@@ -8120,12 +8344,13 @@ index 3ed68b2..1f32de2 100644
 +        int items[12];
 +        char32_t text[128];
 +        size_t text_len;
-+        struct terminal *found[12];
++        struct terminal *found[256];
++        int scroll;
 +    } menu;
      struct wayl_surface surface;
      struct xdg_surface *xdg_surface;
      struct xdg_toplevel *xdg_toplevel;
-@@ -524,6 +606,40 @@ struct wayland {
+@@ -524,6 +610,41 @@ struct wayland {
      tll(struct seat) seats;
  
      tll(struct terminal *) terms;
@@ -8161,6 +8386,7 @@ index 3ed68b2..1f32de2 100644
 +        int row;
 +        int pos;
 +        bool vertical;
++        struct terminal *split_target;
 +        enum { TAB_DND_NONE, TAB_DND_MOVE, TAB_DND_DETACH, TAB_DND_KEEP } action;
 +    } tab_dnd;
  
