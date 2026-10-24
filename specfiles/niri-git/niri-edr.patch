@@ -102,7 +102,7 @@ index aa91a17..4ebbd93 100644
  
  fn is_vrr_capable(device: &DrmDevice, connector: connector::Handle) -> Option<bool> {
 diff --git a/src/render_helpers/color.rs b/src/render_helpers/color.rs
-index b8098c4..31f9e88 100644
+index b8098c4..fab2007 100644
 --- a/src/render_helpers/color.rs
 +++ b/src/render_helpers/color.rs
 @@ -61,10 +61,12 @@ impl ColorDesc {
@@ -119,14 +119,16 @@ index b8098c4..31f9e88 100644
                  max_lum: hdr.max_luminance.0 as f32,
                  ref_lum: hdr.sdr_luminance.0 as f32,
                  ..Self::SRGB
-@@ -174,8 +176,13 @@ pub fn conversion(src: &ColorDesc, dst: &ColorDesc) -> Option<Vec<Uniform<'stati
+@@ -174,8 +176,15 @@ pub fn conversion(src: &ColorDesc, dst: &ColorDesc) -> Option<Vec<Uniform<'stati
  }
  
  pub fn hdr_output_uniforms(hdr: Hdr) -> Vec<Uniform<'static>> {
 -    let mat = rgb_to_xyz(&BT2020).inverse() * rgb_to_xyz(&SRGB) * (hdr.sdr_luminance.0 as f32 / 10000.);
 -    vec![mat3_uniform("hdr_mat", mat)]
 +    let (mat, edr) = if hdr.edr {
-+        (Mat3::IDENTITY, 1.)
++        // The display multiplies by the EDR factor (max / sdr), so peak maps to 1.0.
++        let scale = hdr.sdr_luminance.0 as f32 / hdr.max_luminance.0 as f32;
++        (Mat3::IDENTITY * scale, 1.)
 +    } else {
 +        let scale = hdr.sdr_luminance.0 as f32 / 10000.;
 +        (rgb_to_xyz(&BT2020).inverse() * rgb_to_xyz(&SRGB) * scale, 0.)
@@ -135,7 +137,7 @@ index b8098c4..31f9e88 100644
  }
  
  #[cfg(test)]
-@@ -199,6 +206,7 @@ mod tests {
+@@ -199,6 +208,7 @@ mod tests {
          let hdr = Hdr {
              sdr_luminance: niri_config::FloatOrInt(203.),
              max_luminance: niri_config::FloatOrInt(500.),
@@ -144,7 +146,7 @@ index b8098c4..31f9e88 100644
          let target = ColorDesc::render_target(false, Some(hdr));
          assert!(conversion(&ColorDesc::SRGB, &target).is_none());
 diff --git a/src/render_helpers/shaders/hdr_output.frag b/src/render_helpers/shaders/hdr_output.frag
-index b2e48a0..fc6fced 100644
+index b2e48a0..7275cac 100644
 --- a/src/render_helpers/shaders/hdr_output.frag
 +++ b/src/render_helpers/shaders/hdr_output.frag
 @@ -21,13 +21,19 @@ uniform float tint;
@@ -160,7 +162,7 @@ index b2e48a0..fc6fced 100644
 -    vec3 p = pow(c, vec3(0.1593017578125));
 -    c = pow((0.8359375 + 18.8515625 * p) / (1.0 + 18.6875 * p), vec3(78.84375));
 +    if (hdr_edr == 1.0) {
-+        // Extended sRGB: 1.0 is SDR white, the display maps the headroom above it.
++        // sRGB-encoded, 1.0 is peak; the display's EDR gain lifts SDR white back up.
 +        c = mix(12.92 * c, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
 +    } else {
 +        vec3 p = pow(c, vec3(0.1593017578125));

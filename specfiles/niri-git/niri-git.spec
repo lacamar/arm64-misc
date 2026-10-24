@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        25%{?dist}
+Release:        26%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -178,6 +178,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Sat Oct 24 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^10.git.12de51d6-26
+- Scale EDR output by the display gain
+
 * Sat Oct 24 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^10.git.12de51d6-25
 - Keep P3 primaries in the EDR render target
 
