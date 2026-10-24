@@ -102,17 +102,31 @@ index aa91a17..4ebbd93 100644
  
  fn is_vrr_capable(device: &DrmDevice, connector: connector::Handle) -> Option<bool> {
 diff --git a/src/render_helpers/color.rs b/src/render_helpers/color.rs
-index b8098c4..10052c4 100644
+index b8098c4..31f9e88 100644
 --- a/src/render_helpers/color.rs
 +++ b/src/render_helpers/color.rs
-@@ -174,8 +174,13 @@ pub fn conversion(src: &ColorDesc, dst: &ColorDesc) -> Option<Vec<Uniform<'stati
+@@ -61,10 +61,12 @@ impl ColorDesc {
+         }
+     }
+ 
+-    // HDR outputs render to an extended-range sRGB buffer, PQ-encoded in a final pass.
++    // HDR outputs render to an extended-range buffer, encoded in a final pass. EDR keeps P3
++    // primaries so saturated colours stay below 1.0 and aren't clipped or tone-mapped.
+     fn render_target(wide_gamut: bool, hdr: Option<Hdr>) -> Self {
+         match hdr {
+             Some(hdr) => Self {
++                primaries: if hdr.edr { DISPLAY_P3 } else { SRGB },
+                 max_lum: hdr.max_luminance.0 as f32,
+                 ref_lum: hdr.sdr_luminance.0 as f32,
+                 ..Self::SRGB
+@@ -174,8 +176,13 @@ pub fn conversion(src: &ColorDesc, dst: &ColorDesc) -> Option<Vec<Uniform<'stati
  }
  
  pub fn hdr_output_uniforms(hdr: Hdr) -> Vec<Uniform<'static>> {
 -    let mat = rgb_to_xyz(&BT2020).inverse() * rgb_to_xyz(&SRGB) * (hdr.sdr_luminance.0 as f32 / 10000.);
 -    vec![mat3_uniform("hdr_mat", mat)]
 +    let (mat, edr) = if hdr.edr {
-+        (rgb_to_xyz(&DISPLAY_P3).inverse() * rgb_to_xyz(&SRGB), 1.)
++        (Mat3::IDENTITY, 1.)
 +    } else {
 +        let scale = hdr.sdr_luminance.0 as f32 / 10000.;
 +        (rgb_to_xyz(&BT2020).inverse() * rgb_to_xyz(&SRGB) * scale, 0.)
@@ -121,7 +135,7 @@ index b8098c4..10052c4 100644
  }
  
  #[cfg(test)]
-@@ -199,6 +204,7 @@ mod tests {
+@@ -199,6 +206,7 @@ mod tests {
          let hdr = Hdr {
              sdr_luminance: niri_config::FloatOrInt(203.),
              max_luminance: niri_config::FloatOrInt(500.),
