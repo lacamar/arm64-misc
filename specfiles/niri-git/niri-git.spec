@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        23%{?dist}
+Release:        24%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -72,6 +72,8 @@ Patch:          niri-frame-callback-rate.patch
 Patch:          niri-color-management.patch
 Patch:          niri-xdg-toplevel-icon.patch
 Patch:          niri-vulkan.patch
+# HDR on Apple internal panels via extended-range FP16 (EDR)
+Patch:          niri-edr.patch
 
 BuildRequires:  cargo-rpm-macros >= 26
 BuildRequires:  pkgconfig(udev)
@@ -176,6 +178,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Sat Oct 24 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^10.git.12de51d6-24
+- HDR on Apple internal panels via FP16 EDR
+
 * Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^10.git.12de51d6-23
  - Update to commit 12de51d6a60baad8896366920278a24f17921f52
 

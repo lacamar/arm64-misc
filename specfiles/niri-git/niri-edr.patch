@@ -1,0 +1,173 @@
+diff --git a/niri-config/src/output.rs b/niri-config/src/output.rs
+index 4159a95..4927abe 100644
+--- a/niri-config/src/output.rs
++++ b/niri-config/src/output.rs
+@@ -152,6 +152,9 @@ pub struct Hdr {
+     pub sdr_luminance: FloatOrInt<1, 10000>,
+     #[knuffel(property, default = FloatOrInt(500.))]
+     pub max_luminance: FloatOrInt<1, 10000>,
++    /// Extended-range FP16 output instead of PQ; the backend sets this per connector.
++    #[knuffel(property, default)]
++    pub edr: bool,
+ }
+ 
+ impl FromIterator<Output> for Outputs {
+diff --git a/src/backend/tty.rs b/src/backend/tty.rs
+index aa91a17..4ebbd93 100644
+--- a/src/backend/tty.rs
++++ b/src/backend/tty.rs
+@@ -1350,10 +1350,16 @@ impl Tty {
+ 
+         let single_gpu =
+             device.render_node.unwrap_or(self.primary_render_node) == self.primary_render_node;
++        // Apple eDP panels have no PQ colour mode; HDR goes through extended-range FP16.
++        let edr = connector.interface() == connector::Interface::EmbeddedDisplayPort
++            && smithay::reexports::drm::Device::get_driver(&device.drm)
++                .is_ok_and(|d| d.name() == "apple");
+         let mut hdr = {
+             let config = self.config.borrow();
+             let format = if config.debug.disable_10bit_output {
+                 Fourcc::Argb8888
++            } else if edr {
++                Fourcc::Abgr16161616f
+             } else {
+                 Fourcc::Abgr2101010
+             };
+@@ -1486,13 +1492,15 @@ impl Tty {
+             })
+             .collect::<FormatSet>();
+ 
+-        let color_formats = if self.config.borrow().debug.disable_10bit_output {
+-            &SUPPORTED_COLOR_FORMATS[..]
++        let mut color_formats = if self.config.borrow().debug.disable_10bit_output {
++            SUPPORTED_COLOR_FORMATS.to_vec()
+         } else {
+-            &SUPPORTED_COLOR_FORMATS_10BIT[..]
++            SUPPORTED_COLOR_FORMATS_10BIT.to_vec()
++        };
++        if hdr.is_some_and(|hdr| hdr.edr) {
++            color_formats.insert(0, Fourcc::Abgr16161616f);
+         }
+-        .iter()
+-        .copied();
++        let color_formats = color_formats.into_iter();
+ 
+         // Create the compositor.
+         let res = DrmCompositor::new(
+@@ -3560,22 +3568,24 @@ impl<'a> ConnectorProperties<'a> {
+         let property::ValueType::Enum(values) = info.value_type() else {
+             bail!("wrong property type")
+         };
++        let name = if hdr.edr { c"Default" } else { c"BT2020_RGB" };
+         let bt2020 = values
+             .values()
+             .1
+             .iter()
+-            .find(|v| v.name() == c"BT2020_RGB")
+-            .context("no BT2020_RGB colorspace")?
++            .find(|v| v.name() == name)
++            .context("no matching colorspace")?
+             .value();
+         let colorspace = info.handle();
+ 
+         let (info, _) = self.find(c"HDR_OUTPUT_METADATA")?;
+         let metadata = info.handle();
+ 
+-        let p = color::BT2020.map(|v| (v * 50000.).round() as u16);
++        let primaries = if hdr.edr { color::DISPLAY_P3 } else { color::BT2020 };
++        let p = primaries.map(|v| (v * 50000.).round() as u16);
+         let mut infoframe = hdr_metadata_infoframe {
+-            // SMPTE ST 2084
+-            eotf: 2,
++            // Traditional gamma, HDR range (extended sRGB, max_cll / max_fall headroom) or ST 2084
++            eotf: if hdr.edr { 1 } else { 2 },
+             max_display_mastering_luminance: hdr.max_luminance.0 as u16,
+             min_display_mastering_luminance: 50,
+             max_cll: hdr.max_luminance.0 as u16,
+@@ -3685,11 +3695,14 @@ fn wanted_hdr(
+     single_gpu: bool,
+     format: Fourcc,
+ ) -> Option<color::Hdr> {
++    let edr = format == Fourcc::Abgr16161616f;
+     let is_10bit = matches!(format, Fourcc::Abgr2101010 | Fourcc::Argb2101010);
+-    if !single_gpu || !is_10bit {
++    if !single_gpu || !(is_10bit || edr) {
+         return None;
+     }
+-    config.outputs.find(name)?.hdr
++    let mut hdr = config.outputs.find(name)?.hdr?;
++    hdr.edr = edr;
++    Some(hdr)
+ }
+ 
+ fn is_vrr_capable(device: &DrmDevice, connector: connector::Handle) -> Option<bool> {
+diff --git a/src/render_helpers/color.rs b/src/render_helpers/color.rs
+index b8098c4..10052c4 100644
+--- a/src/render_helpers/color.rs
++++ b/src/render_helpers/color.rs
+@@ -174,8 +174,13 @@ pub fn conversion(src: &ColorDesc, dst: &ColorDesc) -> Option<Vec<Uniform<'stati
+ }
+ 
+ pub fn hdr_output_uniforms(hdr: Hdr) -> Vec<Uniform<'static>> {
+-    let mat = rgb_to_xyz(&BT2020).inverse() * rgb_to_xyz(&SRGB) * (hdr.sdr_luminance.0 as f32 / 10000.);
+-    vec![mat3_uniform("hdr_mat", mat)]
++    let (mat, edr) = if hdr.edr {
++        (rgb_to_xyz(&DISPLAY_P3).inverse() * rgb_to_xyz(&SRGB), 1.)
++    } else {
++        let scale = hdr.sdr_luminance.0 as f32 / 10000.;
++        (rgb_to_xyz(&BT2020).inverse() * rgb_to_xyz(&SRGB) * scale, 0.)
++    };
++    vec![mat3_uniform("hdr_mat", mat), Uniform::new("hdr_edr", edr)]
+ }
+ 
+ #[cfg(test)]
+@@ -199,6 +204,7 @@ mod tests {
+         let hdr = Hdr {
+             sdr_luminance: niri_config::FloatOrInt(203.),
+             max_luminance: niri_config::FloatOrInt(500.),
++            edr: false,
+         };
+         let target = ColorDesc::render_target(false, Some(hdr));
+         assert!(conversion(&ColorDesc::SRGB, &target).is_none());
+diff --git a/src/render_helpers/shaders/hdr_output.frag b/src/render_helpers/shaders/hdr_output.frag
+index b2e48a0..fc6fced 100644
+--- a/src/render_helpers/shaders/hdr_output.frag
++++ b/src/render_helpers/shaders/hdr_output.frag
+@@ -21,13 +21,19 @@ uniform float tint;
+ #endif
+ 
+ uniform mat3 hdr_mat;
++uniform float hdr_edr;
+ 
+ void main() {
+     vec3 c = texture2D(tex, v_coords).rgb;
+     c = max(hdr_mat * (sign(c) * pow(abs(c), vec3(2.2))), 0.0);
+ 
+-    vec3 p = pow(c, vec3(0.1593017578125));
+-    c = pow((0.8359375 + 18.8515625 * p) / (1.0 + 18.6875 * p), vec3(78.84375));
++    if (hdr_edr == 1.0) {
++        // Extended sRGB: 1.0 is SDR white, the display maps the headroom above it.
++        c = mix(12.92 * c, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
++    } else {
++        vec3 p = pow(c, vec3(0.1593017578125));
++        c = pow((0.8359375 + 18.8515625 * p) / (1.0 + 18.6875 * p), vec3(78.84375));
++    }
+ 
+ #if defined(DEBUG_FLAGS)
+     if (tint == 1.0)
+diff --git a/src/render_helpers/shaders/mod.rs b/src/render_helpers/shaders/mod.rs
+index 1e3561c..82b4bd9 100644
+--- a/src/render_helpers/shaders/mod.rs
++++ b/src/render_helpers/shaders/mod.rs
+@@ -174,7 +174,10 @@ impl Shaders {
+         let hdr_output = renderer
+             .compile_custom_texture_shader(
+                 include_str!("hdr_output.frag"),
+-                &[UniformName::new("hdr_mat", UniformType::Matrix3x3)],
++                &[
++                    UniformName::new("hdr_mat", UniformType::Matrix3x3),
++                    UniformName::new("hdr_edr", UniformType::_1f),
++                ],
+             )
+             .map_err(|err| {
+                 warn!("error compiling HDR output shader: {err:?}");
