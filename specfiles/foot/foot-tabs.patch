@@ -1599,7 +1599,7 @@ index 05281d0..0a1d61a 100644
  
          case 'D':
 diff --git a/render.c b/render.c
-index 72b68e1..964c479 100644
+index 72b68e1..287a054 100644
 --- a/render.c
 +++ b/render.c
 @@ -43,6 +43,7 @@
@@ -2330,7 +2330,7 @@ index 72b68e1..964c479 100644
      const char *icon_name = term_icon(term);
      LOG_DBG("setting toplevel icon: %s", icon_name);
  
-@@ -5357,6 +5468,714 @@ render_refresh_icon(struct terminal *term)
+@@ -5357,6 +5468,721 @@ render_refresh_icon(struct terminal *term)
      term->render.icon.last_update = now;
  }
  
@@ -2960,13 +2960,20 @@ index 72b68e1..964c479 100644
 +    wl_surface_commit(icon);
 +}
 +
++/* Looks only: skips re-sorting the tabs */
++void
++render_redraw_sidebar(struct wl_window *win)
++{
++    win->sidebar_dirty = true;
++    if (win->term != NULL)
++        win->term->render.refresh.csd = true;
++}
++
 +void
 +render_refresh_sidebar(struct wl_window *win)
 +{
-+    win->sidebar_dirty = true;
 +    win->order_dirty = true;
-+    if (win->term != NULL)
-+        win->term->render.refresh.csd = true;
++    render_redraw_sidebar(win);
 +}
 +
 +void
@@ -3046,7 +3053,7 @@ index 72b68e1..964c479 100644
  render_refresh(struct terminal *term)
  {
 diff --git a/render.h b/render.h
-index e6674ab..7a71c27 100644
+index e6674ab..2f76597 100644
 --- a/render.h
 +++ b/render.h
 @@ -15,6 +15,7 @@ enum resize_options {
@@ -3057,11 +3064,12 @@ index e6674ab..7a71c27 100644
  };
  
  bool render_resize(
-@@ -24,6 +25,15 @@ void render_refresh(struct terminal *term);
+@@ -24,6 +25,16 @@ void render_refresh(struct terminal *term);
  void render_refresh_app_id(struct terminal *term);
  void render_refresh_icon(struct terminal *term);
  void render_refresh_csd(struct terminal *term);
 +void render_refresh_sidebar(struct wl_window *win);
++void render_redraw_sidebar(struct wl_window *win);
 +void render_sidebar(struct wl_window *win);
 +void render_sidebar_btn(struct wl_window *win);
 +void render_tab_menu(struct wl_window *win);
@@ -3371,7 +3379,7 @@ index 683ad74..d205106 100644
  void server_global_theme_switch_to_dark(struct server *server);
  void server_global_theme_switch_to_light(struct server *server);
 diff --git a/session.c b/session.c
-index 7fed86f..b1c2dbc 100644
+index 938b710..282a20d 100644
 --- a/session.c
 +++ b/session.c
 @@ -4,6 +4,8 @@
@@ -4166,10 +4174,10 @@ index 6289937..b385f1b 100644
          del_from_env(&custom_env, "TERM_PROGRAM");            /* Wezterm, Ghostty */
 diff --git a/tabs.c b/tabs.c
 new file mode 100644
-index 0000000..086de7c
+index 0000000..a7edf21
 --- /dev/null
 +++ b/tabs.c
-@@ -0,0 +1,3543 @@
+@@ -0,0 +1,3572 @@
 +#include "tabs.h"
 +
 +#include <limits.h>
@@ -4389,18 +4397,45 @@ index 0000000..086de7c
 +static int
 +pinned_lines(const struct wl_window *win)
 +{
-+    struct terminal **arr;
-+    const size_t n = to_arr((struct wl_window *)win, &arr);
-+    size_t i = 0;
-+    while (i < n) {
-+        size_t s, e;
-+        row_extent(arr, n, i, &s, &e);
-+        if (!row_pinned(arr, s, e))
-+            break;
-+        i = e;
++    int lines = 0, row = 0;
++    bool pinned = false;
++    const struct terminal *prev = NULL;
++    tll_foreach(win->tabs, it) {
++        if (row_start(prev, it->item)) {
++            if (row > 0 && !pinned)
++                return lines;
++            lines += row;
++            row = 0;
++            pinned = false;
++        }
++        row++;
++        pinned |= it->item->tab_pinned;
++        prev = it->item;
 +    }
-+    free(arr);
-+    return i;
++    return pinned ? lines + row : lines;
++}
++
++UNITTEST
++{
++    struct terminal t[5] = {0};
++    struct wl_window win = {0};
++    for (size_t i = 0; i < 5; i++)
++        tll_push_back(win.tabs, &t[i]);
++    xassert(pinned_lines(&win) == 0);
++
++    t[0].tab_pinned = true;
++    xassert(pinned_lines(&win) == 1);
++
++    t[1].group = t[2].group = 7;
++    t[2].tab_pinned = true;
++    xassert(pinned_lines(&win) == 3);
++
++    t[3].tab_pinned = t[4].tab_pinned = true;
++    xassert(pinned_lines(&win) == 5);
++
++    t[0].tab_pinned = false;
++    xassert(pinned_lines(&win) == 0);
++    tll_free(win.tabs);
 +}
 +
 +/* Keeps pinned rows first, in their current order */
@@ -4437,7 +4472,9 @@ index 0000000..086de7c
 +line_abs_y(const struct wl_window *win, float line)
 +{
 +    const int row_h = tabs_sidebar_row_h(win);
-+    return line * row_h + (line >= pinned_lines(win) ? pin_gap(win) : 0);
++    /* Spread the gap over the row before it, so the gliding highlight doesn't jump */
++    const float into_gap = line - (pinned_lines(win) - 1);
++    return line * row_h + pin_gap(win) * (into_gap < 0 ? 0 : into_gap > 1 ? 1 : into_gap);
 +}
 +
 +/* Pixel offset of a line from the top of the visible list */
@@ -4483,7 +4520,7 @@ index 0000000..086de7c
 +    const int line = target != NULL ? tabs_line_of(win, target) : -1;
 +    if (line != win->split_cue_line) {
 +        win->split_cue_line = line;
-+        render_refresh_sidebar(win);
++        render_redraw_sidebar(win);
 +    }
 +}
 +
@@ -5902,7 +5939,7 @@ index 0000000..086de7c
 +    win->hover.what = what;
 +    win->hover.row = row;
 +    win->sidebar_resize.hover = what == TAB_HOVER_GRIP;
-+    render_refresh_sidebar(win);
++    render_redraw_sidebar(win);
 +    if (seat != NULL && seat->mouse_focus != NULL)
 +        term_xcursor_update_for_seat(seat->mouse_focus, seat);
 +}
@@ -5912,7 +5949,7 @@ index 0000000..086de7c
 +{
 +    win->sidebar_scroll += lines;
 +    tabs_sidebar_scroll_fix(win);
-+    render_refresh_sidebar(win);
++    render_redraw_sidebar(win);
 +}
 +
 +void
@@ -5928,7 +5965,7 @@ index 0000000..086de7c
 +        return;
 +    win->hover.btn = hover;
 +    sidebar_place(win);
-+    render_refresh_sidebar(win);
++    render_redraw_sidebar(win);
 +}
 +
 +/* Multi-select */
@@ -5989,7 +6026,7 @@ index 0000000..086de7c
 +
 +    if (range) {
 +        const int a = tabs_line_of(win, act), b = tabs_line_of(win, t);
-+        for (int l = min(a, b); l <= max(a, b); l++)
++        for (int l = max(0, min(a, b)); a >= 0 && b >= 0 && l <= max(a, b); l++)
 +            tabs_line_term(win, l)->tab_selected = true;
 +    } else
 +        t->tab_selected = !t->tab_selected;

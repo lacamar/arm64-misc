@@ -3,7 +3,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        25%{?dist}
+Release:        26%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -148,6 +148,12 @@ desktop-file-validate \
 
 
 %changelog
+* Sat Oct 24 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-26
+- Smooth highlight glide across the pinned gap
+- Skip tab re-sort on hover and scroll
+- Allocation-free pinned row count
+- Close stray /dev/null fd in restore rules
+
 * Sat Oct 24 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-25
 - Trim session, vulkan and tabs patches
 - Require Vulkan at build time
