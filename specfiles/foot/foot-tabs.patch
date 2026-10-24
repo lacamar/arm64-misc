@@ -504,12 +504,12 @@ index 24d81b5..22e8893 100644
  
  The following keyboard shortcuts are available by default. They can be
 diff --git a/doc/foot.ini.5.scd b/doc/foot.ini.5.scd
-index e65729b..27985f0 100644
+index d60ed48..81d1589 100644
 --- a/doc/foot.ini.5.scd
 +++ b/doc/foot.ini.5.scd
-@@ -937,6 +937,111 @@ _"$@"_ to keep its original arguments. Rules also apply to the
- program foot's own child is running, so a window launched as
- *footclient claude* is resumed rather than restarted.
+@@ -917,6 +917,111 @@ A rule replaces the command line; use _"$@"_ to keep the arguments.
+ Rules also match foot's own child, so *footclient claude* is
+ resumed too.
  
 +# SECTION: session-duplicate
 +
@@ -619,7 +619,7 @@ index e65729b..27985f0 100644
  # SECTION: url
  
  Note that you can also add custom regular expressions, see the 'regex'
-@@ -1587,6 +1692,60 @@ e.g. *search-start=none*.
+@@ -1567,6 +1672,60 @@ e.g. *search-start=none*.
  *quit*
  	Quit foot. Default: _none_.
  
@@ -783,7 +783,7 @@ index fa0e2ce..f896d02 100644
          seat->ime.cursor_rect.pending.height / term->scale);
  
 diff --git a/input.c b/input.c
-index f6ba9de..709a57f 100644
+index f6ba9de..a290504 100644
 --- a/input.c
 +++ b/input.c
 @@ -26,12 +26,14 @@
@@ -959,7 +959,16 @@ index f6ba9de..709a57f 100644
  }
  
  static bool
-@@ -2415,6 +2528,54 @@ mouse_button_state_reset(struct seat *seat)
+@@ -2406,7 +2519,7 @@ xcursor_for_csd_border(struct terminal *term, int x, int y)
+     }
+ }
+ 
+-static void
++void
+ mouse_button_state_reset(struct seat *seat)
+ {
+     tll_free(seat->mouse.buttons);
+@@ -2415,6 +2528,48 @@ mouse_button_state_reset(struct seat *seat)
      memset(&seat->mouse.last_time, 0, sizeof(seat->mouse.last_time));
  }
  
@@ -971,12 +980,6 @@ index f6ba9de..709a57f 100644
 +}
 +
 +/* After starting DnD the compositor keeps the button release */
-+void
-+seat_forget_buttons(struct seat *seat)
-+{
-+    mouse_button_state_reset(seat);
-+}
-+
 +void
 +seat_retarget(struct seat *seat, struct terminal *old, struct terminal *new,
 +              bool mouse)
@@ -1014,7 +1017,7 @@ index f6ba9de..709a57f 100644
   void
  mouse_coord_pixel_to_cell(struct seat *seat, const struct terminal *term,
                            int x, int y)
-@@ -2475,7 +2636,7 @@ wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
+@@ -2475,7 +2630,7 @@ wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
      struct seat *seat = data;
  
      struct wl_window *win = wl_surface_get_user_data(surface);
@@ -1023,7 +1026,7 @@ index f6ba9de..709a57f 100644
  
      seat->mouse_focus = term;
      term->active_surface = term_surface_kind(term, surface);
-@@ -2507,6 +2668,18 @@ wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
+@@ -2507,6 +2662,18 @@ wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
          break;
      }
  
@@ -1042,7 +1045,7 @@ index f6ba9de..709a57f 100644
      case TERM_SURF_TITLE:
      case TERM_SURF_BORDER_LEFT:
      case TERM_SURF_BORDER_RIGHT:
-@@ -2521,7 +2694,7 @@ wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
+@@ -2521,7 +2688,7 @@ wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
          break;
  
      case TERM_SURF_NONE:
@@ -1051,7 +1054,7 @@ index f6ba9de..709a57f 100644
          break;
      }
  }
-@@ -2584,7 +2757,7 @@ wl_pointer_leave(void *data, struct wl_pointer *wl_pointer,
+@@ -2584,7 +2751,7 @@ wl_pointer_leave(void *data, struct wl_pointer *wl_pointer,
          if (surface != NULL) {
              /* Sway 1.4 sends this event with a NULL surface when we destroy the window */
              const struct wl_window UNUSED *win = wl_surface_get_user_data(surface);
@@ -1060,7 +1063,7 @@ index f6ba9de..709a57f 100644
          }
  
          enum term_surface active_surface = old_moused->active_surface;
-@@ -2605,7 +2778,26 @@ wl_pointer_leave(void *data, struct wl_pointer *wl_pointer,
+@@ -2605,7 +2772,26 @@ wl_pointer_leave(void *data, struct wl_pointer *wl_pointer,
              selection_finalize(seat, old_moused, seat->pointer.serial);
              break;
  
@@ -1087,7 +1090,7 @@ index f6ba9de..709a57f 100644
          case TERM_SURF_TITLE:
          case TERM_SURF_BORDER_LEFT:
          case TERM_SURF_BORDER_RIGHT:
-@@ -2691,6 +2883,9 @@ wl_pointer_motion(void *data, struct wl_pointer *wl_pointer,
+@@ -2691,6 +2877,9 @@ wl_pointer_motion(void *data, struct wl_pointer *wl_pointer,
      case TERM_SURF_NONE:
      case TERM_SURF_GRID:
      case TERM_SURF_TITLE:
@@ -1097,7 +1100,7 @@ index f6ba9de..709a57f 100644
      case TERM_SURF_BORDER_LEFT:
      case TERM_SURF_BORDER_RIGHT:
      case TERM_SURF_BORDER_TOP:
-@@ -2713,6 +2908,18 @@ wl_pointer_motion(void *data, struct wl_pointer *wl_pointer,
+@@ -2713,6 +2902,18 @@ wl_pointer_motion(void *data, struct wl_pointer *wl_pointer,
  
      switch (surf_kind) {
      case TERM_SURF_NONE:
@@ -1116,7 +1119,7 @@ index f6ba9de..709a57f 100644
          break;
  
      case TERM_SURF_BUTTON_MINIMIZE:
-@@ -3108,7 +3315,30 @@ wl_pointer_button(void *data, struct wl_pointer *wl_pointer,
+@@ -3108,7 +3309,30 @@ wl_pointer_button(void *data, struct wl_pointer *wl_pointer,
          seat->mouse.last_released_button = button;
      }
  
@@ -1147,7 +1150,7 @@ index f6ba9de..709a57f 100644
      case TERM_SURF_TITLE:
          if (state == WL_POINTER_BUTTON_STATE_PRESSED) {
  
-@@ -3241,11 +3471,16 @@ wl_pointer_button(void *data, struct wl_pointer *wl_pointer,
+@@ -3241,11 +3465,16 @@ wl_pointer_button(void *data, struct wl_pointer *wl_pointer,
              pointer_is_on_button(term, seat, CSD_SURF_CLOSE) &&
              state == WL_POINTER_BUTTON_STATE_RELEASED)
          {
@@ -1165,7 +1168,7 @@ index f6ba9de..709a57f 100644
          search_cancel(term);
          urls_reset(term);
  
-@@ -3297,7 +3532,7 @@ wl_pointer_button(void *data, struct wl_pointer *wl_pointer,
+@@ -3297,7 +3526,7 @@ wl_pointer_button(void *data, struct wl_pointer *wl_pointer,
      }
  
      case TERM_SURF_NONE:
@@ -1174,7 +1177,7 @@ index f6ba9de..709a57f 100644
          break;
  
      }
-@@ -3329,6 +3564,20 @@ mouse_scroll(struct seat *seat, int amount, enum wl_pointer_axis axis)
+@@ -3329,6 +3558,20 @@ mouse_scroll(struct seat *seat, int amount, enum wl_pointer_axis axis)
      struct terminal *term = seat->mouse_focus;
      xassert(term != NULL);
  
@@ -1195,7 +1198,7 @@ index f6ba9de..709a57f 100644
      int button = axis == WL_POINTER_AXIS_VERTICAL_SCROLL
          ? amount < 0 ? BTN_WHEEL_BACK : BTN_WHEEL_FORWARD
          : amount < 0 ? BTN_WHEEL_LEFT : BTN_WHEEL_RIGHT;
-@@ -3398,14 +3647,16 @@ wl_pointer_axis(void *data, struct wl_pointer *wl_pointer,
+@@ -3398,14 +3641,16 @@ wl_pointer_axis(void *data, struct wl_pointer *wl_pointer,
       * Without this, very slow scrolling will never actually scroll
       * anything.
       */
@@ -1215,7 +1218,7 @@ index f6ba9de..709a57f 100644
  }
  
  static void
-@@ -3554,7 +3805,7 @@ wl_touch_down(void *data, struct wl_touch *wl_touch, uint32_t serial,
+@@ -3554,7 +3799,7 @@ wl_touch_down(void *data, struct wl_touch *wl_touch, uint32_t serial,
          return;
  
      struct wl_window *win = wl_surface_get_user_data(surface);
@@ -1224,7 +1227,7 @@ index f6ba9de..709a57f 100644
  
      LOG_DBG("touch_down: touch=%p, x=%d, y=%d", (void *)wl_touch,
              wl_fixed_to_int(surface_x), wl_fixed_to_int(surface_y));
-@@ -3586,7 +3837,7 @@ wl_touch_up(void *data, struct wl_touch *wl_touch, uint32_t serial,
+@@ -3586,7 +3831,7 @@ wl_touch_up(void *data, struct wl_touch *wl_touch, uint32_t serial,
      LOG_DBG("touch_up: touch=%p", (void *)wl_touch);
  
      struct wl_window *win = wl_surface_get_user_data(seat->touch.surface);
@@ -1233,7 +1236,7 @@ index f6ba9de..709a57f 100644
  
      struct terminal *old_term = seat->mouse_focus;
      enum term_surface old_active_surface = term->active_surface;
-@@ -3613,8 +3864,10 @@ wl_touch_up(void *data, struct wl_touch *wl_touch, uint32_t serial,
+@@ -3613,8 +3858,10 @@ wl_touch_up(void *data, struct wl_touch *wl_touch, uint32_t serial,
          break;
      }
  
@@ -1246,7 +1249,7 @@ index f6ba9de..709a57f 100644
  }
  
  static void
-@@ -3629,7 +3882,7 @@ wl_touch_motion(void *data, struct wl_touch *wl_touch, uint32_t time,
+@@ -3629,7 +3876,7 @@ wl_touch_motion(void *data, struct wl_touch *wl_touch, uint32_t time,
              wl_fixed_to_int(surface_x), wl_fixed_to_int(surface_y));
  
      struct wl_window *win = wl_surface_get_user_data(seat->touch.surface);
@@ -1255,7 +1258,7 @@ index f6ba9de..709a57f 100644
  
      struct terminal *old_term = seat->mouse_focus;
      enum term_surface old_active_surface = term->active_surface;
-@@ -3661,8 +3914,10 @@ wl_touch_motion(void *data, struct wl_touch *wl_touch, uint32_t time,
+@@ -3661,8 +3908,10 @@ wl_touch_motion(void *data, struct wl_touch *wl_touch, uint32_t time,
          break;
      }
  
@@ -1269,7 +1272,7 @@ index f6ba9de..709a57f 100644
  
  static void
 diff --git a/input.h b/input.h
-index 347466a..9d2274b 100644
+index 347466a..f67a4ed 100644
 --- a/input.h
 +++ b/input.h
 @@ -31,6 +31,10 @@ extern const struct wl_pointer_listener pointer_listener;
@@ -1277,7 +1280,7 @@ index 347466a..9d2274b 100644
  
  void input_repeat(struct seat *seat, uint32_t key);
 +void seat_stop_repeat(struct seat *seat);
-+void seat_forget_buttons(struct seat *seat);
++void mouse_button_state_reset(struct seat *seat);
 +void seat_retarget(struct seat *seat, struct terminal *old,
 +                   struct terminal *new, bool mouse);
  
@@ -1536,10 +1539,10 @@ index 48e33bc..634f859 100644
      shm_fini();
      vkr_destroy();
 diff --git a/meson.build b/meson.build
-index a0ae012..23a08eb 100644
+index ae87f43..348ca88 100644
 --- a/meson.build
 +++ b/meson.build
-@@ -308,6 +308,7 @@ pgolib = static_library(
+@@ -304,6 +304,7 @@ pgolib = static_library(
    'grid.c', 'grid.h',
    'selection.c', 'selection.h',
    'terminal.c', 'terminal.h',
@@ -1596,7 +1599,7 @@ index 05281d0..0a1d61a 100644
  
          case 'D':
 diff --git a/render.c b/render.c
-index 72b68e1..74ee541 100644
+index 72b68e1..964c479 100644
 --- a/render.c
 +++ b/render.c
 @@ -43,6 +43,7 @@
@@ -2327,7 +2330,7 @@ index 72b68e1..74ee541 100644
      const char *icon_name = term_icon(term);
      LOG_DBG("setting toplevel icon: %s", icon_name);
  
-@@ -5357,6 +5468,722 @@ render_refresh_icon(struct terminal *term)
+@@ -5357,6 +5468,714 @@ render_refresh_icon(struct terminal *term)
      term->render.icon.last_update = now;
  }
  
@@ -2399,6 +2402,16 @@ index 72b68e1..74ee541 100644
 +    pixman_image_fill_rectangles(
 +        PIXMAN_OP_SRC, buf->pix[0], &c, 1,
 +        &(pixman_rectangle16_t){x, y, w, h});
++}
++
++static void
++sidebar_outline(struct buffer *buf, uint32_t color, bool gamma,
++                int x, int y, int w, int h, int t)
++{
++    sidebar_fill(buf, color, 0xffff, gamma, x, y, w, t);
++    sidebar_fill(buf, color, 0xffff, gamma, x, y + h - t, w, t);
++    sidebar_fill(buf, color, 0xffff, gamma, x, y, t, h);
++    sidebar_fill(buf, color, 0xffff, gamma, x + w - t, y, t, h);
 +}
 +
 +/* Elides the middle, so both the start and the end of a title stay readable */
@@ -2541,10 +2554,7 @@ index 72b68e1..74ee541 100644
 +
 +        if (grabbed) {
 +            const uint32_t o = win->sidebar_drag.drop == TAB_DROP_NONE ? accent : c->table[3];
-+            sidebar_fill(buf, o, 0xffff, gamma, 0, y, w, 2 * line);
-+            sidebar_fill(buf, o, 0xffff, gamma, 0, y + row_h - 2 * line, w, 2 * line);
-+            sidebar_fill(buf, o, 0xffff, gamma, 0, y, 2 * line, row_h);
-+            sidebar_fill(buf, o, 0xffff, gamma, w - 2 * line, y, 2 * line, row_h);
++            sidebar_outline(buf, o, gamma, 0, y, w, row_h, 2 * line);
 +        }
 +
 +        const int cx = tabs_close_x(win);
@@ -2555,10 +2565,7 @@ index 72b68e1..74ee541 100644
 +            /* Dropping here splits the dragged tab with this one */
 +            const int o = 2 * line;
 +            sidebar_fill(buf, accent, 0x5000, gamma, 0, y, w, row_h);
-+            sidebar_fill(buf, accent, 0xffff, gamma, 0, y, w, o);
-+            sidebar_fill(buf, accent, 0xffff, gamma, 0, y + row_h - o, w, o);
-+            sidebar_fill(buf, accent, 0xffff, gamma, 0, y, o, row_h);
-+            sidebar_fill(buf, accent, 0xffff, gamma, w - o, y, o, row_h);
++            sidebar_outline(buf, accent, gamma, 0, y, w, row_h, o);
 +            const char32_t *cue = U"⇥ split";
 +            const int cw2 = text_width(term, cue);
 +            if (right) {
@@ -2792,10 +2799,7 @@ index 72b68e1..74ee541 100644
 +    sidebar_fill(buf, c->bg, 0xffff, gamma, 0, 0, w, h);
 +
 +    const int x0 = cw / 2, y0 = ch / 2, x1 = w - cw / 2, y1 = h - ch / 2;
-+    sidebar_fill(buf, c->fg, 0xffff, gamma, x0, y0, x1 - x0, line);
-+    sidebar_fill(buf, c->fg, 0xffff, gamma, x0, y1 - line, x1 - x0, line);
-+    sidebar_fill(buf, c->fg, 0xffff, gamma, x0, y0, line, y1 - y0);
-+    sidebar_fill(buf, c->fg, 0xffff, gamma, x1 - line, y0, line, y1 - y0);
++    sidebar_outline(buf, c->fg, gamma, x0, y0, x1 - x0, y1 - y0, line);
 +
 +    int ry = ch;
 +    if (confirm) {
@@ -2819,10 +2823,7 @@ index 72b68e1..74ee541 100644
 +            const uint32_t edge = i == 1 ? danger : c->fg;
 +            if (sel)
 +                sidebar_fill(buf, edge, 0xffff, gamma, bx, by, bw, ch);
-+            sidebar_fill(buf, edge, 0xffff, gamma, bx, by, bw, line);
-+            sidebar_fill(buf, edge, 0xffff, gamma, bx, by + ch - line, bw, line);
-+            sidebar_fill(buf, edge, 0xffff, gamma, bx, by, line, ch);
-+            sidebar_fill(buf, edge, 0xffff, gamma, bx + bw - line, by, line, ch);
++            sidebar_outline(buf, edge, gamma, bx, by, bw, ch, line);
 +            sidebar_text(term, buf, label, bx + cw, by, ch, bx + bw,
 +                         sel ? c->bg : edge, gamma);
 +            free(label);
@@ -2910,10 +2911,7 @@ index 72b68e1..74ee541 100644
 +    struct buffer *buf = shm_get_buffer(win->menu_chain, w, h);
 +    pixman_image_set_clip_region32(buf->pix[0], NULL);
 +    sidebar_fill(buf, accent, 0x3800, gamma, 0, 0, w, h);
-+    sidebar_fill(buf, accent, 0xffff, gamma, 0, 0, w, line);
-+    sidebar_fill(buf, accent, 0xffff, gamma, 0, h - line, w, line);
-+    sidebar_fill(buf, accent, 0xffff, gamma, 0, 0, line, h);
-+    sidebar_fill(buf, accent, 0xffff, gamma, w - line, 0, line, h);
++    sidebar_outline(buf, accent, gamma, 0, 0, w, h, line);
 +
 +    const char32_t *label = win->drop_center ? U"+ add as tab"
 +        : win->drop_vertical ? U"⤓ split here" : U"⇥ split here";
@@ -2952,10 +2950,7 @@ index 72b68e1..74ee541 100644
 +    struct buffer *buf = shm_get_buffer(wayl->tab_dnd.icon_chain, w, h);
 +    pixman_image_set_clip_region32(buf->pix[0], NULL);
 +    sidebar_fill(buf, color_blend_towards(c->bg, c->fg, 1.15), 0xf000, gamma, 0, 0, w, h);
-+    sidebar_fill(buf, accent, 0xffff, gamma, 0, 0, w, s);
-+    sidebar_fill(buf, accent, 0xffff, gamma, 0, h - s, w, s);
-+    sidebar_fill(buf, accent, 0xffff, gamma, 0, 0, s, h);
-+    sidebar_fill(buf, accent, 0xffff, gamma, w - s, 0, s, h);
++    sidebar_outline(buf, accent, gamma, 0, 0, w, h, s);
 +    sidebar_text(t, buf, label, pad, 0, h, w - pad, c->fg, gamma);
 +    free(label);
 +
@@ -3170,7 +3165,7 @@ index 554d61b..5137432 100644
      struct terminal *term = seat->clipboard.window->term;
  
 diff --git a/server.c b/server.c
-index 69be99d..5922865 100644
+index 69be99d..0f36d1a 100644
 --- a/server.c
 +++ b/server.c
 @@ -20,6 +20,7 @@
@@ -3245,7 +3240,7 @@ index 69be99d..5922865 100644
  {
      struct server *server = data;
      struct terminal_instance *instance = xmalloc(sizeof(*instance));
-@@ -577,32 +599,86 @@ restore_window(void *data, struct session *session,
+@@ -577,32 +599,60 @@ restore_window(void *data, struct session *session,
      instance->terminal = term_init(
          server->conf, server->fdm, server->reaper, server->wayl, "footclient",
          cwd, NULL, session_window_name(w), NULL, 4, argv, NULL,
@@ -3265,39 +3260,13 @@ index 69be99d..5922865 100644
 +    return instance->terminal;
 +}
 +
-+static void
-+window_closing(void *data, struct wl_window *win)
++bool
++server_new_tab(struct server *server, struct wl_window *win, bool split,
++               const char *cwd, int argc, char *const *argv)
 +{
-+    struct server *server = data;
-+    session_window_closing(server->session, win);
-+}
++    if (server == NULL)
++        return false;
 +
-+static void
-+tab_moved(void *data, struct terminal *term, struct wl_window *dst)
-+{
-+    struct server *server = data;
-+    session_tab_moved(server->session, term, dst);
-+}
-+
-+static char *
-+reopen_script(void *data, char **cwd)
-+{
-+    struct server *server = data;
-+    return session_reopen_script(server->session, cwd);
-+}
-+
-+static char *
-+duplicate_script(void *data, struct terminal *term, char **cwd)
-+{
-+    struct server *server = data;
-+    return session_duplicate_script(server->session, term, cwd);
-+}
-+
-+static bool
-+new_tab(void *data, struct wl_window *win, bool split,
-+        const char *cwd, int argc, char *const *argv)
-+{
-+    struct server *server = data;
 +    struct terminal_instance *instance = xmalloc(sizeof(*instance));
 +    *instance = (struct terminal_instance){.server = server};
 +
@@ -3339,7 +3308,7 @@ index 69be99d..5922865 100644
      {
          if (!prepare_socket(fd))
              goto err;
-@@ -664,13 +740,25 @@ server_init(struct config *conf, struct fdm *fdm, struct reaper *reaper,
+@@ -664,13 +714,19 @@ server_init(struct config *conf, struct fdm *fdm, struct reaper *reaper,
          .terminals = tll_init(),
      };
  
@@ -3349,18 +3318,12 @@ index 69be99d..5922865 100644
  
 -    server->session = session_init(
 -        conf, fdm, reaper, wayl, &restore_window, server);
-+    wayl->tab_host.new_tab = &new_tab;
-+    wayl->tab_host.window_closing = &window_closing;
-+    wayl->tab_host.tab_moved = &tab_moved;
-+    wayl->tab_host.duplicate_script = &duplicate_script;
-+    wayl->tab_host.reopen_script = &reopen_script;
-+    wayl->tab_host.data = server;
++    wayl->server = server;
++    if (!embedded)
++        server->session = wayl->session = session_init(
++            conf, fdm, reaper, wayl, &restore_window, server);
  
 -    LOG_INFO("accepting connections on %s", sock_path != NULL ? sock_path : "socket provided through socket activation");
-+    if (!embedded)
-+        server->session = session_init(
-+            conf, fdm, reaper, wayl, &restore_window, server);
-+
 +    if (sock_path != NULL && wayl->tab_sock_path == NULL)
 +        wayl->tab_sock_path = xstrdup(sock_path);
 +
@@ -3369,16 +3332,21 @@ index 69be99d..5922865 100644
  
      return server;
  
-@@ -705,7 +793,14 @@ server_destroy(struct server *server)
+@@ -688,7 +744,7 @@ server_destroy(struct server *server)
+         return;
+ 
+     session_destroy(server->session);
+-    server->session = NULL;
++    server->session = server->wayl->session = NULL;
+ 
+     LOG_DBG("server destroy, %zu clients still alive",
+             tll_length(server->clients));
+@@ -705,7 +761,10 @@ server_destroy(struct server *server)
  
      tll_free(server->terminals);
  
 -    fdm_del(server->fdm, server->fd);
-+    server->wayl->tab_host.new_tab = NULL;
-+    server->wayl->tab_host.window_closing = NULL;
-+    server->wayl->tab_host.tab_moved = NULL;
-+    server->wayl->tab_host.duplicate_script = NULL;
-+    server->wayl->tab_host.reopen_script = NULL;
++    server->wayl->server = NULL;
 +    tabs_sock_release(server->wayl);
 +    if (server->fd != -1)
 +        fdm_del(server->fdm, server->fd);
@@ -3386,10 +3354,10 @@ index 69be99d..5922865 100644
          unlink(server->sock_path);
      free(server);
 diff --git a/server.h b/server.h
-index 683ad74..1ee55bc 100644
+index 683ad74..d205106 100644
 --- a/server.h
 +++ b/server.h
-@@ -7,7 +7,8 @@
+@@ -7,8 +7,11 @@
  
  struct server;
  struct server *server_init(struct config *conf, struct fdm *fdm,
@@ -3397,10 +3365,13 @@ index 683ad74..1ee55bc 100644
 +                           struct reaper *reaper, struct wayland *wayl,
 +                           const char *path, bool embedded);
  void server_destroy(struct server *server);
++bool server_new_tab(struct server *server, struct wl_window *win, bool split,
++                    const char *cwd, int argc, char *const *argv);
  
  void server_global_theme_switch_to_dark(struct server *server);
+ void server_global_theme_switch_to_light(struct server *server);
 diff --git a/session.c b/session.c
-index 4d2298b..9c604cb 100644
+index 7fed86f..b1c2dbc 100644
 --- a/session.c
 +++ b/session.c
 @@ -4,6 +4,8 @@
@@ -3412,10 +3383,10 @@ index 4d2298b..9c604cb 100644
  #include <signal.h>
  #include <stdio.h>
  #include <stdlib.h>
-@@ -20,12 +22,15 @@
- #define LOG_MODULE "session"
+@@ -21,12 +23,15 @@
  #define LOG_ENABLE_DBG 0
  #include "log.h"
+ #include "debug.h"
 +#include "render.h"
 +#include "tabs.h"
  #include "terminal.h"
@@ -3429,7 +3400,7 @@ index 4d2298b..9c604cb 100644
  #define MAX_CHAIN_DEPTH 16
  #define RULE_TIMEOUT_SECS 5
  #define RULE_OUTPUT_MAX (64 * 1024)
-@@ -41,6 +46,17 @@ typedef tll(struct session_command) command_list_t;
+@@ -42,6 +47,17 @@ typedef tll(struct session_command) command_list_t;
  
  struct session_window {
      char *name;
@@ -3447,7 +3418,7 @@ index 4d2298b..9c604cb 100644
      char *cwd;
      char *snapshot;
      size_t launch_argc;
-@@ -90,6 +106,8 @@ struct rule_eval {
+@@ -91,6 +107,8 @@ struct rule_eval {
  struct session_tracked {
      struct session *session;
      struct terminal *term;
@@ -3456,7 +3427,7 @@ index 4d2298b..9c604cb 100644
      const struct config *conf;
      char *name;
      size_t launch_argc;
-@@ -114,6 +132,7 @@ struct session {
+@@ -115,6 +133,7 @@ struct session {
  
      tll(struct session_tracked *) windows;
      tll(struct closed_window) closed;
@@ -3464,7 +3435,7 @@ index 4d2298b..9c604cb 100644
      tll(struct relaunch) relaunch;
      tll(struct rule_eval *) evals;
  
-@@ -179,6 +198,8 @@ window_free(struct session_window *w)
+@@ -180,6 +199,8 @@ window_free(struct session_window *w)
      if (w == NULL)
          return;
      free(w->name);
@@ -3473,7 +3444,7 @@ index 4d2298b..9c604cb 100644
      free(w->cwd);
      free(w->snapshot);
      argv_free(w->launch_argc, w->launch_argv);
-@@ -346,6 +367,11 @@ static void
+@@ -298,6 +319,11 @@ static void
  write_window(FILE *f, const struct session_window *w)
  {
      write_blob(f, w->name);
@@ -3485,65 +3456,43 @@ index 4d2298b..9c604cb 100644
      write_blob(f, w->cwd);
      write_blob(f, w->snapshot);
      write_argv(f, w->launch_argc, w->launch_argv);
-@@ -403,8 +429,56 @@ read_window(FILE *f, int version)
-     int cols, rows;
- 
-     w->name = version >= 4 ? read_blob(f) : toplevel_name_new();
-+    w->current = true;
-+    w->sidebar_hidden = -1;
+@@ -352,12 +378,33 @@ read_window(FILE *f)
+ {
+     struct session_window *w = xcalloc(1, sizeof(*w));
+     size_t count;
+-
+-    bool ok = (w->name = read_blob(f)) != NULL && (w->cwd = read_blob(f)) != NULL &&
++    int current = 0, pinned = 0, weight = 0;
++    char *label = NULL, *prefix = NULL;
 +
-+    bool ok = w->name != NULL;
-+    if (ok && version == 5) {
-+        /* Workspaces are gone: keep tab order, current = active in current workspace */
-+        int ws_idx;
-+        unsigned flags;
-+        char *ws_name;
-+        ok = fscanf(f, "%d %d %u %u\n", &ws_idx, &w->pos, &w->group, &flags) == 4 &&
-+            (ws_name = read_blob(f)) != NULL;
-+        if (ok) {
-+            free(ws_name);
-+            w->current = (flags & 3) == 3;
-+        }
-+    } else if (ok && version >= 6) {
-+        int current;
-+        ok = fscanf(f, "%d %u %d %d %d\n", &w->pos, &w->group, &current,
-+                    &w->sidebar_w, &w->sidebar_hidden) == 5;
-+        w->current = current & 1;
-+        w->vertical = current & 2;
-+        if (ok && version >= 8) {
-+            int pinned, weight;
-+            ok = version >= 9
-+                ? fscanf(f, "%d %d %d\n", &pinned, &weight, &w->sort_mode) == 3
-+                : fscanf(f, "%d %d\n", &pinned, &weight) == 2;
-+            w->pinned = pinned;
-+            w->weight = weight / 1000.f;
-+            char *label = ok ? read_blob(f) : NULL;
-+            ok = label != NULL;
-+            if (ok && label[0] != '\0')
-+                w->label = label;
-+            else
-+                free(label);
-+            if (ok && version >= 9) {
-+                char *prefix = read_blob(f);
-+                ok = prefix != NULL;
-+                if (ok && prefix[0] != '\0')
-+                    w->prefix = prefix;
-+                else
-+                    free(prefix);
-+            }
-+        }
-+        /* v6 saved the then-default visible sidebar for every window */
-+        if (version == 6)
-+            w->sidebar_hidden = -1;
-+    }
- 
--    bool ok = w->name != NULL && (w->cwd = read_blob(f)) != NULL &&
-+    ok = ok &&
++    bool ok = (w->name = read_blob(f)) != NULL &&
++        fscanf(f, "%d %u %d %d %d\n", &w->pos, &w->group, &current,
++               &w->sidebar_w, &w->sidebar_hidden) == 5 &&
++        fscanf(f, "%d %d %d\n", &pinned, &weight, &w->sort_mode) == 3 &&
++        (label = read_blob(f)) != NULL &&
++        (prefix = read_blob(f)) != NULL &&
 +        (w->cwd = read_blob(f)) != NULL &&
-         (version > 2 || fscanf(f, "%d %d\n", &cols, &rows) == 2) &&
          (w->snapshot = read_blob(f)) != NULL &&
          read_argv(f, &w->launch_argc, &w->launch_argv) &&
-@@ -471,38 +545,94 @@ read_state(const char *path, window_list_t *out, char **xdg_id)
+         fscanf(f, "%zu", &count) == 1 && fgetc(f) == '\n' && count <= 64;
+ 
++    w->current = current & 1;
++    w->vertical = current & 2;
++    w->pinned = pinned;
++    w->weight = weight / 1000.f;
++    if (label != NULL && label[0] != '\0')
++        w->label = label;
++    else
++        free(label);
++    if (prefix != NULL && prefix[0] != '\0')
++        w->prefix = prefix;
++    else
++        free(prefix);
++
+     for (size_t i = 0; ok && i < count; i++) {
+         struct session_command cmd = {.cwd = read_blob(f)};
+         ok = cmd.cwd != NULL && read_argv(f, &cmd.argc, &cmd.argv);
+@@ -419,38 +466,94 @@ read_state(const char *path, window_list_t *out, char **xdg_id)
      free(backup);
  }
  
@@ -3651,7 +3600,7 @@ index 4d2298b..9c604cb 100644
  
      if (fclose(f) != 0) {
          free(buf);
-@@ -868,14 +998,15 @@ eval_envp(pid_t pid, const char *cwd)
+@@ -819,14 +922,15 @@ eval_envp(pid_t pid, const char *cwd)
      return envp;
  }
  
@@ -3671,7 +3620,7 @@ index 4d2298b..9c604cb 100644
      }
      fcntl(fds[0], F_SETFL, O_NONBLOCK);
  
-@@ -887,7 +1018,7 @@ eval_start(struct session *s, struct relaunch *r, const char *command,
+@@ -838,7 +942,7 @@ eval_start(struct session *s, struct relaunch *r, const char *command,
      for (size_t i = 0; i < argc; i++)
          sh_argv[3 + i] = argv[i];
  
@@ -3680,7 +3629,7 @@ index 4d2298b..9c604cb 100644
  
      sigset_t mask;
      sigemptyset(&mask);
-@@ -920,9 +1051,22 @@ eval_start(struct session *s, struct relaunch *r, const char *command,
+@@ -871,9 +975,22 @@ eval_start(struct session *s, struct relaunch *r, const char *command,
      if (child < 0) {
          LOG_ERRNO("failed to fork");
          close(fds[0]);
@@ -3704,7 +3653,7 @@ index 4d2298b..9c604cb 100644
      struct rule_eval *ev = xmalloc(sizeof(*ev));
      *ev = (struct rule_eval){
          .session = s,
-@@ -930,13 +1074,13 @@ eval_start(struct session *s, struct relaunch *r, const char *command,
+@@ -881,13 +998,13 @@ eval_start(struct session *s, struct relaunch *r, const char *command,
          .starttime = r->starttime,
          .program = xstrdup(r->program),
          .child = child,
@@ -3721,7 +3670,7 @@ index 4d2298b..9c604cb 100644
          ev->fd = -1;
          ev->failed = true;
      }
-@@ -1033,6 +1177,25 @@ build_window(struct session *s, const struct session_tracked *t,
+@@ -984,6 +1101,25 @@ build_window(struct session *s, const struct session_tracked *t,
          .commands = tll_init(),
      };
  
@@ -3747,7 +3696,7 @@ index 4d2298b..9c604cb 100644
      if (w->cwd == NULL) {
          const char *home = getenv("HOME");
          w->cwd = xstrdup(t->term->cwd != NULL ? t->term->cwd
-@@ -1288,6 +1451,35 @@ static const struct xdg_session_v1_listener xdg_session_listener = {
+@@ -1239,6 +1375,35 @@ static const struct xdg_session_v1_listener xdg_session_listener = {
      .replaced = &xdg_session_replaced,
  };
  
@@ -3783,7 +3732,7 @@ index 4d2298b..9c604cb 100644
  static void
  restore(struct session *s, session_restore_cb cb, void *data)
  {
-@@ -1304,22 +1496,206 @@ restore(struct session *s, session_restore_cb cb, void *data)
+@@ -1255,22 +1420,206 @@ restore(struct session *s, session_restore_cb cb, void *data)
          xdg_session_v1_add_listener(s->wayl->xdg_session, &xdg_session_listener, s);
      }
  
@@ -3991,7 +3940,7 @@ index 4d2298b..9c604cb 100644
  }
  
  /* Public API */
-@@ -1413,6 +1789,11 @@ session_destroy(struct session *s)
+@@ -1364,6 +1713,11 @@ session_destroy(struct session *s)
          tll_remove(s->closed, it);
      }
  
@@ -4003,7 +3952,7 @@ index 4d2298b..9c604cb 100644
      tll_foreach(s->windows, it) {
          it->item->session = NULL;
          tll_remove(s->windows, it);
-@@ -1432,6 +1813,7 @@ track(struct session *s, struct terminal *term, const struct config *conf,
+@@ -1383,6 +1737,7 @@ track(struct session *s, struct terminal *term, const struct config *conf,
      *t = (struct session_tracked){
          .session = s,
          .term = term,
@@ -4011,7 +3960,7 @@ index 4d2298b..9c604cb 100644
          .conf = conf,
          .name = name,
          .launch_argc = launch_argc,
-@@ -1442,6 +1824,17 @@ track(struct session *s, struct terminal *term, const struct config *conf,
+@@ -1393,6 +1748,17 @@ track(struct session *s, struct terminal *term, const struct config *conf,
      return t;
  }
  
@@ -4029,7 +3978,7 @@ index 4d2298b..9c604cb 100644
  struct session_tracked *
  session_track(struct session *s, struct terminal *term,
                const struct config *conf,
-@@ -1450,11 +1843,13 @@ session_track(struct session *s, struct terminal *term,
+@@ -1401,11 +1767,13 @@ session_track(struct session *s, struct terminal *term,
      if (s == NULL)
          return NULL;
  
@@ -4045,7 +3994,7 @@ index 4d2298b..9c604cb 100644
          win->toplevel_session = xdg_session_v1_add_toplevel(
              s->wayl->xdg_session, win->xdg_toplevel, t->name);
      }
-@@ -1477,6 +1872,60 @@ session_track_restored(struct session *s, struct terminal *term,
+@@ -1428,6 +1796,60 @@ session_track_restored(struct session *s, struct terminal *term,
      return t;
  }
  
@@ -4106,7 +4055,7 @@ index 4d2298b..9c604cb 100644
  void
  session_untrack(struct session_tracked *t)
  {
-@@ -1489,12 +1938,14 @@ session_untrack(struct session_tracked *t)
+@@ -1440,12 +1862,14 @@ session_untrack(struct session_tracked *t)
              if (it->item == t)
                  tll_remove(s->windows, it);
          }
@@ -4124,7 +4073,7 @@ index 4d2298b..9c604cb 100644
      }
  
      window_free(t->saved);
-@@ -1504,6 +1955,48 @@ session_untrack(struct session_tracked *t)
+@@ -1455,6 +1879,48 @@ session_untrack(struct session_tracked *t)
      free(t);
  }
  
@@ -4217,10 +4166,10 @@ index 6289937..b385f1b 100644
          del_from_env(&custom_env, "TERM_PROGRAM");            /* Wezterm, Ghostty */
 diff --git a/tabs.c b/tabs.c
 new file mode 100644
-index 0000000..2d230c0
+index 0000000..086de7c
 --- /dev/null
 +++ b/tabs.c
-@@ -0,0 +1,3582 @@
+@@ -0,0 +1,3543 @@
 +#include "tabs.h"
 +
 +#include <limits.h>
@@ -4248,6 +4197,8 @@ index 0000000..2d230c0
 +#include "render.h"
 +#include "search.h"
 +#include "selection.h"
++#include "server.h"
++#include "session.h"
 +#include "shm.h"
 +#include "terminal.h"
 +#include "url-mode.h"
@@ -4284,15 +4235,9 @@ index 0000000..2d230c0
 +}
 +
 +bool
-+tabs_sidebar_has_tabs(const struct wl_window *win)
-+{
-+    return tll_length(win->tabs) >= 1;
-+}
-+
-+bool
 +tabs_sidebar_visible(const struct wl_window *win)
 +{
-+    return tabs_sidebar_has_tabs(win) && !win->sidebar_hidden;
++    return tll_length(win->tabs) > 0 && !win->sidebar_hidden;
 +}
 +
 +int
@@ -4877,10 +4822,7 @@ index 0000000..2d230c0
 +    if (win->term == term && tll_length(win->tabs) > 0)
 +        win->term = tll_front(win->tabs);
 +
-+    render_wait_for_preapply_damage(term);
-+    shm_unref(term->render.last_buf);
-+    term->render.last_buf = NULL;
-+    shm_purge(term->render.chains.grid);
++    drop_buffers(term);
 +    shm_purge(term->render.chains.search);
 +    shm_purge(term->render.chains.scrollback_indicator);
 +    shm_purge(term->render.chains.render_timer);
@@ -4925,7 +4867,7 @@ index 0000000..2d230c0
 +sidebar_update(struct wl_window *win)
 +{
 +    const bool show = tabs_sidebar_visible(win);
-+    const bool btn = tabs_sidebar_has_tabs(win) && win->sidebar_hidden;
++    const bool btn = tll_length(win->tabs) > 0 && win->sidebar_hidden;
 +
 +    if (show) {
 +        if (win->sidebar.surface.surf == NULL)
@@ -5294,8 +5236,7 @@ index 0000000..2d230c0
 +        return;
 +    win->closing = true;
 +    struct wayland *wayl = win->term->wl;
-+    if (wayl->tab_host.window_closing != NULL)
-+        wayl->tab_host.window_closing(wayl->tab_host.data, win);
++    session_window_closing(wayl->session, win);
 +
 +    struct terminal **arr;
 +    size_t n = to_arr(win, &arr);
@@ -5348,8 +5289,7 @@ index 0000000..2d230c0
 +
 +    drop_buffers(t);
 +    tll_push_back(dst->tabs, t);
-+    if (t->wl->tab_host.tab_moved != NULL)
-+        t->wl->tab_host.tab_moved(t->wl->tab_host.data, t, dst);
++    session_tab_moved(t->wl->session, t, dst);
 +}
 +
 +static struct terminal *
@@ -5690,23 +5630,14 @@ index 0000000..2d230c0
 +            break;
 +        memcpy(row, &arr[s], len * sizeof(row[0]));
 +
-+        ssize_t k = -1;
++        if (delta > 0 ? e >= n : s == 0)
++            break;
++        size_t ks, ke;
++        row_extent(arr, n, delta > 0 ? e : s - 1, &ks, &ke);
 +        if (delta > 0) {
-+            for (size_t j = e; j < n; j++)
-+                { k = j; break; }
-+            if (k < 0)
-+                break;
-+            size_t ks, ke;
-+            row_extent(arr, n, k, &ks, &ke);
 +            memmove(&arr[s], &arr[e], (ke - e) * sizeof(arr[0]));
 +            memcpy(&arr[ke - len], row, len * sizeof(row[0]));
 +        } else {
-+            for (ssize_t j = (ssize_t)s - 1; j >= 0; j--)
-+                { k = j; break; }
-+            if (k < 0)
-+                break;
-+            size_t ks, ke;
-+            row_extent(arr, n, k, &ks, &ke);
 +            memmove(&arr[ks + len], &arr[ks], (s - ks) * sizeof(arr[0]));
 +            memcpy(&arr[ks], row, len * sizeof(row[0]));
 +        }
@@ -5762,12 +5693,11 @@ index 0000000..2d230c0
 +{
 +    struct wayland *wayl = from->wl;
 +    struct wl_window *win = from->window;
-+    if (wayl->tab_host.new_tab == NULL || win == NULL || win->closing)
++    if (win == NULL || win->closing)
 +        return false;
 +
 +    char *cwd = live_cwd(from);
-+    bool ok = wayl->tab_host.new_tab(
-+        wayl->tab_host.data, win, split, cwd, 0, NULL);
++    bool ok = server_new_tab(wayl->server, win, split, cwd, 0, NULL);
 +    free(cwd);
 +    return ok;
 +}
@@ -6106,23 +6036,13 @@ index 0000000..2d230c0
 +        shm_purge(wayl->tab_dnd.icon_chain);
 +        shm_chain_free(wayl->tab_dnd.icon_chain);
 +    }
-+    struct wl_window *target = wayl->tab_dnd.target;
-+    if (target != NULL) {
-+        target->drop_row = -1;
-+        target->drop_split = false;
-+        target->drop_center = false;
-+        set_split_cue(target, NULL);
-+        render_tab_drop_hint(target);
-+        render_refresh_sidebar(target);
-+    }
++    tabs_dnd_leave(wayl);
 +    wayl->tab_dnd.source = NULL;
 +    wayl->tab_dnd.icon = NULL;
 +    wayl->tab_dnd.icon_chain = NULL;
 +    tll_foreach(wayl->seats, it)
 +        if (it->item.mouse_focus != NULL)
 +            term_xcursor_update_for_seat(it->item.mouse_focus, &it->item);
-+    wayl->tab_dnd.target = NULL;
-+    wayl->tab_dnd.surface = NULL;
 +}
 +
 +static void
@@ -6192,7 +6112,7 @@ index 0000000..2d230c0
 +        seat->data_device, src, win->sidebar.surface.surf,
 +        wayl->tab_dnd.icon, seat->pointer.serial);
 +    render_tab_drag_icon(wayl);
-+    seat_forget_buttons(seat);
++    mouse_button_state_reset(seat);
 +    return true;
 +}
 +
@@ -7001,21 +6921,19 @@ index 0000000..2d230c0
 +{
 +    struct wayland *wayl = t->wl;
 +    struct wl_window *win = t->window;
-+    if (wayl->tab_host.new_tab == NULL || win == NULL || win->closing)
++    if (win == NULL || win->closing)
 +        return;
 +
 +    char *cwd = NULL;
-+    char *script = wayl->tab_host.duplicate_script != NULL
-+        ? wayl->tab_host.duplicate_script(wayl->tab_host.data, t, &cwd)
-+        : NULL;
++    char *script = session_duplicate_script(wayl->session, t, &cwd);
 +
 +    if (script == NULL) {
 +        free(cwd);
 +        cwd = live_cwd(t);
-+        wayl->tab_host.new_tab(wayl->tab_host.data, win, false, cwd, 0, NULL);
++        server_new_tab(wayl->server, win, false, cwd, 0, NULL);
 +    } else {
 +        char *argv[] = {"/bin/sh", "-c", script, "foot", NULL};
-+        wayl->tab_host.new_tab(wayl->tab_host.data, win, false, cwd, 4, argv);
++        server_new_tab(wayl->server, win, false, cwd, 4, argv);
 +    }
 +    free(script);
 +    free(cwd);
@@ -7313,12 +7231,6 @@ index 0000000..2d230c0
 +}
 +
 +/* Centered modals */
-+static void
-+menu_open_center(struct wl_window *win, struct terminal *t, enum tab_menu_kind kind)
-+{
-+    menu_open(win, t, kind, -1, -1);
-+}
-+
 +void
 +tabs_rename(struct terminal *t, const char *label)
 +{
@@ -7387,7 +7299,7 @@ index 0000000..2d230c0
 +        win->last_close = now;
 +    }
 +    if (t->tab_pinned && t->window != NULL) {
-+        menu_open_center(t->window, t, TAB_MENU_CONFIRM_CLOSE);
++        menu_open(t->window, t, TAB_MENU_CONFIRM_CLOSE, -1, -1);
 +        return;
 +    }
 +    term_shutdown(t);
@@ -7410,13 +7322,11 @@ index 0000000..2d230c0
 +tabs_reopen(struct wl_window *win)
 +{
 +    struct wayland *wayl = win->term->wl;
-+    if (wayl->tab_host.reopen_script == NULL || wayl->tab_host.new_tab == NULL)
-+        return;
 +    char *cwd = NULL;
-+    char *script = wayl->tab_host.reopen_script(wayl->tab_host.data, &cwd);
++    char *script = session_reopen_script(wayl->session, &cwd);
 +    if (script != NULL) {
 +        char *argv[] = {"/bin/sh", "-c", script, "foot", NULL};
-+        wayl->tab_host.new_tab(wayl->tab_host.data, win, false, cwd, 4, argv);
++        server_new_tab(wayl->server, win, false, cwd, 4, argv);
 +    }
 +    free(script);
 +    free(cwd);
@@ -7425,13 +7335,13 @@ index 0000000..2d230c0
 +void
 +tabs_open_switcher(struct wl_window *win)
 +{
-+    menu_open_center(win, win->term, TAB_MENU_SWITCHER);
++    menu_open(win, win->term, TAB_MENU_SWITCHER, -1, -1);
 +}
 +
 +void
 +tabs_open_rename(struct wl_window *win, struct terminal *t)
 +{
-+    menu_open_center(win, t, TAB_MENU_RENAME);
++    menu_open(win, t, TAB_MENU_RENAME, -1, -1);
 +}
 +
 +struct switch_ctx {
@@ -7508,7 +7418,7 @@ index 0000000..2d230c0
 +
 +    switch (item) {
 +    case MI_CLOSE:     tabs_close_tab(t); break;
-+    case MI_KILL:      menu_open_center(win, t, TAB_MENU_CONFIRM_KILL); break;
++    case MI_KILL:      menu_open(win, t, TAB_MENU_CONFIRM_KILL, -1, -1); break;
 +    case MI_YES:       tabs_kill(t); break;
 +    case MI_YES_CLOSE: term_shutdown(t); break;
 +    case MI_DUPLICATE: tabs_duplicate(t); break;
@@ -7805,10 +7715,10 @@ index 0000000..2d230c0
 +}
 diff --git a/tabs.h b/tabs.h
 new file mode 100644
-index 0000000..46956ae
+index 0000000..6be670e
 --- /dev/null
 +++ b/tabs.h
-@@ -0,0 +1,129 @@
+@@ -0,0 +1,128 @@
 +#pragma once
 +
 +#include <stdbool.h>
@@ -7841,7 +7751,6 @@ index 0000000..46956ae
 +bool tabs_scrollbar(const struct wl_window *win, int *x, int *w, int *ty, int *th);
 +void tabs_close_tab(struct terminal *t);
 +int tabs_sidebar_left_px(const struct wl_window *win);
-+bool tabs_sidebar_has_tabs(const struct wl_window *win);
 +int tabs_sidebar_height_px(const struct wl_window *win);
 +void tabs_sidebar_scroll_fix(struct wl_window *win);
 +
@@ -7939,7 +7848,7 @@ index 0000000..46956ae
 +void tabs_open_switcher(struct wl_window *win);
 +void tabs_open_rename(struct wl_window *win, struct terminal *t);
 diff --git a/terminal.c b/terminal.c
-index 555b88f..b931fc4 100644
+index d2cd7b0..884f978 100644
 --- a/terminal.c
 +++ b/terminal.c
 @@ -1,4 +1,5 @@
@@ -8153,7 +8062,7 @@ index 555b88f..b931fc4 100644
          fdm_del(term->fdm, term->ptmx);
      else
          close(term->ptmx);
-@@ -1977,10 +2060,7 @@ term_destroy(struct terminal *term)
+@@ -1970,10 +2053,7 @@ term_destroy(struct terminal *term)
      if (term->shutdown.terminate_timeout_fd >= 0)
          fdm_del(term->fdm, term->shutdown.terminate_timeout_fd);
  
@@ -8165,7 +8074,7 @@ index 555b88f..b931fc4 100644
  
      mtx_lock(&term->render.workers.lock);
      xassert(tll_length(term->render.workers.queue) == 0);
-@@ -2012,6 +2092,7 @@ term_destroy(struct terminal *term)
+@@ -2005,6 +2085,7 @@ term_destroy(struct terminal *term)
  
      free(term->app_id);
      free(term->window_title);
@@ -8173,7 +8082,7 @@ index 555b88f..b931fc4 100644
      tll_free_and_free(term->window_title_stack, free);
  
      for (size_t i = 0; i < sizeof(term->fonts) / sizeof(term->fonts[0]); i++)
-@@ -3205,6 +3286,9 @@ term_scroll_partial(struct terminal *term, struct scroll_region region, int rows
+@@ -3198,6 +3279,9 @@ term_scroll_partial(struct terminal *term, struct scroll_region region, int rows
      LOG_DBG("scroll: rows=%d, region.start=%d, region.end=%d",
              rows, region.start, region.end);
  
@@ -8183,7 +8092,7 @@ index 555b88f..b931fc4 100644
      /* Verify scroll amount has been clamped */
      xassert(rows <= region.end - region.start);
  
-@@ -3778,6 +3862,21 @@ term_xcursor_update_for_seat(struct terminal *term, struct seat *seat)
+@@ -3771,6 +3855,21 @@ term_xcursor_update_for_seat(struct terminal *term, struct seat *seat)
              shape = CURSOR_SHAPE_LEFT_PTR;
          break;
  
@@ -8205,7 +8114,7 @@ index 555b88f..b931fc4 100644
      case TERM_SURF_TITLE:
      case TERM_SURF_BUTTON_MINIMIZE:
      case TERM_SURF_BUTTON_MAXIMIZE:
-@@ -3792,8 +3891,14 @@ term_xcursor_update_for_seat(struct terminal *term, struct seat *seat)
+@@ -3785,8 +3884,14 @@ term_xcursor_update_for_seat(struct terminal *term, struct seat *seat)
          shape = xcursor_for_csd_border(term, seat->mouse.x, seat->mouse.y);
          break;
  
@@ -8222,7 +8131,7 @@ index 555b88f..b931fc4 100644
      }
  
      if (shape == CURSOR_SHAPE_NONE)
-@@ -3911,7 +4016,16 @@ term_bell(struct terminal *term)
+@@ -3904,7 +4009,16 @@ term_bell(struct terminal *term)
      if (!term->bell_action_enabled)
          return;
  
@@ -8240,7 +8149,7 @@ index 555b88f..b931fc4 100644
          if (!wayl_win_set_urgent(term->window)) {
              /*
               * Urgency (xdg-activation) is relatively new in
-@@ -4589,8 +4703,16 @@ out:
+@@ -4582,8 +4696,16 @@ out:
  enum term_surface
  term_surface_kind(const struct terminal *term, const struct wl_surface *surface)
  {
@@ -8258,7 +8167,7 @@ index 555b88f..b931fc4 100644
      else if (surface == term->window->csd.surface[CSD_SURF_TITLE].surface.surf)
          return TERM_SURF_TITLE;
      else if (surface == term->window->csd.surface[CSD_SURF_LEFT].surface.surf)
-@@ -4931,6 +5053,7 @@ term_theme_switch_to_dark(struct terminal *term)
+@@ -4924,6 +5046,7 @@ term_theme_switch_to_dark(struct terminal *term)
  
      if (term->report_theme_changes)
          term_to_slave(term, "\033[?997;1n", 9);
@@ -8266,7 +8175,7 @@ index 555b88f..b931fc4 100644
  
      term_damage_view(term);
      term_damage_margins(term);
-@@ -4951,6 +5074,7 @@ term_theme_switch_to_light(struct terminal *term)
+@@ -4944,6 +5067,7 @@ term_theme_switch_to_light(struct terminal *term)
  
      if (term->report_theme_changes)
          term_to_slave(term, "\033[?997;2n", 9);
@@ -8274,7 +8183,7 @@ index 555b88f..b931fc4 100644
  
      term_damage_view(term);
      term_damage_margins(term);
-@@ -4966,12 +5090,14 @@ term_theme_toggle(struct terminal *term)
+@@ -4959,12 +5083,14 @@ term_theme_toggle(struct terminal *term)
  
          if (term->report_theme_changes)
              term_to_slave(term, "\033[?997;2n", 9);
@@ -8713,7 +8622,7 @@ index a2c255a..04eaaf2 100644
  }
  
 diff --git a/wayland.h b/wayland.h
-index 3ed68b2..87ba4d5 100644
+index 3ed68b2..66bb46d 100644
 --- a/wayland.h
 +++ b/wayland.h
 @@ -84,6 +84,7 @@ struct wl_clipboard {
@@ -8724,7 +8633,7 @@ index 3ed68b2..87ba4d5 100644
      char *text;
      uint32_t serial;
  };
-@@ -368,9 +369,102 @@ struct xdg_activation_token_context {
+@@ -368,9 +369,104 @@ struct xdg_activation_token_context {
      void *cb_data;                                /* Callback user pointer */
  };
  
@@ -8744,6 +8653,8 @@ index 3ed68b2..87ba4d5 100644
 +#define TAB_MIME "application/x-foot-tab"
 +
  struct wayland;
++struct server;
++struct session;
  struct wl_window {
      struct terminal *term;
 +    tll(struct terminal *) tabs;
@@ -8827,7 +8738,7 @@ index 3ed68b2..87ba4d5 100644
      struct wayl_surface surface;
      struct xdg_surface *xdg_surface;
      struct xdg_toplevel *xdg_toplevel;
-@@ -524,6 +618,41 @@ struct wayland {
+@@ -524,6 +620,34 @@ struct wayland {
      tll(struct seat) seats;
  
      tll(struct terminal *) terms;
@@ -8836,15 +8747,8 @@ index 3ed68b2..87ba4d5 100644
 +    uint64_t focus_counter;
 +    uint32_t group_counter;
 +    char *tab_sock_path;
-+    struct {
-+        bool (*new_tab)(void *data, struct wl_window *win, bool split,
-+                        const char *cwd, int argc, char *const *argv);
-+        char *(*duplicate_script)(void *data, struct terminal *term, char **cwd);
-+        char *(*reopen_script)(void *data, char **cwd);
-+        void (*window_closing)(void *data, struct wl_window *win);
-+        void (*tab_moved)(void *data, struct terminal *term, struct wl_window *dst);
-+        void *data;
-+    } tab_host;
++    struct server *server;
++    struct session *session;
 +
 +    /* Merging destroys a window; doing it mid-dispatch unbalances the Wayland read lock */
 +    struct wl_window *merge_src;

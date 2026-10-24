@@ -3,7 +3,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        24%{?dist}
+Release:        25%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -95,8 +95,7 @@ Requires:       ncurses-base
 %build
 %meson \
     -Dterminfo-base-name=%{foot_terminfo} \
-    -Ddefault-terminfo=foot \
-    -Dvulkan=enabled
+    -Ddefault-terminfo=foot
 %meson_build
 
 
@@ -149,6 +148,11 @@ desktop-file-validate \
 
 
 %changelog
+* Sat Oct 24 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-25
+- Trim session, vulkan and tabs patches
+- Require Vulkan at build time
+- Drop pre-v9 session state readers
+
 * Fri Oct 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-24
 - Move window prefix to sidebar menu
 - Overlay hover close button on titles

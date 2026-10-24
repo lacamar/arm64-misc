@@ -30,10 +30,10 @@ index 73761f1..27715d4 100644
  
      struct {
 diff --git a/doc/foot.ini.5.scd b/doc/foot.ini.5.scd
-index d6107d2..e65729b 100644
+index f7cc3fc..d60ed48 100644
 --- a/doc/foot.ini.5.scd
 +++ b/doc/foot.ini.5.scd
-@@ -2218,6 +2218,13 @@ any of these options.
+@@ -2198,6 +2198,13 @@ any of these options.
  	
  	Default: _auto_
  
@@ -78,31 +78,27 @@ index c3c7971..48e33bc 100644
      wayl_destroy(wayl);
      key_binding_manager_destroy(key_binding_manager);
 diff --git a/meson.build b/meson.build
-index 6093b22..a0ae012 100644
+index 6093b22..ae87f43 100644
 --- a/meson.build
 +++ b/meson.build
-@@ -165,6 +165,20 @@ endif
+@@ -165,6 +165,16 @@ endif
  
  tllist = dependency('tllist', version: '>=1.1.0', fallback: 'tllist')
  fcft = dependency('fcft', version: ['>=3.3.1', '<4.0.0'], fallback: 'fcft')
-+vulkan = dependency('vulkan', required: get_option('vulkan'))
-+glslang = find_program('glslangValidator', required: get_option('vulkan'))
-+vulkan_src = []
-+if vulkan.found() and glslang.found()
-+  add_project_arguments('-DFOOT_VULKAN=1', language: 'c')
-+  foreach sh : ['quad.vert', 'quad.frag']
-+    vulkan_src += custom_target(
-+      sh.underscorify(),
-+      input: 'shaders' / sh,
-+      output: sh.underscorify() + '.h',
-+      command: [glslang, '-V', '--vn', sh.underscorify(), '-o', '@OUTPUT@', '@INPUT@'])
-+  endforeach
-+  vulkan_src += files('vulkan.c')
-+endif
++vulkan = dependency('vulkan')
++glslang = find_program('glslangValidator')
++vulkan_src = files('vulkan.c')
++foreach sh : ['quad.vert', 'quad.frag']
++  vulkan_src += custom_target(
++    sh.underscorify(),
++    input: 'shaders' / sh,
++    output: sh.underscorify() + '.h',
++    command: [glslang, '-V', '--vn', sh.underscorify(), '-o', '@OUTPUT@', '@INPUT@'])
++endforeach
  
  wayland_protocols_datadir = wayland_protocols.get_variable('pkgdatadir')
  
-@@ -187,6 +201,7 @@ wl_proto_xml = [
+@@ -187,6 +197,7 @@ wl_proto_xml = [
    wayland_protocols_datadir / 'unstable/tablet/tablet-unstable-v2.xml',  # required by cursor-shape-v1
    wayland_protocols_datadir / 'staging/cursor-shape/cursor-shape-v1.xml',
    wayland_protocols_datadir / 'staging/single-pixel-buffer/single-pixel-buffer-v1.xml',
@@ -110,7 +106,7 @@ index 6093b22..a0ae012 100644
    wayland_protocols_datadir / 'staging/xdg-toplevel-icon/xdg-toplevel-icon-v1.xml',
    wayland_protocols_datadir / 'staging/xdg-system-bell/xdg-system-bell-v1.xml',
    wayland_protocols_datadir / 'staging/color-management/color-management-v1.xml',
-@@ -345,9 +360,9 @@ executable(
+@@ -345,9 +356,9 @@ executable(
    'user-notification.c', 'user-notification.h',
    'wayland.c', 'wayland.h', 'shm-formats.h',
    'xkbcommon-vmod.h',
@@ -122,23 +118,6 @@ index 6093b22..a0ae012 100644
    link_with: pgolib,
    install: true)
  
-@@ -445,6 +460,7 @@ summary(
-     'Documentation': scdoc.found(),
-     'Themes': get_option('themes'),
-     'IME': get_option('ime'),
-+    'Vulkan renderer': vulkan.found() and glslang.found(),
-     'Grapheme clustering': utf8proc.found(),
-     'utmp backend': utmp_backend,
-     'utmp helper default path': utmp_default_helper_path,
-diff --git a/meson_options.txt b/meson_options.txt
-index e335607..89dba0d 100644
---- a/meson_options.txt
-+++ b/meson_options.txt
-@@ -29,3 +29,4 @@ option('utmp-default-helper-path', type: 'string', value: 'auto',
-        description: 'Default path to the utmp helper binary. Default: auto-detect')
- 
- option('fanalyzer', type: 'boolean', value: false, description: 'enable GCC static analyzer')
-+option('vulkan', type: 'feature', value: 'auto', description: 'optional Vulkan renderer ([tweak] renderer=vulkan)')
 diff --git a/render.c b/render.c
 index 2bc4414..72b68e1 100644
 --- a/render.c
@@ -381,7 +360,7 @@ index c58a853..87448ff 100644
  enum shm_bit_depth shm_chain_bit_depth(const struct buffer_chain *chain);
   
 diff --git a/terminal.c b/terminal.c
-index db21173..555b88f 100644
+index 33761e8..d2cd7b0 100644
 --- a/terminal.c
 +++ b/terminal.c
 @@ -45,6 +45,7 @@
@@ -1429,10 +1408,10 @@ index 0000000..1d8edd4
 +}
 diff --git a/vulkan.h b/vulkan.h
 new file mode 100644
-index 0000000..0f7524d
+index 0000000..5ab117d
 --- /dev/null
 +++ b/vulkan.h
-@@ -0,0 +1,44 @@
+@@ -0,0 +1,26 @@
 +#pragma once
 +
 +#include <stdbool.h>
@@ -1443,7 +1422,6 @@ index 0000000..0f7524d
 +struct buffer;
 +struct vkr_image;
 +
-+#if defined(FOOT_VULKAN)
 +bool vkr_init(struct wayland *wayl);
 +void vkr_destroy(void);
 +bool vkr_enabled(void);
@@ -1460,23 +1438,6 @@ index 0000000..0f7524d
 +void vkr_trapezoids(pixman_op_t op, pixman_image_t *src, int dx, int dy,
 +                    int n, const pixman_trapezoid_t *traps);
 +pixman_image_t *vkr_solid(const pixman_color_t *color);
-+#else
-+static inline bool vkr_init(struct wayland *wayl) { return false; }
-+static inline void vkr_destroy(void) {}
-+static inline bool vkr_enabled(void) { return false; }
-+static inline struct vkr_image *vkr_image_new(int w, int h, struct wl_buffer **b) { return NULL; }
-+static inline void vkr_image_destroy(struct vkr_image *img) {}
-+static inline void vkr_begin(struct buffer *buf) {}
-+static inline void vkr_end(void) {}
-+static inline bool vkr_owns(const pixman_image_t *pix) { return false; }
-+static inline void vkr_fill(pixman_op_t op, const pixman_color_t *c, int n, const pixman_rectangle16_t *r) {}
-+static inline void vkr_composite(pixman_op_t op, pixman_image_t *s, pixman_image_t *m,
-+                                 int sx, int sy, int mx, int my, int dx, int dy, int w, int h) {}
-+static inline void vkr_set_clip(const pixman_region32_t *r) {}
-+static inline void vkr_trapezoids(pixman_op_t op, pixman_image_t *s, int dx, int dy,
-+                                  int n, const pixman_trapezoid_t *t) {}
-+static inline pixman_image_t *vkr_solid(const pixman_color_t *c) { return pixman_image_create_solid_fill(c); }
-+#endif
 diff --git a/wayland.c b/wayland.c
 index bedc205..a2c255a 100644
 --- a/wayland.c

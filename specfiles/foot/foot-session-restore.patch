@@ -1,10 +1,12 @@
-diff -Nru '--exclude=build' -x '*.o' pristine/config.c foot-src/config.c
---- pristine/config.c	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/config.c	2026-10-07 14:13:01.986333249 +0200
-@@ -1300,6 +1300,52 @@
+diff --git a/config.c b/config.c
+index 221258d..0f53be0 100644
+--- a/config.c
++++ b/config.c
+@@ -1299,6 +1299,52 @@ parse_section_scrollback(struct context *ctx)
+     }
  }
  
- static bool
++static bool
 +parse_section_session(struct context *ctx)
 +{
 +    struct config *conf = ctx->conf;
@@ -50,11 +52,10 @@ diff -Nru '--exclude=build' -x '*.o' pristine/config.c foot-src/config.c
 +    return true;
 +}
 +
-+static bool
+ static bool
  parse_section_url(struct context *ctx)
  {
-     struct config *conf = ctx->conf;
-@@ -3092,6 +3138,8 @@
+@@ -3092,6 +3138,8 @@ enum section {
      SECTION_BELL,
      SECTION_DESKTOP_NOTIFICATIONS,
      SECTION_SCROLLBACK,
@@ -63,7 +64,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/config.c foot-src/config.c
      SECTION_URL,
      SECTION_REGEX,
      SECTION_COLORS_DARK,
-@@ -3124,6 +3172,8 @@
+@@ -3124,6 +3172,8 @@ static const struct {
      [SECTION_BELL] =            {&parse_section_bell, "bell"},
      [SECTION_DESKTOP_NOTIFICATIONS] = {&parse_section_desktop_notifications, "desktop-notifications"},
      [SECTION_SCROLLBACK] =      {&parse_section_scrollback, "scrollback"},
@@ -72,7 +73,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/config.c foot-src/config.c
      [SECTION_URL] =             {&parse_section_url, "url"},
      [SECTION_REGEX] =           {&parse_section_regex, "regex", true},
      [SECTION_COLORS_DARK] =     {&parse_section_colors_dark, "colors-dark"},
-@@ -3576,6 +3626,12 @@
+@@ -3576,6 +3626,12 @@ config_load(struct config *conf, const char *conf_path,
              },
              .multiplier = 3.,
          },
@@ -85,7 +86,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/config.c foot-src/config.c
          .colors_dark = {
              .fg = default_foreground,
              .bg = default_background,
-@@ -3985,6 +4041,16 @@
+@@ -3985,6 +4041,16 @@ config_clone(const struct config *old)
          tll_push_back(conf->env_vars, copy);
      }
  
@@ -102,7 +103,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/config.c foot-src/config.c
      conf->utmp_helper_path =
          old->utmp_helper_path != NULL ? xstrdup(old->utmp_helper_path) : NULL;
  
-@@ -4070,6 +4136,12 @@
+@@ -4070,6 +4136,12 @@ config_free(struct config *conf)
          tll_remove(conf->env_vars, it);
      }
  
@@ -115,10 +116,11 @@ diff -Nru '--exclude=build' -x '*.o' pristine/config.c foot-src/config.c
      free(conf->utmp_helper_path);
      user_notifications_free(&conf->notifications);
  }
-diff -Nru '--exclude=build' -x '*.o' pristine/config.h foot-src/config.h
---- pristine/config.h	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/config.h	2026-10-07 14:13:01.986522459 +0200
-@@ -227,6 +227,11 @@
+diff --git a/config.h b/config.h
+index f8e99df..73761f1 100644
+--- a/config.h
++++ b/config.h
+@@ -227,6 +227,11 @@ enum underline_style {
      UNDERLINE_DASHED,
  };
  
@@ -130,44 +132,36 @@ diff -Nru '--exclude=build' -x '*.o' pristine/config.h foot-src/config.h
  struct config {
      char *conf_path;
      char *term;
-@@ -330,6 +335,13 @@
+@@ -329,6 +334,13 @@ struct config {
+         float multiplier;
      } scrollback;
  
-     struct {
++    struct {
 +        bool enabled;
 +        uint32_t save_interval_secs;
 +        uint32_t scrollback_lines;
 +        tll(struct session_restore_rule) restore_rules;
 +    } session;
 +
-+    struct {
+     struct {
          char32_t *label_letters;
          struct config_spawn_template launch;
-         enum {
-diff -Nru '--exclude=build' -x '*.o' pristine/doc/foot.ini.5.scd foot-src/doc/foot.ini.5.scd
---- pristine/doc/foot.ini.5.scd	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/doc/foot.ini.5.scd	2026-10-07 14:16:55.159224487 +0200
-@@ -861,6 +861,82 @@
+diff --git a/doc/foot.ini.5.scd b/doc/foot.ini.5.scd
+index 8bedf45..f7cc3fc 100644
+--- a/doc/foot.ini.5.scd
++++ b/doc/foot.ini.5.scd
+@@ -861,6 +861,62 @@ xdgtoken=95ebdfe56e4f47ddb5bba9d7dc3a2c35
  	string. This option is ignored if
  	*indicator-position=none*. Default: _empty string_.
  
 +# SECTION: session
 +
-+This section only applies when running in server mode (see *-s*,
-+*--server* in *foot*(1)). It controls whether, and how, open
-+terminal windows are saved to disk and automatically re-opened the
-+next time the server starts - for example after a reboot.
-+
-+Each restored window is re-created with its original working
-+directory, and shows the last on-screen content (if any
-+was saved) followed by a banner. It then re-runs the programs that
-+were running in it, as configured in the *session-restore* section,
-+and finally executes the command line the window was originally
-+launched with (e.g. *footclient lf*), or the shell.
-+
-+If the compositor implements the xdg-session-management protocol,
-+it is also asked to restore each window's size, position and
-+workspace.
++Server mode only (*--server*). Saves open windows and re-opens them
++when the server next starts. A restored window gets its working
++directory and saved screen content, re-runs the programs matched by
++*session-restore*, then its original launch command or the shell.
++Size, position and workspace are restored via
++xdg-session-management, if the compositor supports it.
 +
 +*save*
 +	Whether to save, and restore, terminal sessions. Default: _yes_.
@@ -187,31 +181,21 @@ diff -Nru '--exclude=build' -x '*.o' pristine/doc/foot.ini.5.scd foot-src/doc/fo
 +the name of a program (the basename of its executable), and the
 +value is the command line to run in its place on restore.
 +
-+At save time, foot follows the chain of interactive programs
-+running on each window's pty, starting at foot's own child (the
-+shell, or whatever *footclient* was told to run) and descending
-+through programs whose standard input and output are the terminal -
-+so a program started from a file manager is found, while helpers
-+spawned with pipes are not. Every program with a matching rule is
-+re-run on restore, innermost first, each in the directory it was
-+running in, before the window's original launch command is
-+executed. Quitting a restored program thus lands you where it did
-+before.
++Foot follows the chain of programs whose stdin and stdout are the
++window's pty, starting at its own child. Matching programs are
++re-run innermost first, each in its own directory, so quitting one
++lands where it did before.
 +
-+The value is expanded by */bin/sh* while the program is still
-+running, with:
++The value is expanded by */bin/sh* in the program's environment
++while it runs, with:
 +
 +- _$0_ and _"$@"_ set to the program's own command line
 +- _$FOOT_PID_ set to the program's PID
 +- _$FOOT_CWD_ set to the program's current working directory
 +
-+in the program's own environment. This is what lets a rule pick up
-+state that only exists while the program is alive, and turn a plain
-+re-launch into a resume. Rules are re-evaluated, in the background,
-+at every periodic save (see *save-interval*); with
-+*save-interval=0* they are never evaluated. A rule that expands to
-+nothing means the program is not re-launched. A rule that fails, or
-+produces an empty word, keeps its previous result.
++Rules are evaluated in the background at each periodic save (never
++with *save-interval=0*). Expanding to nothing skips the program; a
++failure or an empty word keeps the previous result.
 +
 +Example:
 +
@@ -222,18 +206,18 @@ diff -Nru '--exclude=build' -x '*.o' pristine/doc/foot.ini.5.scd foot-src/doc/fo
 +claude=claude --resume "$(jq -r .sessionId "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/sessions/$FOOT_PID.json")"
 +```
 +
-+Note that a rule replaces the program's command line entirely; use
-+_"$@"_ to keep its original arguments. Rules also apply to the
-+program foot's own child is running, so a window launched as
-+*footclient claude* is resumed rather than restarted.
++A rule replaces the command line; use _"$@"_ to keep the arguments.
++Rules also match foot's own child, so *footclient claude* is
++resumed too.
 +
  # SECTION: url
  
  Note that you can also add custom regular expressions, see the 'regex'
-diff -Nru '--exclude=build' -x '*.o' pristine/main.c foot-src/main.c
---- pristine/main.c	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/main.c	2026-10-07 14:14:59.825799216 +0200
-@@ -649,7 +649,7 @@
+diff --git a/main.c b/main.c
+index 383d57a..c3c7971 100644
+--- a/main.c
++++ b/main.c
+@@ -649,7 +649,7 @@ main(int argc, char *const *argv)
          goto out;
  
      if (!as_server && (term = term_init(
@@ -242,10 +226,11 @@ diff -Nru '--exclude=build' -x '*.o' pristine/main.c foot-src/main.c
                             argc, argv, NULL,
                             &term_shutdown_cb, &shutdown_ctx)) == NULL) {
          goto out;
-diff -Nru '--exclude=build' -x '*.o' pristine/meson.build foot-src/meson.build
---- pristine/meson.build	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/meson.build	2026-10-07 14:14:59.824410249 +0200
-@@ -190,6 +190,7 @@
+diff --git a/meson.build b/meson.build
+index 1325784..6093b22 100644
+--- a/meson.build
++++ b/meson.build
+@@ -190,6 +190,7 @@ wl_proto_xml = [
    wayland_protocols_datadir / 'staging/xdg-toplevel-icon/xdg-toplevel-icon-v1.xml',
    wayland_protocols_datadir / 'staging/xdg-system-bell/xdg-system-bell-v1.xml',
    wayland_protocols_datadir / 'staging/color-management/color-management-v1.xml',
@@ -253,7 +238,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/meson.build foot-src/meson.build
  ]
  
  if (wayland_protocols.version().version_compare('>=1.43'))
-@@ -334,6 +335,7 @@
+@@ -334,6 +335,7 @@ executable(
    'render.c', 'render.h',
    'search.c', 'search.h',
    'server.c', 'server.h', 'client-protocol.h',
@@ -261,9 +246,10 @@ diff -Nru '--exclude=build' -x '*.o' pristine/meson.build foot-src/meson.build
    'shm.c', 'shm.h',
    'slave.c', 'slave.h',
    'spawn.c', 'spawn.h',
-diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
---- pristine/server.c	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/server.c	2026-10-07 14:14:59.825892008 +0200
+diff --git a/server.c b/server.c
+index 2596332..69be99d 100644
+--- a/server.c
++++ b/server.c
 @@ -19,6 +19,7 @@
  #include "log.h"
  
@@ -272,7 +258,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
  #include "terminal.h"
  #include "util.h"
  #include "wayland.h"
-@@ -40,6 +41,8 @@
+@@ -40,6 +41,8 @@ struct server {
  
      tll(struct client *) clients;
      tll(struct terminal_instance *) terminals;
@@ -281,7 +267,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
  };
  
  struct client {
-@@ -61,6 +64,7 @@
+@@ -61,6 +64,7 @@ struct terminal_instance {
      struct server *server;
      struct client *client;
      struct config *conf;
@@ -289,7 +275,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
  };
  static void instance_destroy(struct terminal_instance *instance, int exit_code);
  
-@@ -105,6 +109,8 @@
+@@ -105,6 +109,8 @@ client_send_exit_code(struct client *client, int exit_code)
  static void
  instance_destroy(struct terminal_instance *instance, int exit_code)
  {
@@ -298,7 +284,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
      if (instance->terminal != NULL)
          term_destroy(instance->terminal);
  
-@@ -391,7 +397,7 @@
+@@ -391,7 +397,7 @@ fdm_client(struct fdm *fdm, int fd, int events, void *data)
      instance->terminal = term_init(
          conf != NULL ? conf : server->conf,
          server->fdm, server->reaper, server->wayl, "footclient", cwd, token,
@@ -307,7 +293,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
          &term_shutdown_handler, instance);
  
      if (instance->terminal == NULL) {
-@@ -401,6 +407,10 @@
+@@ -401,6 +407,10 @@ fdm_client(struct fdm *fdm, int fd, int events, void *data)
          goto shutdown;
      }
  
@@ -318,7 +304,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
      if (cdata.no_wait) {
          // the server owns the instance
          tll_push_back(server->terminals, instance);
-@@ -555,6 +565,32 @@
+@@ -555,6 +565,32 @@ prepare_socket(int fd)
      return true;
  }
  
@@ -351,7 +337,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
  struct server *
  server_init(struct config *conf, struct fdm *fdm, struct reaper *reaper,
              struct wayland *wayl)
-@@ -631,6 +667,9 @@
+@@ -631,6 +667,9 @@ server_init(struct config *conf, struct fdm *fdm, struct reaper *reaper,
      if (!fdm_add(fdm, fd, EPOLLIN, &fdm_server, server))
          goto err;
  
@@ -361,7 +347,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
      LOG_INFO("accepting connections on %s", sock_path != NULL ? sock_path : "socket provided through socket activation");
  
      return server;
-@@ -648,6 +687,9 @@
+@@ -648,6 +687,9 @@ server_destroy(struct server *server)
      if (server == NULL)
          return;
  
@@ -371,10 +357,12 @@ diff -Nru '--exclude=build' -x '*.o' pristine/server.c foot-src/server.c
      LOG_DBG("server destroy, %zu clients still alive",
              tll_length(server->clients));
  
-diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
---- pristine/session.c	1970-01-01 01:00:00.000000000 +0100
-+++ foot-src/session.c	2026-10-07 14:16:08.366341512 +0200
-@@ -0,0 +1,1511 @@
+diff --git a/session.c b/session.c
+new file mode 100644
+index 0000000..7fed86f
+--- /dev/null
++++ b/session.c
+@@ -0,0 +1,1462 @@
 +#include "session.h"
 +
 +#include <dirent.h>
@@ -397,6 +385,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +#define LOG_MODULE "session"
 +#define LOG_ENABLE_DBG 0
 +#include "log.h"
++#include "debug.h"
 +#include "terminal.h"
 +#include "util.h"
 +#include "xmalloc.h"
@@ -609,27 +598,15 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +        return false;
 +
 +    char *tmp = xstrjoin(path, ".tmp");
-+    int fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
-+    if (fd < 0) {
++    FILE *f = fopen(tmp, "we");
++    if (f == NULL) {
 +        LOG_ERRNO("%s: failed to open", tmp);
 +        free(tmp);
 +        return false;
 +    }
 +
-+    bool ok = true;
-+    for (size_t done = 0; ok && done < len;) {
-+        ssize_t n = write(fd, data + done, len - done);
-+        if (n < 0 && errno == EINTR)
-+            continue;
-+        if (n < 0) {
-+            LOG_ERRNO("%s: failed to write", tmp);
-+            ok = false;
-+        } else
-+            done += n;
-+    }
-+
-+    ok = ok && fsync(fd) == 0;
-+    ok = close(fd) == 0 && ok;
++    bool ok = fwrite(data, 1, len, f) == len && fflush(f) == 0 && fsync(fileno(f)) == 0;
++    ok = fclose(f) == 0 && ok;
 +
 +    if (ok && rename(tmp, path) < 0) {
 +        LOG_ERRNO("%s: failed to rename to %s", tmp, path);
@@ -642,61 +619,24 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +    return ok;
 +}
 +
-+static char *
-+read_file(const char *path, size_t *len)
-+{
-+    int fd = open(path, O_RDONLY | O_CLOEXEC);
-+    if (fd < 0)
-+        return NULL;
-+
-+    char *buf = NULL;
-+    size_t size = 0, cap = 0;
-+
-+    while (true) {
-+        if (size + 4096 > cap) {
-+            cap = cap == 0 ? 4096 : cap * 2;
-+            buf = xrealloc(buf, cap + 1);
-+        }
-+
-+        ssize_t n = read(fd, buf + size, cap - size);
-+        if (n < 0 && errno == EINTR)
-+            continue;
-+        if (n < 0) {
-+            free(buf);
-+            close(fd);
-+            return NULL;
-+        }
-+        if (n == 0)
-+            break;
-+        size += n;
-+    }
-+
-+    close(fd);
-+    buf[size] = '\0';
-+    *len = size;
-+    return buf;
-+}
-+
++/* NUL-separated words; closes f */
 +static char **
-+split_nul(const char *buf, size_t len, size_t *argc)
++read_words(FILE *f, size_t *argc)
 +{
-+    size_t count = 0;
-+    for (size_t i = 0; i < len; i++) {
-+        if (buf[i] == '\0' || i == len - 1)
-+            count++;
-+    }
-+
-+    *argc = count;
-+    if (count == 0)
++    *argc = 0;
++    if (f == NULL)
 +        return NULL;
 +
-+    char **argv = xcalloc(count, sizeof(argv[0]));
-+    size_t idx = 0;
-+    for (size_t start = 0; start < len; idx++) {
-+        size_t n = strnlen(buf + start, len - start);
-+        argv[idx] = xstrndup(buf + start, n);
-+        start += n + 1;
++    char **argv = NULL;
++    char *word = NULL;
++    size_t size = 0;
++    while (getdelim(&word, &size, '\0', f) > 0) {
++        argv = xreallocarray(argv, *argc + 1, sizeof(argv[0]));
++        argv[(*argc)++] = xstrdup(word);
 +    }
++
++    free(word);
++    fclose(f);
 +    return argv;
 +}
 +
@@ -773,16 +713,12 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +}
 +
 +static struct session_window *
-+read_window(FILE *f, int version)
++read_window(FILE *f)
 +{
 +    struct session_window *w = xcalloc(1, sizeof(*w));
 +    size_t count;
-+    int cols, rows;
 +
-+    w->name = version >= 4 ? read_blob(f) : toplevel_name_new();
-+
-+    bool ok = w->name != NULL && (w->cwd = read_blob(f)) != NULL &&
-+        (version > 2 || fscanf(f, "%d %d\n", &cols, &rows) == 2) &&
++    bool ok = (w->name = read_blob(f)) != NULL && (w->cwd = read_blob(f)) != NULL &&
 +        (w->snapshot = read_blob(f)) != NULL &&
 +        read_argv(f, &w->launch_argc, &w->launch_argv) &&
 +        fscanf(f, "%zu", &count) == 1 && fgetc(f) == '\n' && count <= 64;
@@ -815,8 +751,8 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +    size_t count;
 +    bool ok = fscanf(f, "%31s %d\n", magic, &version) == 2 &&
 +        streq(magic, STATE_MAGIC) &&
-+        version >= 2 && version <= STATE_VERSION &&
-+        (version < 4 || (*xdg_id = read_blob(f)) != NULL) &&
++        version == STATE_VERSION &&
++        (*xdg_id = read_blob(f)) != NULL &&
 +        fscanf(f, "%zu", &count) == 1 && fgetc(f) == '\n';
 +
 +    if (*xdg_id != NULL && (*xdg_id)[0] == '\0') {
@@ -825,7 +761,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +    }
 +
 +    for (size_t i = 0; ok && i < count; i++) {
-+        struct session_window *w = read_window(f, version);
++        struct session_window *w = read_window(f);
 +        if (w != NULL)
 +            tll_push_back(*out, w);
 +        else
@@ -913,12 +849,12 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +    char path[64];
 +    snprintf(path, sizeof(path), "/proc/%d/stat", (int)pid);
 +
-+    size_t len;
-+    char *stat = read_file(path, &len);
-+    if (stat == NULL)
++    size_t n;
++    char **stat = read_words(fopen(path, "re"), &n);
++    if (n == 0)
 +        return false;
 +
-+    const char *p = strrchr(stat, ')');
++    const char *p = strrchr(stat[0], ')');
 +    char state;
 +    int ppid, pgid, sid;
 +    unsigned long long starttime;
@@ -930,7 +866,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +        &state, &ppid, &pgid, &sid, &starttime) == 5 &&
 +        state != 'Z' && state != 'X';
 +
-+    free(stat);
++    argv_free(n, stat);
 +    if (ok) {
 +        *out = (struct proc){
 +            .pid = pid, .ppid = ppid, .pgid = pgid, .sid = sid,
@@ -1048,15 +984,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +    char path[64];
 +    snprintf(path, sizeof(path), "/proc/%d/%s", (int)pid, file);
 +
-+    size_t len;
-+    char *buf = read_file(path, &len);
-+    *argc = 0;
-+    if (buf == NULL)
-+        return NULL;
-+
-+    char **argv = split_nul(buf, len, argc);
-+    free(buf);
-+    return argv;
++    return read_words(fopen(path, "re"), argc);
 +}
 +
 +static int
@@ -1121,8 +1049,19 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +            return false;
 +    }
 +
-+    *argv = split_nul(out, len, argc);
++    *argv = read_words(fmemopen((void *)out, len, "r"), argc);
 +    return true;
++}
++
++UNITTEST
++{
++    size_t argc;
++    char **argv;
++    xassert(parse_words("a\0bc\0", 5, &argc, &argv) && argc == 2 &&
++            streq(argv[0], "a") && streq(argv[1], "bc"));
++    argv_free(argc, argv);
++    xassert(parse_words("\0", 1, &argc, &argv) && argc == 0);
++    xassert(!parse_words("a\0\0", 3, &argc, &argv));
 +}
 +
 +static void
@@ -1886,9 +1825,11 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.c foot-src/session.c
 +{
 +    return w->name;
 +}
-diff -Nru '--exclude=build' -x '*.o' pristine/session.h foot-src/session.h
---- pristine/session.h	1970-01-01 01:00:00.000000000 +0100
-+++ foot-src/session.h	2026-10-07 14:16:08.365516381 +0200
+diff --git a/session.h b/session.h
+new file mode 100644
+index 0000000..b128b7e
+--- /dev/null
++++ b/session.h
 @@ -0,0 +1,33 @@
 +#pragma once
 +
@@ -1923,9 +1864,10 @@ diff -Nru '--exclude=build' -x '*.o' pristine/session.h foot-src/session.h
 +void session_untrack(struct session_tracked *tracked);
 +
 +const char *session_window_name(const struct session_window *w);
-diff -Nru '--exclude=build' -x '*.o' pristine/terminal.c foot-src/terminal.c
---- pristine/terminal.c	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/terminal.c	2026-10-07 14:14:59.825725216 +0200
+diff --git a/terminal.c b/terminal.c
+index beee1f9..33761e8 100644
+--- a/terminal.c
++++ b/terminal.c
 @@ -24,6 +24,7 @@
  #include "log.h"
  
@@ -1934,7 +1876,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/terminal.c foot-src/terminal.c
  #include "commands.h"
  #include "config.h"
  #include "debug.h"
-@@ -1171,7 +1172,7 @@
+@@ -1171,7 +1172,7 @@ static const int PTY_OPEN_FLAGS = O_RDWR | O_NOCTTY;
  struct terminal *
  term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
            struct wayland *wayl, const char *foot_exe, const char *cwd,
@@ -1943,7 +1885,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/terminal.c foot-src/terminal.c
            int argc, char *const *argv, const char *const *envp,
            void (*shutdown_cb)(void *data, int exit_code), void *shutdown_data)
  {
-@@ -1453,7 +1454,7 @@
+@@ -1453,7 +1454,7 @@ term_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
      term->scale = tll_front(term->wl->monitors).scale;
  
      /* Initialize the Wayland window backend */
@@ -1952,31 +1894,18 @@ diff -Nru '--exclude=build' -x '*.o' pristine/terminal.c foot-src/terminal.c
          goto err;
  
      /* Load fonts */
-@@ -1810,6 +1811,139 @@
+@@ -1810,6 +1811,132 @@ sig_alarm(int signo)
      alarm_raised = 1;
  }
  
-+struct snapshot {
-+    char32_t *buf;
-+    size_t len;
-+    size_t cap;
-+};
-+
 +static void
-+snapshot_append(struct snapshot *s, char32_t c)
++snapshot_putc(FILE *f, char32_t c)
 +{
-+    if (s->len == s->cap) {
-+        s->cap = max(s->cap * 2, 1024);
-+        s->buf = xreallocarray(s->buf, s->cap, sizeof(s->buf[0]));
-+    }
-+    s->buf[s->len++] = c;
-+}
-+
-+static void
-+snapshot_append_ascii(struct snapshot *s, const char *str)
-+{
-+    for (; *str != '\0'; str++)
-+        snapshot_append(s, (unsigned char)*str);
++    char mb[MB_LEN_MAX];
++    mbstate_t ps = {0};
++    size_t n = c32rtomb(mb, c, &ps);
++    if (n != (size_t)-1)
++        fwrite(mb, 1, n, f);
 +}
 +
 +static bool
@@ -1990,38 +1919,36 @@ diff -Nru '--exclude=build' -x '*.o' pristine/terminal.c foot-src/terminal.c
 +        a->bg_src == b->bg_src && (a->bg_src == COLOR_DEFAULT || a->bg == b->bg);
 +}
 +
-+static size_t
-+snapshot_sgr_color(char *buf, size_t size, enum color_source src,
-+                   uint32_t color, bool bg)
++static void
++snapshot_sgr_color(FILE *f, enum color_source src, uint32_t color, bool bg)
 +{
 +    switch (src) {
 +    case COLOR_DEFAULT:
-+        return 0;
++        break;
 +    case COLOR_BASE16:
-+        return xsnprintf(buf, size, ";%u",
-+                         (color < 8 ? (bg ? 40 : 30) : (bg ? 100 : 90)) + color % 8);
++        fprintf(f, ";%u", (color < 8 ? (bg ? 40 : 30) : (bg ? 100 : 90)) + color % 8);
++        break;
 +    case COLOR_BASE256:
-+        return xsnprintf(buf, size, ";%u;5;%u", bg ? 48 : 38, color);
++        fprintf(f, ";%u;5;%u", bg ? 48 : 38, color);
++        break;
 +    case COLOR_RGB:
-+        return xsnprintf(buf, size, ";%u;2;%u;%u;%u", bg ? 48 : 38,
-+                         (color >> 16) & 0xff, (color >> 8) & 0xff, color & 0xff);
++        fprintf(f, ";%u;2;%u;%u;%u", bg ? 48 : 38,
++                (color >> 16) & 0xff, (color >> 8) & 0xff, color & 0xff);
++        break;
 +    }
-+    return 0;
 +}
 +
 +static void
-+snapshot_sgr(struct snapshot *s, const struct attributes *a)
++snapshot_sgr(FILE *f, const struct attributes *a)
 +{
-+    char sgr[64];
-+    size_t n = xsnprintf(sgr, sizeof(sgr), "\x1b[0%s%s%s%s%s%s%s%s",
-+                         a->bold ? ";1" : "", a->dim ? ";2" : "",
-+                         a->italic ? ";3" : "", a->underline ? ";4" : "",
-+                         a->blink ? ";5" : "", a->reverse ? ";7" : "",
-+                         a->conceal ? ";8" : "", a->strikethrough ? ";9" : "");
-+    n += snapshot_sgr_color(sgr + n, sizeof(sgr) - n, a->fg_src, a->fg, false);
-+    n += snapshot_sgr_color(sgr + n, sizeof(sgr) - n, a->bg_src, a->bg, true);
-+    xsnprintf(sgr + n, sizeof(sgr) - n, "m");
-+    snapshot_append_ascii(s, sgr);
++    fprintf(f, "\x1b[0%s%s%s%s%s%s%s%s",
++            a->bold ? ";1" : "", a->dim ? ";2" : "",
++            a->italic ? ";3" : "", a->underline ? ";4" : "",
++            a->blink ? ";5" : "", a->reverse ? ";7" : "",
++            a->conceal ? ";8" : "", a->strikethrough ? ";9" : "");
++    snapshot_sgr_color(f, a->fg_src, a->fg, false);
++    snapshot_sgr_color(f, a->bg_src, a->bg, true);
++    fputc('m', f);
 +}
 +
 +char *
@@ -2034,8 +1961,13 @@ diff -Nru '--exclude=build' -x '*.o' pristine/terminal.c foot-src/terminal.c
 +    while (start < 0 && grid->rows[grid_row_absolute(grid, start)] == NULL)
 +        start++;
 +
-+    struct snapshot s = {0};
-+    size_t keep = 0;
++    char *text = NULL;
++    size_t len = 0;
++    FILE *f = open_memstream(&text, &len);
++    if (f == NULL)
++        return NULL;
++
++    long keep = 0;
 +    const struct attributes none = {0};
 +
 +    for (int r = start; r < term->rows; r++) {
@@ -2055,7 +1987,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/terminal.c foot-src/terminal.c
 +                continue;
 +
 +            if (!snapshot_attrs_eq(&cur, &cell->attrs)) {
-+                snapshot_sgr(&s, &cell->attrs);
++                snapshot_sgr(f, &cell->attrs);
 +                cur = cell->attrs;
 +            }
 +
@@ -2063,39 +1995,43 @@ diff -Nru '--exclude=build' -x '*.o' pristine/terminal.c foot-src/terminal.c
 +                const struct composed *comp = composed_lookup(
 +                    term->composed, cell->wc - CELL_COMB_CHARS_LO);
 +                for (size_t i = 0; comp != NULL && i < comp->count; i++)
-+                    snapshot_append(&s, comp->chars[i]);
++                    snapshot_putc(f, comp->chars[i]);
 +            } else if (cell->wc == 0 || cell->wc == U'\t')
-+                snapshot_append(&s, U' ');
++                fputc(' ', f);
 +            else
-+                snapshot_append(&s, cell->wc);
++                snapshot_putc(f, cell->wc);
 +        }
 +
 +        if (!snapshot_attrs_eq(&cur, &none))
-+            snapshot_append_ascii(&s, "\x1b[0m");
++            fputs("\x1b[0m", f);
 +        if (!wrapped)
-+            snapshot_append(&s, U'\n');
++            fputc('\n', f);
 +        if (end > 0)
-+            keep = s.len;
++            keep = ftell(f);
 +    }
 +
-+    s.len = keep;
-+    if (keep > 0 && s.buf[keep - 1] != U'\n')
-+        snapshot_append(&s, U'\n');
-+    snapshot_append(&s, U'\0');
++    fseek(f, keep, SEEK_SET);
++    if (fclose(f) != 0) {
++        free(text);
++        return NULL;
++    }
 +
-+    char *text = ac32tombs(s.buf);
-+
-+    free(s.buf);
++    if (keep > 0 && text[keep - 1] != '\n') {
++        text = xrealloc(text, keep + 2);
++        text[keep++] = '\n';
++    }
++    text[keep] = '\0';
 +    return text;
 +}
 +
  int
  term_destroy(struct terminal *term)
  {
-diff -Nru '--exclude=build' -x '*.o' pristine/terminal.h foot-src/terminal.h
---- pristine/terminal.h	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/terminal.h	2026-10-07 14:14:59.825018420 +0200
-@@ -842,13 +842,15 @@
+diff --git a/terminal.h b/terminal.h
+index 32145ca..7566e95 100644
+--- a/terminal.h
++++ b/terminal.h
+@@ -842,13 +842,15 @@ struct config;
  struct terminal *term_init(
      const struct config *conf, struct fdm *fdm, struct reaper *reaper,
      struct wayland *wayl, const char *foot_exe, const char *cwd,
@@ -2112,10 +2048,11 @@ diff -Nru '--exclude=build' -x '*.o' pristine/terminal.h foot-src/terminal.h
  void term_update_ascii_printer(struct terminal *term);
  void term_single_shift(struct terminal *term, enum charset_designator idx);
  
-diff -Nru '--exclude=build' -x '*.o' pristine/wayland.c foot-src/wayland.c
---- pristine/wayland.c	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/wayland.c	2026-10-07 14:14:59.824968086 +0200
-@@ -1567,6 +1567,15 @@
+diff --git a/wayland.c b/wayland.c
+index f15c168..bedc205 100644
+--- a/wayland.c
++++ b/wayland.c
+@@ -1567,6 +1567,15 @@ handle_global(void *data, struct wl_registry *registry,
              wayl->registry, name, &xdg_toplevel_icon_manager_v1_interface, required);
      }
  
@@ -2131,7 +2068,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/wayland.c foot-src/wayland.c
      else if (streq(interface, xdg_system_bell_v1_interface.name)) {
          const uint32_t required = 1;
          if (!verify_iface_version(interface, version, required))
-@@ -1981,6 +1990,8 @@
+@@ -1981,6 +1990,8 @@ wayl_destroy(struct wayland *wayl)
          xdg_system_bell_v1_destroy(wayl->system_bell);
      if (wayl->toplevel_icon_manager != NULL)
          xdg_toplevel_icon_manager_v1_destroy(wayl->toplevel_icon_manager);
@@ -2140,7 +2077,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/wayland.c foot-src/wayland.c
      if (wayl->single_pixel_manager != NULL)
          wp_single_pixel_buffer_manager_v1_destroy(wayl->single_pixel_manager);
      if (wayl->fractional_scale_manager != NULL)
-@@ -2054,7 +2065,7 @@
+@@ -2054,7 +2065,7 @@ static const struct wp_fractional_scale_v1_listener fractional_scale_listener =
  };
  
  struct wl_window *
@@ -2149,7 +2086,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/wayland.c foot-src/wayland.c
  {
      struct wayland *wayl = term->wl;
      const struct config *conf = term->conf;
-@@ -2110,6 +2121,11 @@
+@@ -2110,6 +2121,11 @@ wayl_win_init(struct terminal *term, const char *token)
  
      xdg_toplevel_set_app_id(win->xdg_toplevel, conf->app_id);
  
@@ -2161,7 +2098,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/wayland.c foot-src/wayland.c
  #if defined(HAVE_XDG_TOPLEVEL_TAG)
      if (conf->toplevel_tag != NULL && conf->toplevel_tag[0] != '\0') {
          if (wayl->toplevel_tag_manager != NULL) {
-@@ -2347,6 +2363,8 @@
+@@ -2347,6 +2363,8 @@ wayl_win_destroy(struct wl_window *win)
          wl_callback_destroy(win->frame_callback);
      if (win->xdg_toplevel_decoration != NULL)
          zxdg_toplevel_decoration_v1_destroy(win->xdg_toplevel_decoration);
@@ -2170,9 +2107,10 @@ diff -Nru '--exclude=build' -x '*.o' pristine/wayland.c foot-src/wayland.c
      if (win->xdg_toplevel != NULL)
          xdg_toplevel_destroy(win->xdg_toplevel);
      if (win->xdg_surface != NULL)
-diff -Nru '--exclude=build' -x '*.o' pristine/wayland.h foot-src/wayland.h
---- pristine/wayland.h	2026-09-02 13:02:26.000000000 +0200
-+++ foot-src/wayland.h	2026-10-07 14:14:59.824539583 +0200
+diff --git a/wayland.h b/wayland.h
+index 11a3836..0a6f3d4 100644
+--- a/wayland.h
++++ b/wayland.h
 @@ -19,6 +19,7 @@
  #include <xdg-activation-v1.h>
  #include <xdg-decoration-unstable-v1.h>
@@ -2181,7 +2119,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/wayland.h foot-src/wayland.h
  #include <xdg-shell.h>
  #include <xdg-system-bell-v1.h>
  #include <xdg-toplevel-icon-v1.h>
-@@ -382,6 +383,7 @@
+@@ -382,6 +383,7 @@ struct wl_window {
      int preferred_buffer_scale;
  
      struct zxdg_toplevel_decoration_v1 *xdg_toplevel_decoration;
@@ -2189,7 +2127,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/wayland.h foot-src/wayland.h
  
      enum csd_mode csd_mode;
  
-@@ -485,6 +487,9 @@
+@@ -485,6 +487,9 @@ struct wayland {
  
      struct xdg_toplevel_icon_manager_v1 *toplevel_icon_manager;
  
@@ -2199,7 +2137,7 @@ diff -Nru '--exclude=build' -x '*.o' pristine/wayland.h foot-src/wayland.h
      struct xdg_system_bell_v1 *system_bell;
  
      struct {
-@@ -543,7 +548,8 @@
+@@ -543,7 +548,8 @@ void wayl_surface_scale_explicit_width_height(
      const struct wl_window *win, const struct wayl_surface *surf,
      int width, int height, float scale);
  
