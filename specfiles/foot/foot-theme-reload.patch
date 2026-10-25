@@ -1,0 +1,57 @@
+diff --git a/main.c b/main.c
+index 634f859..dd5d22a 100644
+--- a/main.c
++++ b/main.c
+@@ -53,8 +53,34 @@ fdm_sigint(struct fdm *fdm, int signo, void *data)
+ struct sigusr_context {
+     struct wayland *wayl;
+     struct server *server;
++    struct config *conf;
++    const char *conf_path;
+ };
+ 
++static void
++reload_colors(struct sigusr_context *ctx, int signo)
++{
++    struct config fresh;
++    user_notifications_t notifications = tll_init();
++    config_override_t overrides = tll_init();
++
++    if (config_load(&fresh, ctx->conf_path, &notifications, &overrides,
++                    false, ctx->server != NULL))
++    {
++        ctx->conf->colors_dark = fresh.colors_dark;
++        ctx->conf->colors_light = fresh.colors_light;
++        tll_foreach(ctx->wayl->terms, it) {
++            struct config *c = (struct config *)it->item->conf;
++            c->colors_dark = fresh.colors_dark;
++            c->colors_light = fresh.colors_light;
++            /* force the switch below to re-apply the theme */
++            it->item->colors.active_theme =
++                signo == SIGUSR1 ? COLOR_THEME_LIGHT : COLOR_THEME_DARK;
++        }
++    }
++    config_free(&fresh);
++}
++
+ static bool
+ fdm_sigusr(struct fdm *fdm, int signo, void *data)
+ {
+@@ -62,6 +88,8 @@ fdm_sigusr(struct fdm *fdm, int signo, void *data)
+ 
+     struct sigusr_context *ctx = data;
+ 
++    reload_colors(ctx, signo);
++
+     if (ctx->server != NULL) {
+         if (signo == SIGUSR1)
+             server_global_theme_switch_to_dark(ctx->server);
+@@ -749,6 +777,8 @@ main(int argc, char *const *argv)
+     struct sigusr_context sigusr_context = {
+         .wayl = wayl,
+         .server = server,
++        .conf = &conf,
++        .conf_path = conf_path,
+     };
+ 
+     if (!fdm_signal_add(fdm, SIGUSR1, &fdm_sigusr, &sigusr_context) ||

@@ -3,7 +3,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        26%{?dist}
+Release:        27%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -19,6 +19,7 @@ Source2:        gpgkey-5BBD4992C116573F.asc
 Patch0:         foot-session-restore.patch
 Patch1:         foot-vulkan.patch
 Patch2:         foot-tabs.patch
+Patch3:         foot-theme-reload.patch
 
 BuildRequires:  gcc
 BuildRequires:  gnupg2
@@ -148,6 +149,9 @@ desktop-file-validate \
 
 
 %changelog
+* Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-27
+- Reload colours from config on SIGUSR1/SIGUSR2
+
 * Sat Oct 24 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-26
 - Smooth highlight glide across the pinned gap
 - Skip tab re-sort on hover and scroll
