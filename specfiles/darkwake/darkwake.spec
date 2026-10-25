@@ -1,5 +1,5 @@
 Name:           darkwake
-Version:        0.1.0
+Version:        0.1.1
 Release:        1%{?dist}
 Summary:        Connected sleep with scheduled dark wakes for Apple Silicon
 
@@ -17,7 +17,7 @@ Requires:       polkit
 
 %description
 Suspends to idle with the Wi-Fi firmware kept associated and WoWLAN patterns
-armed, wakes on a PMU RTC alarm, runs darkwake-sync.target for a bounded
+armed, wakes on /sys/power/s2idle_wake_timer (kernel patch), runs darkwake-sync.target for a bounded
 window with the display off, then suspends again until user activity.
 Start with: systemctl start darkwake.service
 
@@ -42,5 +42,10 @@ python3 -I darkwake selftest
 %config(noreplace) %{_sysconfdir}/darkwake.conf
 
 %changelog
+* Mon Oct 26 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.1-1
+- Wake via s2idle_wake_timer, refuse without it
+- Drop PMU RTC alarm
+- Wake on key and lid only
+
 * Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.0-1
 - Initial package
