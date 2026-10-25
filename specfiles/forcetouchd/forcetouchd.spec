@@ -1,5 +1,5 @@
 Name:           forcetouchd
-Version:        0.1.0
+Version:        0.2.0
 Release:        1%{?dist}
 Summary:        Force Touch trackpad click strength and force click daemon
 
@@ -44,5 +44,10 @@ python3 test_encode.py
 %config(noreplace) %{_sysconfdir}/forcetouchd.toml
 
 %changelog
+* Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.2.0-1
+- Host click thresholds from click strength
+- Strong force click haptic
+- Learn and persist click pressure
+
 * Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.0-1
 - Initial package
