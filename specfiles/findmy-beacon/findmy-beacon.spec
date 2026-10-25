@@ -1,5 +1,5 @@
 Name:           findmy-beacon
-Version:        0.1.1
+Version:        0.1.2
 Release:        1%{?dist}
 Summary:        Find My offline-finding beacon for Linux
 
@@ -46,6 +46,9 @@ python3 test_keys.py
 %{_unitdir}/findmy-beacon.service
 
 %changelog
+* Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2-1
+- findmy-locate: create state dir before login
+
 * Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.1-1
 - findmy-locate: UTF-8 safe password prompt
 
