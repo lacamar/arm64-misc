@@ -46,5 +46,5 @@ python3 test_keys.py
 %{_unitdir}/findmy-beacon.service
 
 %changelog
-* sø. okt. 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.0-1
+* Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.0-1
 - Initial package

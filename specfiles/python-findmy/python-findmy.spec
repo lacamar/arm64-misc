@@ -39,5 +39,5 @@ Summary:        %{summary}
 %files -n python3-python-findmy -f %{pyproject_files}
 
 %changelog
-* sø. okt. 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.10.2-1
+* Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.10.2-1
 - Initial package

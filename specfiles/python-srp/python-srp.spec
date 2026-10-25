@@ -1,6 +1,6 @@
 Name:           python-srp
 Version:        1.0.22
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Secure Remote Password protocol for Python
 
 License:        MIT
@@ -39,5 +39,5 @@ Summary:        %{summary}
 %files -n python3-python-srp -f %{pyproject_files}
 
 %changelog
-* sø. okt. 25 2026 Lachlan Marie <lchlnm@pm.me> - 1.0.22-1
+* Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 1.0.22-2
 - Initial package
