@@ -1,6 +1,6 @@
 Name:           python-findmy
 Version:        0.10.2
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Apple Find My library
 
 License:        MIT
@@ -15,10 +15,10 @@ Apple Find My library.}
 
 %description %_description
 
-%package -n python3-python-findmy
+%package -n python3-findmy
 Summary:        %{summary}
 
-%description -n python3-python-findmy %_description
+%description -n python3-findmy %_description
 
 %prep
 %autosetup -n findmy-%{version}
@@ -36,8 +36,9 @@ Summary:        %{summary}
 %check
 %pyproject_check_import
 
-%files -n python3-python-findmy -f %{pyproject_files}
+%files -n python3-findmy -f %{pyproject_files}
 
 %changelog
-* Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.10.2-2
+* Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.10.2-3
+- Fix subpackage name
 - Lowercase source URL

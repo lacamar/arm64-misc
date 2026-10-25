@@ -1,6 +1,6 @@
 Name:           python-bleak
 Version:        3.0.2
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Cross-platform Bluetooth Low Energy client
 
 License:        MIT
@@ -15,10 +15,10 @@ Cross-platform Bluetooth Low Energy client.}
 
 %description %_description
 
-%package -n python3-python-bleak
+%package -n python3-bleak
 Summary:        %{summary}
 
-%description -n python3-python-bleak %_description
+%description -n python3-bleak %_description
 
 %prep
 %autosetup -n bleak-%{version}
@@ -36,8 +36,9 @@ Summary:        %{summary}
 %check
 %pyproject_check_import -e 'bleak.backends.winrt*' -e 'bleak.backends.p4android*' -e 'bleak.backends.corebluetooth*'
 
-%files -n python3-python-bleak -f %{pyproject_files}
+%files -n python3-bleak -f %{pyproject_files}
 
 %changelog
-* Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 3.0.2-2
+* Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 3.0.2-3
+- Fix subpackage name
 - Skip non-Linux imports
