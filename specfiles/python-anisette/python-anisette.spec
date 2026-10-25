@@ -4,7 +4,7 @@
 
 Name:           python-anisette
 Version:        1.2.4^%{snapdate}git%{shortcommit}
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Apple anisette data provider
 
 License:        MIT
@@ -27,7 +27,7 @@ Summary:        %{summary}
 %prep
 %autosetup -n Anisette.py-%{commit}
 sed -i -e '/"typer>=/d;/"rich>=/d;/"fastapi>=/d;/"granian>=/d' \
-    -e 's|"macOS-ADI-emulator @ git+[^"]*"|"macos-adi-emulator"|' pyproject.toml
+    -e 's|"websockets>=16[^"]*"|"websockets>=15"|;s|"macOS-ADI-emulator @ git+[^"]*"|"macos-adi-emulator"|' pyproject.toml
 
 %generate_buildrequires
 %pyproject_buildrequires
@@ -47,6 +47,9 @@ rm -f %{buildroot}%{_bindir}/ani*
 %files -n python3-anisette -f %{pyproject_files}
 
 %changelog
+* Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 1.2.4^20261021git627c9c6-2
+- Relax websockets pin
+
 * Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 1.2.4^20261021git627c9c6-1
 - Update to PR 6 head (macOS ADI backend)
 - Add macos-adi-emulator dependency
