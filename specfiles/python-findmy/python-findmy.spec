@@ -4,7 +4,7 @@
 
 Name:           python-findmy
 Version:        0.10.2^%{snapdate}git%{shortcommit}
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Apple Find My library
 
 License:        MIT
@@ -43,6 +43,9 @@ Summary:        %{summary}
 %files -n python3-findmy -f %{pyproject_files}
 
 %changelog
+* Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.10.2^20261021gitf2d24c8-3
+- Rebuild against new anisette
+
 * Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.10.2^20261021gitf2d24c8-2
 - Rebuild against new anisette
 

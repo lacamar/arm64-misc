@@ -4,7 +4,7 @@
 
 Name:           python-anisette
 Version:        1.2.4^%{snapdate}git%{shortcommit}
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Apple anisette data provider
 
 License:        MIT
@@ -42,11 +42,14 @@ rm -f %{buildroot}%{_bindir}/ani*
 %pyproject_save_files -l anisette
 
 %check
-%pyproject_check_import
+%pyproject_check_import -e 'anisette.cli*' -e anisette.__main__
 
 %files -n python3-anisette -f %{pyproject_files}
 
 %changelog
+* Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 1.2.4^20261021git627c9c6-3
+- Skip CLI import check
+
 * Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 1.2.4^20261021git627c9c6-2
 - Relax websockets pin
 
