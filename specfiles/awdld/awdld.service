@@ -1,0 +1,11 @@
+[Unit]
+Description=Firmware AWDL (awdl0) peer manager
+After=NetworkManager.service
+
+[Service]
+ExecStart=/usr/bin/awdld
+ExecStopPost=-/usr/bin/sh -c 'echo 0 > /sys/module/brcmfmac/parameters/awdl'
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

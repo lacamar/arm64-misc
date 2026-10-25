@@ -1,0 +1,112 @@
+#!/usr/bin/python3 -I
+import os, select, signal, socket, struct, subprocess, sys, time
+
+DEV = "wld0"
+IFACE = "awdl0"
+BSS = 2
+PARAM = "/sys/module/brcmfmac/parameters/awdl"
+EVT_PROTO = 0x88B5
+PEER_TTL = 60
+AF_MAGIC = b"\x7f\x00\x17\xf2\x08"
+TLV_ARPA, TLV_VERSION = 16, 21
+
+def log(*a):
+    print(*a, flush=True)
+
+def dcmd(cmd, payload, setf):
+    hdr = struct.pack("<IiIII", cmd, len(payload) if setf else 1024, 20, setf, 0)
+    args = [f"0x{b:02x}" for b in hdr + payload]
+    r = subprocess.run(["iw", "dev", DEV, "vendor", "recv", "0x001018", "0x1", *args],
+                       capture_output=True, text=True)
+    return r.returncode == 0
+
+def set_bss(name, data):
+    return dcmd(263, b"bsscfg:" + name.encode() + b"\0" + struct.pack("<I", BSS) + data, 1)
+
+def peer_op(op, mac):
+    return set_bss("awdl_peer_op", bytes([0, op]) + mac + b"\0")
+
+def tlv(t, v):
+    return struct.pack("<BH", t, len(v)) + v
+
+def payload_tlvs(name):
+    # ponytail: version + arpa only; service params/data path state not provided
+    tl = tlv(TLV_VERSION, bytes([0x10, 0x01])) + tlv(TLV_ARPA, bytes([3]) + name.encode())
+    return struct.pack("<H", len(tl)) + tl
+
+def parse_event(pkt):
+    if len(pkt) < 14 + 12 or struct.unpack_from(">H", pkt, 12)[0] != EVT_PROTO:
+        return None
+    code, status, _ = struct.unpack_from(">III", pkt, 14)
+    return code, status, pkt[26:]
+
+def parse_af(data):
+    i = data.find(AF_MAGIC)
+    if i < 24 or len(data) < i + 16:
+        return None
+    mac = data[i - 24 + 10:i - 24 + 16]
+    subtype = data[i + 6]
+    tlvs, p = {}, i + 16
+    while p + 3 <= len(data):
+        t, n = struct.unpack_from("<BH", data, p)
+        tlvs[t] = data[p + 3:p + 3 + n]
+        p += 3 + n
+    name = tlvs.get(TLV_ARPA, b"\0")[1:].decode(errors="replace")
+    return mac, subtype, name
+
+def selftest():
+    mac = bytes.fromhex("aabbccddeeff")
+    mgmt = bytes(10) + mac + bytes(8)
+    af = AF_MAGIC + bytes([16, 0, 0]) + bytes(8)
+    frame = mgmt + af + tlv(TLV_ARPA, bytes([3]) + b"iPhone.local")
+    pkt = bytes(12) + struct.pack(">H", EVT_PROTO) + struct.pack(">III", 98, 2, 0) + bytes(16) + frame
+    code, status, data = parse_event(pkt)
+    assert (code, status) == (98, 2)
+    assert parse_af(data) == (mac, 0, "iPhone.local"), parse_af(data)
+    assert parse_af(b"junk") is None
+    log("selftest ok")
+
+def run(name):
+    if not os.path.exists(f"/sys/class/net/{IFACE}"):
+        with open(PARAM, "w") as f:
+            f.write("1")
+    subprocess.run(["ip", "link", "set", IFACE, "up", "allmulticast", "on"], check=True)
+    set_bss("allmulti", struct.pack("<I", 1))
+    set_bss("awdl_payload", payload_tlvs(name)) or log("awdl_payload refused")
+    s = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(EVT_PROTO))
+    s.bind((IFACE, 0))
+    peers = {}
+    log(f"{IFACE} up, listening")
+    while True:
+        if select.select([s], [], [], 5)[0]:
+            ev = parse_event(s.recv(4096))
+            if ev and ev[0] == 98 and ev[1] == 2:
+                af = parse_af(ev[2])
+                if af:
+                    mac, _, pname = af
+                    if mac not in peers:
+                        log("peer", mac.hex(":"), pname, "add ok" if peer_op(0, mac) else "add failed")
+                    peers[mac] = time.monotonic()
+            elif ev and ev[0] == 97:
+                log("role", ev[1])
+        now = time.monotonic()
+        for mac in [m for m, t in peers.items() if now - t > PEER_TTL]:
+            peer_op(1, mac)
+            del peers[mac]
+            log("peer gone", mac.hex(":"))
+
+def main():
+    if "selftest" in sys.argv:
+        return selftest()
+    signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))
+    try:
+        run(socket.gethostname().split(".")[0] + ".local")
+    finally:
+        try:
+            with open(PARAM, "w") as f:
+                f.write("0")
+        except OSError:
+            pass
+
+if __name__ == "__main__":
+    main()
