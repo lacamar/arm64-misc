@@ -1,5 +1,5 @@
 Name:           findmy-beacon
-Version:        0.1.2
+Version:        0.1.3
 Release:        1%{?dist}
 Summary:        Find My offline-finding beacon for Linux
 
@@ -13,7 +13,7 @@ BuildRequires:  systemd-rpm-macros
 
 Requires:       python3-cryptography
 Requires:       bluez
-Recommends:     python3-findmy
+Requires:       python3-findmy >= 0.10.2^20261021gitf2d24c8
 
 %description
 Broadcasts a Find My accessory beacon over Bluetooth LE. findmy-locate fetches
@@ -46,6 +46,10 @@ python3 test_keys.py
 %{_unitdir}/findmy-beacon.service
 
 %changelog
+* Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.3-1
+- findmy-locate: macOS anisette backend
+- Require python3-findmy snapshot
+
 * Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2-1
 - findmy-locate: create state dir before login
 

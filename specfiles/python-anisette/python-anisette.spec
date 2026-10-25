@@ -1,17 +1,21 @@
+%global commit      627c9c663062bd872182b653113759c9d66b7e13
+%global shortcommit %(c=%{commit}; echo ${c:0:7})
+%global snapdate    20261021
+
 Name:           python-anisette
-Version:        1.2.4
-Release:        5%{?dist}
+Version:        1.2.4^%{snapdate}git%{shortcommit}
+Release:        1%{?dist}
 Summary:        Apple anisette data provider
 
 License:        MIT
 URL:            https://github.com/malmeloo/Anisette.py
-Source0:        https://files.pythonhosted.org/packages/source/a/anisette/anisette-%{version}.tar.gz
+Source0:        https://github.com/sacca97/Anisette.py/archive/%{commit}/Anisette.py-%{shortcommit}.tar.gz
 
 BuildArch:      noarch
 BuildRequires:  python3-devel
 
 %global _description %{expand:
-Apple anisette data provider.}
+Apple anisette data provider using the macOS ADI backend (PR 6).}
 
 %description %_description
 
@@ -21,7 +25,9 @@ Summary:        %{summary}
 %description -n python3-anisette %_description
 
 %prep
-%autosetup -n anisette-%{version}
+%autosetup -n Anisette.py-%{commit}
+sed -i -e '/"typer>=/d;/"rich>=/d;/"fastapi>=/d;/"granian>=/d' \
+    -e 's|"macOS-ADI-emulator @ git+[^"]*"|"macos-adi-emulator"|' pyproject.toml
 
 %generate_buildrequires
 %pyproject_buildrequires
@@ -31,17 +37,17 @@ Summary:        %{summary}
 
 %install
 %pyproject_install
-rm %{buildroot}%{_bindir}/ani*
+rm -r %{buildroot}%{python3_sitelib}/anisette/cli %{buildroot}%{python3_sitelib}/anisette/__main__.py
+rm -f %{buildroot}%{_bindir}/ani*
 %pyproject_save_files -l anisette
 
 %check
-%pyproject_check_import -e anisette.cli -e anisette.__main__
+%pyproject_check_import
 
 %files -n python3-anisette -f %{pyproject_files}
 
 %changelog
-* Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 1.2.4-5
-- Fix subpackage name
-- Lowercase source URL
-- Skip CLI import check
-- Drop CLI scripts
+* Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 1.2.4^20261021git627c9c6-1
+- Update to PR 6 head (macOS ADI backend)
+- Add macos-adi-emulator dependency
+- Drop CLI and server deps
