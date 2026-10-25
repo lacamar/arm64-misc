@@ -1,6 +1,6 @@
 Name:           python-anisette
 Version:        1.2.4
-Release:        3%{?dist}
+Release:        4%{?dist}
 Summary:        Apple anisette data provider
 
 License:        MIT
@@ -31,6 +31,7 @@ Summary:        %{summary}
 
 %install
 %pyproject_install
+rm %{buildroot}%{_bindir}/ani*
 %pyproject_save_files -l anisette
 
 %check
@@ -39,6 +40,7 @@ Summary:        %{summary}
 %files -n python3-python-anisette -f %{pyproject_files}
 
 %changelog
-* Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 1.2.4-3
+* Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 1.2.4-4
 - Lowercase source URL
 - Skip CLI import check
+- Drop CLI scripts
