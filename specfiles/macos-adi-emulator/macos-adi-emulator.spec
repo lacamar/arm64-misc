@@ -4,7 +4,7 @@
 
 Name:           macos-adi-emulator
 Version:        0.1.0^%{snapdate}git%{shortcommit}
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Unicorn emulator for Apple's macOS ADI library
 
 License:        MIT
@@ -39,7 +39,7 @@ cd macOS-ADI-emulator
 %install
 cd macOS-ADI-emulator
 %pyproject_install
-%pyproject_save_files -l macos_adi_emulator
+%pyproject_save_files -L macos_adi_emulator
 
 %check
 %pyproject_check_import
@@ -49,5 +49,8 @@ cd macOS-ADI-emulator
 %{_bindir}/macos-adi-emulator
 
 %changelog
+* Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.0^20261021git374d838-2
+- Fix license handling
+
 * Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.0^20261021git374d838-1
 - Initial package
