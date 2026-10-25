@@ -4,7 +4,7 @@
 
 Name:           python-anisette
 Version:        1.2.4^%{snapdate}git%{shortcommit}
-Release:        3%{?dist}
+Release:        4%{?dist}
 Summary:        Apple anisette data provider
 
 License:        MIT
@@ -37,7 +37,6 @@ sed -i -e '/"typer>=/d;/"rich>=/d;/"fastapi>=/d;/"granian>=/d' \
 
 %install
 %pyproject_install
-rm -r %{buildroot}%{python3_sitelib}/anisette/cli %{buildroot}%{python3_sitelib}/anisette/__main__.py
 rm -f %{buildroot}%{_bindir}/ani*
 %pyproject_save_files -l anisette
 
@@ -47,6 +46,9 @@ rm -f %{buildroot}%{_bindir}/ani*
 %files -n python3-anisette -f %{pyproject_files}
 
 %changelog
+* Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 1.2.4^20261021git627c9c6-4
+- Keep CLI modules in file list
+
 * Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 1.2.4^20261021git627c9c6-3
 - Skip CLI import check
 
