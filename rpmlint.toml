@@ -1,0 +1,4 @@
+Filters = [
+  "buildarch-instead-of-exclusivearch-tag",
+  "use-of-RPM_SOURCE_DIR",
+]
