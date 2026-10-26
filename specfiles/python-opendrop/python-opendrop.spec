@@ -1,6 +1,6 @@
 Name:           python-opendrop
 Version:        0.13.0
-Release:        7%{?dist}
+Release:        8%{?dist}
 Summary:        Open Apple AirDrop implementation
 
 License:        GPL-3.0-or-later
@@ -50,6 +50,10 @@ install -Dm644 %{SOURCE1} %{buildroot}%{_userunitdir}/opendrop-receive.service
 %{_userunitdir}/opendrop-receive.service
 
 %changelog
+* Mon Oct 26 2026 Lachlan Marie <lchlnm@pm.me> - 0.13.0-8
+- Bound upload drain to 2 s, reply without terminal chunk
+- Lingering close (20 s) after upload reply
+
 * Mon Oct 26 2026 Lachlan Marie <lchlnm@pm.me> - 0.13.0-7
 - Drain upload body before replying (iOS reported failure)
 

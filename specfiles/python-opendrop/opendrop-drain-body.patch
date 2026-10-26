@@ -1,13 +1,37 @@
 --- a/opendrop/server.py	2026-10-26 21:17:11.262638028 +0100
-+++ b/opendrop/server.py	2026-10-26 21:17:11.276896249 +0100
-@@ -399,6 +399,10 @@
++++ b/opendrop/server.py	2026-10-26 21:41:37.895216499 +0100
+@@ -399,6 +399,14 @@
          else:
              with libarchive.read.stream_reader(reader) as archive:
                  save_archive(archive, dest)
-+        # libarchive stops at the cpio trailer; closing with unread body data resets the
-+        # connection and iOS reports the transfer as failed
-+        while reader.read(65536):
++        # libarchive stops at the cpio trailer and iOS may hold back the terminal chunk until it
++        # gets a reply; closing with unread data resets the connection and iOS reports failure
++        self.connection.settimeout(2)
++        try:
++            while reader.read(65536):
++                pass
++        except OSError:
 +            pass
  
          transferred = reader.total / 1024.0 / 1024.0
          speed = transferred / (time.time() - start)
+@@ -410,6 +418,19 @@
+         self.send_header("Content-Length", 0)
+         self.send_header("Connection", "close")
+         self.end_headers()
++        self.wfile.flush()
++        # wait for iOS to close first: its ACK of this reply can lag seconds behind on AWDL
++        deadline = time.time() + 20
++        try:
++            self.connection.shutdown(socket.SHUT_WR)
++            while time.time() < deadline:
++                try:
++                    if not self.connection.recv(65536):
++                        break
++                except TimeoutError:
++                    pass
++        except OSError:
++            pass
+ 
+     def do_POST(self):
+         """
