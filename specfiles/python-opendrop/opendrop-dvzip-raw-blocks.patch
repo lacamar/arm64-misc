@@ -1,0 +1,27 @@
+diff -ru a/opendrop/server.py b/opendrop/server.py
+--- a/opendrop/server.py	2026-10-26 14:53:50.325069938 +0100
++++ b/opendrop/server.py	2026-10-26 14:53:50.335610861 +0100
+@@ -133,12 +133,22 @@
+     address_family = socket.AF_INET6
+ 
+ 
++def _dvzip_block(b):
++    # blocks that don't shrink are stored raw
++    for wbits in (15, -15):
++        try:
++            return zlib.decompress(b, wbits)
++        except zlib.error:
++            pass
++    return b
++
++
+ def dvzip_to_cpio(data):
+     # x-dvzip: a cpio archive split into blocks of [u32 BE length][zlib stream]
+     out, i = bytearray(), 0
+     while i + 4 <= len(data):
+         n = int.from_bytes(data[i:i + 4], "big")
+-        out += zlib.decompress(data[i + 4:i + 4 + n])
++        out += _dvzip_block(data[i + 4:i + 4 + n])
+         i += 4 + n
+     return bytes(out)
+ 

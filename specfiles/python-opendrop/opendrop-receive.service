@@ -1,0 +1,11 @@
+[Unit]
+Description=AirDrop receiver on awdl0
+
+[Service]
+ExecStartPre=/usr/bin/sh -c 'for i in $(seq 120); do ip -6 addr show dev awdl0 2>/dev/null | grep -q "inet6 fe80" && exit 0; sleep 1; done; exit 1'
+ExecStart=/usr/bin/opendrop receive
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

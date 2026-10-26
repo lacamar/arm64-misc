@@ -1,0 +1,184 @@
+diff -ruN -x __pycache__ a/opendrop/cli.py b/opendrop/cli.py
+--- a/opendrop/cli.py	2026-10-26 13:06:56.895622012 +0100
++++ b/opendrop/cli.py	2026-10-26 13:07:21.986431443 +0100
+@@ -64,6 +64,7 @@
+         parser.add_argument(
+             "-d", "--debug", help="Enable debug mode", action="store_true"
+         )
++        parser.add_argument("-o", "--output", help="Directory for received files")
+         parser.add_argument(
+             "-i", "--interface", help="Which AWDL interface to use", default="awdl0"
+         )
+@@ -86,6 +87,7 @@
+             computer_model=args.model,
+             debug=args.debug,
+             interface=args.interface,
++            receive_dir=args.output,
+         )
+         self.server = None
+         self.client = None
+diff -ruN -x __pycache__ a/opendrop/config.py b/opendrop/config.py
+--- a/opendrop/config.py	2026-10-26 13:06:56.895718638 +0100
++++ b/opendrop/config.py	2026-10-26 13:07:21.986276318 +0100
+@@ -20,6 +20,7 @@
+ import logging
+ import os
+ import random
++import re
+ import socket
+ import ssl
+ import subprocess
+@@ -50,6 +51,23 @@
+     SUPPORTS_ASSET_BUNDLE = 0x200
+ 
+ 
++def download_dir():
++    d = os.environ.get("XDG_DOWNLOAD_DIR")
++    if not d:
++        conf = os.path.join(
++            os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"),
++            "user-dirs.dirs",
++        )
++        try:
++            with open(conf) as f:
++                for ln in f:
++                    if ln.startswith("XDG_DOWNLOAD_DIR="):
++                        d = ln.split("=", 1)[1].strip().strip('"')
++        except OSError:
++            pass
++    return os.path.expandvars(d) if d else os.path.expanduser("~/Downloads")
++
++
+ class AirDropConfig:
+     def __init__(
+         self,
+@@ -57,14 +75,20 @@
+         computer_name=None,
+         computer_model=None,
+         server_port=8771,
+-        airdrop_dir="~/.opendrop",
++        airdrop_dir=None,
++        receive_dir=None,
+         service_id=None,
+         email=None,
+         phone=None,
+         debug=False,
+         interface=None,
+     ):
++        if airdrop_dir is None:
++            airdrop_dir = os.path.join(
++                os.environ.get("XDG_DATA_HOME") or "~/.local/share", "opendrop"
++            )
+         self.airdrop_dir = os.path.expanduser(airdrop_dir)
++        self.receive_dir = os.path.expanduser(receive_dir or download_dir())
+ 
+         self.discovery_report = os.path.join(self.airdrop_dir, "discover.last.json")
+ 
+@@ -80,7 +104,7 @@
+         self.port = server_port
+ 
+         if service_id is None:
+-            service_id = f"{random.randint(0, 0xFFFFFFFFFFFF):012x}"  # random 6-byte string in base16
++            service_id = self._persistent_service_id()
+         self.service_id = service_id
+ 
+         self.debug = debug
+@@ -126,6 +150,22 @@
+         else:
+             logger.debug("No Apple ID Validation Record found")
+ 
++    def _persistent_service_id(self):
++        # a fresh id per run leaves stale devices cached on the sender
++        id_file = os.path.join(self.airdrop_dir, "service_id")
++        try:
++            with open(id_file) as f:
++                sid = f.read().strip()
++            if re.fullmatch(r"[0-9a-f]{12}", sid):
++                return sid
++        except OSError:
++            pass
++        sid = f"{random.randint(0, 0xFFFFFFFFFFFF):012x}"
++        os.makedirs(self.airdrop_dir, exist_ok=True)
++        with open(id_file, "w") as f:
++            f.write(sid)
++        return sid
++
+     def create_default_key(self):
+         logger.info(f"Create new self-signed certificate in {self.key_dir}")
+         if not os.path.exists(self.key_dir):
+diff -ruN -x __pycache__ a/opendrop/server.py b/opendrop/server.py
+--- a/opendrop/server.py	2026-10-26 13:06:56.895746138 +0100
++++ b/opendrop/server.py	2026-10-26 13:07:21.986376318 +0100
+@@ -20,9 +20,12 @@
+ import zlib
+ import json
+ import logging
++import os
+ import platform
+ import plistlib
++import shutil
+ import socket
++import tempfile
+ import time
+ from http.server import BaseHTTPRequestHandler, HTTPServer
+ 
+@@ -140,6 +143,31 @@
+     return bytes(out)
+ 
+ 
++def save_archive(archive, dest):
++    # iOS wraps each upload in NSIRD_AirDrop_* and adds ._ AppleDouble files
++    with tempfile.TemporaryDirectory(dir=dest, prefix=".airdrop-") as tmp:
++        cwd = os.getcwd()
++        os.chdir(tmp)
++        try:
++            libarchive.extract.extract_entries(archive)
++        finally:
++            os.chdir(cwd)
++        for root, _, names in os.walk(tmp):
++            for n in names:
++                if n.startswith("._"):
++                    os.remove(os.path.join(root, n))
++        for top in os.listdir(tmp):
++            path = os.path.join(tmp, top)
++            items = [os.path.join(path, n) for n in os.listdir(path)] if top.startswith("NSIRD_") and os.path.isdir(path) else [path]
++            for src in items:
++                base, ext = os.path.splitext(os.path.basename(src))
++                dst, i = os.path.join(dest, base + ext), 0
++                while os.path.exists(dst):
++                    i += 1
++                    dst = os.path.join(dest, f"{base} ({i}){ext}")
++                shutil.move(src, dst)
++
++
+ class AirDropServerHandler(BaseHTTPRequestHandler):
+     """
+     Server which responds to AirDrop HTTP POST requests
+@@ -312,22 +340,17 @@
+                 self.total += length
+                 return length
+ 
+-        def extract_stream(stream, flags=0):
+-            """
+-            Extracts an archive from memory into the current directory.
+-            """
+-
+-            with libarchive.read.stream_reader(stream) as archive:
+-                libarchive.extract.extract_entries(archive, flags)
+-
+         logger.info("Receiving file(s) ...")
+         start = time.time()
+         reader = HTTPChunkedReader(self.rfile)
++        dest = self.config.receive_dir
++        os.makedirs(dest, exist_ok=True)
+         if self.headers.get("content-type", "").lower() == "application/x-dvzip":
+             with libarchive.read.memory_reader(dvzip_to_cpio(reader.read())) as archive:
+-                libarchive.extract.extract_entries(archive)
++                save_archive(archive, dest)
+         else:
+-            extract_stream(reader)
++            with libarchive.read.stream_reader(reader) as archive:
++                save_archive(archive, dest)
+ 
+         transferred = reader.total / 1024.0 / 1024.0
+         speed = transferred / (time.time() - start)
