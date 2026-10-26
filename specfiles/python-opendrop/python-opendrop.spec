@@ -1,6 +1,6 @@
 Name:           python-opendrop
 Version:        0.13.0
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Open Apple AirDrop implementation
 
 License:        GPL-3.0-or-later
@@ -40,6 +40,9 @@ Requires:       awdld
 %{_bindir}/opendrop
 
 %changelog
+* Mon Oct 26 2026 Lachlan Marie <lchlnm@pm.me> - 0.13.0-3
+- Receive x-dvzip uploads
+
 * Mon Oct 26 2026 Lachlan Marie <lchlnm@pm.me> - 0.13.0-2
 - Accept chunked Discover/Ask requests
 

@@ -1,6 +1,31 @@
 --- a/opendrop/server.py	2026-10-26 12:28:59.413682735 +0100
-+++ b/opendrop/server.py	2026-10-26 12:28:59.424664072 +0100
-@@ -162,9 +162,20 @@
++++ b/opendrop/server.py	2026-10-26 12:46:47.513340295 +0100
+@@ -17,6 +17,7 @@
+ along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ """
+ import io
++import zlib
+ import json
+ import logging
+ import platform
+@@ -129,6 +130,16 @@
+     address_family = socket.AF_INET6
+ 
+ 
++def dvzip_to_cpio(data):
++    # x-dvzip: a cpio archive split into blocks of [u32 BE length][zlib stream]
++    out, i = bytearray(), 0
++    while i + 4 <= len(data):
++        n = int.from_bytes(data[i:i + 4], "big")
++        out += zlib.decompress(data[i + 4:i + 4 + n])
++        i += 4 + n
++    return bytes(out)
++
++
+ class AirDropServerHandler(BaseHTTPRequestHandler):
+     """
+     Server which responds to AirDrop HTTP POST requests
+@@ -162,9 +173,20 @@
          self._set_response(len(body))
          self.wfile.write(body)
  
@@ -23,7 +48,7 @@
  
          AirDropUtil.write_debug(
              self.config, post_data, "receive_discover_request.plist"
-@@ -222,8 +233,7 @@
+@@ -222,8 +244,7 @@
          self.wfile.write(discover_answer_binary)
  
      def handle_ask(self):
@@ -33,3 +58,26 @@
  
          AirDropUtil.write_debug(self.config, post_data, "receive_ask_request.plist")
  
+@@ -243,7 +264,8 @@
+         self.wfile.write(ask_resp_binary)
+ 
+     def handle_upload(self):
+-        if self.headers.get("content-type", "").lower() != "application/x-cpio":
++        # iOS sends StreamingZip archives as x-dvzip; libarchive reads both
++        if self.headers.get("content-type", "").lower() not in ("application/x-cpio", "application/x-dvzip"):
+             logger.warning(
+                 f"Unsupported content-type: {self.headers.get('content-type')}"
+             )
+@@ -301,7 +323,11 @@
+         logger.info("Receiving file(s) ...")
+         start = time.time()
+         reader = HTTPChunkedReader(self.rfile)
+-        extract_stream(reader)
++        if self.headers.get("content-type", "").lower() == "application/x-dvzip":
++            with libarchive.read.memory_reader(dvzip_to_cpio(reader.read())) as archive:
++                libarchive.extract.extract_entries(archive)
++        else:
++            extract_stream(reader)
+ 
+         transferred = reader.total / 1024.0 / 1024.0
+         speed = transferred / (time.time() - start)
