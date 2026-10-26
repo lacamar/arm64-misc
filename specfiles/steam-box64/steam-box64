@@ -1,0 +1,39 @@
+#!/bin/bash
+steam=${XDG_DATA_HOME:-$HOME/.local/share}/Steam
+ns=${XDG_STATE_HOME:-$HOME/.local/state}/steam-box64/ns.json
+box64=/usr/bin/box64.asahi
+bash64=/usr/bin/box64-bash
+
+if [ "${1:-}" = --inner ]; then
+    shift
+    export BOX64_BASH=$bash64 BOX64_LOG=${BOX64_LOG:-0}
+    # Bundled SDL is emulated; a wrapped FAudio would bring a second, native SDL.
+    export BOX64_EMULATED_LIBS=libFAudio.so.0
+    export STEAMOS=1 STEAM_RUNTIME=1 DBUS_FATAL_WARNINGS=0
+    exec "$box64" "$bash64" "$steam/steam.sh" -noverifyfiles "$@"
+fi
+
+# Steam's single-instance check reads ~/.steam/steam.pid, which only resolves inside its pid namespace.
+pid=$(grep -o '"child-pid": *[0-9]*' "$ns" 2>/dev/null | grep -o '[0-9]*$')
+if [ -n "$pid" ] && grep -qsF "$bash64" "/proc/$pid/cmdline"; then
+    exec nsenter -t "$pid" -U -m -p --preserve-credentials -- "$0" --inner "$@"
+fi
+
+if ! grep -qs '^enabled' /proc/sys/fs/binfmt_misc/binfmt-dispatcher-x86_64; then
+    echo "steam-box64: x86 binaries aren't handled by binfmt-dispatcher" >&2
+    exit 1
+fi
+
+if [ ! -f "$steam/steam.sh" ]; then
+    mkdir -p "$steam"
+    curl -fsSL https://repo.steampowered.com/steam/archive/stable/steam_latest.tar.gz |
+        tar -xzO steam-launcher/bootstraplinux_ubuntu12_32.tar.xz | tar -xJ -C "$steam" || exit
+fi
+[ ! -L "$steam/steamrt64" ] || rm "$steam/steamrt64"
+touch "$steam/.steam-enable-steamrt64-client"
+
+# Route x86 execs to box64 only inside this mount namespace; the rest of the system keeps FEX.
+cfg=${XDG_CONFIG_HOME:-$HOME/.config}/binfmt-dispatcher
+mkdir -p "${ns%/*}" "$cfg"
+exec bwrap --dev-bind / / --proc /proc --unshare-pid --ro-bind /usr/share/steam-box64/binfmt-dispatcher "$cfg" \
+    --info-fd 3 "$0" --inner "$@" 3>"$ns"

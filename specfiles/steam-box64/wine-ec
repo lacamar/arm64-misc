@@ -1,0 +1,42 @@
+#!/bin/bash
+case $1 in
+run | waitforexitandrun) shift ;;
+*) exit 0 ;;
+esac
+tool=${0%/*}
+cache=${XDG_CACHE_HOME:-$HOME/.cache}/steam-box64
+lib=$cache/wine-ec
+steam=${STEAM_COMPAT_CLIENT_INSTALL_PATH:-${XDG_DATA_HOME:-$HOME/.local/share}/Steam}
+export WINEPREFIX=$STEAM_COMPAT_DATA_PATH/pfx
+mkdir -p "$WINEPREFIX"
+
+# Steamworks: borrow lsteamclient + steam.exe from Valve's ARM64 Proton; they load ~/.steam/sdkarm64/steamclient.so.
+proton=$(printf '%s\n' "$steam"/steamapps/common/Proton*ARM64* | sort -V | tail -1)
+sc=$HOME/.steam/sdkarm64/steamclient.so
+if [ -d "$proton" ] && [ -f "$sc" ]; then
+    for f in aarch64-unix/lsteamclient.so {aarch64,i386}-windows/{lsteamclient.dll,steam.exe}; do
+        mkdir -p "$lib/${f%/*}"
+        ln -sfn "$proton/files/lib/wine/$f" "$lib/$f"
+    done
+    # Proton's wine swaps in lsteamclient for these; system wine needs builtins by that name.
+    for f in aarch64-windows/steamclient64.dll i386-windows/steamclient.dll aarch64-unix/steamclient{,64}.so; do
+        ln -sfn "lsteamclient.${f##*.}" "$lib/$f"
+    done
+    s="$WINEPREFIX/drive_c/Program Files (x86)/Steam"
+    mkdir -p "$s"
+    for f in steamclient.dll steamclient64.dll GameOverlayRenderer64.dll Steam.dll; do
+        cp -u "$steam/legacycompat/$f" "$s/" 2>/dev/null
+    done
+    cp -u "$steam/legacycompat/SteamService.exe" "$s/steam.exe" 2>/dev/null
+    export WINEDLLPATH=$lib WINEDLLOVERRIDES="steam.exe,steamclient,steamclient64=b${WINEDLLOVERRIDES:+;$WINEDLLOVERRIDES}"
+    # Proton's wine.inf sets these; steam_api finds steamclient64.dll through them.
+    grep -qs SteamClientDll64 "$WINEPREFIX/user.reg" || wine regedit /S "$tool/steam.reg"
+
+    # Valve's arm64 steamclient.so is 4K-aligned and won't load on a 16K kernel.
+    sc16=$cache/steamclient-16k.so
+    if [ "$sc" -nt "$sc16" ]; then
+        python3 "$tool/realign.py" "$sc" "$sc16.new" && mv "$sc16.new" "$sc16" || rm -f "$sc16"
+    fi
+    [ -f "$sc16" ] && exec bwrap --dev-bind / / --ro-bind "$sc16" "$sc" wine steam.exe "$@"
+fi
+exec wine "$@"

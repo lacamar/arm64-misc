@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Steam (box64)
+Comment=Play games
+Icon=steam-box64
+TryExec=steam-box64
+Exec=steam-box64 %U
+Terminal=false
+Categories=Game;
+StartupWMClass=steam

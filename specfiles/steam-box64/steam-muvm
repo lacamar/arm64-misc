@@ -1,0 +1,61 @@
+#!/bin/sh
+# Launch option: steam-muvm %command%. Runs the game in muvm, keeping Steamworks/DRM working.
+if [ -z "$STEAM_MUVM_PID" ]; then
+    export STEAM_MUVM_PID=$$
+    exec muvm -e STEAM_MUVM_PID -e STEAM_MUVM_CWD="$PWD" $(env | sed -n 's/^\(Steam[A-Za-z]*\|STEAM_[A-Z_]*\)=.*/-e \1/p') -- "$0" "$@"
+fi
+
+cd "$STEAM_MUVM_CWD" || exit
+d=${XDG_RUNTIME_DIR:-/tmp}/steam-muvm
+mkdir -p "$d"
+p=$(cat "$d/pid" 2>/dev/null)
+if [ -z "$p" ] || ! kill -0 "$p" 2>/dev/null; then
+    rm -f "$d/pid.new"
+    python3 -c '
+import asyncio, os, struct, sys
+
+# Steam drops clients whose pid it cannot see, so report the host-side muvm pid instead.
+def host_pid(msg):
+    if len(msg) != 17 or msg[4] != 9:
+        return msg
+    pid = struct.unpack_from("<I", msg, 9)[0]
+    try:
+        env = open(f"/proc/{pid}/environ", "rb").read().split(b"\0")
+        h = int(next(e for e in env if e.startswith(b"STEAM_MUVM_PID="))[15:])
+    except (OSError, StopIteration, ValueError):
+        return msg
+    return msg[:9] + struct.pack("<I", h) + msg[13:]
+
+async def pipe(r, w, first=None):
+    try:
+        if first:
+            w.write(first)
+        while d := await r.read(65536):
+            w.write(d)
+            await w.drain()
+    finally:
+        w.close()
+
+async def handle(r, w):
+    try:
+        n = await r.readexactly(4)
+        first = n + await r.readexactly(struct.unpack("<I", n)[0])
+    except asyncio.IncompleteReadError:
+        return w.close()
+    hr, hw = await asyncio.open_connection(sys.argv[1], 57343)
+    await asyncio.gather(pipe(r, hw, host_pid(first)), pipe(hr, w))
+
+async def main():
+    s = await asyncio.start_server(handle, "127.0.0.1", 57343)
+    with open(sys.argv[2], "w") as f:
+        f.write(str(os.getpid()))
+    await s.serve_forever()
+
+asyncio.run(main())' "$(ip route | awk '/^default/{print $3; exit}')" "$d/pid.new" &
+    f=$!
+    # Port taken: Steam itself runs in this VM.
+    until [ -s "$d/pid.new" ]; do kill -0 $f 2>/dev/null || exec "$@"; sleep 0.1; done
+    mv "$d/pid.new" "$d/pid"
+fi
+# steamclient checks kill(steam.pid, 0); the host's pid means nothing here.
+exec bwrap --dev-bind / / --bind "$d/pid" "$HOME/.steam/steam.pid" "$@"

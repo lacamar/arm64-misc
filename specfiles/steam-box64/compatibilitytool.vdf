@@ -1,0 +1,13 @@
+"compatibilitytools"
+{
+  "compat_tools"
+  {
+    "wine-ec"
+    {
+      "install_path" "."
+      "display_name" "Wine (arm64ec)"
+      "from_oslist" "windows"
+      "to_oslist" "linux"
+    }
+  }
+}

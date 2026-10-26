@@ -1,0 +1,13 @@
+REGEDIT4
+
+[HKEY_CURRENT_USER\Software\Valve\Steam]
+"SteamPath"="C:\\Program Files (x86)\\Steam"
+"SteamExe"="C:\\Program Files (x86)\\Steam\\Steam.exe"
+
+[HKEY_CURRENT_USER\Software\Valve\Steam\ActiveProcess]
+"SteamClientDll"="C:\\Program Files (x86)\\Steam\\steamclient.dll"
+"SteamClientDll64"="C:\\Program Files (x86)\\Steam\\steamclient64.dll"
+"SteamPath"="C:\\Program Files (x86)\\Steam"
+
+[HKEY_LOCAL_MACHINE\Software\Wow6432Node\Valve\Steam]
+"InstallPath"="C:\\Program Files (x86)\\Steam"

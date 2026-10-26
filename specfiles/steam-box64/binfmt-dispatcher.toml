@@ -1,0 +1,5 @@
+[defaults]
+interpreter = "box64"
+
+[interpreters.box64]
+path = "/usr/libexec/steam-box64/box64-binfmt"
