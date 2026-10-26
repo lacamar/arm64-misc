@@ -1,5 +1,5 @@
 Name:           awdld
-Version:        0.1.0
+Version:        0.1.1
 Release:        1%{?dist}
 Summary:        AWDL peer manager for brcmfmac firmware AWDL
 
@@ -15,6 +15,7 @@ BuildRequires:  systemd-rpm-macros
 Requires:       python3
 Requires:       iw
 Requires:       iproute
+Requires:       NetworkManager
 
 %description
 Creates awdl0 on a brcmfmac kernel with AWDL support, adds peers seen in
@@ -32,6 +33,7 @@ install -Dm644 %{SOURCE2} %{buildroot}%{_prefix}/lib/NetworkManager/conf.d/90-aw
 python3 -I %{SOURCE0} selftest
 
 %post
+nmcli general reload conf >/dev/null 2>&1 || :
 %systemd_post awdld.service
 
 %preun
@@ -46,5 +48,10 @@ python3 -I %{SOURCE0} selftest
 %{_prefix}/lib/NetworkManager/conf.d/90-awdl-unmanaged.conf
 
 %changelog
+* Mon Oct 26 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.1-1
+- Unmanage awdl0 at start
+- Reload NM conf on install
+- Add -v frame logging
+
 * Mon Oct 26 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.0-1
 - Initial package

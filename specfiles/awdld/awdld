@@ -66,10 +66,13 @@ def selftest():
     assert parse_af(b"junk") is None
     log("selftest ok")
 
+VERBOSE = "-v" in sys.argv
+
 def run(name):
     if not os.path.exists(f"/sys/class/net/{IFACE}"):
         with open(PARAM, "w") as f:
             f.write("1")
+    subprocess.run(["nmcli", "device", "set", IFACE, "managed", "no"], capture_output=True)
     subprocess.run(["ip", "link", "set", IFACE, "up", "allmulticast", "on"], check=True)
     set_bss("allmulti", struct.pack("<I", 1))
     set_bss("awdl_payload", payload_tlvs(name)) or log("awdl_payload refused")
@@ -79,7 +82,10 @@ def run(name):
     log(f"{IFACE} up, listening")
     while True:
         if select.select([s], [], [], 5)[0]:
-            ev = parse_event(s.recv(4096))
+            raw = s.recv(4096)
+            ev = parse_event(raw)
+            if VERBOSE:
+                log("frame", len(raw), "evt", ev and (ev[0], ev[1]), raw[:96].hex())
             if ev and ev[0] == 98 and ev[1] == 2:
                 af = parse_af(ev[2])
                 if af:
