@@ -1,0 +1,35 @@
+--- a/opendrop/server.py	2026-10-26 12:28:59.413682735 +0100
++++ b/opendrop/server.py	2026-10-26 12:28:59.424664072 +0100
+@@ -162,9 +162,20 @@
+         self._set_response(len(body))
+         self.wfile.write(body)
+ 
++    def _read_body(self):
++        # iOS 17+ sends Discover/Ask with chunked transfer encoding
++        if self.headers.get("transfer-encoding", "").lower() != "chunked":
++            return self.rfile.read(int(self.headers.get("Content-Length", 0)))
++        data = b""
++        while length := int(self.rfile.readline().split(b";")[0].strip(), 16):
++            data += self.rfile.read(length)
++            self.rfile.readline()
++        while self.rfile.readline().strip():
++            pass
++        return data
++
+     def handle_discover(self):
+-        content_length = int(self.headers["Content-Length"])
+-        post_data = self.rfile.read(content_length)
++        post_data = self._read_body()
+ 
+         AirDropUtil.write_debug(
+             self.config, post_data, "receive_discover_request.plist"
+@@ -222,8 +233,7 @@
+         self.wfile.write(discover_answer_binary)
+ 
+     def handle_ask(self):
+-        content_length = int(self.headers["Content-Length"])
+-        post_data = self.rfile.read(content_length)
++        post_data = self._read_body()
+ 
+         AirDropUtil.write_debug(self.config, post_data, "receive_ask_request.plist")
+ 

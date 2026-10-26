@@ -1,12 +1,13 @@
 Name:           python-opendrop
 Version:        0.13.0
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Open Apple AirDrop implementation
 
 License:        GPL-3.0-or-later
 URL:            https://github.com/seemoo-lab/opendrop
 Source0:        %{pypi_source opendrop}
 Patch0:         opendrop-no-pkg-resources.patch
+Patch1:         opendrop-chunked-requests.patch
 
 BuildArch:      noarch
 BuildRequires:  python3-devel
@@ -39,6 +40,9 @@ Requires:       awdld
 %{_bindir}/opendrop
 
 %changelog
+* Mon Oct 26 2026 Lachlan Marie <lchlnm@pm.me> - 0.13.0-2
+- Accept chunked Discover/Ask requests
+
 * Mon Oct 26 2026 Lachlan Marie <lchlnm@pm.me> - 0.13.0-1
 - Initial package
 - Drop pkg_resources
