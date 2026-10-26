@@ -1,8 +1,8 @@
 diff --git a/niri-config/src/binds.rs b/niri-config/src/binds.rs
-index 2266d87..c1c9cc6 100644
+index 7448c8f..ae54806 100644
 --- a/niri-config/src/binds.rs
 +++ b/niri-config/src/binds.rs
-@@ -347,6 +347,12 @@ pub enum Action {
+@@ -466,6 +466,12 @@ pub enum Action {
      FocusFloating,
      FocusTiling,
      SwitchFocusBetweenFloatingAndTiling,
@@ -15,7 +15,7 @@ index 2266d87..c1c9cc6 100644
      #[knuffel(skip)]
      MoveFloatingWindowById {
          id: Option<u64>,
-@@ -687,6 +693,12 @@ impl From<niri_ipc::Action> for Action {
+@@ -806,6 +812,12 @@ impl From<niri_ipc::Action> for Action {
              niri_ipc::Action::SwitchFocusBetweenFloatingAndTiling {} => {
                  Self::SwitchFocusBetweenFloatingAndTiling
              }
@@ -29,37 +29,37 @@ index 2266d87..c1c9cc6 100644
                  Self::MoveFloatingWindowById { id, x, y }
              }
 diff --git a/niri-config/src/layout.rs b/niri-config/src/layout.rs
-index f84528b..723f939 100644
+index dad9520..943a98e 100644
 --- a/niri-config/src/layout.rs
 +++ b/niri-config/src/layout.rs
-@@ -24,6 +24,7 @@ pub struct Layout {
-     pub gaps: f64,
+@@ -25,6 +25,7 @@ pub struct Layout {
      pub struts: Struts,
      pub background_color: Color,
+     pub fullscreen_backdrop_color: Color,
 +    pub scratchpad: Scratchpad,
  }
  
  impl Default for Layout {
-@@ -52,6 +53,7 @@ impl Default for Layout {
-                 PresetSize::Proportion(2. / 3.),
+@@ -54,6 +55,7 @@ impl Default for Layout {
              ],
              background_color: DEFAULT_BACKGROUND_COLOR,
+             fullscreen_backdrop_color: Color::from_array_unpremul([0., 0., 0., 1.]),
 +            scratchpad: Scratchpad::default(),
          }
      }
  }
-@@ -78,6 +80,7 @@ impl MergeWith<LayoutPart> for Layout {
-             default_column_display,
+@@ -81,6 +83,7 @@ impl MergeWith<LayoutPart> for Layout {
              struts,
              background_color,
+             fullscreen_backdrop_color,
 +            scratchpad,
          );
  
          if let Some(x) = part.default_column_width {
-@@ -126,6 +129,18 @@ pub struct LayoutPart {
-     pub struts: Option<Struts>,
-     #[knuffel(child)]
+@@ -131,6 +134,18 @@ pub struct LayoutPart {
      pub background_color: Option<Color>,
+     #[knuffel(child)]
+     pub fullscreen_backdrop_color: Option<Color>,
 +    #[knuffel(child)]
 +    pub scratchpad: Option<Scratchpad>,
 +}
@@ -76,11 +76,11 @@ index f84528b..723f939 100644
  
  #[derive(knuffel::Decode, Debug, Clone, Copy, PartialEq)]
 diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
-index 4a13386..3a58601 100644
+index ca14e8a..0cab1d2 100644
 --- a/niri-config/src/lib.rs
 +++ b/niri-config/src/lib.rs
-@@ -1507,6 +1507,11 @@ mod tests {
-                     b: 0.25,
+@@ -1961,6 +1961,11 @@ mod tests {
+                     b: 0.0,
                      a: 1.0,
                  },
 +                scratchpad: Scratchpad {
@@ -92,10 +92,10 @@ index 4a13386..3a58601 100644
              prefer_no_csd: true,
              cursor: Cursor {
 diff --git a/niri-ipc/src/lib.rs b/niri-ipc/src/lib.rs
-index ec85134..9c7b992 100644
+index c314d45..10669b5 100644
 --- a/niri-ipc/src/lib.rs
 +++ b/niri-ipc/src/lib.rs
-@@ -839,6 +839,25 @@ pub enum Action {
+@@ -851,6 +851,25 @@ pub enum Action {
      FocusTiling {},
      /// Toggles the focus between the floating and the tiling layout.
      SwitchFocusBetweenFloatingAndTiling {},
@@ -121,7 +121,7 @@ index ec85134..9c7b992 100644
      /// Move a floating window on screen.
      #[cfg_attr(feature = "clap", clap(about = "Move the floating window on screen"))]
      MoveFloatingWindow {
-@@ -1360,6 +1379,8 @@ pub struct Window {
+@@ -1375,6 +1394,8 @@ pub struct Window {
      pub is_floating: bool,
      /// Whether this window requests your attention.
      pub is_urgent: bool,
@@ -131,10 +131,10 @@ index ec85134..9c7b992 100644
      pub layout: WindowLayout,
      /// Timestamp when the window was most recently focused.
 diff --git a/src/input/mod.rs b/src/input/mod.rs
-index 10c1d02..03c3ddc 100644
+index c316332..4e9f493 100644
 --- a/src/input/mod.rs
 +++ b/src/input/mod.rs
-@@ -2265,6 +2265,40 @@ impl State {
+@@ -2363,6 +2363,40 @@ impl State {
                  // FIXME: granular
                  self.niri.queue_redraw_all();
              }
@@ -803,7 +803,7 @@ index a2da4ce..e550e3d 100644
  fn set_height_fixed_negative() {
      let ops = [
 diff --git a/src/layout/tile.rs b/src/layout/tile.rs
-index db8ce67..1979f21 100644
+index 7e9b653..d98cf81 100644
 --- a/src/layout/tile.rs
 +++ b/src/layout/tile.rs
 @@ -62,6 +62,12 @@ pub struct Tile<W: LayoutElement> {
@@ -819,9 +819,9 @@ index db8ce67..1979f21 100644
      /// The size that the window should assume when going floating.
      ///
      /// This is generally the last size the window had when it was floating. It can be unknown if
-@@ -200,6 +206,8 @@ impl<W: LayoutElement> Tile<W> {
+@@ -201,6 +207,8 @@ impl<W: LayoutElement> Tile<W> {
              sizing_mode,
-             fullscreen_backdrop: SolidColorBuffer::new((0., 0.), [0., 0., 0., 1.]),
+             fullscreen_backdrop: SolidColorBuffer::new((0., 0.), fullscreen_backdrop_color),
              restore_to_floating: false,
 +            is_scratchpad: false,
 +            scratchpad_area: None,

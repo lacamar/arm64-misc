@@ -100,10 +100,10 @@ index 32de7f5..aa37107 100644
 +    Vulkan,
 +}
 diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
-index 9971b01..4aa68b0 100644
+index 59907b1..7845182 100644
 --- a/niri-config/src/lib.rs
 +++ b/niri-config/src/lib.rs
-@@ -2343,6 +2343,7 @@ mod tests {
+@@ -2861,6 +2861,7 @@ mod tests {
                  render_drm_device: Some(
                      "/dev/dri/renderD129",
                  ),
@@ -4063,7 +4063,7 @@ index 1a307da..0e05735 100644
          match self {
              Backend::Tty(tty) => tty.with_primary_renderer(f),
 diff --git a/src/backend/tty.rs b/src/backend/tty.rs
-index 2d952b3..aa91a17 100644
+index 77059ac..2a66173 100644
 --- a/src/backend/tty.rs
 +++ b/src/backend/tty.rs
 @@ -34,8 +34,8 @@ use smithay::backend::egl::context::ContextPriority;
@@ -4129,7 +4129,7 @@ index 2d952b3..aa91a17 100644
          let gpu_manager = GpuManager::new(api).context("error creating the GPU manager")?;
  
          let (primary_node, primary_render_node) = primary_node_from_config(&config.borrow())
-@@ -867,7 +870,7 @@ impl Tty {
+@@ -875,7 +878,7 @@ impl Tty {
                  debug!("bound legacy EGL to wl_display");
              }
  
@@ -4138,7 +4138,7 @@ index 2d952b3..aa91a17 100644
              resources::init(gles_renderer);
              shaders::init(gles_renderer);
  
-@@ -1443,8 +1446,7 @@ impl Tty {
+@@ -1451,8 +1454,7 @@ impl Tty {
  
          let render_node = device.render_node.unwrap_or(self.primary_render_node);
          let renderer = self.gpu_manager.single_renderer(&render_node)?;
@@ -4148,7 +4148,7 @@ index 2d952b3..aa91a17 100644
  
          // Filter out the CCS modifiers as they have increased bandwidth, causing some monitor
          // configurations to stop working.
-@@ -1906,13 +1908,13 @@ impl Tty {
+@@ -1914,13 +1916,13 @@ impl Tty {
  
      pub fn with_primary_renderer<T>(
          &mut self,
@@ -4693,7 +4693,7 @@ index 5ba97a3..4f50a51 100644
          location: Point<f64, Logical>,
          scale: Scale<f64>,
 diff --git a/src/layout/scrolling.rs b/src/layout/scrolling.rs
-index be24ab3..1a77707 100644
+index b9356f1..732a182 100644
 --- a/src/layout/scrolling.rs
 +++ b/src/layout/scrolling.rs
 @@ -7,7 +7,7 @@ use niri_config::utils::MergeWith as _;
@@ -4724,7 +4724,7 @@ index be24ab3..1a77707 100644
          tile_size: Size<f64, Logical>,
          tile_pos: Point<f64, Logical>,
 diff --git a/src/layout/tile.rs b/src/layout/tile.rs
-index 1979f21..5f555a2 100644
+index d98cf81..ee721c5 100644
 --- a/src/layout/tile.rs
 +++ b/src/layout/tile.rs
 @@ -5,7 +5,7 @@ use niri_config::utils::MergeWith as _;
@@ -4745,7 +4745,7 @@ index 1979f21..5f555a2 100644
  
  #[derive(Debug)]
  struct ResizeAnimation {
-@@ -1439,7 +1439,7 @@ impl<W: LayoutElement> Tile<W> {
+@@ -1443,7 +1443,7 @@ impl<W: LayoutElement> Tile<W> {
  
      pub fn store_unmap_snapshot_if_empty(
          &mut self,
@@ -4754,7 +4754,7 @@ index 1979f21..5f555a2 100644
          xray: Option<&mut Xray>,
          xray_has_blocked_out_layers: bool,
          xray_pos: XrayPos,
-@@ -1454,7 +1454,7 @@ impl<W: LayoutElement> Tile<W> {
+@@ -1458,7 +1458,7 @@ impl<W: LayoutElement> Tile<W> {
  
      fn render_snapshot(
          &self,
@@ -4764,7 +4764,7 @@ index 1979f21..5f555a2 100644
          xray_has_blocked_out_layers: bool,
          xray_pos: XrayPos,
 diff --git a/src/layout/workspace.rs b/src/layout/workspace.rs
-index 487eedf..c2b8e26 100644
+index 37b1609..5f1d923 100644
 --- a/src/layout/workspace.rs
 +++ b/src/layout/workspace.rs
 @@ -8,7 +8,7 @@ use niri_config::{
@@ -4804,10 +4804,10 @@ index 487eedf..c2b8e26 100644
          tile_size: Size<f64, Logical>,
          tile_pos: Point<f64, Logical>,
 diff --git a/src/niri.rs b/src/niri.rs
-index b56ddb4..7b51c1a 100644
+index f591261..2d169a1 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
-@@ -33,7 +33,7 @@ use smithay::backend::renderer::element::{
+@@ -34,7 +34,7 @@ use smithay::backend::renderer::element::{
      default_primary_scanout_output_compare, Element, Id, Kind, PrimaryScanoutOutput, RenderElement,
      RenderElementStates,
  };
@@ -4816,7 +4816,7 @@ index b56ddb4..7b51c1a 100644
  use smithay::backend::renderer::sync::SyncPoint;
  use smithay::backend::renderer::Color32F;
  use smithay::desktop::utils::{
-@@ -4881,7 +4881,7 @@ impl Niri {
+@@ -4911,7 +4911,7 @@ impl Niri {
          push(backdrop);
      }
  
@@ -4825,7 +4825,7 @@ index b56ddb4..7b51c1a 100644
          let _span = tracy_client::span!("Niri::fill_xray_elements");
  
          // Make sure the xrayed elements themselves cannot use xray by mistake.
-@@ -5841,7 +5841,7 @@ impl Niri {
+@@ -5887,7 +5887,7 @@ impl Niri {
  
      pub fn render_for_screencopy_with_damage(
          &mut self,
@@ -4834,7 +4834,7 @@ index b56ddb4..7b51c1a 100644
          output: &Output,
      ) {
          let _span = tracy_client::span!("Niri::render_for_screencopy_with_damage");
-@@ -5916,7 +5916,7 @@ impl Niri {
+@@ -5962,7 +5962,7 @@ impl Niri {
  
      pub fn render_for_screencopy_without_damage(
          &mut self,
@@ -4843,7 +4843,7 @@ index b56ddb4..7b51c1a 100644
          manager: &ZwlrScreencopyManagerV1,
          screencopy: Screencopy,
      ) -> anyhow::Result<()> {
-@@ -5968,7 +5968,7 @@ impl Niri {
+@@ -6014,7 +6014,7 @@ impl Niri {
  
      pub fn render_for_image_copy_capture(
          &mut self,
@@ -4852,7 +4852,7 @@ index b56ddb4..7b51c1a 100644
          output: &Output,
          target_presentation_time: Duration,
      ) {
-@@ -6108,7 +6108,7 @@ impl Niri {
+@@ -6154,7 +6154,7 @@ impl Niri {
  
      pub fn render_for_image_copy_cursor_capture(
          &mut self,
@@ -4861,7 +4861,7 @@ index b56ddb4..7b51c1a 100644
          output: &Output,
          target_presentation_time: Duration,
      ) {
-@@ -6210,9 +6210,9 @@ impl Niri {
+@@ -6256,9 +6256,9 @@ impl Niri {
  
      pub fn render_cursor_for_capture(
          &self,
@@ -4873,7 +4873,7 @@ index b56ddb4..7b51c1a 100644
          let int_scale = output.current_scale().integer_scale();
          let output_scale = Scale::from(output.current_scale().fractional_scale());
  
-@@ -6385,9 +6385,9 @@ impl Niri {
+@@ -6431,9 +6431,9 @@ impl Niri {
  
      #[allow(clippy::type_complexity)]
      fn render_for_screencopy_internal(
@@ -4885,7 +4885,7 @@ index b56ddb4..7b51c1a 100644
          states: RenderElementStates,
          screencopy: &Screencopy,
      ) -> anyhow::Result<Option<SyncPoint>> {
-@@ -6435,7 +6435,7 @@ impl Niri {
+@@ -6481,7 +6481,7 @@ impl Niri {
  
      pub fn capture_screenshots<'a>(
          &'a self,
@@ -4894,7 +4894,7 @@ index b56ddb4..7b51c1a 100644
      ) -> impl Iterator<Item = (Output, [OutputScreenshot; 3])> + 'a {
          self.global_space.outputs().cloned().filter_map(|output| {
              let size = output.current_mode().unwrap().size;
-@@ -6516,7 +6516,7 @@ impl Niri {
+@@ -6562,7 +6562,7 @@ impl Niri {
  
      pub fn screenshot(
          &mut self,
@@ -4903,7 +4903,7 @@ index b56ddb4..7b51c1a 100644
          output: &Output,
          write_to_disk: bool,
          include_pointer: bool,
-@@ -6553,7 +6553,7 @@ impl Niri {
+@@ -6599,7 +6599,7 @@ impl Niri {
  
      pub fn screenshot_window(
          &self,
@@ -4912,7 +4912,7 @@ index b56ddb4..7b51c1a 100644
          output: &Output,
          mapped: &Mapped,
          write_to_disk: bool,
-@@ -6570,7 +6570,7 @@ impl Niri {
+@@ -6616,7 +6616,7 @@ impl Niri {
                  mapped.rules().opacity.unwrap_or(1.).clamp(0., 1.)
              };
  
@@ -4921,7 +4921,7 @@ index b56ddb4..7b51c1a 100644
  
          // Add pointer if requested and it's over this window.
          if show_pointer {
-@@ -6729,7 +6729,7 @@ impl Niri {
+@@ -6775,7 +6775,7 @@ impl Niri {
      #[cfg(feature = "dbus")]
      pub fn screenshot_all_outputs(
          &mut self,
@@ -4930,7 +4930,7 @@ index b56ddb4..7b51c1a 100644
          include_pointer: bool,
          on_done: impl FnOnce(PathBuf) + Send + 'static,
      ) -> anyhow::Result<()> {
-@@ -7271,7 +7271,7 @@ impl Niri {
+@@ -7330,7 +7330,7 @@ impl Niri {
          }
      }
  
@@ -5505,17 +5505,16 @@ index 017c2ef..14d66f8 100644
              offscreen.blurred.insert(blurred).clone()
          };
 diff --git a/src/render_helpers/framebuffer_effect.rs b/src/render_helpers/framebuffer_effect.rs
-index 4e5a616..be6271d 100644
+index 775e400..aa83250 100644
 --- a/src/render_helpers/framebuffer_effect.rs
 +++ b/src/render_helpers/framebuffer_effect.rs
-@@ -4,19 +4,18 @@ use glam::{Mat3, Vec2};
- use niri_config::CornerRadius;
+@@ -6,18 +6,19 @@ use niri_config::CornerRadius;
  use smithay::backend::allocator::Fourcc;
  use smithay::backend::renderer::element::{Element, Id, RenderElement};
--use smithay::backend::renderer::gles::{
--    ffi, GlesError, GlesFrame, GlesRenderer, GlesTexture, Uniform,
--};
-+use smithay::backend::renderer::gles::{ffi, GlesError, GlesFrame, GlesTexture, Uniform};
+ use smithay::backend::renderer::gles::{
+-    ffi, Capability, GlesError, GlesFrame, GlesRenderer, GlesTexture, Uniform,
++    ffi, Capability, GlesError, GlesFrame, GlesTexture, Uniform,
+ };
 +use smithay::backend::renderer::base::{BaseError, BaseFrame, BaseRenderer, BaseTexture};
  use smithay::backend::renderer::utils::CommitCounter;
 -use smithay::backend::renderer::{Frame as _, FrameContext, Offscreen, Texture as _};
@@ -5533,7 +5532,7 @@ index 4e5a616..be6271d 100644
  use crate::render_helpers::shaders::{mat3_uniform, Shaders};
  use crate::utils::region::TransformedRegion;
  
-@@ -42,9 +41,9 @@ pub struct FramebufferEffectElement {
+@@ -43,9 +44,9 @@ pub struct FramebufferEffectElement {
  
  #[derive(Debug)]
  struct Inner {
@@ -5545,7 +5544,7 @@ index 4e5a616..be6271d 100644
      /// Reusable storage for subregion-filtered damage rects.
      subregion_damage: Vec<Rectangle<i32, Physical>>,
  }
-@@ -152,24 +151,26 @@ impl Element for FramebufferEffectElement {
+@@ -153,25 +154,31 @@ impl Element for FramebufferEffectElement {
      }
  }
  
@@ -5566,8 +5565,13 @@ index 4e5a616..be6271d 100644
              let output_rect = Rectangle::from_size(frame.output_size());
              let transform = frame.transformation();
  
+-            let supports_blit = frame.capabilities().contains(&Capability::Blit);
 -            let mut guard = frame.renderer();
--
++            let supports_blit = match &*frame {
++                BaseFrame::Gles(f) => f.capabilities().contains(&Capability::Blit),
++                BaseFrame::Vulkan(_) => true,
++            };
+ 
 -            let inner = cache
 -                .get_or_insert::<RefCell<Inner>, _>(|| RefCell::new(Inner::new(guard.as_mut())));
 +            let inner = cache.get_or_insert::<RefCell<Inner>, _>(|| {
@@ -5579,7 +5583,7 @@ index 4e5a616..be6271d 100644
              let mut inner = inner.borrow_mut();
              let inner = &mut *inner;
  
-@@ -226,17 +227,15 @@ impl RenderElement<GlesRenderer> for FramebufferEffectElement {
+@@ -236,17 +243,15 @@ impl RenderElement<GlesRenderer> for FramebufferEffectElement {
                  fb
              } else {
                  trace!("creating framebuffer texture sized {} × {}", size.w, size.h);
@@ -5599,7 +5603,7 @@ index 4e5a616..be6271d 100644
                      framebuffer,
                      *options,
                  ) {
-@@ -245,57 +244,12 @@ impl RenderElement<GlesRenderer> for FramebufferEffectElement {
+@@ -255,57 +260,12 @@ impl RenderElement<GlesRenderer> for FramebufferEffectElement {
                  }
              }
  
@@ -5662,7 +5666,7 @@ index 4e5a616..be6271d 100644
  
              // If blur is off, use the unblurred texture.
              if self.blur_options.is_none() {
-@@ -304,9 +258,7 @@ impl RenderElement<GlesRenderer> for FramebufferEffectElement {
+@@ -314,9 +274,7 @@ impl RenderElement<GlesRenderer> for FramebufferEffectElement {
              }
  
              if let Some((blur, options)) = blur {
@@ -5673,7 +5677,7 @@ index 4e5a616..be6271d 100644
                      Ok(blurred) => inner.intermediate = Some(blurred),
                      Err(err) => {
                          warn!("error rendering blur: {err:?}");
-@@ -320,13 +272,13 @@ impl RenderElement<GlesRenderer> for FramebufferEffectElement {
+@@ -330,13 +288,13 @@ impl RenderElement<GlesRenderer> for FramebufferEffectElement {
  
      fn draw(
          &self,
@@ -5689,7 +5693,7 @@ index 4e5a616..be6271d 100644
          let Some(cache) = cache else {
              return Ok(());
          };
-@@ -417,8 +369,8 @@ impl<'render> RenderElement<TtyRenderer<'render>> for FramebufferEffectElement {
+@@ -427,8 +385,8 @@ impl<'render> RenderElement<TtyRenderer<'render>> for FramebufferEffectElement {
          dst: Rectangle<i32, Physical>,
          cache: &UserDataMap,
      ) -> Result<(), TtyRendererError<'render>> {
@@ -5700,7 +5704,7 @@ index 4e5a616..be6271d 100644
          Ok(())
      }
  
-@@ -431,8 +383,8 @@ impl<'render> RenderElement<TtyRenderer<'render>> for FramebufferEffectElement {
+@@ -441,8 +399,8 @@ impl<'render> RenderElement<TtyRenderer<'render>> for FramebufferEffectElement {
          opaque_regions: &[Rectangle<i32, Physical>],
          cache: Option<&UserDataMap>,
      ) -> Result<(), TtyRendererError<'render>> {
@@ -5711,7 +5715,7 @@ index 4e5a616..be6271d 100644
              &self,
              gles_frame,
              src,
-@@ -446,12 +398,67 @@ impl<'render> RenderElement<TtyRenderer<'render>> for FramebufferEffectElement {
+@@ -456,12 +414,67 @@ impl<'render> RenderElement<TtyRenderer<'render>> for FramebufferEffectElement {
  }
  
  impl Inner {
@@ -7479,7 +7483,7 @@ index 221ae05..4d81a43 100644
              return;
          };
 diff --git a/src/ui/hotkey_overlay.rs b/src/ui/hotkey_overlay.rs
-index 34bc395..2973b76 100644
+index 0b92e47..17808a8 100644
 --- a/src/ui/hotkey_overlay.rs
 +++ b/src/ui/hotkey_overlay.rs
 @@ -9,7 +9,7 @@ use niri_config::{Action, Bind, Config, Key, ModKey, Modifiers, Trigger};
@@ -7509,7 +7513,7 @@ index 34bc395..2973b76 100644
              render(renderer, &self.config.borrow(), self.mod_key, scale)
                  .unwrap_or_else(|_| RenderedOverlay { buffer: None })
          });
-@@ -304,7 +304,7 @@ fn collect_actions(config: &Config) -> Vec<&Action> {
+@@ -332,7 +332,7 @@ fn collect_actions(config: &Config) -> Vec<&Action> {
  }
  
  fn render(
@@ -7519,7 +7523,7 @@ index 34bc395..2973b76 100644
      mod_key: ModKey,
      scale: f64,
 diff --git a/src/ui/mru.rs b/src/ui/mru.rs
-index d8ec6de..a9c5a3a 100644
+index 7c1194d..d421688 100644
 --- a/src/ui/mru.rs
 +++ b/src/ui/mru.rs
 @@ -17,7 +17,7 @@ use smithay::backend::renderer::element::utils::{
@@ -7626,7 +7630,7 @@ index 7d26f85..44972b3 100644
          clock: Clock,
      ) -> Self {
 diff --git a/src/ui/screenshot_ui.rs b/src/ui/screenshot_ui.rs
-index a158636..402fe49 100644
+index 75dada3..b67e141 100644
 --- a/src/ui/screenshot_ui.rs
 +++ b/src/ui/screenshot_ui.rs
 @@ -15,7 +15,7 @@ use smithay::backend::allocator::Fourcc;
@@ -7636,7 +7640,7 @@ index a158636..402fe49 100644
 -use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
 +use smithay::backend::renderer::base::{BaseRenderer, BaseTexture};
  use smithay::backend::renderer::{ExportMem, Texture as _};
- use smithay::input::keyboard::{Keysym, ModifiersState};
+ use smithay::input::keyboard::Keysym;
  use smithay::output::{Output, WeakOutput};
 @@ -94,11 +94,11 @@ pub struct OutputData {
      screenshot: [OutputScreenshot; 3],
@@ -7670,7 +7674,7 @@ index a158636..402fe49 100644
      ) -> anyhow::Result<(Size<i32, Physical>, Vec<u8>)> {
          let _span = tracy_client::span!("ScreenshotUi::capture");
  
-@@ -1023,10 +1023,10 @@ impl ScreenshotUi {
+@@ -1083,10 +1083,10 @@ impl ScreenshotUi {
  
  impl OutputScreenshot {
      pub fn from_textures(
@@ -7684,7 +7688,7 @@ index a158636..402fe49 100644
      ) -> Self {
          let buffer = PrimaryGpuTextureRenderElement(TextureRenderElement::from_texture_buffer(
              TextureBuffer::from_texture(
-@@ -1132,10 +1132,10 @@ fn is_within_capture_button(
+@@ -1165,10 +1165,10 @@ fn is_within_capture_button(
  }
  
  fn render_panel(
@@ -7698,7 +7702,7 @@ index a158636..402fe49 100644
  
      let padding: i32 = to_physical_precise_round(scale, PADDING);
 diff --git a/src/window/mapped.rs b/src/window/mapped.rs
-index 7d4130e..724676b 100644
+index f3a51e5..3de98f1 100644
 --- a/src/window/mapped.rs
 +++ b/src/window/mapped.rs
 @@ -4,7 +4,7 @@ use std::time::Duration;
@@ -7728,7 +7732,7 @@ index 7d4130e..724676b 100644
          self.animation_snapshot = Some(self.render_snapshot(renderer));
      }
  
-@@ -752,7 +752,7 @@ impl LayoutElement for Mapped {
+@@ -756,7 +756,7 @@ impl LayoutElement for Mapped {
  
      fn render_background_effect(
          &self,
