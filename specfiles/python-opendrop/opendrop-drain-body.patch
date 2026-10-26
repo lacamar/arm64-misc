@@ -1,0 +1,13 @@
+--- a/opendrop/server.py	2026-10-26 21:17:11.262638028 +0100
++++ b/opendrop/server.py	2026-10-26 21:17:11.276896249 +0100
+@@ -399,6 +399,10 @@
+         else:
+             with libarchive.read.stream_reader(reader) as archive:
+                 save_archive(archive, dest)
++        # libarchive stops at the cpio trailer; closing with unread body data resets the
++        # connection and iOS reports the transfer as failed
++        while reader.read(65536):
++            pass
+ 
+         transferred = reader.total / 1024.0 / 1024.0
+         speed = transferred / (time.time() - start)
