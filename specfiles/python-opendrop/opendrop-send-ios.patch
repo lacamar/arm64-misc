@@ -1,0 +1,287 @@
+diff -ruN '--exclude=__pycache__' a/opendrop/ble.py c/opendrop/ble.py
+--- a/opendrop/ble.py	1970-01-01 01:00:00.000000000 +0100
++++ b/opendrop/ble.py	2026-10-26 23:33:51.713333417 +0100
+@@ -0,0 +1,109 @@
++import asyncio
++import contextlib
++import hashlib
++import logging
++import os
++import threading
++
++logger = logging.getLogger(__name__)
++
++PATH = "/org/opendrop/advertisement0"
++
++
++def airdrop_payload(ids=()):
++    # Apple continuity type 0x05: 8 zero bytes, version 1, first 2 bytes of SHA-256 of up to 4 contact ids, 0
++    h = b"".join(hashlib.sha256(i.encode()).digest()[:2] for i in list(ids)[:4]).ljust(8, b"\0")
++    return bytes([0x05, 0x12]) + bytes(8) + b"\x01" + h + b"\x00"
++
++
++async def _advertise(data, adapter, started, stop):
++    from dbus_next import BusType, Variant
++    from dbus_next.aio import MessageBus
++    from dbus_next.constants import PropertyAccess
++    from dbus_next.service import ServiceInterface, dbus_property, method
++
++    class Advertisement(ServiceInterface):
++        def __init__(self):
++            super().__init__("org.bluez.LEAdvertisement1")
++            self.tx = 20  # max; the controller clamps
++
++        @method()
++        def Release(self):
++            pass
++
++        @dbus_property(access=PropertyAccess.READ)
++        def Type(self) -> "s":
++            return "broadcast"
++
++        @dbus_property()
++        def TxPower(self) -> "n":
++            return self.tx
++
++        @TxPower.setter
++        def TxPower(self, val: "n"):
++            self.tx = val  # bluez reports back the power it picked
++
++        @dbus_property(access=PropertyAccess.READ)
++        def MinInterval(self) -> "u":
++            return 100  # ms; the bluez default is too slow to wake iOS
++
++        @dbus_property(access=PropertyAccess.READ)
++        def MaxInterval(self) -> "u":
++            return 100
++
++        @dbus_property(access=PropertyAccess.READ)
++        def ManufacturerData(self) -> "a{qv}":
++            return {0x004C: Variant("ay", data)}
++
++    bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
++    try:
++        bus.export(PATH, Advertisement())
++        obj = f"/org/bluez/{adapter}"
++        proxy = bus.get_proxy_object("org.bluez", obj, await bus.introspect("org.bluez", obj))
++        mgr = proxy.get_interface("org.bluez.LEAdvertisingManager1")
++        await mgr.call_register_advertisement(PATH, {})
++        started.set()
++        await stop.wait()
++        await mgr.call_unregister_advertisement(PATH)
++    finally:
++        bus.disconnect()
++
++
++@contextlib.contextmanager
++def wake(ids=(), adapter=None, settle=3.0):
++    """Advertise the AirDrop BLE beacon so nearby iOS receivers switch on AWDL"""
++    adapter = adapter or os.environ.get("OPENDROP_BLE_ADAPTER", "hci0")
++    loop = asyncio.new_event_loop()
++    started, stop = threading.Event(), asyncio.Event()
++    err = []
++
++    def run():
++        try:
++            loop.run_until_complete(_advertise(airdrop_payload(ids), adapter, started, stop))
++        except Exception as e:  # BLE is best effort: macOS receivers never need it
++            err.append(e)
++            started.set()
++
++    t = threading.Thread(target=run, daemon=True)
++    t.start()
++    started.wait(10)
++    if err:
++        logger.warning(f"BLE wake unavailable: {err[0]}")
++    else:
++        logger.info("Advertising AirDrop over BLE")
++        stop_t = loop.time() + settle
++        while loop.time() < stop_t:
++            t.join(0.1)
++    try:
++        yield
++    finally:
++        if not err and t.is_alive():
++            loop.call_soon_threadsafe(stop.set)
++            t.join(5)
++
++
++if __name__ == "__main__":
++    p = airdrop_payload()
++    assert len(p) == 20 and p[:2] == b"\x05\x12" and p[10] == 1, p.hex()
++    assert airdrop_payload(["a@b.c"])[11:13] == hashlib.sha256(b"a@b.c").digest()[:2]
++    print("payload ok", p.hex())
+diff -ruN '--exclude=__pycache__' a/opendrop/client.py c/opendrop/client.py
+--- a/opendrop/client.py	2026-10-26 22:35:21.821567728 +0100
++++ b/opendrop/client.py	2026-10-26 23:33:51.767584830 +0100
+@@ -24,6 +24,8 @@
+ import platform
+ import plistlib
+ import socket
++import uuid
++import zlib
+ from http.client import HTTPSConnection
+ 
+ import fleep
+@@ -92,6 +94,7 @@
+         self.receiver_host = receiver[0]
+         self.receiver_port = receiver[1]
+         self.http_conn = None
++        self.transfer_id = str(uuid.uuid4()).upper()
+ 
+     def send_POST(self, url, body, headers=None):
+         logger.debug(f"Send {url} request")
+@@ -151,6 +154,8 @@
+             "SenderModelName": self.config.computer_model,
+             "SenderID": self.config.service_id,
+             "ConvertMediaFormats": False,
++            "TransferID": {"id": self.transfer_id},
++            "TransferType": {"files": {}},
+         }
+         if self.config.record_data:
+             ask_body["SenderRecordData"] = self.config.record_data
+@@ -162,8 +167,10 @@
+                     "FileName": file_name,
+                     "FileType": AirDropUtil.get_uti_type(flp),
+                     "FileBomPath": os.path.join(".", file_name),
+-                    "FileIsDirectory": os.path.isdir(file_name),
++                    "FileIsDirectory": os.path.isdir(file),
++                    "FileSize": os.path.getsize(file),
+                     "ConvertMediaFormats": 0,
++                    "ShouldConvertMediaFormats": False,
+                 }
+                 yield file_entry
+ 
+@@ -198,24 +205,12 @@
+             return
+ 
+         headers = {
+-            "Content-Type": "application/x-cpio",
++            "Content-Type": "application/x-dvzip",
++            # iOS matches the upload to the accepted /Ask by TransferID
++            "TransferID": self.transfer_id,
++            "TotalBytes": str(os.path.getsize(file_path)),
+         }
+-
+-        # Create archive in memory ...
+-        stream = io.BytesIO()
+-        with libarchive.custom_writer(
+-            stream.write,
+-            "cpio",
+-            filter_name="gzip",
+-            archive_write_class=AbsArchiveWrite,
+-        ) as archive:
+-            for f in [file_path]:
+-                ff = os.path.basename(f)
+-                archive.add_abs_file(f, os.path.join(".", ff))
+-        stream.seek(0)
+-
+-        # ... then send in chunked mode
+-        success, _ = self.send_POST("/Upload", stream, headers=headers)
++        success, _ = self.send_POST("/Upload", io.BytesIO(dvzip(file_path)), headers=headers)
+ 
+         # TODO better: write archive chunk whenever send_POST does a read to avoid having the whole archive in memory
+ 
+@@ -236,6 +231,30 @@
+         return headers
+ 
+ 
++def _odc(name, mode, data=b"", mtime=0, ino=0, uid=501, gid=501, size=None):
++    n = name.encode() + b"\0"
++    return b"070707" + b"%06o%06o%06o%06o%06o%06o%06o%011o%06o%011o" % (
++        0, ino, mode, uid, gid, 1, 0, mtime, len(n), len(data) if size is None else size) + n + data
++
++
++def dvzip(file_path, block=1 << 17):
++    # what iOS sends: an odc cpio of "." and the file, split into [u32 BE len][zlib] blocks; bit 31 = stored
++    st = os.stat(file_path)
++    with open(file_path, "rb") as f:
++        data = f.read()
++    parts = [_odc(".", 0o40700, ino=1, mtime=int(st.st_mtime)),
++             _odc("./" + os.path.basename(file_path), 0o100644, ino=2, mtime=int(st.st_mtime), size=len(data))]
++    parts += [data[i:i + block] for i in range(0, len(data), block)]
++    trailer = _odc("TRAILER!!!", 0, uid=0, gid=0)
++    size = sum(map(len, parts)) + len(trailer)
++    parts.append(trailer + bytes(-size % 512))
++    out = b""
++    for raw in parts:
++        z = zlib.compress(raw)
++        out += (len(z).to_bytes(4, "big") + z) if len(z) < len(raw) else ((len(raw) | 1 << 31).to_bytes(4, "big") + raw)
++    return out
++
++
+ class HTTPSConnectionAWDL(HTTPSConnection):
+     """
+     This class allows to bind the HTTPConnection to a specific network interface
+@@ -266,12 +285,9 @@
+         super(HTTPSConnectionAWDL, self).__init__(
+             host=host,
+             port=port,
+-            key_file=key_file,
+-            cert_file=cert_file,
+             timeout=timeout,
+             source_address=source_address,
+             context=context,
+-            check_hostname=check_hostname,
+         )
+ 
+         self.interface_name = interface_name
+diff -ruN '--exclude=__pycache__' a/opendrop/cli.py c/opendrop/cli.py
+--- a/opendrop/cli.py	2026-10-26 22:35:21.821567728 +0100
++++ b/opendrop/cli.py	2026-10-26 23:33:51.713124124 +0100
+@@ -25,6 +25,7 @@
+ import threading
+ import time
+ 
++from . import ble
+ from .client import AirDropBrowser, AirDropClient
+ from .config import AirDropConfig, AirDropReceiverFlags
+ from .server import AirDropServer
+@@ -100,7 +101,8 @@
+             if args.action == "receive":
+                 self.receive()
+             elif args.action == "find":
+-                self.find()
++                with ble.wake(self.config.email + self.config.phone):
++                    self.find()
+             else:  # args.action == 'send'
+                 if args.file is None:
+                     parser.error("Need -f,--file when using send")
+@@ -111,7 +113,8 @@
+                 if args.receiver is None:
+                     parser.error("Need -r,--receiver when using send")
+                 self.receiver = args.receiver
+-                self.send()
++                with ble.wake(self.config.email + self.config.phone):
++                    self.send()
+         except KeyboardInterrupt:
+             if self.browser is not None:
+                 self.browser.stop()
+diff -ruN '--exclude=__pycache__' a/opendrop/util.py c/opendrop/util.py
+--- a/opendrop/util.py	2026-10-26 22:35:21.821567728 +0100
++++ b/opendrop/util.py	2026-10-26 23:33:51.768055041 +0100
+@@ -56,6 +56,8 @@
+         uti_type = "public.content"
+         if len(flp.mime) == 0 or len(flp.type) == 0:
+             return uti_type
++        if "application/epub+zip" in flp.mime:
++            return "org.idpf.epub-container"
+ 
+         mime = flp.mime[0]
+         f_type = flp.type[0]
+@@ -111,13 +113,13 @@
+             pass  # no EXIF data available
+ 
+         # Big image
+-        im.thumbnail((540, 540), Image.ANTIALIAS)
++        im.thumbnail((540, 540), Image.LANCZOS)
+         img_bytes = io.BytesIO()
+         im.save(img_bytes, format="JPEG2000")
+         file_icon = img_bytes.getvalue()
+ 
+         # Small image
+-        # im.thumbnail((64, 64), Image.ANTIALIAS)
++        # im.thumbnail((64, 64), Image.LANCZOS)
+         # img_bytes = io.BytesIO()
+         # im.save(img_bytes, format='JPEG2000')
+         # small_file_icon = img_bytes.getvalue()

@@ -1,6 +1,6 @@
 Name:           python-opendrop
 Version:        0.13.0
-Release:        8%{?dist}
+Release:        9%{?dist}
 Summary:        Open Apple AirDrop implementation
 
 License:        GPL-3.0-or-later
@@ -13,6 +13,7 @@ Patch3:         opendrop-dvzip-raw-blocks.patch
 Patch4:         opendrop-awdl-robust.patch
 Patch5:         opendrop-dvzip-stored-flag.patch
 Patch6:         opendrop-drain-body.patch
+Patch7:         opendrop-send-ios.patch
 Source1:        opendrop-receive.service
 
 BuildArch:      noarch
@@ -28,6 +29,7 @@ Send and receive files over AirDrop. Needs an awdl0 interface (see awdld).}
 Summary:        %{summary}
 Requires:       awdld
 Requires:       iproute
+Requires:       python3-dbus-next
 
 %description -n python3-opendrop %_description
 
@@ -50,6 +52,12 @@ install -Dm644 %{SOURCE1} %{buildroot}%{_userunitdir}/opendrop-receive.service
 %{_userunitdir}/opendrop-receive.service
 
 %changelog
+* Mon Oct 26 2026 Lachlan Marie <lchlnm@pm.me> - 0.13.0-9
+- Fix sending on Python 3.12+ and Pillow 10+
+- Send x-dvzip uploads with TransferID
+- Wake iOS receivers over BLE via BlueZ
+- Report epub as org.idpf.epub-container
+
 * Mon Oct 26 2026 Lachlan Marie <lchlnm@pm.me> - 0.13.0-8
 - Bound upload drain to 2 s, reply without terminal chunk
 - Lingering close (20 s) after upload reply
