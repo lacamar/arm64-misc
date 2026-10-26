@@ -1,7 +1,7 @@
 %global bumpver 0
 %global _name shadps4-qtlauncher
-%global tag 4.2026.10.18.6.6.911.4865.1.8.2425071.8.39.46.9.9
-%global commit 6f6b911f4865a1c8bf2425071ca8d39ec46d9ea9
+%global tag 4.2026.10.26.811.0319.2.76.1.8.89.22.67.45761
+%global commit 811fb0319cea2e76f1fb8f89d22d67efdf45761a
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 %global _lto_cflags %{nil}
@@ -116,6 +116,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/net.shadps4.shadps4-q
 %{_datadir}/icons/hicolor/scalable/apps/net.shadps4.shadPS4.svg
 
 %changelog
+* Mon Oct 26 2026 Lachlan Marie <lchlnm@pm.me> - 4.2026.10.26.811.0319.2.76.1.8.89.22.67.45761^0.git.811fb03-1
+- Update to 4.2026.10.26.811.0319.2.76.1.8.89.22.67.45761
+
 * Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - 4.2026.10.18.6.6.911.4865.1.8.2425071.8.39.46.9.9^0.git.6f6b911-1
  - Update to 4.2026.10.18.6.6.911.4865.1.8.2425071.8.39.46.9.9
 
