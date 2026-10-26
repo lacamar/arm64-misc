@@ -1599,7 +1599,7 @@ index 05281d0..0a1d61a 100644
  
          case 'D':
 diff --git a/render.c b/render.c
-index 72b68e1..287a054 100644
+index 72b68e1..675ac7e 100644
 --- a/render.c
 +++ b/render.c
 @@ -43,6 +43,7 @@
@@ -2330,7 +2330,7 @@ index 72b68e1..287a054 100644
      const char *icon_name = term_icon(term);
      LOG_DBG("setting toplevel icon: %s", icon_name);
  
-@@ -5357,6 +5468,721 @@ render_refresh_icon(struct terminal *term)
+@@ -5357,6 +5468,723 @@ render_refresh_icon(struct terminal *term)
      term->render.icon.last_update = now;
  }
  
@@ -2938,7 +2938,9 @@ index 72b68e1..287a054 100644
 +    const int s = max(1, (int)ceilf(t->scale));
 +    const uint32_t accent = (c->cursor_bg >> 31) ? c->cursor_bg : c->fg;
 +
-+    char32_t *label = ambstoc32(t->window_title != NULL ? t->window_title : "foot");
++    char *title = tabs_title(t, false);
++    char32_t *label = ambstoc32(title);
++    free(title);
 +    if (label == NULL)
 +        label = xc32dup(U"foot");
 +    const int pad = 8 * s;
@@ -4174,10 +4176,10 @@ index 6289937..b385f1b 100644
          del_from_env(&custom_env, "TERM_PROGRAM");            /* Wezterm, Ghostty */
 diff --git a/tabs.c b/tabs.c
 new file mode 100644
-index 0000000..a7edf21
+index 0000000..435737d
 --- /dev/null
 +++ b/tabs.c
-@@ -0,0 +1,3572 @@
+@@ -0,0 +1,3578 @@
 +#include "tabs.h"
 +
 +#include <limits.h>
@@ -7289,10 +7291,16 @@ index 0000000..a7edf21
 +char *
 +tabs_title(const struct terminal *t, bool prefixed)
 +{
-+    const char *base = t->tab_label != NULL ? t->tab_label
-+        : t->window_title != NULL ? t->window_title : "foot";
++    const char *base = t->tab_label != NULL ? t->tab_label : t->window_title;
++    char *prog = NULL;
++    if (base == NULL || base[0] == '\0') {
++        prog = program_of(t);
++        base = prog[0] != '\0' ? prog : "foot";
++    }
 +    const char *prefix = prefixed && t->window != NULL ? t->window->prefix : NULL;
-+    return prefix != NULL ? xasprintf("%s | %s", prefix, base) : xstrdup(base);
++    char *r = prefix != NULL ? xasprintf("%s | %s", prefix, base) : xstrdup(base);
++    free(prog);
++    return r;
 +}
 +
 +void
@@ -7885,7 +7893,7 @@ index 0000000..6be670e
 +void tabs_open_switcher(struct wl_window *win);
 +void tabs_open_rename(struct wl_window *win, struct terminal *t);
 diff --git a/terminal.c b/terminal.c
-index d2cd7b0..884f978 100644
+index d2cd7b0..2b3d7db 100644
 --- a/terminal.c
 +++ b/terminal.c
 @@ -1,4 +1,5 @@
@@ -8204,7 +8212,7 @@ index d2cd7b0..884f978 100644
      else if (surface == term->window->csd.surface[CSD_SURF_TITLE].surface.surf)
          return TERM_SURF_TITLE;
      else if (surface == term->window->csd.surface[CSD_SURF_LEFT].surface.surf)
-@@ -4924,6 +5046,7 @@ term_theme_switch_to_dark(struct terminal *term)
+@@ -4924,10 +5046,13 @@ term_theme_switch_to_dark(struct terminal *term)
  
      if (term->report_theme_changes)
          term_to_slave(term, "\033[?997;1n", 9);
@@ -8212,7 +8220,13 @@ index d2cd7b0..884f978 100644
  
      term_damage_view(term);
      term_damage_margins(term);
-@@ -4944,6 +5067,7 @@ term_theme_switch_to_light(struct terminal *term)
+     render_refresh(term);
++    if (term->window != NULL && term->window->term == term)
++        tabs_relayout(term->window);
+ }
+ 
+ void
+@@ -4944,10 +5069,13 @@ term_theme_switch_to_light(struct terminal *term)
  
      if (term->report_theme_changes)
          term_to_slave(term, "\033[?997;2n", 9);
@@ -8220,7 +8234,13 @@ index d2cd7b0..884f978 100644
  
      term_damage_view(term);
      term_damage_margins(term);
-@@ -4959,12 +5083,14 @@ term_theme_toggle(struct terminal *term)
+     render_refresh(term);
++    if (term->window != NULL && term->window->term == term)
++        tabs_relayout(term->window);
+ }
+ 
+ void
+@@ -4959,12 +5087,14 @@ term_theme_toggle(struct terminal *term)
  
          if (term->report_theme_changes)
              term_to_slave(term, "\033[?997;2n", 9);

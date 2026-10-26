@@ -4,7 +4,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        28%{?dist}
+Release:        29%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -157,6 +157,10 @@ desktop-file-validate \
 
 
 %changelog
+* Mon Oct 26 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-29
+- Fall back to program name for empty tab titles
+- Redraw sidebar and split background on theme switch
+
 * Mon Oct 26 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-28
 - Restore Fedora metainfo, gpgverify, xdg dir
 
