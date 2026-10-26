@@ -1,9 +1,10 @@
+%global default_terminfo foot
 %global foot_terminfo foot-extra
 %global fcft_minver 3.3.1
 
 Name:           foot
 Version:        1.28.0
-Release:        27%{?dist}
+Release:        28%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -14,6 +15,7 @@ Source0:        %{url}/releases/download/%{version}/%{name}-%{version}.tar.gz
 Source1:        %{url}/releases/download/%{version}/%{name}-%{version}.tar.gz.sig
 # Daniel Eklöf (Git signing) <daniel@ekloef.se>
 Source2:        gpgkey-5BBD4992C116573F.asc
+Source3:        org.codeberg.dnkl.foot.metainfo.xml
 
 # Session save/restore for --server (downstream)
 Patch0:         foot-session-restore.patch
@@ -22,9 +24,10 @@ Patch2:         foot-tabs.patch
 Patch3:         foot-theme-reload.patch
 
 BuildRequires:  gcc
-BuildRequires:  gnupg2
+BuildRequires:  gpgverify
 BuildRequires:  meson >= 0.59.0
 BuildRequires:  desktop-file-utils
+BuildRequires:  libappstream-glib
 BuildRequires:  python3
 BuildRequires:  systemd-rpm-macros
 
@@ -96,18 +99,21 @@ Requires:       ncurses-base
 %build
 %meson \
     -Dterminfo-base-name=%{foot_terminfo} \
-    -Ddefault-terminfo=foot
+    -Ddefault-terminfo=%{default_terminfo}
 %meson_build
 
 
 %install
 %meson_install
+install -D -pv -m0644 %{SOURCE3} \
+    %{buildroot}%{_metainfodir}/org.codeberg.dnkl.foot.metainfo.xml
 # Will be installed to correct location with rpm macros
 rm %{buildroot}%{_docdir}/%{name}/LICENSE
 
 
 %check
 %meson_test
+appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/*.metainfo.xml
 desktop-file-validate \
     %{buildroot}/%{_datadir}/applications/%{name}*.desktop
 
@@ -121,6 +127,7 @@ desktop-file-validate \
 
 %files
 %license LICENSE
+%dir %{_sysconfdir}/xdg/%{name}
 %config(noreplace) %{_sysconfdir}/xdg/%{name}/%{name}.ini
 %{_bindir}/%{name}
 %{_bindir}/%{name}client
@@ -128,6 +135,7 @@ desktop-file-validate \
 %{_datadir}/applications/%{name}*.desktop
 %{_datadir}/icons/hicolor/48x48/apps/%{name}.png
 %{_datadir}/icons/hicolor/scalable/apps/%{name}.svg
+%{_metainfodir}/org.codeberg.dnkl.foot.metainfo.xml
 %{bash_completions_dir}/foot*
 %{fish_completions_dir}/foot*
 %{zsh_completions_dir}/_foot*
@@ -149,6 +157,9 @@ desktop-file-validate \
 
 
 %changelog
+* Mon Oct 26 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-28
+- Restore Fedora metainfo, gpgverify, xdg dir
+
 * Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-27
 - Reload colours from config on SIGUSR1/SIGUSR2
 
