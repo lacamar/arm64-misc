@@ -1,0 +1,165 @@
+diff -ruN -x __pycache__ a/opendrop/config.py b/opendrop/config.py
+--- a/opendrop/config.py	2026-10-26 15:42:32.218698765 +0100
++++ b/opendrop/config.py	2026-10-26 15:43:10.495539510 +0100
+@@ -22,6 +22,7 @@
+ import random
+ import re
+ import socket
++import uuid
+ import ssl
+ import subprocess
+ 
+@@ -68,6 +69,15 @@
+     return os.path.expandvars(d) if d else os.path.expanduser("~/Downloads")
+ 
+ 
++def awdl_host_name(interface):
++    # same derivation as awdld's ARPA name: peers resolve <uuid>.local from the AWDL TLV
++    try:
++        with open(f"/sys/class/net/{interface}/address") as f:
++            return str(uuid.uuid5(uuid.NAMESPACE_DNS, "awdl." + f.read().strip()))
++    except OSError:
++        return None
++
++
+ class AirDropConfig:
+     def __init__(
+         self,
+@@ -94,10 +104,12 @@
+ 
+         if host_name is None:
+             host_name = socket.gethostname()
+-        self.host_name = host_name
+         if computer_name is None:
+             computer_name = host_name
+         self.computer_name = computer_name
++        if (interface or "awdl0").startswith("awdl"):
++            host_name = os.environ.get("AWDL_HOST") or awdl_host_name(interface or "awdl0") or host_name
++        self.host_name = host_name
+         if computer_model is None:
+             computer_model = "OpenDrop"
+         self.computer_model = computer_model
+diff -ruN -x __pycache__ a/opendrop/server.py b/opendrop/server.py
+--- a/opendrop/server.py	2026-10-26 15:42:32.220750942 +0100
++++ b/opendrop/server.py	2026-10-26 15:59:37.535053838 +0100
+@@ -27,7 +27,7 @@
+ import socket
+ import tempfile
+ import time
+-from http.server import BaseHTTPRequestHandler, HTTPServer
++from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+ 
+ import libarchive
+ import libarchive.extract
+@@ -87,10 +87,20 @@
+             port=self.config.port,
+             properties=properties,
+             server=server,
+-            addresses=[self.ip_addr.packed],
++            addresses=[self.ip_addr.packed] + self._v4_dummy(),
+         )
+         return info
+ 
++    def _v4_dummy(self):
++        # zeroconf's NSEC for a missing A record has the service name as owner, so peers asking
++        # A <host>.local would retry forever; answer with a harmless link-local address instead
++        try:
++            with open(f"/sys/class/net/{self.config.interface}/address") as f:
++                m = bytes.fromhex(f.read().strip().replace(":", ""))
++        except (OSError, ValueError):
++            return []
++        return [bytes([169, 254, m[4], m[5]])]
++
+     def start_service(self):
+         logger.info(
+             f"Announcing service: host {self.config.host_name}, address {self.ip_addr}, port {self.config.port}"
+@@ -129,8 +139,9 @@
+         return properties
+ 
+ 
+-class HTTPServerV6(HTTPServer):
++class HTTPServerV6(ThreadingHTTPServer):
+     address_family = socket.AF_INET6
++    daemon_threads = True
+ 
+ 
+ def _dvzip_block(b):
+@@ -143,14 +154,33 @@
+     return b
+ 
+ 
+-def dvzip_to_cpio(data):
+-    # x-dvzip: a cpio archive split into blocks of [u32 BE length][zlib stream]
+-    out, i = bytearray(), 0
+-    while i + 4 <= len(data):
+-        n = int.from_bytes(data[i:i + 4], "big")
+-        out += _dvzip_block(data[i + 4:i + 4 + n])
+-        i += 4 + n
+-    return bytes(out)
++class DvzipReader(io.RawIOBase):
++    # x-dvzip: a cpio archive split into blocks of [u32 BE length][zlib stream], decoded as it arrives
++    def __init__(self, src):
++        self.src, self.buf = src, b""
++
++    def readable(self):
++        return True
++
++    def _exact(self, n):
++        out = bytearray()
++        while len(out) < n:
++            b = self.src.read(n - len(out))
++            if not b:
++                break
++            out += b
++        return bytes(out)
++
++    def readinto(self, buf):
++        while not self.buf:
++            head = self._exact(4)
++            if len(head) < 4:
++                return 0
++            self.buf = _dvzip_block(self._exact(int.from_bytes(head, "big")))
++        n = min(len(buf), len(self.buf))
++        buf[:n] = self.buf[:n]
++        self.buf = self.buf[n:]
++        return n
+ 
+ 
+ def save_archive(archive, dest):
+@@ -179,6 +209,8 @@
+ 
+ 
+ class AirDropServerHandler(BaseHTTPRequestHandler):
++    timeout = 60
++
+     """
+     Server which responds to AirDrop HTTP POST requests
+     """
+@@ -334,13 +366,16 @@
+                 super().__init__(*args, **kwargs)
+                 self.rfile = rfile
+                 self.chunk = None
++                self.eof = False
+                 self.total = 0
+ 
+             def _next_chunk(self):
+-                if self.chunk is None or len(self.chunk) == 0:
+-                    length = int(self.rfile.readline().rstrip(), 16)
++                # reading past the 0-length chunk blocks until the peer gives up
++                if not self.eof and (self.chunk is None or len(self.chunk) == 0):
++                    length = int(self.rfile.readline().split(b";")[0].strip(), 16)
+                     self.chunk = self.rfile.read(length)
+                     self.rfile.readline()  # strip trailing \n\r
++                    self.eof = length == 0
+ 
+             def readinto(self, buf):
+                 self._next_chunk()
+@@ -356,7 +391,7 @@
+         dest = self.config.receive_dir
+         os.makedirs(dest, exist_ok=True)
+         if self.headers.get("content-type", "").lower() == "application/x-dvzip":
+-            with libarchive.read.memory_reader(dvzip_to_cpio(reader.read())) as archive:
++            with libarchive.read.stream_reader(DvzipReader(reader)) as archive:
+                 save_archive(archive, dest)
+         else:
+             with libarchive.read.stream_reader(reader) as archive:
