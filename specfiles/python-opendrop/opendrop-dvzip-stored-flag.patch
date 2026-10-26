@@ -1,0 +1,23 @@
+--- a/opendrop/server.py	2026-10-26 21:05:54.525699892 +0100
++++ b/opendrop/server.py	2026-10-26 21:05:54.535915902 +0100
+@@ -155,7 +155,8 @@
+ 
+ 
+ class DvzipReader(io.RawIOBase):
+-    # x-dvzip: a cpio archive split into blocks of [u32 BE length][zlib stream], decoded as it arrives
++    # x-dvzip: a cpio archive split into blocks of [u32 BE length][zlib stream], decoded as it arrives;
++    # length bit 31 marks a stored block
+     def __init__(self, src):
+         self.src, self.buf = src, b""
+ 
+@@ -176,7 +177,9 @@
+             head = self._exact(4)
+             if len(head) < 4:
+                 return 0
+-            self.buf = _dvzip_block(self._exact(int.from_bytes(head, "big")))
++            n = int.from_bytes(head, "big")
++            blk = self._exact(n & 0x7FFFFFFF)
++            self.buf = blk if n & 0x80000000 else _dvzip_block(blk)
+         n = min(len(buf), len(self.buf))
+         buf[:n] = self.buf[:n]
+         self.buf = self.buf[n:]

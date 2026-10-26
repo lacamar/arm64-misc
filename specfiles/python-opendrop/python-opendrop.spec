@@ -1,6 +1,6 @@
 Name:           python-opendrop
 Version:        0.13.0
-Release:        5%{?dist}
+Release:        6%{?dist}
 Summary:        Open Apple AirDrop implementation
 
 License:        GPL-3.0-or-later
@@ -11,6 +11,7 @@ Patch1:         opendrop-chunked-requests.patch
 Patch2:         opendrop-receive-dir.patch
 Patch3:         opendrop-dvzip-raw-blocks.patch
 Patch4:         opendrop-awdl-robust.patch
+Patch5:         opendrop-dvzip-stored-flag.patch
 Source1:        opendrop-receive.service
 
 BuildArch:      noarch
@@ -48,6 +49,9 @@ install -Dm644 %{SOURCE1} %{buildroot}%{_userunitdir}/opendrop-receive.service
 %{_userunitdir}/opendrop-receive.service
 
 %changelog
+* Mon Oct 26 2026 Lachlan Marie <lchlnm@pm.me> - 0.13.0-6
+- Handle stored x-dvzip blocks (videos, large photos)
+
 * Mon Oct 26 2026 Lachlan Marie <lchlnm@pm.me> - 0.13.0-5
 - Stream x-dvzip uploads
 - Threaded server, 60 s socket timeout
