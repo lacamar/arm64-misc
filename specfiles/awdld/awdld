@@ -125,7 +125,10 @@ def arpa_name(name):
     return bytes([len(name)]) + name.encode() + b"\xc0\x0c"
 
 def infra_channel():
-    r = subprocess.run(["iw", "dev", DEV, "info"], capture_output=True, text=True)
+    try:
+        r = subprocess.run(["iw", "dev", DEV, "info"], capture_output=True, text=True)
+    except OSError:
+        return 0
     for ln in r.stdout.splitlines():
         if ln.strip().startswith("channel"):
             return int(ln.split()[1])
