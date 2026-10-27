@@ -3,9 +3,10 @@ Description=AirDrop receiver on awdl0
 
 [Service]
 ExecStartPre=/usr/bin/sh -c 'for i in $(seq 120); do ip -6 addr show dev awdl0 2>/dev/null | grep -q "inet6 fe80" && exit 0; sleep 1; done; exit 1'
-ExecStart=/usr/bin/opendrop receive
-Restart=on-failure
-RestartSec=10
+# awdld recreates awdl0 on restart and resume: exit with the old interface, come back on the new one
+ExecStart=/usr/bin/sh -c 'i=$(cat /sys/class/net/awdl0/ifindex) || exit 1; /usr/bin/opendrop receive & p=$$!; while kill -0 $$p 2>/dev/null; do sleep 5; [ "$(cat /sys/class/net/awdl0/ifindex 2>/dev/null)" = "$$i" ] || { kill $$p; exit 1; }; done; wait $$p'
+Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=default.target

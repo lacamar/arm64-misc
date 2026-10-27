@@ -1,6 +1,6 @@
 Name:           python-opendrop
 Version:        0.13.0
-Release:        9%{?dist}
+Release:        10%{?dist}
 Summary:        Open Apple AirDrop implementation
 
 License:        GPL-3.0-or-later
@@ -52,6 +52,9 @@ install -Dm644 %{SOURCE1} %{buildroot}%{_userunitdir}/opendrop-receive.service
 %{_userunitdir}/opendrop-receive.service
 
 %changelog
+* Tue Oct 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.13.0-10
+- Restart receiver when awdl0 is recreated
+
 * Mon Oct 26 2026 Lachlan Marie <lchlnm@pm.me> - 0.13.0-9
 - Fix sending on Python 3.12+ and Pillow 10+
 - Send x-dvzip uploads with TransferID
