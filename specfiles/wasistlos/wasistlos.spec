@@ -1,7 +1,7 @@
 %global tag 1.7.0
 Name: wasistlos
 Version: %{tag}
-Release: 15%{?dist}
+Release: 16%{?dist}
 Summary: An unofficial WhatsApp desktop application for Linux.
 
 License: GNU GPL v3
@@ -9,6 +9,7 @@ URL:     https://github.com/xeco23/WasIstLos
 Source0: %{url}/archive/v%{version}/wasistlos-%{version}.tar.gz
 Patch0:  0001-paste-image-clipboard.patch
 Patch1:  0002-chat-export.patch
+Patch2:  0003-webkit-media-env.patch
 
 BuildRequires: cmake
 BuildRequires: pkgconfig
@@ -58,6 +59,10 @@ An unofficial WhatsApp desktop application for Linux.
 
 
 %changelog
+* Tue Oct 27 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-16
+- Disable V4L2 stateless video decoders in WebKit
+- Stop restoring muted stream volume onto voice notes
+
 * Thu Oct 22 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-15
 - Match export entries by message id
 - Replace edited messages instead of duplicating

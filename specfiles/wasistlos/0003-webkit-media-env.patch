@@ -1,0 +1,24 @@
+diff --git a/src/main.cpp b/src/main.cpp
+index 2f13f4e..3acddb5 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -1,5 +1,6 @@
+ #include <clocale>
+ #include <glibmm/i18n.h>
++#include <glibmm/miscutils.h>
+ #include "Config.hpp"
+ #include "ui/Application.hpp"
+ #include "util/Helper.hpp"
+@@ -14,6 +15,12 @@ namespace
+ 
+ int main(int argc, char** argv)
+ {
++    // WebKit can't negotiate buffers with V4L2 stateless decoders (Apple AVD): garbled frames, web process crashes
++    auto const rank = Glib::getenv("GST_PLUGIN_FEATURE_RANK");
++    Glib::setenv("GST_PLUGIN_FEATURE_RANK", rank + (rank.empty() ? "" : ",") + "v4l2slh264dec:NONE,v4l2slh265dec:NONE,v4l2slvp9dec:NONE");
++    // WirePlumber would restore a muted video preview's volume onto later voice notes
++    Glib::setenv("PULSE_PROP", "state.restore-props=false");
++
+     setlocale(LC_ALL, "");
+ 
+     bindtextdomain(GETTEXT_PACKAGE, WIL_LOCALEDIR);
