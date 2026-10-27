@@ -1,6 +1,6 @@
 Name:           python-opendrop
 Version:        0.13.0
-Release:        10%{?dist}
+Release:        11%{?dist}
 Summary:        Open Apple AirDrop implementation
 
 License:        GPL-3.0-or-later
@@ -47,11 +47,23 @@ Requires:       python3-dbus-next
 %pyproject_save_files -L opendrop
 install -Dm644 %{SOURCE1} %{buildroot}%{_userunitdir}/opendrop-receive.service
 
+%post -n python3-opendrop
+%systemd_user_post opendrop-receive.service
+
+%preun -n python3-opendrop
+%systemd_user_preun opendrop-receive.service
+
+%postun -n python3-opendrop
+%systemd_user_postun_with_restart opendrop-receive.service
+
 %files -n python3-opendrop -f %{pyproject_files}
 %{_bindir}/opendrop
 %{_userunitdir}/opendrop-receive.service
 
 %changelog
+* Tue Oct 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.13.0-11
+- systemd user unit scriptlets
+
 * Tue Oct 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.13.0-10
 - Restart receiver when awdl0 is recreated
 
