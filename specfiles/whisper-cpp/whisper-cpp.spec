@@ -1,7 +1,7 @@
 %global tag 1.9.5
 Name:    whisper-cpp
 Version: %{tag}
-Release: 3%{?dist}
+Release: 4%{?dist}
 Summary: Port of OpenAI's Whisper model in C/C++
 
 License: MIT
@@ -92,6 +92,11 @@ install -Dm755 %{SOURCE1} %{buildroot}%{_bindir}/whisper-dictate
 
 
 %changelog
+* Tue Oct 27 2026 Lachlan Marie <lchlnm@pm.me> - 1.9.5-4
+- whisper-stream: flush on 0.5 s pause or full buffer
+- whisper-stream: --silence-thold, skip silent chunks
+- whisper-dictate: 8 s chunks, smaller audio context, filter filler
+
 * Tue Oct 27 2026 Lachlan Marie <lchlnm@pm.me> - 1.9.5-3
 - Build SDL2 examples (whisper-stream)
 - whisper-stream: clear audio after each VAD phrase

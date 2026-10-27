@@ -4,6 +4,7 @@ set -eu
 model=${WHISPER_DICTATE_MODEL:-large-v3-turbo}
 lang=${WHISPER_DICTATE_LANG:-auto}
 vth=${WHISPER_DICTATE_VAD:-0.6}
+sil=${WHISPER_DICTATE_SILENCE:-0.003}
 data=${XDG_DATA_HOME:-$HOME/.local/share}/whisper
 run=${XDG_RUNTIME_DIR:?}/whisper-dictate
 bin=$data/ggml-$model.bin
@@ -24,12 +25,12 @@ if [ ! -f "$bin" ]; then
 	mv "$bin.part" "$bin"
 fi
 
-export bin lang vth
+export bin lang vth sil
 setsid sh -c '
-	whisper-stream -m "$bin" -l "$lang" --step 0 --length 30000 -vth "$vth" 2>/dev/null |
-	sed -un "s/^\[[^]]*-->[^]]*\] *//p" |
+	whisper-stream -m "$bin" -l "$lang" --step 0 --length 8000 -ac 512 -vth "$vth" --silence-thold "$sil" 2>/dev/null |
+	sed -un "s/^\[[^]]*-->[^]]*\] *//; T; s/^- *//; p" |
 	while IFS= read -r text; do
-		case $text in "" | "["* | "("* | "*"*) continue ;; esac
+		case $text in "" | "["* | "("* | "*"* | "Thank you." | "Thanks for watching!" | "Takk for meg." ) continue ;; esac
 		wtype -- "$text "
 	done
 ' &

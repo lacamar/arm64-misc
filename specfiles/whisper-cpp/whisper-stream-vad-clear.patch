@@ -1,10 +1,49 @@
 --- a/examples/stream/stream.cpp	2026-10-27 16:04:55.335333385 +0100
-+++ b/examples/stream/stream.cpp	2026-10-27 16:04:55.355021798 +0100
-@@ -303,6 +303,7 @@
++++ b/examples/stream/stream.cpp	2026-10-27 16:29:16.290586769 +0100
+@@ -20,6 +20,7 @@
+     int32_t step_ms    = 3000;
+     int32_t length_ms  = 10000;
+     int32_t keep_ms    = 200;
++    float   silence_thold = 0.003f;
+     int32_t capture_id = -1;
+     int32_t max_tokens = 32;
+     int32_t audio_ctx  = 0;
+@@ -57,6 +58,7 @@
+         else if (                  arg == "--step")          { params.step_ms       = std::stoi(argv[++i]); }
+         else if (                  arg == "--length")        { params.length_ms     = std::stoi(argv[++i]); }
+         else if (                  arg == "--keep")          { params.keep_ms       = std::stoi(argv[++i]); }
++        else if (                  arg == "--silence-thold") { params.silence_thold = std::stof(argv[++i]); }
+         else if (arg == "-c"    || arg == "--capture")       { params.capture_id    = std::stoi(argv[++i]); }
+         else if (arg == "-mt"   || arg == "--max-tokens")    { params.max_tokens    = std::stoi(argv[++i]); }
+         else if (arg == "-ac"   || arg == "--audio-ctx")     { params.audio_ctx     = std::stoi(argv[++i]); }
+@@ -293,7 +295,7 @@
+             const auto t_now  = std::chrono::high_resolution_clock::now();
+             const auto t_diff = std::chrono::duration_cast<std::chrono::milliseconds>(t_now - t_last).count();
  
-             if (::vad_simple(pcmf32_new, WHISPER_SAMPLE_RATE, 1000, params.vad_thold, params.freq_thold, false)) {
+-            if (t_diff < 2000) {
++            if (t_diff < 500) {
+                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
+ 
+                 continue;
+@@ -301,8 +303,20 @@
+ 
+             audio.get(2000, pcmf32_new);
+ 
+-            if (::vad_simple(pcmf32_new, WHISPER_SAMPLE_RATE, 1000, params.vad_thold, params.freq_thold, false)) {
++            // flush on a 0.5 s pause, or when length_ms has buffered; drop long silence untranscribed
++            if (::vad_simple(pcmf32_new, WHISPER_SAMPLE_RATE, 500, params.vad_thold, params.freq_thold, false) ||
++                t_diff >= params.length_ms) {
                  audio.get(params.length_ms, pcmf32);
 +                audio.clear();
++
++                float energy = 0.0f;
++                for (float v : pcmf32) {
++                    energy += fabsf(v);
++                }
++                if (pcmf32.empty() || energy/pcmf32.size() < params.silence_thold) {
++                    t_last = t_now;
++                    continue;
++                }
              } else {
                  std::this_thread::sleep_for(std::chrono::milliseconds(100));
  
