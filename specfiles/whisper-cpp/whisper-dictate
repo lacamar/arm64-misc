@@ -1,8 +1,9 @@
 #!/bin/sh
-# Push-to-talk dictation: first call starts recording, second call transcribes and types it.
+# Continuous dictation: types each phrase into the focused window when you pause. Run again to stop.
 set -eu
 model=${WHISPER_DICTATE_MODEL:-large-v3-turbo}
 lang=${WHISPER_DICTATE_LANG:-auto}
+vth=${WHISPER_DICTATE_VAD:-0.6}
 data=${XDG_DATA_HOME:-$HOME/.local/share}/whisper
 run=${XDG_RUNTIME_DIR:?}/whisper-dictate
 bin=$data/ggml-$model.bin
@@ -10,15 +11,10 @@ mkdir -p "$data" "$run"
 
 note() { command -v notify-send >/dev/null && notify-send -a whisper-dictate -t 1500 "$1" || true; }
 
-if [ -f "$run/pid" ]; then
-	pid=$(cat "$run/pid")
-	rm -f "$run/pid"
-	kill -INT "$pid" 2>/dev/null || true
-	while kill -0 "$pid" 2>/dev/null; do sleep 0.05; done
-	text=$(whisper-cli -m "$bin" -f "$run/rec.wav" -l "$lang" -nt -np 2>/dev/null |
-		tr -s ' \n' ' ' | sed 's/^ //; s/ $//')
-	rm -f "$run/rec.wav"
-	[ -n "$text" ] && wtype -- "$text"
+if [ -f "$run/pgid" ]; then
+	kill -TERM -- "-$(cat "$run/pgid")" 2>/dev/null || true
+	rm -f "$run/pgid"
+	note "Dictation off"
 	exit 0
 fi
 
@@ -28,6 +24,14 @@ if [ ! -f "$bin" ]; then
 	mv "$bin.part" "$bin"
 fi
 
-pw-record --rate 16000 --channels 1 --format s16 "$run/rec.wav" &
-echo $! >"$run/pid"
-note "Listening"
+export bin lang vth
+setsid sh -c '
+	whisper-stream -m "$bin" -l "$lang" --step 0 --length 30000 -vth "$vth" 2>/dev/null |
+	sed -un "s/^\[[^]]*-->[^]]*\] *//p" |
+	while IFS= read -r text; do
+		case $text in "" | "["* | "("* | "*"*) continue ;; esac
+		wtype -- "$text "
+	done
+' &
+echo $! >"$run/pgid"
+note "Dictation on"

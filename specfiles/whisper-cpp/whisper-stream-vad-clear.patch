@@ -1,0 +1,10 @@
+--- a/examples/stream/stream.cpp	2026-10-27 16:04:55.335333385 +0100
++++ b/examples/stream/stream.cpp	2026-10-27 16:04:55.355021798 +0100
+@@ -303,6 +303,7 @@
+ 
+             if (::vad_simple(pcmf32_new, WHISPER_SAMPLE_RATE, 1000, params.vad_thold, params.freq_thold, false)) {
+                 audio.get(params.length_ms, pcmf32);
++                audio.clear();
+             } else {
+                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
+ 
