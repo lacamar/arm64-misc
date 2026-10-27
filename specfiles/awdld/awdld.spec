@@ -1,6 +1,6 @@
 Name:           awdld
 Version:        0.2.0
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        AWDL peer manager for brcmfmac firmware AWDL
 
 License:        MIT
@@ -9,6 +9,7 @@ Source1:        awdld.service
 Source2:        90-awdl-unmanaged.conf
 Source3:        90-awdld.conf
 Source4:        awdld.sleep
+Source5:        90-awdld.preset
 
 BuildArch:      noarch
 BuildRequires:  python3
@@ -31,6 +32,7 @@ Start with: systemctl start awdld.service
 %install
 install -Dm755 %{SOURCE0} %{buildroot}%{_bindir}/awdld
 install -Dm644 %{SOURCE1} %{buildroot}%{_unitdir}/awdld.service
+install -Dm644 %{SOURCE5} %{buildroot}%{_presetdir}/90-awdld.preset
 install -Dm644 %{SOURCE2} %{buildroot}%{_prefix}/lib/NetworkManager/conf.d/90-awdl-unmanaged.conf
 install -Dm644 %{SOURCE3} %{buildroot}%{_sysctldir}/90-awdld.conf
 install -Dm755 %{SOURCE4} %{buildroot}%{_prefix}/lib/systemd/system-sleep/awdld
@@ -52,11 +54,15 @@ nmcli general reload conf >/dev/null 2>&1 || :
 %files
 %{_bindir}/awdld
 %{_unitdir}/awdld.service
+%{_presetdir}/90-awdld.preset
 %{_prefix}/lib/NetworkManager/conf.d/90-awdl-unmanaged.conf
 %{_sysctldir}/90-awdld.conf
 %{_prefix}/lib/systemd/system-sleep/awdld
 
 %changelog
+* Tue Oct 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.2.0-3
+- Enable by default (preset)
+
 * Tue Oct 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.2.0-2
 - BuildRequires iw for selftest
 
