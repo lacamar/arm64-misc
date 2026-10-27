@@ -4179,7 +4179,7 @@ new file mode 100644
 index 0000000..435737d
 --- /dev/null
 +++ b/tabs.c
-@@ -0,0 +1,3578 @@
+@@ -0,0 +1,3579 @@
 +#include "tabs.h"
 +
 +#include <limits.h>
@@ -5735,7 +5735,8 @@ index 0000000..435737d
 +    if (win == NULL || win->closing)
 +        return false;
 +
-+    char *cwd = live_cwd(from);
++    const char *home = getenv("HOME");
++    char *cwd = split ? live_cwd(from) : xstrdup(home != NULL ? home : "/");
 +    bool ok = server_new_tab(wayl->server, win, split, cwd, 0, NULL);
 +    free(cwd);
 +    return ok;
