@@ -1,22 +1,38 @@
 %global tag 1.9.5
 Name:    whisper-cpp
 Version: %{tag}
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: Port of OpenAI's Whisper model in C/C++
 
 License: MIT
 URL:     https://github.com/ggml-org/whisper.cpp
 Source0: %{url}/archive/refs/tags/v%{version}.tar.gz#/whisper.cpp-%{version}.tar.gz
+Source1: whisper-dictate
 
 BuildRequires: cmake
 BuildRequires: gcc-c++
 BuildRequires: git
 BuildRequires: llama-cpp-devel
 
+Requires: llama-cpp%{?_isa}
+
 
 %description
 High-performance inference of OpenAI's Whisper speech recognition model,
 built against the llama-cpp ggml so it shares its Vulkan GPU backend.
+
+
+%package dictate
+Summary:   Push-to-talk dictation with whisper.cpp
+BuildArch: noarch
+Requires:  %{name}
+Requires:  pipewire-utils
+Requires:  wtype
+Requires:  curl
+
+%description dictate
+Toggle script: records from the default microphone, transcribes with
+whisper-cli and types the text into the focused Wayland window.
 
 
 %package devel
@@ -35,7 +51,7 @@ Headers and CMake files for %{name}.
 %build
 %cmake \
     -DWHISPER_USE_SYSTEM_GGML=ON \
-    -DWHISPER_BUILD_EXAMPLES=OFF \
+    -DWHISPER_BUILD_EXAMPLES=ON \
     -DWHISPER_BUILD_SERVER=OFF \
     -DWHISPER_BUILD_TESTS=OFF \
     -DGGML_NATIVE=OFF
@@ -45,12 +61,19 @@ Headers and CMake files for %{name}.
 %install
 %cmake_install
 find %{buildroot} -name '*.pc' -delete
+install -Dm755 %{SOURCE1} %{buildroot}%{_bindir}/whisper-dictate
 
 
 %files
 %license LICENSE
 %{_libdir}/libwhisper.so.*
 %{_libdir}/libparakeet.so.*
+%{_bindir}/whisper-{cli,bench,quantize,server,vad-speech-segments}
+%{_bindir}/parakeet-*
+
+
+%files dictate
+%{_bindir}/whisper-dictate
 
 
 %files devel
@@ -64,5 +87,9 @@ find %{buildroot} -name '*.pc' -delete
 
 
 %changelog
+* Tue Oct 27 2026 Lachlan Marie <lchlnm@pm.me> - 1.9.5-2
+- Ship whisper-cli
+- Add whisper-dictate push-to-talk subpackage
+
 * Sat Oct 18 2026 Lachlan Marie <lchlnm@pm.me> - 1.9.5-1
  - Initial packaging against llama-cpp ggml (Vulkan)

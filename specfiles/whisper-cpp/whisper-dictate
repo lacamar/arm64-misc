@@ -1,0 +1,33 @@
+#!/bin/sh
+# Push-to-talk dictation: first call starts recording, second call transcribes and types it.
+set -eu
+model=${WHISPER_DICTATE_MODEL:-large-v3-turbo}
+lang=${WHISPER_DICTATE_LANG:-auto}
+data=${XDG_DATA_HOME:-$HOME/.local/share}/whisper
+run=${XDG_RUNTIME_DIR:?}/whisper-dictate
+bin=$data/ggml-$model.bin
+mkdir -p "$data" "$run"
+
+note() { command -v notify-send >/dev/null && notify-send -a whisper-dictate -t 1500 "$1" || true; }
+
+if [ -f "$run/pid" ]; then
+	pid=$(cat "$run/pid")
+	rm -f "$run/pid"
+	kill -INT "$pid" 2>/dev/null || true
+	while kill -0 "$pid" 2>/dev/null; do sleep 0.05; done
+	text=$(whisper-cli -m "$bin" -f "$run/rec.wav" -l "$lang" -nt -np 2>/dev/null |
+		tr -s ' \n' ' ' | sed 's/^ //; s/ $//')
+	rm -f "$run/rec.wav"
+	[ -n "$text" ] && wtype -- "$text"
+	exit 0
+fi
+
+if [ ! -f "$bin" ]; then
+	note "Downloading Whisper model $model"
+	curl -fL -o "$bin.part" "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$model.bin"
+	mv "$bin.part" "$bin"
+fi
+
+pw-record --rate 16000 --channels 1 --format s16 "$run/rec.wav" &
+echo $! >"$run/pid"
+note "Listening"
