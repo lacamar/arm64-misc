@@ -1,10 +1,16 @@
 [Unit]
 Description=Firmware AWDL (awdl0) peer manager
 After=NetworkManager.service
+ConditionPathExists=/sys/module/brcmfmac/parameters/awdl
+Conflicts=sleep.target
+Before=sleep.target
 
 [Service]
 ExecStart=/usr/bin/awdld
 ExecStopPost=-/usr/bin/sh -c 'echo 0 > /sys/module/brcmfmac/parameters/awdl'
+StateDirectory=awdld
+Restart=on-failure
+RestartSec=10
 TimeoutStopSec=30
 
 [Install]

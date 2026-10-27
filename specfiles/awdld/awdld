@@ -1,14 +1,48 @@
 #!/usr/bin/python3 -I
-import os, select, signal, socket, struct, subprocess, sys, time
+import ipaddress, os, re, select, signal, socket, struct, subprocess, sys, time, uuid
 
 DEV = "wld0"
 IFACE = "awdl0"
 BSS = 2
 PARAM = "/sys/module/brcmfmac/parameters/awdl"
+PARAM_ADDR = PARAM + "_addr"
+STATE = os.environ.get("STATE_DIRECTORY", "/var/lib/awdld")
 EVT_PROTO = 0x88B5
 PEER_TTL = 60
 AF_MAGIC = b"\x7f\x00\x17\xf2\x08"
 TLV_ARPA, TLV_VERSION = 16, 21
+ELECT = os.environ.get("AWDLD_ELECT", "2")
+MT_FIELD = os.environ.get("AWDLD_MT", "fw")
+SN_ADJ = int(os.environ.get("AWDLD_SNADJ", "0"))
+MT_ADD = int(os.environ.get("AWDLD_MTADD", "0"))
+# fw clock zero lags awdl_fw_t0 (ARM release) by ~111 ms, measured with a sniffer
+FW_LAG = int(os.environ.get("AWDLD_FWLAG", "111400"))
+try:
+    FW_T0 = int(open("/sys/module/brcmfmac/parameters/awdl_fw_t0").read())
+except (OSError, ValueError):
+    FW_T0 = 0
+REFRESH = float(os.environ.get("AWDLD_REFRESH", "1.0"))
+PARENT_TTL = 4.0
+ISOLATE = os.environ.get("AWDLD_ISOLATE", "1") != "0"
+DEBOUNCE = os.environ.get("AWDLD_DEBOUNCE", "0") != "0"
+READD = os.environ.get("AWDLD_READD", "1") != "0"
+THR = os.environ.get("AWDLD_THR", "0") != "0"
+MIN_PARENT_METRIC = int(os.environ.get("AWDLD_MIN_METRIC", "256"))
+SO_TIMESTAMPNS = getattr(socket, "SO_TIMESTAMPNS", 35)
+ONLY = {bytes.fromhex(m.replace(":", "")) for m in os.environ.get("AWDLD_ONLY", "").split(",") if m}
+MAX_HC = 4
+
+def state(name, value=None):
+    p = os.path.join(STATE, name)
+    if value is None:
+        try:
+            with open(p) as f:
+                return f.read().strip()
+        except OSError:
+            return None
+    os.makedirs(STATE, exist_ok=True)
+    with open(p, "w") as f:
+        f.write(value)
 
 def log(*a):
     print(*a, flush=True)
@@ -18,21 +52,390 @@ def dcmd(cmd, payload, setf):
     args = [f"0x{b:02x}" for b in hdr + payload]
     r = subprocess.run(["iw", "dev", DEV, "vendor", "recv", "0x001018", "0x1", *args],
                        capture_output=True, text=True)
+    if r.returncode and VERBOSE:
+        log("dcmd err", r.stderr.strip()[:100])
     return r.returncode == 0
 
 def set_bss(name, data):
     return dcmd(263, b"bsscfg:" + name.encode() + b"\0" + struct.pack("<I", BSS) + data, 1)
 
-def peer_op(op, mac):
-    return set_bss("awdl_peer_op", bytes([0, op]) + mac + b"\0")
+def get_plain(name):
+    hdr = struct.pack("<IiIII", 262, 1024, 20, 0, 0)
+    r = subprocess.run(["iw", "dev", DEV, "vendor", "recv", "0x001018", "0x1", *[f"0x{b:02x}" for b in hdr + name.encode() + b"\0"]],
+                       capture_output=True, text=True)
+    toks = []
+    for ln in r.stdout.splitlines():
+        toks += [t for t in (ln.split(":", 1)[1] if ":" in ln else ln).split() if len(t) == 2 and all(c in "0123456789abcdef" for c in t)]
+    return bytes.fromhex("".join(toks))[4:12] if r.returncode == 0 and toks else None
+
+def get_bss(name):
+    p = b"bsscfg:" + name.encode() + b"\0" + struct.pack("<I", BSS)
+    hdr = struct.pack("<IiIII", 262, 1024, 20, 0, 0)
+    r = subprocess.run(["iw", "dev", DEV, "vendor", "recv", "0x001018", "0x1", *[f"0x{b:02x}" for b in hdr + p]],
+                       capture_output=True, text=True)
+    if r.returncode:
+        return None
+    toks = []
+    for ln in r.stdout.splitlines():
+        toks += [t for t in (ln.split(":", 1)[1] if ":" in ln else ln).split() if len(t) == 2 and all(c in "0123456789abcdef" for c in t)]
+    return bytes.fromhex("".join(toks))[4:] or None
+
+def chanspec_swapped(chan, opclass):
+    # BCM chanspec of an opclass/channel pair, stored big-endian in the peer cache IE
+    if opclass == 0x51:
+        return bytes.fromhex("1006")[:1] + bytes([chan]) if chan <= 14 else None
+    if opclass == 0x80:
+        sb = {36: 0, 40: 1, 44: 2, 48: 3, 52: 0, 56: 1, 60: 2, 64: 3}.get(chan)
+        center = {36: 42, 40: 42, 44: 42, 48: 42, 52: 58, 56: 58, 60: 58, 64: 58}.get(chan)
+        if sb is None:
+            return None
+        return struct.pack(">H", 0xe000 | (sb << 8) | center)
+    return None
+
+def peer_add_blob(mac, tlv18):
+    # layout from RE (setPEER_CACHE_CONTROL): ver 0, op, mac, flags, 28-byte HT IE slot (zero), optional chan-seq vendor IE
+    blob = bytes([0, 0]) + mac + b"\0" + bytes(28)
+    if tlv18 and len(tlv18) >= 6 + 2 * (tlv18[0] + 1) and tlv18[1] == 3:
+        count = tlv18[0] + 1
+        lst = b""
+        for i in range(count):
+            ch, oc = tlv18[6 + 2 * i], tlv18[7 + 2 * i]
+            lst += chanspec_swapped(ch, oc) or b"\0\0"
+        body = bytes([0x00, 0x17, 0xf2, 0x08, 0x12, tlv18[0], tlv18[1] - 1, tlv18[2], tlv18[3], 0xff, 0xff]) + lst
+        blob += bytes([0xdd, len(body)]) + body
+    return blob
+
+def peer_op(op, mac, tlv18=None):
+    if op == 1:
+        return set_bss("awdl_peer_op", bytes([0, 1]) + mac + b"\0")
+    blob = peer_add_blob(mac, tlv18)
+    return set_bss("awdl_peer_op", blob) or set_bss("awdl_peer_op", blob.ljust(0x62, b"\0"))
 
 def tlv(t, v):
     return struct.pack("<BH", t, len(v)) + v
 
-def payload_tlvs(name):
-    # ponytail: version + arpa only; service params/data path state not provided
-    tl = tlv(TLV_VERSION, bytes([0x10, 0x01])) + tlv(TLV_ARPA, bytes([3]) + name.encode())
+# Templates copied from TLVs an iPhone sent in its AWDL MIFs (01:11 capture); semantics of most
+# bytes are unknown, only the awdl address, infra channel, name and device class are substituted.
+T_SERVICE = bytes.fromhex("0000003703004008002040")  # macOS AirDrop receiver (2015 MacBook), most common variant
+T_DATAPATH = bytes.fromhex("239f4e4f00030000000000000028" "00" "000000000000" "0400000000007d190000df02000081d90400c04b000067060000")
+T_HT = bytes.fromhex("00006f881bffff00000000000000009600010000")
+T_VHT = bytes.fromhex("bf0c76f0b113faff0000faff0020")
+
+def arpa_name(name):
+    return bytes([len(name)]) + name.encode() + b"\xc0\x0c"
+
+def infra_channel():
+    r = subprocess.run(["iw", "dev", DEV, "info"], capture_output=True, text=True)
+    for ln in r.stdout.splitlines():
+        if ln.strip().startswith("channel"):
+            return int(ln.split()[1])
+    return 0
+
+def airdrop_record(sid, flags):
+    # TLV 2 record a macOS AirDrop receiver sends: <sid>._airdrop._tcp (suffix by pointer) TXT flags=<n>
+    name = bytes([len(sid)]) + sid.encode() + b"\xc0\x07"
+    txt = bytes([6 + len(str(flags))]) + b"flags=" + str(flags).encode()
+    return struct.pack("<H", len(name) + 1) + name + b"\x10" + struct.pack("<I", len(txt)) + txt
+
+def dns_name(m, p):
+    labels, jumped, end = [], False, p
+    for _ in range(40):
+        n = m[p]
+        if n == 0:
+            return ".".join(labels), (end if jumped else p + 1)
+        if n & 0xc0 == 0xc0:
+            if not jumped:
+                end = p + 2
+            jumped = True
+            p = ((n & 0x3f) << 8) | m[p + 1]
+            continue
+        labels.append(m[p + 1:p + 1 + n].decode(errors="replace"))
+        p += 1 + n
+    raise ValueError("dns name loop")
+
+def airdrop_from_mdns(m):
+    # returns (service id, flags) from a DNS message carrying the <id>._airdrop._tcp.local instance with TXT flags=
+    try:
+        qd, an, ns, ar = struct.unpack_from(">4H", m, 4)
+        p = 12
+        for _ in range(qd):
+            _, p = dns_name(m, p)
+            p += 4
+        sid = flags = None
+        for _ in range(an + ns + ar):
+            owner, p = dns_name(m, p)
+            typ, _, _, rdl = struct.unpack_from(">HHIH", m, p)
+            rd = p + 10
+            p = rd + rdl
+            lab = owner.split(".")
+            if len(lab) >= 3 and lab[1] == "_airdrop" and re.fullmatch(r"[0-9a-f]{12}", lab[0]):
+                sid = lab[0]
+                if typ == 16:
+                    q = rd
+                    while q < rd + rdl:
+                        t = m[q + 1:q + 1 + m[q]]
+                        if t.startswith(b"flags="):
+                            flags = int(t[6:])
+                        q += 1 + m[q]
+        return (sid, flags) if sid and flags is not None else None
+    except (IndexError, ValueError, struct.error):
+        return None
+
+def service_response():
+    # copied from the iPhone's TLV 2: DNS-style record for 17pm._applicationservicepairing._tcp with TXT at/sid/sn
+    name = bytes([4]) + b"17pm" + bytes([26]) + b"_applicationservicepairing" + b"\xc0\x0a"
+    txt = b"".join(bytes([len(x)]) + x for x in (b"at=" + os.urandom(6).hex().encode(),
+                                                b"sid=" + str(uuid.uuid4()).upper().encode(),
+                                                b"sn=com.apple.sharingd.AirDrop"))
+    return struct.pack("<H", len(name) + 1) + name + b"\x10" + bytes.fromhex("57000000") + txt
+
+def payload_tlvs(name, mac, airdrop=None):
+    dp = bytearray(T_DATAPATH)
+    struct.pack_into("<H", dp, 12, infra_channel())
+    dp[14:20] = mac
+    tl = ((tlv(2, airdrop_record(*airdrop)) if airdrop else b"") + tlv(6, T_SERVICE) + tlv(12, bytes(dp)) + tlv(7, T_HT) + tlv(17, T_VHT) +
+          tlv(TLV_VERSION, bytes([0xa0, 0x01])) + tlv(TLV_ARPA, bytes([3]) + arpa_name(name)))
     return struct.pack("<H", len(tl)) + tl
+
+
+def u16(b, o):
+    return struct.unpack_from("<H", b, o)[0]
+
+def u32(b, o):
+    return struct.unpack_from("<I", b, o)[0]
+
+def parse_rx(data):
+    i = data.find(AF_MAGIC)
+    if i < 24 or len(data) < i + 16:
+        return None
+    return dict(rssi=struct.unpack_from(">i", data, 8)[0], mt=struct.unpack_from(">I", data, 12)[0],
+                phy=u32(data, i + 8), tgt=u32(data, i + 12), cs=struct.unpack_from(">H", data, 4)[0])
+
+def good_anchor(rx, t4, chan):
+    # master-channel frames only: ch40 frames carry a foreign mactime base (other core)
+    d = rx["phy"] - rx["tgt"]
+    return t4[3] == chan and (rx["cs"] & 0xff) == chan and 0 <= d < 5000
+
+def seq_steady(q, seq, mt):
+    # a peer that just (re)synced jumps its AW seq; the fw table is write-once, so anchor only
+    # once seq has advanced in step with the rx clock for >= 0.5 s
+    c = q.get("cand")
+    dt = (mt - c[1]) % 2**32 if c else 0
+    if c and dt < 10_000_000 and abs(((seq - c[0]) % 65536) - dt / 16384) <= 2:
+        return dt >= 500_000
+    q["cand"] = (seq, mt)
+    return False
+
+def peer_election(tlvs):
+    # root, hop count, root metric, self metric from the election TLVs (24 = v2 tree, 5 = v1)
+    t24, t5 = tlvs.get(24), tlvs.get(5)
+    if t24 and len(t24) >= 28:
+        return dict(root=t24[0:6], hc=u32(t24, 16), rmet=u32(t24, 20), smet=u32(t24, 24))
+    if t5 and len(t5) >= 19:
+        return dict(root=t5[5:11], hc=t5[3], rmet=u32(t5, 11), smet=u32(t5, 15))
+    return None
+
+def advert_entry(mac, t4, el, rx):
+    # awdl_peer_advert_add (0x2c), field order from IO80211AWDLPeerManager::programChipWithNewMaster
+    e = bytearray(0x2c)
+    delay = (rx["phy"] - rx["tgt"]) & 0xffff if rx["tgt"] and rx["phy"] >= rx["tgt"] else 0
+    struct.pack_into("<7H", e, 0, (u16(t4, 29) - SN_ADJ) & 0xffff, u16(t4, 1), delay, u16(t4, 7), u16(t4, 13), u16(t4, 11), u16(t4, 5))
+    e[14] = max(-128, min(127, rx["rssi"])) & 0xff
+    e[16] = t4[27]
+    e[18] = el["hc"] & 0xff
+    # fw counts AWs on its own clock: us since fw start (module param awdl_fw_t0, CLOCK_REALTIME ns)
+    fw = (rx["host"] - FW_T0) // 1000 - FW_LAG if FW_T0 and rx.get("host") else rx["mt"]
+    struct.pack_into("<III", e, 0x14, ({"fw": fw, "mactime": rx["mt"], "phy": rx["phy"], "zero": 0, "rot16": ((rx["mt"] & 0xffff) << 16) | (rx["mt"] >> 16),
+                                        "bswap": int.from_bytes(rx["mt"].to_bytes(4, "little"), "big")}[MT_FIELD] + MT_ADD) & 0xffffffff, el["smet"], el["rmet"])
+    e[0x20:0x26] = el["root"]
+    e[0x26:0x2c] = mac
+    return bytes(e)
+
+def program_opmode(master):
+    cur = get_bss("awdl_opmode")
+    if not cur or len(cur) < 0x1c:
+        return False
+    b = bytearray(cur[:0x1c])
+    b[0], b[1] = 1, 2
+    b[4:10] = master
+    return set_bss("awdl_opmode", bytes(b))
+
+def program_tree(root, rmet, depth):
+    cur = get_bss("awdl_election_tree")
+    if not cur or len(cur) < 0x2a:
+        return False
+    b = bytearray(cur[:0x2a])
+    if THR:
+        b[7:15] = bytes.fromhex("d305c9ceba010304")
+    b[15:21] = root
+    struct.pack_into("<I", b, 21, rmet)
+    b[25] = depth
+    return set_bss("awdl_election_tree", bytes(b))
+
+class Elect:
+    # host-side AWDL election like IO80211AWDLPeerManager: firmware only follows a master the host programs
+    def __init__(s, me):
+        s.me, s.peers, s.parent, s.last = me, {}, None, 0.0
+        s.metric = 0
+        sp = get_bss("awdl_sync_params")
+        s.chan = sp[6] if sp and len(sp) > 6 and sp[6] else 6
+        cur = get_bss("awdl_election_tree")
+        if cur and len(cur) >= 7:
+            s.metric = u32(cur, 3)
+        log("elect: self metric", s.metric)
+        if ELECT == "1":
+            s.to_self()
+
+    def to_self(s):
+        ok = program_opmode(s.me) and program_tree(s.me, s.metric, 0)
+        log("elect: self master", "ok" if ok else "failed")
+        s.parent = None
+
+    def ctl(s):
+        # AWDLD_CTL: "<token> <cmd>" experiments on the fw advertisers table: fake | add | selfthen
+        f = os.environ.get("AWDLD_CTL")
+        if not f:
+            return
+        try:
+            with open(f) as fh:
+                c = fh.read().strip()
+        except OSError:
+            return
+        if not c or c == getattr(s, "ctl_done", None) or not s.parent:
+            return
+        s.ctl_done = c
+        cmd = c.split()[-1]
+        mac = s.parent
+        log("elect: ctl", c)
+        if cmd == "fake":
+            log("elect: ctl fake advert", set_bss("awdl_advertisers", s.advert(mac, 1000)))
+        elif cmd == "add":
+            log("elect: ctl add", set_bss("awdl_advertisers", s.advert(mac)))
+        elif cmd in ("del1", "del2"):
+            log("elect: ctl", cmd, set_bss("awdl_advertisers", s.advert(mac, 0, int(cmd[-1]))))
+        elif cmd == "recycle":
+            log("elect: ctl awdl off", set_bss("awdl", struct.pack("<I", 0)))
+            time.sleep(2)
+            log("elect: ctl awdl on", set_bss("awdl", struct.pack("<I", 1)))
+            s.parent = None
+        elif cmd.startswith("pm"):
+            log("elect: ctl", cmd, set_bss("awdl_presencemode", struct.pack("<I", int(cmd[2:]))))
+        elif cmd == "selfthen":
+            log("elect: ctl self", program_opmode(s.me), program_tree(s.me, s.metric, 0))
+            s.program(mac, time.monotonic())
+
+    def set_mode(s, m):
+        global ELECT
+        log("elect: mode", ELECT, "->", m)
+        ELECT = m
+        if m == "1":
+            s.to_self()
+        elif m == "0":
+            s.parent = None
+
+    def feed(s, mac, tlvs, rx, now):
+        if ELECT == "0":
+            return
+        t4, el = tlvs.get(4), peer_election(tlvs)
+        if rx and t4 and len(t4) >= 33 and el and u16(t4, 11) == 16:
+            q = s.peers.setdefault(mac, dict(adv=0.0))
+            q.update(t=now, t4=t4, el=el, rx=rx)
+            if good_anchor(rx, t4, s.chan) and seq_steady(q, u16(t4, 29), rx["mt"]):
+                q["anchor"] = (t4, el, rx)
+            if ELECT == "3":
+                if "anchor" in q and not q.get("done"):
+                    q["done"] = True
+                    ok = set_bss("awdl_advertisers", s.advert(mac))
+                    log("elect: advertise", mac.hex(":"), ok)
+            elif mac == s.parent:
+                s.refresh(now)
+
+    def advert(s, mac, fake=0, op=0):
+        # the fw table is write-once per MAC: only ever send an entry built from a good anchor frame
+        p = s.peers[mac]
+        if "anchor" not in p:
+            return None
+        t4, el, rx = p["anchor"]
+        if fake:
+            t4 = bytearray(t4)
+            struct.pack_into("<H", t4, 29, (u16(t4, 29) + fake) & 0xffff)
+        log("elect: tsf bss2", (get_bss("tsf") or b"").hex(), "ifp0", (get_plain("tsf") or b"").hex(), "sn_adj", SN_ADJ, "mt_field", MT_FIELD, MT_ADD, "fw_t0", FW_T0)
+        log("elect: anchor", mac.hex(":"), "sn", u16(t4, 29), "txc", u16(t4, 1), "delay", (rx["phy"] - rx["tgt"]) & 0xffffffff,
+            "rssi", rx["rssi"], "cs", hex(rx["cs"]), "mt", rx["mt"], "host", rx.get("host"), "fake" if fake else "")
+        return (struct.pack("<HH", op, 0x2c) + advert_entry(mac, t4, el, rx)).ljust(0x32, b"\0")
+
+    def best(s, now):
+        c = [(mac, p) for mac, p in s.peers.items()
+             if now - p["t"] < PARENT_TTL and p["el"]["hc"] < MAX_HC and "anchor" in p and p["el"]["rmet"] >= MIN_PARENT_METRIC
+             and (not ONLY or mac in ONLY)]
+        if not c:
+            return None
+        top = max((p["el"]["rmet"], p["el"]["root"]) for _, p in c)
+        if top <= (s.metric, s.me):
+            return None
+        # within the tree follow the closest peer (the phone we talk to, not a far-away root); 10 dB hysteresis
+        rssi = lambda p: p["rx"]["rssi"] if p["rx"]["rssi"] < 0 else -127
+        c = [(mac, p) for mac, p in c if (p["el"]["rmet"], p["el"]["root"]) == top]
+        mac, p = max(c, key=lambda x: rssi(x[1]))
+        cur = dict(c).get(s.parent)
+        return s.parent if cur and rssi(p) - rssi(cur) < 10 else mac
+
+    def program(s, mac, now):
+        p = s.peers[mac]
+        el = p["el"]
+        a = set_bss("awdl_advertisers", s.advert(mac))
+        o = a and program_opmode(mac)
+        t = o and program_tree(el["root"], el["rmet"], el["hc"] + 1)
+        log("elect: follow", mac.hex(":"), "root", el["root"].hex(":"), "rmet", el["rmet"], "hc", el["hc"],
+            "advert", a, "opmode", o, "tree", t)
+        s.last = now
+
+    def refresh(s, now):
+        if REFRESH > 0 and now - s.last >= REFRESH:
+            if set_bss("awdl_advertisers", s.advert(s.parent)):
+                s.last = now
+
+    def tick(s, now):
+        f = os.environ.get("AWDLD_ELECT_FILE")
+        if f:
+            try:
+                with open(f) as fh:
+                    m = fh.read().strip()
+            except OSError:
+                m = ELECT
+            if m in ("0", "1", "2", "3") and m != ELECT:
+                s.set_mode(m)
+        s.ctl()
+        if ELECT == "0":
+            return
+        want = None if ELECT == "3" else s.best(now)
+        if want != s.parent:
+            if want:
+                s.program(want, now)
+                s.parent = want
+            else:
+                log("elect: parent lost")
+                s.to_self()
+        for mac in [m for m, p in s.peers.items() if now - p["t"] > PEER_TTL]:
+            del s.peers[mac]
+
+def isolate():
+    # awdl0 airtime is scarce: only AirDrop (mDNS, ICMPv6, TCP 8770/8771) goes out, never avahi
+    rules = ['oifname "awdl0" udp dport 5353 accept', 'oifname "awdl0" meta l4proto ipv6-icmp accept',
+             'oifname "awdl0" tcp dport { 8770, 8771 } accept', 'oifname "awdl0" tcp sport { 8770, 8771 } accept',
+             'oifname "awdl0" drop']
+    for extra in (['oifname "awdl0" udp dport 5353 meta skuid avahi drop'], []):
+        text = "table inet awdld { chain out { type filter hook output priority 0; policy accept; %s; }; }" % "; ".join(extra + rules)
+        subprocess.run(["nft", "delete", "table", "inet", "awdld"], capture_output=True)
+        if subprocess.run(["nft", "-f", "-"], input=text, text=True, capture_output=True).returncode == 0:
+            return
+
+def unisolate():
+    subprocess.run(["nft", "delete", "table", "inet", "awdld"], capture_output=True)
+
+def own_mac():
+    with open(f"/sys/class/net/{IFACE}/address") as f:
+        return bytes.fromhex(f.read().strip().replace(":", ""))
 
 def parse_event(pkt):
     if len(pkt) < 14 + 12 or struct.unpack_from(">H", pkt, 12)[0] != EVT_PROTO:
@@ -42,60 +445,177 @@ def parse_event(pkt):
 
 def parse_af(data):
     i = data.find(AF_MAGIC)
-    if i < 24 or len(data) < i + 16:
+    if i < 0 or len(data) < i + 16:
         return None
-    mac = data[i - 24 + 10:i - 24 + 16]
     subtype = data[i + 6]
     tlvs, p = {}, i + 16
     while p + 3 <= len(data):
         t, n = struct.unpack_from("<BH", data, p)
         tlvs[t] = data[p + 3:p + 3 + n]
         p += 3 + n
-    name = tlvs.get(TLV_ARPA, b"\0")[1:].decode(errors="replace")
-    return mac, subtype, name
+    a = tlvs.get(TLV_ARPA, b"\0\0")[1:]
+    name = a[1:1 + a[0]].decode(errors="replace") if a else ""
+    return subtype, name, tlvs
 
 def selftest():
     mac = bytes.fromhex("aabbccddeeff")
-    mgmt = bytes(10) + mac + bytes(8)
-    af = AF_MAGIC + bytes([16, 0, 0]) + bytes(8)
-    frame = mgmt + af + tlv(TLV_ARPA, bytes([3]) + b"iPhone.local")
-    pkt = bytes(12) + struct.pack(">H", EVT_PROTO) + struct.pack(">III", 98, 2, 0) + bytes(16) + frame
+    af = AF_MAGIC + bytes([16, 3, 0]) + bytes(8)
+    frame = af + tlv(TLV_ARPA, bytes([3]) + arpa_name("iPhone"))
+    pkt = bytes(6) + mac + struct.pack(">H", EVT_PROTO) + struct.pack(">III", 75, 0, 0) + bytes(24) + frame
     code, status, data = parse_event(pkt)
-    assert (code, status) == (98, 2)
-    assert parse_af(data) == (mac, 0, "iPhone.local"), parse_af(data)
+    assert (code, status) == (75, 0) and pkt[6:12] == mac
+    assert parse_af(data)[:2] == (3, "iPhone"), parse_af(data)
+    assert len(payload_tlvs("m2", mac)) > 100
+    t18 = bytes.fromhex("0f030003ffff288028802c8000000000000000002880065128802c80288000000000000028800000")
+    blob = peer_add_blob(mac, t18)
+    assert len(blob) == 0x25 + 2 + 0x2b and blob[0x25] == 0xdd and blob[0x26] == 0x2b, (len(blob), blob.hex())
+    assert blob[0x25 + 15 + 0:0x25 + 15 + 2] == bytes.fromhex("e12a"), blob.hex()
+    e = Elect.__new__(Elect)
+    e.me, e.metric, e.parent = b"\0" * 6, 60, None
+    root, phone = bytes.fromhex("ba7aa4b40761"), bytes.fromhex("ca132b30e28d")
+    peer = lambda hc, rssi: {"t": 0.0, "anchor": 1, "el": {"hc": hc, "rmet": 534, "root": root}, "rx": {"rssi": rssi}}
+    e.peers = {root: peer(0, -80), phone: peer(1, -50)}
+    assert e.best(1.0) == phone  # closest peer in the tree, not the root
+    e.parent, e.peers[root] = phone, peer(0, -45)
+    assert e.best(1.0) == phone  # within hysteresis: stay
+    e.peers[root] = peer(0, -30)
+    assert e.best(1.0) == root
+    e.peers[phone]["rx"]["rssi"] = 0  # rssi unknown
+    assert e.best(1.0) == root
+    assert len(peer_add_blob(mac, None)) == 0x25
+    assert airdrop_record("e3e18a4d9970", 13311).hex() == "10000c653365313861346439393730c007100c0000000b666c6167733d3133333131"
+    name = bytes([12]) + b"e3e18a4d9970" + bytes([8]) + b"_airdrop" + bytes([4]) + b"_tcp" + bytes([5]) + b"local" + b"\0"
+    ptr = b"\xc0" + bytes([12 + 4 + len(b"")])
+    txt = bytes([11]) + b"flags=13311"
+    msg = struct.pack(">6H", 0, 0x8400, 0, 1, 0, 0) + name + struct.pack(">HHIH", 16, 0x8001, 120, len(txt)) + txt
+    assert airdrop_from_mdns(msg) == ("e3e18a4d9970", 13311), airdrop_from_mdns(msg)
     assert parse_af(b"junk") is None
+    t4 = bytes.fromhex("062a00060010006e00001010001000000003030303ca132b30e28d0400d1be00000f010003ffff")
+    t24 = bytes.fromhex("ca132b30e28dca132b30e28d960b00000000000008020000080200000000000000000000960b0000")
+    el = peer_election({24: t24})
+    assert el == dict(root=bytes.fromhex("ca132b30e28d"), hc=0, rmet=520, smet=520), el
+    rx = dict(rssi=-56, mt=1773656527, phy=3537952196, tgt=3537951231)
+    e = advert_entry(bytes.fromhex("ca132b30e28d"), t4, el, rx)
+    q = {}
+    assert not seq_steady(q, 100, 0) and not seq_steady(q, 110, 163840)
+    assert seq_steady(q, 131, 524288) and not seq_steady(q, 48000, 600000)
+    assert len(e) == 0x2c and e[:14].hex() == "d1be2a00c503" "6e00" "1000" "1000" "1000", e.hex()
+    assert e[14] == 0xc8 and e[16] == 4 and e[0x26:].hex() == "ca132b30e28d" and e[0x20:0x26] == e[0x26:]
+    f = parse_rx(bytes(24) + AF_MAGIC + bytes([16, 3, 0]) + struct.pack("<II", 5, 3))
+    assert f and f["phy"] == 5 and f["tgt"] == 3
     log("selftest ok")
 
 VERBOSE = "-v" in sys.argv
 
 def run(name):
     if not os.path.exists(f"/sys/class/net/{IFACE}"):
+        saved = state("mac")
+        if saved:
+            try:
+                with open(PARAM_ADDR, "w") as f:
+                    f.write(saved)
+            except OSError:
+                pass
         with open(PARAM, "w") as f:
             f.write("1")
     subprocess.run(["nmcli", "device", "set", IFACE, "managed", "no"], capture_output=True)
+    # DAD never completes on awdl0 in time and opendrop's mDNS socket can not bind a tentative address
+    for k, v in (("dad_transmits", "0"), ("addr_gen_mode", "0")):
+        try:
+            with open(f"/proc/sys/net/ipv6/conf/{IFACE}/{k}", "w") as f:
+                f.write(v)
+        except OSError:
+            pass
     subprocess.run(["ip", "link", "set", IFACE, "up", "allmulticast", "on"], check=True)
     set_bss("allmulti", struct.pack("<I", 1))
-    set_bss("awdl_payload", payload_tlvs(name)) or log("awdl_payload refused")
+    me = own_mac()
+    state("mac", me.hex(":"))
+    name = str(uuid.uuid5(uuid.NAMESPACE_DNS, "awdl." + me.hex(":")))
+    state("name", name)
+    if ISOLATE:
+        isolate()
+    set_bss("awdl_payload", payload_tlvs(name, me)) or log("awdl_payload refused")
+    mdns = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(0x0003))
+    mdns.bind((IFACE, 0))
+    airdrop = None
     s = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(EVT_PROTO))
+    s.setsockopt(socket.SOL_SOCKET, SO_TIMESTAMPNS, 1)
     s.bind((IFACE, 0))
-    peers = {}
+    peers, seqs, pending, added = {}, {}, {}, {}
+    elect = Elect(me)
+    for _ in range(50):
+        r = subprocess.run(["ip", "-6", "-o", "addr", "show", IFACE, "scope", "link", "-tentative"],
+                           capture_output=True, text=True)
+        if "fe80" in r.stdout:
+            break
+        time.sleep(0.1)
+    # peers derive our address from the AWDL MAC (EUI-64); opendrop announces the first link-local address
+    m = bytearray(own_mac())
+    m[0] ^= 2
+    ll = "fe80::%02x%02x:%02xff:fe%02x:%02x%02x" % tuple(m)
+    r = subprocess.run(["ip", "-6", "addr", "add", ll + "/64", "dev", IFACE, "nodad"], capture_output=True, text=True)
+    out = subprocess.run(["ip", "-6", "-o", "addr", "show", IFACE, "scope", "link"], capture_output=True, text=True).stdout
+    for ln in out.splitlines():
+        a = ln.split()[3]
+        if ipaddress.IPv6Address(a.split("/")[0]) != ipaddress.IPv6Address(ll):
+            subprocess.run(["ip", "-6", "addr", "del", a, "dev", IFACE])
+    log(f"EUI-64 {ll}: {r.returncode} {r.stderr.strip()}")
+    # AWDL drops bursts: retransmit fast instead of backing off
+    subprocess.run(["ip", "-6", "route", "replace", "fe80::/64", "dev", IFACE, "proto", "kernel", "metric", "256",
+                    "rto_min", "5ms", "quickack", "1", "initcwnd", "20"], capture_output=True)
     log(f"{IFACE} up, listening")
     while True:
-        if select.select([s], [], [], 5)[0]:
-            raw = s.recv(4096)
+        rd = select.select([s, mdns], [], [], 5)[0]
+        if not os.path.exists(f"/sys/class/net/{IFACE}"):
+            sys.exit(1)
+        if mdns in rd:
+            pkt = mdns.recv(4096)
+            if not airdrop and pkt[6:12] == me and pkt[0:6] == bytes.fromhex("3333000000fb"):
+                m = pkt[14 + 40 + 8:] if pkt[12:14] == b"\x86\xdd" and len(pkt) > 62 else b""
+                airdrop = airdrop_from_mdns(m) or airdrop
+                if airdrop:
+                    ok = set_bss("awdl_payload", payload_tlvs(name, me, airdrop))
+                    log("airdrop service", airdrop, "payload", "ok" if ok else "refused")
+        if s in rd:
+            raw, anc, _, _ = s.recvmsg(4096, 64)
+            rxns = next((int.from_bytes(d[:8], "little") * 10**9 + int.from_bytes(d[8:16], "little")
+                         for _, t, d in anc if t == SO_TIMESTAMPNS), time.time_ns())
             ev = parse_event(raw)
             if VERBOSE:
                 log("frame", len(raw), "evt", ev and (ev[0], ev[1]), raw[:96].hex())
-            if ev and ev[0] == 98 and ev[1] == 2:
-                af = parse_af(ev[2])
-                if af:
-                    mac, _, pname = af
+            af = ev and parse_af(ev[2])
+            if af:
+                sub, pname, tlvs = af
+                mac = raw[6:12]
+                cs = tlvs.get(18)
+                if cs != pending.get(mac, (None, 0))[0]:
+                    pending[mac] = (cs, 0)
+                pending[mac] = (cs, pending[mac][1] + 1)
+                now_t = time.monotonic()
+                if mac not in peers or (seqs.get(mac) != cs and (not DEBOUNCE or (pending[mac][1] >= 2 and now_t - added.get(mac, 0) > 2))):
+                    added[mac] = now_t
+                    if READD and mac in peers:
+                        peer_op(1, mac)  # fw keeps the old chan seq on re-add
+                    log("peer", mac.hex(":"), pname, "evt", ev[0], "sub", sub,
+                        "add ok" if peer_op(0, mac, cs) else "add failed", "chanseq", cs and cs.hex())
                     if mac not in peers:
-                        log("peer", mac.hex(":"), pname, "add ok" if peer_op(0, mac) else "add failed")
-                    peers[mac] = time.monotonic()
+                        log("peer tlvs", {t: v.hex() for t, v in tlvs.items()})
+                    seqs[mac] = cs
+                peers[mac] = time.monotonic()
+                try:
+                    rx = parse_rx(ev[2])
+                    if rx:
+                        rx["host"] = rxns
+                    elect.feed(mac, tlvs, rx, peers[mac])
+                except (KeyError, IndexError, struct.error) as x:
+                    log("elect: feed error", repr(x))
             elif ev and ev[0] == 97:
                 log("role", ev[1])
         now = time.monotonic()
+        try:
+            elect.tick(now)
+        except (KeyError, IndexError, struct.error) as x:
+            log("elect: tick error", repr(x))
         for mac in [m for m, t in peers.items() if now - t > PEER_TTL]:
             peer_op(1, mac)
             del peers[mac]
@@ -106,8 +626,9 @@ def main():
         return selftest()
     signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))
     try:
-        run(socket.gethostname().split(".")[0] + ".local")
+        run(None)
     finally:
+        unisolate()
         try:
             with open(PARAM, "w") as f:
                 f.write("0")

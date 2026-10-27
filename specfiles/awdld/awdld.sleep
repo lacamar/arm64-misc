@@ -1,0 +1,4 @@
+#!/bin/sh
+# awdld stops before sleep (Conflicts=sleep.target); bring it back after resume if enabled
+[ "$1" = post ] && systemctl -q is-enabled awdld.service && systemctl --no-block start awdld.service
+exit 0
