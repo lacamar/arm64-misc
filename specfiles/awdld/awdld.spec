@@ -1,6 +1,6 @@
 Name:           awdld
 Version:        0.2.0
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        AWDL peer manager for brcmfmac firmware AWDL
 
 License:        MIT
@@ -13,6 +13,7 @@ Source4:        awdld.sleep
 BuildArch:      noarch
 BuildRequires:  python3
 BuildRequires:  systemd-rpm-macros
+BuildRequires:  iw
 
 Requires:       python3
 Requires:       iw
@@ -56,6 +57,9 @@ nmcli general reload conf >/dev/null 2>&1 || :
 %{_prefix}/lib/systemd/system-sleep/awdld
 
 %changelog
+* Tue Oct 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.2.0-2
+- BuildRequires iw for selftest
+
 * Mon Oct 26 2026 Lachlan Marie <lchlnm@pm.me> - 0.2.0-1
 - Persist awdl0 MAC and ARPA name
 - Exit when awdl0 disappears
