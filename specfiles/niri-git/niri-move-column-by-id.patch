@@ -1,5 +1,5 @@
 diff --git a/niri-config/src/binds.rs b/niri-config/src/binds.rs
-index 7448c8f..e18043d 100644
+index ae54806..9b6522d 100644
 --- a/niri-config/src/binds.rs
 +++ b/niri-config/src/binds.rs
 @@ -315,6 +315,8 @@ pub enum Action {
@@ -11,7 +11,7 @@ index 7448c8f..e18043d 100644
      MoveWindowDown,
      MoveWindowUp,
      MoveWindowDownOrToWorkspaceDown,
-@@ -596,7 +598,13 @@ impl From<niri_ipc::Action> for Action {
+@@ -602,7 +604,13 @@ impl From<niri_ipc::Action> for Action {
              niri_ipc::Action::MoveColumnRight {} => Self::MoveColumnRight,
              niri_ipc::Action::MoveColumnToFirst {} => Self::MoveColumnToFirst,
              niri_ipc::Action::MoveColumnToLast {} => Self::MoveColumnToLast,
@@ -27,10 +27,19 @@ index 7448c8f..e18043d 100644
                  Self::MoveColumnLeftOrToMonitorLeft
              }
 diff --git a/niri-ipc/src/lib.rs b/niri-ipc/src/lib.rs
-index c314d45..d51b008 100644
+index dce9d67..4506a55 100644
 --- a/niri-ipc/src/lib.rs
 +++ b/niri-ipc/src/lib.rs
-@@ -404,13 +404,20 @@ pub enum Action {
+@@ -87,6 +87,8 @@ pub enum Request {
+     PickColor,
+     /// Perform an action.
+     Action(Action),
++    /// Perform an action with its animations completed instantly.
++    InstantAction(Action),
+     /// Change output configuration temporarily.
+     ///
+     /// The configuration is changed temporarily and not saved into the config file. If the output
+@@ -404,13 +406,20 @@ pub enum Action {
      MoveColumnLeftOrToMonitorLeft {},
      /// Move the focused column to the right or to the monitor to the right.
      MoveColumnRightOrToMonitorRight {},
@@ -52,11 +61,41 @@ index c314d45..d51b008 100644
      },
      /// Move the focused window down in a column.
      MoveWindowDown {},
+diff --git a/src/cli.rs b/src/cli.rs
+index df69aa1..a98b918 100644
+--- a/src/cli.rs
++++ b/src/cli.rs
+@@ -84,6 +84,10 @@ pub enum Msg {
+     PickColor,
+     /// Perform an action.
+     Action {
++        /// Complete the action's animations instantly.
++        #[arg(long)]
++        no_animation: bool,
++
+         #[command(subcommand)]
+         action: Action,
+     },
 diff --git a/src/input/mod.rs b/src/input/mod.rs
-index 80d18e0..3fbba37 100644
+index 8b2005c..ea64529 100644
 --- a/src/input/mod.rs
 +++ b/src/input/mod.rs
-@@ -1683,11 +1683,20 @@ impl State {
+@@ -897,6 +897,14 @@ impl State {
+         }
+     }
+ 
++    pub fn do_action_instantly(&mut self, action: Action) {
++        let was_instant = self.niri.clock.should_complete_instantly();
++        self.niri.clock.set_complete_instantly(true);
++        self.do_action(action, false);
++        self.niri.advance_animations();
++        self.niri.clock.set_complete_instantly(was_instant);
++    }
++
+     pub fn do_action(&mut self, action: Action, allow_when_locked: bool) {
+         if self.niri.is_locked() && !(allow_when_locked || allowed_when_locked(&action)) {
+             return;
+@@ -1684,11 +1692,20 @@ impl State {
                  }
              }
              Action::MoveColumnToIndex(idx) => {
@@ -78,11 +117,73 @@ index 80d18e0..3fbba37 100644
              Action::FocusWorkspaceDown => {
                  self.niri.layout.switch_workspace_down();
                  self.maybe_warp_cursor_to_focus();
+diff --git a/src/ipc/client.rs b/src/ipc/client.rs
+index 8345170..2c6bad0 100644
+--- a/src/ipc/client.rs
++++ b/src/ipc/client.rs
+@@ -23,6 +23,7 @@ pub fn handle_msg(mut msg: Msg, json: bool, print_request: bool) -> anyhow::Resu
+             Action::Screenshot { path, .. }
+             | Action::ScreenshotScreen { path, .. }
+             | Action::ScreenshotWindow { path, .. },
++        ..
+     } = &mut msg
+     {
+         if let Some(path) = path {
+@@ -37,7 +38,14 @@ pub fn handle_msg(mut msg: Msg, json: bool, print_request: bool) -> anyhow::Resu
+         Msg::FocusedOutput => Request::FocusedOutput,
+         Msg::PickWindow => Request::PickWindow,
+         Msg::PickColor => Request::PickColor,
+-        Msg::Action { action } => Request::Action(action.clone()),
++        Msg::Action {
++            no_animation: false,
++            action,
++        } => Request::Action(action.clone()),
++        Msg::Action {
++            no_animation: true,
++            action,
++        } => Request::InstantAction(action.clone()),
+         Msg::Output { output, action } => Request::Output {
+             output: output.clone(),
+             action: action.clone(),
+diff --git a/src/ipc/server.rs b/src/ipc/server.rs
+index fc9a4d5..f59b303 100644
+--- a/src/ipc/server.rs
++++ b/src/ipc/server.rs
+@@ -273,6 +273,7 @@ async fn handle_client(ctx: ClientCtx, stream: Async<'static, UnixStream>) -> an
+ }
+ 
+ async fn process(ctx: &ClientCtx, request: Request) -> Reply {
++    let instant = matches!(request, Request::InstantAction(_));
+     let response = match request {
+         Request::ReturnError => return Err(String::from("example compositor error")),
+         Request::Version => Response::Version(version()),
+@@ -382,7 +383,7 @@ async fn process(ctx: &ClientCtx, request: Request) -> Reply {
+             let color = result.map_err(|_| String::from("error getting picked color"))?;
+             Response::PickedColor(color)
+         }
+-        Request::Action(action) => {
++        Request::Action(action) | Request::InstantAction(action) => {
+             validate_action(&action)?;
+ 
+             let (tx, rx) = async_channel::bounded(1);
+@@ -392,7 +393,11 @@ async fn process(ctx: &ClientCtx, request: Request) -> Reply {
+                 // Make sure some logic like workspace clean-up has a chance to run before doing
+                 // actions.
+                 state.niri.advance_animations();
+-                state.do_action(action, false);
++                if instant {
++                    state.do_action_instantly(action);
++                } else {
++                    state.do_action(action, false);
++                }
+                 let _ = tx.send_blocking(());
+             });
+ 
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index 8575a1a..ff4ada4 100644
+index f51de69..256df02 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
-@@ -1892,11 +1892,16 @@ impl<W: LayoutElement> Layout<W> {
+@@ -2044,11 +2044,16 @@ impl<W: LayoutElement> Layout<W> {
          true
      }
  
@@ -103,7 +204,7 @@ index 8575a1a..ff4ada4 100644
  
      pub fn move_down(&mut self) {
 diff --git a/src/layout/scrolling.rs b/src/layout/scrolling.rs
-index 4f462c6..8cbe00c 100644
+index 732a182..2de8e30 100644
 --- a/src/layout/scrolling.rs
 +++ b/src/layout/scrolling.rs
 @@ -1699,49 +1699,88 @@ impl<W: LayoutElement> ScrollingSpace<W> {
@@ -211,7 +312,7 @@ index 4f462c6..8cbe00c 100644
  
      pub fn move_left(&mut self) -> bool {
 diff --git a/src/layout/tests.rs b/src/layout/tests.rs
-index a2da4ce..e5a6690 100644
+index a861a8f..9a2f9f5 100644
 --- a/src/layout/tests.rs
 +++ b/src/layout/tests.rs
 @@ -493,7 +493,12 @@ enum Op {
@@ -228,7 +329,7 @@ index a2da4ce..e5a6690 100644
      MoveWindowDown,
      MoveWindowUp,
      MoveWindowDownOrToWorkspaceDown,
-@@ -1158,7 +1163,10 @@ impl Op {
+@@ -1174,7 +1179,10 @@ impl Op {
  
                  layout.move_column_right_or_to_output(&output);
              }
@@ -240,7 +341,7 @@ index a2da4ce..e5a6690 100644
              Op::MoveWindowDown => layout.move_down(),
              Op::MoveWindowUp => layout.move_up(),
              Op::MoveWindowDownOrToWorkspaceDown => layout.move_down_or_to_workspace_down(),
-@@ -1656,6 +1664,50 @@ fn workspace_output_name(layout: &Layout<TestWindow>, ws_name: usize) -> &str {
+@@ -1680,6 +1688,50 @@ fn workspace_output_name(layout: &Layout<TestWindow>, ws_name: usize) -> &str {
          .output_name()
  }
  
@@ -292,7 +393,7 @@ index a2da4ce..e5a6690 100644
  fn workspace_output_fallback_promotes_preferred_in_reverse_connection_order() {
      // output3 is not a candidate, so it stays the primary monitor throughout; every assertion
 diff --git a/src/layout/workspace.rs b/src/layout/workspace.rs
-index effa38b..db1adc8 100644
+index 5f1d923..1085708 100644
 --- a/src/layout/workspace.rs
 +++ b/src/layout/workspace.rs
 @@ -1101,11 +1101,15 @@ impl<W: LayoutElement> Workspace<W> {
@@ -314,3 +415,31 @@ index effa38b..db1adc8 100644
      }
  
      pub fn move_down(&mut self) -> bool {
+diff --git a/src/tests/animations.rs b/src/tests/animations.rs
+index 51c57f7..a5044fd 100644
+--- a/src/tests/animations.rs
++++ b/src/tests/animations.rs
+@@ -188,3 +188,23 @@ fn egl_clientside_height_change_doesnt_animate() {
+     200 × 200 at x:  0 y: 50
+     ");
+ }
++
++#[test]
++fn instant_action_completes_animations() {
++    use niri_config::Action;
++
++    let config = Config::parse_mem("workspace \"a\"\nworkspace \"b\"\n").unwrap();
++    let mut f = Fixture::with_config(config);
++    f.add_output(1, (1920, 1080));
++    f.niri_complete_animations();
++
++    let state = f.niri_state();
++    state.do_action(Action::FocusWorkspaceDown, false);
++    assert!(state.niri.layout.are_animations_ongoing(None));
++
++    f.niri_complete_animations();
++    let state = f.niri_state();
++    state.do_action_instantly(Action::FocusWorkspaceUp);
++    assert!(!state.niri.layout.are_animations_ongoing(None));
++    assert!(!state.niri.clock.should_complete_instantly());
++}
