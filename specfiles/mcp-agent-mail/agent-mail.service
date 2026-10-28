@@ -1,0 +1,15 @@
+[Unit]
+Description=MCP Agent Mail Server
+After=network.target
+
+[Service]
+Type=notify
+NotifyAccess=main
+EnvironmentFile=-%h/.config/mcp-agent-mail/config.env
+ExecStart=/usr/bin/am serve-http --no-tui
+Restart=on-failure
+RestartSec=30
+LimitNOFILE=65536
+
+[Install]
+WantedBy=default.target

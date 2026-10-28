@@ -1,55 +1,53 @@
 %global debug_package %{nil}
-%global __brp_mangle_shebangs_exclude_from ^%{_libdir}/%{name}/.*$
-%global __requires_exclude_from ^%{_libdir}/%{name}/.*$
-%global __provides_exclude_from ^%{_libdir}/%{name}/.*$
 
 Name:           mcp-agent-mail
-Version:        0.3.4
-Release:        2%{?dist}
-Summary:        Mail-like coordination MCP server for coding agents
+Version:        0.3.39
+Release:        1%{?dist}
+Summary:        Mail-like coordination layer for coding agents over MCP
 
 License:        MIT
-URL:            https://github.com/Dicklesworthstone/mcp_agent_mail
-Source0:        %{url}/archive/v%{version}/mcp_agent_mail-%{version}.tar.gz
+URL:            https://github.com/Dicklesworthstone/mcp_agent_mail_rust
+Source0:        %{url}/releases/download/v%{version}/%{name}-aarch64-unknown-linux-gnu.tar.xz
+Source1:        agent-mail.service
 
-Patch0:         0001-xdg-default-paths.patch
-
-BuildRequires:  python3.14-devel
-BuildRequires:  uv
-BuildRequires:  gcc
-Requires:       /usr/bin/python3.14
-Requires:       git-core
+ExclusiveArch:  aarch64
+BuildRequires:  systemd-rpm-macros
 
 %description
-MCP Agent Mail: asynchronous, mail-like coordination layer for coding agents,
-with identities, inboxes, searchable threads and advisory file reservations
-backed by Git and SQLite.
+Shared mailbox for coding agents: messages, per-agent inboxes and advisory
+file reservations over MCP, with a local web UI. Ships the mcp-agent-mail
+server and the am operator CLI.
 
 %prep
-%autosetup -p1 -n mcp_agent_mail-%{version}
+%autosetup -c %{name}-%{version}
 
 %install
-export UV_PYTHON_DOWNLOADS=never UV_LINK_MODE=copy UV_NO_CACHE=1
-export UV_PROJECT_ENVIRONMENT=%{buildroot}%{_libdir}/%{name}
-uv sync --frozen --no-dev --no-editable --no-install-project --python /usr/bin/python3.14
-uv pip install --python %{buildroot}%{_libdir}/%{name}/bin/python --no-deps .
-rm -f %{buildroot}%{_libdir}/%{name}/bin/{activate*,deactivate*,*.bat}
-grep -rlF %{buildroot} %{buildroot}%{_libdir}/%{name} | xargs -r sed -i 's|%{buildroot}||g'
-%py_byte_compile /usr/bin/python3.14 %{buildroot}%{_libdir}/%{name}/lib
-install -dm0755 %{buildroot}%{_bindir}
-cat > %{buildroot}%{_bindir}/%{name} <<'EOS'
-#!/bin/sh
-exec %{_libdir}/%{name}/bin/python -P -m mcp_agent_mail "$@"
-EOS
-chmod 0755 %{buildroot}%{_bindir}/%{name}
+install -Dm755 mcp-agent-mail %{buildroot}%{_bindir}/mcp-agent-mail
+install -Dm755 am %{buildroot}%{_bindir}/am
+install -Dm644 %{SOURCE1} %{buildroot}%{_userunitdir}/agent-mail.service
 
 %files
 %license LICENSE
-%doc README.md CHANGELOG.md
-%{_bindir}/%{name}
-%{_libdir}/%{name}
+%doc README.md
+%{_bindir}/mcp-agent-mail
+%{_bindir}/am
+%{_userunitdir}/agent-mail.service
+
+%post
+%systemd_user_post agent-mail.service
+
+%preun
+%systemd_user_preun agent-mail.service
+
+%postun
+%systemd_user_postun_with_restart agent-mail.service
 
 %changelog
+* Wed Oct 28 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.39-1
+- Switch to upstream Rust edition, prebuilt aarch64 binaries
+- Drop Python venv build
+- Ship am CLI and agent-mail user service
+
 * Mon Sep 28 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.4-2
 - Pin venv to Python 3.14
 
