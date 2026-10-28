@@ -1,0 +1,265 @@
+diff --git a/niri-config/src/binds.rs b/niri-config/src/binds.rs
+index 7448c8f..e18043d 100644
+--- a/niri-config/src/binds.rs
++++ b/niri-config/src/binds.rs
+@@ -315,6 +315,8 @@ pub enum Action {
+     MoveColumnLeftOrToMonitorLeft,
+     MoveColumnRightOrToMonitorRight,
+     MoveColumnToIndex(#[knuffel(argument)] usize),
++    #[knuffel(skip)]
++    MoveColumnToIndexById { id: u64, index: usize },
+     MoveWindowDown,
+     MoveWindowUp,
+     MoveWindowDownOrToWorkspaceDown,
+@@ -596,7 +598,13 @@ impl From<niri_ipc::Action> for Action {
+             niri_ipc::Action::MoveColumnRight {} => Self::MoveColumnRight,
+             niri_ipc::Action::MoveColumnToFirst {} => Self::MoveColumnToFirst,
+             niri_ipc::Action::MoveColumnToLast {} => Self::MoveColumnToLast,
+-            niri_ipc::Action::MoveColumnToIndex { index } => Self::MoveColumnToIndex(index),
++            niri_ipc::Action::MoveColumnToIndex { index, id: None } => {
++                Self::MoveColumnToIndex(index)
++            }
++            niri_ipc::Action::MoveColumnToIndex {
++                index,
++                id: Some(id),
++            } => Self::MoveColumnToIndexById { id, index },
+             niri_ipc::Action::MoveColumnLeftOrToMonitorLeft {} => {
+                 Self::MoveColumnLeftOrToMonitorLeft
+             }
+diff --git a/niri-ipc/src/lib.rs b/niri-ipc/src/lib.rs
+index c314d45..d51b008 100644
+--- a/niri-ipc/src/lib.rs
++++ b/niri-ipc/src/lib.rs
+@@ -404,13 +404,20 @@ pub enum Action {
+     MoveColumnLeftOrToMonitorLeft {},
+     /// Move the focused column to the right or to the monitor to the right.
+     MoveColumnRightOrToMonitorRight {},
+-    /// Move the focused column to a specific index on its workspace.
++    /// Move a column to a specific index on its workspace.
+     MoveColumnToIndex {
+         /// New index for the column.
+         ///
+         /// The index starts from 1 for the first column.
+         #[cfg_attr(feature = "clap", arg())]
+         index: usize,
++
++        /// Id of a window in the column to move.
++        ///
++        /// If set, that window's column is moved without changing the focus. If `None`, moves the
++        /// focused column.
++        #[cfg_attr(feature = "clap", arg(long))]
++        id: Option<u64>,
+     },
+     /// Move the focused window down in a column.
+     MoveWindowDown {},
+diff --git a/src/input/mod.rs b/src/input/mod.rs
+index 80d18e0..3fbba37 100644
+--- a/src/input/mod.rs
++++ b/src/input/mod.rs
+@@ -1683,11 +1683,20 @@ impl State {
+                 }
+             }
+             Action::MoveColumnToIndex(idx) => {
+-                self.niri.layout.move_column_to_index(idx);
++                self.niri.layout.move_column_to_index(None, idx);
+                 self.maybe_warp_cursor_to_focus();
+                 // FIXME: granular
+                 self.niri.queue_redraw_all();
+             }
++            Action::MoveColumnToIndexById { id, index } => {
++                let window = self.niri.layout.windows().find(|(_, m)| m.id().get() == id);
++                let window = window.map(|(_, m)| m.window.clone());
++                if let Some(window) = window {
++                    self.niri.layout.move_column_to_index(Some(&window), index);
++                    // FIXME: granular
++                    self.niri.queue_redraw_all();
++                }
++            }
+             Action::FocusWorkspaceDown => {
+                 self.niri.layout.switch_workspace_down();
+                 self.maybe_warp_cursor_to_focus();
+diff --git a/src/layout/mod.rs b/src/layout/mod.rs
+index 8575a1a..ff4ada4 100644
+--- a/src/layout/mod.rs
++++ b/src/layout/mod.rs
+@@ -1892,11 +1892,16 @@ impl<W: LayoutElement> Layout<W> {
+         true
+     }
+ 
+-    pub fn move_column_to_index(&mut self, index: usize) {
+-        let Some(workspace) = self.active_workspace_mut() else {
++    pub fn move_column_to_index(&mut self, id: Option<&W::Id>, index: usize) {
++        let workspace = if let Some(id) = id {
++            self.workspaces_mut().find(|ws| ws.has_window(id))
++        } else {
++            self.active_workspace_mut()
++        };
++        let Some(workspace) = workspace else {
+             return;
+         };
+-        workspace.move_column_to_index(index);
++        workspace.move_column_to_index(id, index);
+     }
+ 
+     pub fn move_down(&mut self) {
+diff --git a/src/layout/scrolling.rs b/src/layout/scrolling.rs
+index 4f462c6..bd26f28 100644
+--- a/src/layout/scrolling.rs
++++ b/src/layout/scrolling.rs
+@@ -1699,49 +1699,88 @@ impl<W: LayoutElement> ScrollingSpace<W> {
+         self.columns[self.active_column_idx].focus_bottom()
+     }
+ 
+-    pub fn move_column_to_index(&mut self, index: usize) {
++    pub fn move_column_to_index(&mut self, id: Option<&W::Id>, index: usize) {
+         if self.columns.is_empty() {
+             return;
+         }
+ 
+-        self.move_column_to(index.saturating_sub(1).min(self.columns.len() - 1));
++        let from_idx = if let Some(id) = id {
++            let Some(idx) = self.columns.iter().position(|col| col.contains(id)) else {
++                return;
++            };
++            idx
++        } else {
++            self.active_column_idx
++        };
++
++        let new_idx = index.saturating_sub(1).min(self.columns.len() - 1);
++        self.move_column_from_to(from_idx, new_idx, id.is_none());
+     }
+ 
+     fn move_column_to(&mut self, new_idx: usize) {
+-        if self.active_column_idx == new_idx {
++        self.move_column_from_to(self.active_column_idx, new_idx, true);
++    }
++
++    fn move_column_from_to(&mut self, from_idx: usize, new_idx: usize, activate: bool) {
++        if from_idx == new_idx {
+             return;
+         }
+ 
+-        let current_col_x = self.column_x(self.active_column_idx);
+-        let next_col_x = self.column_x(self.active_column_idx + 1);
++        // Camera is anchored to the active column; remember it to keep it fixed when not following.
++        let active_x_before = self.column_x(self.active_column_idx);
++
++        let current_col_x = self.column_x(from_idx);
++        let next_col_x = self.column_x(from_idx + 1);
+ 
+-        let mut column = self.columns.remove(self.active_column_idx);
+-        let data = self.data.remove(self.active_column_idx);
++        let mut column = self.columns.remove(from_idx);
++        let data = self.data.remove(from_idx);
+         cancel_resize_for_column(&mut self.interactive_resize, &mut column);
+         self.columns.insert(new_idx, column);
+         self.data.insert(new_idx, data);
+ 
+-        // Preserve the camera position when moving to the left.
+-        let view_offset_delta = -self.column_x(self.active_column_idx) + current_col_x;
+-        self.view_offset.offset(view_offset_delta);
+-
+         // The column we just moved is offset by the difference between its new and old position.
+         let new_col_x = self.column_x(new_idx);
+         self.columns[new_idx].animate_move_x_from(current_col_x - new_col_x);
+ 
+         // All columns in between moved by the width of the column that we just moved.
+         let others_x_offset = next_col_x - current_col_x;
+-        if self.active_column_idx < new_idx {
+-            for col in &mut self.columns[self.active_column_idx..new_idx] {
++        if from_idx < new_idx {
++            for col in &mut self.columns[from_idx..new_idx] {
+                 col.animate_move_x_from(others_x_offset);
+             }
+         } else {
+-            for col in &mut self.columns[new_idx + 1..=self.active_column_idx] {
++            for col in &mut self.columns[new_idx + 1..=from_idx] {
+                 col.animate_move_x_from(-others_x_offset);
+             }
+         }
+ 
+-        self.activate_column_with_anim_config(new_idx, self.options.animations.window_movement.0);
++        if activate {
++            // Preserve the camera position when moving to the left.
++            let view_offset_delta = -self.column_x(from_idx) + current_col_x;
++            self.view_offset.offset(view_offset_delta);
++
++            self.activate_column_with_anim_config(
++                new_idx,
++                self.options.animations.window_movement.0,
++            );
++        } else {
++            let mut active = self.active_column_idx;
++            if active == from_idx {
++                active = new_idx;
++            } else {
++                if active > from_idx {
++                    active -= 1;
++                }
++                if active >= new_idx {
++                    active += 1;
++                }
++            }
++            self.active_column_idx = active;
++
++            // Keep the camera fixed on the unchanged active column.
++            let active_x_after = self.column_x(active);
++            self.view_offset.offset(active_x_before - active_x_after);
++        }
+     }
+ 
+     pub fn move_left(&mut self) -> bool {
+diff --git a/src/layout/tests.rs b/src/layout/tests.rs
+index a2da4ce..08223c8 100644
+--- a/src/layout/tests.rs
++++ b/src/layout/tests.rs
+@@ -493,7 +493,12 @@ enum Op {
+     MoveColumnToLast,
+     MoveColumnLeftOrToMonitorLeft(#[proptest(strategy = "1..=2u8")] u8),
+     MoveColumnRightOrToMonitorRight(#[proptest(strategy = "1..=2u8")] u8),
+-    MoveColumnToIndex(#[proptest(strategy = "1..=5usize")] usize),
++    MoveColumnToIndex {
++        #[proptest(strategy = "proptest::option::of(1..=5usize)")]
++        id: Option<usize>,
++        #[proptest(strategy = "1..=5usize")]
++        index: usize,
++    },
+     MoveWindowDown,
+     MoveWindowUp,
+     MoveWindowDownOrToWorkspaceDown,
+@@ -1158,7 +1163,10 @@ impl Op {
+ 
+                 layout.move_column_right_or_to_output(&output);
+             }
+-            Op::MoveColumnToIndex(index) => layout.move_column_to_index(index),
++            Op::MoveColumnToIndex { id, index } => {
++                let id = id.filter(|id| layout.has_window(id));
++                layout.move_column_to_index(id.as_ref(), index);
++            }
+             Op::MoveWindowDown => layout.move_down(),
+             Op::MoveWindowUp => layout.move_up(),
+             Op::MoveWindowDownOrToWorkspaceDown => layout.move_down_or_to_workspace_down(),
+diff --git a/src/layout/workspace.rs b/src/layout/workspace.rs
+index effa38b..db1adc8 100644
+--- a/src/layout/workspace.rs
++++ b/src/layout/workspace.rs
+@@ -1101,11 +1101,15 @@ impl<W: LayoutElement> Workspace<W> {
+         self.scrolling.move_column_to_last();
+     }
+ 
+-    pub fn move_column_to_index(&mut self, index: usize) {
+-        if self.floating_is_active.get() {
++    pub fn move_column_to_index(&mut self, id: Option<&W::Id>, index: usize) {
++        if let Some(id) = id {
++            if self.floating.has_window(id) {
++                return;
++            }
++        } else if self.floating_is_active.get() {
+             return;
+         }
+-        self.scrolling.move_column_to_index(index);
++        self.scrolling.move_column_to_index(id, index);
+     }
+ 
+     pub fn move_down(&mut self) -> bool {

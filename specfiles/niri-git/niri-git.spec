@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        26%{?dist}
+Release:        27%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -74,6 +74,8 @@ Patch:          niri-xdg-toplevel-icon.patch
 Patch:          niri-vulkan.patch
 # HDR on Apple internal panels via extended-range FP16 (EDR)
 Patch:          niri-edr.patch
+# move-column-to-index --id: reorder any window's column without shifting focus
+Patch:          niri-move-column-by-id.patch
 
 BuildRequires:  cargo-rpm-macros >= 26
 BuildRequires:  pkgconfig(udev)
@@ -178,6 +180,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Wed Oct 28 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^12.git.fcbc971c-27
+- move-column-to-index --id: reorder a window's column without shifting focus
+
 * Wed Oct 28 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^12.git.fcbc971c-26
 - Update to commit fcbc971cf49a987b1e8d5ff1d64da6b1f61a1787
 
