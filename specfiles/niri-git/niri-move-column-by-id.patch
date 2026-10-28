@@ -103,7 +103,7 @@ index 8575a1a..ff4ada4 100644
  
      pub fn move_down(&mut self) {
 diff --git a/src/layout/scrolling.rs b/src/layout/scrolling.rs
-index 4f462c6..bd26f28 100644
+index 4f462c6..8cbe00c 100644
 --- a/src/layout/scrolling.rs
 +++ b/src/layout/scrolling.rs
 @@ -1699,49 +1699,88 @@ impl<W: LayoutElement> ScrollingSpace<W> {
@@ -127,7 +127,9 @@ index 4f462c6..bd26f28 100644
 +        };
 +
 +        let new_idx = index.saturating_sub(1).min(self.columns.len() - 1);
-+        self.move_column_from_to(from_idx, new_idx, id.is_none());
++        // The view follows the focused column so it can't end up off-screen.
++        let activate = from_idx == self.active_column_idx;
++        self.move_column_from_to(from_idx, new_idx, activate);
      }
  
      fn move_column_to(&mut self, new_idx: usize) {
@@ -191,17 +193,15 @@ index 4f462c6..bd26f28 100644
 +            );
 +        } else {
 +            let mut active = self.active_column_idx;
-+            if active == from_idx {
-+                active = new_idx;
-+            } else {
-+                if active > from_idx {
-+                    active -= 1;
-+                }
-+                if active >= new_idx {
-+                    active += 1;
-+                }
++            if active > from_idx {
++                active -= 1;
++            }
++            if active >= new_idx {
++                active += 1;
 +            }
 +            self.active_column_idx = active;
++            // The previous column may have changed.
++            self.activate_prev_column_on_removal = None;
 +
 +            // Keep the camera fixed on the unchanged active column.
 +            let active_x_after = self.column_x(active);
@@ -211,7 +211,7 @@ index 4f462c6..bd26f28 100644
  
      pub fn move_left(&mut self) -> bool {
 diff --git a/src/layout/tests.rs b/src/layout/tests.rs
-index a2da4ce..08223c8 100644
+index a2da4ce..e5a6690 100644
 --- a/src/layout/tests.rs
 +++ b/src/layout/tests.rs
 @@ -493,7 +493,12 @@ enum Op {
@@ -240,6 +240,57 @@ index a2da4ce..08223c8 100644
              Op::MoveWindowDown => layout.move_down(),
              Op::MoveWindowUp => layout.move_up(),
              Op::MoveWindowDownOrToWorkspaceDown => layout.move_down_or_to_workspace_down(),
+@@ -1656,6 +1664,50 @@ fn workspace_output_name(layout: &Layout<TestWindow>, ws_name: usize) -> &str {
+         .output_name()
+ }
+ 
++#[test]
++fn move_column_to_index_by_id_keeps_focus_and_view() {
++    let mut ops = vec![Op::AddOutput(1)];
++    ops.extend((0..4).map(|id| Op::AddWindow {
++        params: TestWindowParams::new(id),
++    }));
++    ops.push(Op::FocusWindow(1));
++    let mut layout = check_ops(ops);
++
++    let view_pos =
++        |layout: &Layout<TestWindow>| layout.active_workspace().unwrap().scrolling().view_pos();
++    let order = |layout: &Layout<TestWindow>| {
++        let ws = layout.active_workspace().unwrap();
++        ws.scrolling()
++            .columns()
++            .map(|col| *col.tiles().next().unwrap().0.window().id())
++            .collect::<Vec<_>>()
++    };
++
++    for (id, index, expected) in [(3, 1, [3, 0, 1, 2]), (3, 4, [0, 1, 2, 3])] {
++        let before = view_pos(&layout);
++        check_ops_on_layout(
++            &mut layout,
++            [Op::MoveColumnToIndex {
++                id: Some(id),
++                index,
++            }],
++        );
++        assert_eq!(order(&layout), expected);
++        assert_eq!(*layout.focus().unwrap().id(), 1);
++        assert_eq!(view_pos(&layout), before);
++    }
++
++    check_ops_on_layout(
++        &mut layout,
++        [Op::MoveColumnToIndex {
++            id: Some(1),
++            index: 4,
++        }],
++    );
++    assert_eq!(order(&layout), [0, 2, 3, 1]);
++    assert_eq!(*layout.focus().unwrap().id(), 1);
++}
++
+ #[test]
+ fn workspace_output_fallback_promotes_preferred_in_reverse_connection_order() {
+     // output3 is not a candidate, so it stays the primary monitor throughout; every assertion
 diff --git a/src/layout/workspace.rs b/src/layout/workspace.rs
 index effa38b..db1adc8 100644
 --- a/src/layout/workspace.rs

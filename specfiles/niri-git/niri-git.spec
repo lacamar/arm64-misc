@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        27%{?dist}
+Release:        28%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -180,6 +180,11 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Wed Oct 28 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^12.git.fcbc971c-28
+- move-column-to-index --id: view follows focused column
+- Reset previous-column focus memory on reorder
+- Test focus and view preserved
+
 * Wed Oct 28 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^12.git.fcbc971c-27
 - move-column-to-index --id: reorder a window's column without shifting focus
 
