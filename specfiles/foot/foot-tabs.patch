@@ -3175,7 +3175,7 @@ index 554d61b..5137432 100644
      struct terminal *term = seat->clipboard.window->term;
  
 diff --git a/server.c b/server.c
-index 69be99d..0f36d1a 100644
+index 69be99d..554c346 100644
 --- a/server.c
 +++ b/server.c
 @@ -20,6 +20,7 @@
@@ -3221,7 +3221,16 @@ index 69be99d..0f36d1a 100644
  
      if (instance->terminal == NULL) {
          LOG_ERR("failed to instantiate new terminal");
-@@ -464,6 +477,15 @@ fdm_server(struct fdm *fdm, int fd, int events, void *data)
+@@ -439,6 +452,8 @@ shutdown:
+     if (client->instance != NULL &&
+         !client->instance->terminal->shutdown.in_progress)
+     {
++        /* A dying client (e.g. at logout) isn't the user closing the tab */
++        session_window_detached(client->instance->session);
+         term_shutdown(client->instance->terminal);
+     } else
+         client_destroy(client);
+@@ -464,6 +479,15 @@ fdm_server(struct fdm *fdm, int fd, int events, void *data)
          return false;
      }
  
@@ -3237,7 +3246,7 @@ index 69be99d..0f36d1a 100644
      struct client *client = xmalloc(sizeof(*client));
      *client = (struct client) {
          .server = server,
-@@ -565,10 +587,10 @@ prepare_socket(int fd)
+@@ -565,10 +589,10 @@ prepare_socket(int fd)
      return true;
  }
  
@@ -3250,7 +3259,7 @@ index 69be99d..0f36d1a 100644
  {
      struct server *server = data;
      struct terminal_instance *instance = xmalloc(sizeof(*instance));
-@@ -577,32 +599,60 @@ restore_window(void *data, struct session *session,
+@@ -577,32 +601,60 @@ restore_window(void *data, struct session *session,
      instance->terminal = term_init(
          server->conf, server->fdm, server->reaper, server->wayl, "footclient",
          cwd, NULL, session_window_name(w), NULL, 4, argv, NULL,
@@ -3318,7 +3327,7 @@ index 69be99d..0f36d1a 100644
      {
          if (!prepare_socket(fd))
              goto err;
-@@ -664,13 +714,19 @@ server_init(struct config *conf, struct fdm *fdm, struct reaper *reaper,
+@@ -664,13 +716,19 @@ server_init(struct config *conf, struct fdm *fdm, struct reaper *reaper,
          .terminals = tll_init(),
      };
  
@@ -3342,7 +3351,7 @@ index 69be99d..0f36d1a 100644
  
      return server;
  
-@@ -688,7 +744,7 @@ server_destroy(struct server *server)
+@@ -688,7 +746,7 @@ server_destroy(struct server *server)
          return;
  
      session_destroy(server->session);
@@ -3351,7 +3360,7 @@ index 69be99d..0f36d1a 100644
  
      LOG_DBG("server destroy, %zu clients still alive",
              tll_length(server->clients));
-@@ -705,7 +761,10 @@ server_destroy(struct server *server)
+@@ -705,7 +763,10 @@ server_destroy(struct server *server)
  
      tll_free(server->terminals);
  
@@ -3381,7 +3390,7 @@ index 683ad74..d205106 100644
  void server_global_theme_switch_to_dark(struct server *server);
  void server_global_theme_switch_to_light(struct server *server);
 diff --git a/session.c b/session.c
-index 938b710..282a20d 100644
+index 938b710..e42c554 100644
 --- a/session.c
 +++ b/session.c
 @@ -4,6 +4,8 @@
@@ -4083,7 +4092,7 @@ index 938b710..282a20d 100644
      }
  
      window_free(t->saved);
-@@ -1455,6 +1879,48 @@ session_untrack(struct session_tracked *t)
+@@ -1455,6 +1879,55 @@ session_untrack(struct session_tracked *t)
      free(t);
  }
  
@@ -4096,6 +4105,13 @@ index 938b710..282a20d 100644
 +        if (it->item->win == win)
 +            it->item->closing = true;
 +    }
++}
++
++void
++session_window_detached(struct session_tracked *t)
++{
++    if (t != NULL)
++        t->closing = true;
 +}
 +
 +void
@@ -4133,7 +4149,7 @@ index 938b710..282a20d 100644
  session_window_name(const struct session_window *w)
  {
 diff --git a/session.h b/session.h
-index b128b7e..7128da1 100644
+index b128b7e..8cc9d87 100644
 --- a/session.h
 +++ b/session.h
 @@ -13,9 +13,9 @@ struct session_tracked;
@@ -4148,7 +4164,7 @@ index b128b7e..7128da1 100644
  
  struct session *session_init(
      const struct config *conf, struct fdm *fdm, struct reaper *reaper,
-@@ -29,5 +29,11 @@ struct session_tracked *session_track_restored(
+@@ -29,5 +29,12 @@ struct session_tracked *session_track_restored(
      struct session *session, struct terminal *term, const struct config *conf,
      struct session_window *w);
  void session_untrack(struct session_tracked *tracked);
@@ -4156,6 +4172,7 @@ index b128b7e..7128da1 100644
 +char *session_duplicate_script(struct session *session, struct terminal *term,
 +                               char **cwd);
 +void session_window_closing(struct session *session, struct wl_window *win);
++void session_window_detached(struct session_tracked *tracked);
 +void session_tab_moved(struct session *session, struct terminal *term,
 +                       struct wl_window *dst);
  
@@ -4176,7 +4193,7 @@ index 6289937..b385f1b 100644
          del_from_env(&custom_env, "TERM_PROGRAM");            /* Wezterm, Ghostty */
 diff --git a/tabs.c b/tabs.c
 new file mode 100644
-index 0000000..435737d
+index 0000000..d796ec6
 --- /dev/null
 +++ b/tabs.c
 @@ -0,0 +1,3579 @@

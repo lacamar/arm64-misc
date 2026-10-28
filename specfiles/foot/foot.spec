@@ -4,7 +4,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        30%{?dist}
+Release:        31%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -157,6 +157,9 @@ desktop-file-validate \
 
 
 %changelog
+* Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-31
+- Keep tabs whose footclient dies at logout
+
 * Tue Oct 27 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-30
 - Open new tabs in $HOME
 
