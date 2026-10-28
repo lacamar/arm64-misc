@@ -49,16 +49,17 @@ diff -Naur a/extension/manifest.json b/extension/manifest.json
 diff -Naur a/extension/privileged/api.js b/extension/privileged/api.js
 --- a/extension/privileged/api.js	2026-10-21 21:55:17.433699674 +0200
 +++ b/extension/privileged/api.js	2026-10-21 21:55:17.455801148 +0200
-@@ -67,6 +67,16 @@
+@@ -67,6 +67,17 @@
              throw new ExtensionUtils.ExtensionError(String(e?.message || e));
            }
          },
-+        // page sees itself visible (rAF, timers, popovers) without the tab being shown
++        // page sees itself visible (rAF, timers, popovers) without the tab being shown;
++        // set docShellIsActive directly, never _printPreviewBrowsers: a layerless background
++        // tab left in that set wedges AsyncTabSwitcher in STATE_LOADING and freezes tab switching
 +        active(tabId, on) {
 +          try {
 +            const tab = context.extension.tabManager.get(tabId).nativeTab, gb = tab.documentGlobal.gBrowser, b = tab.linkedBrowser;
-+            if (on) gb.activateBrowserForPrintPreview(b);
-+            else { gb._printPreviewBrowsers.delete(b); b.docShellIsActive = gb.shouldActivateDocShell(b); }
++            b.docShellIsActive = on || gb.shouldActivateDocShell(b);
 +          } catch (e) {
 +            throw new ExtensionUtils.ExtensionError(String(e?.message || e));
 +          }
