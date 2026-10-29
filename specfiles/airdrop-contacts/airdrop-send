@@ -31,9 +31,24 @@ def mine():
     return {fe80(m), "169.254.%d.%d" % (b[4], b[5])}
 
 
-# the peer only answers an mDNS query, so provoke it while browsing
+def parse(out, skip):
+    peers = []
+    for line in out.splitlines():
+        if not line.startswith("="):
+            continue
+        f = line.split(";")
+        if len(f) < 9 or f[7] in skip or not f[7].startswith("fe80::"):
+            continue
+        peers.append({"id": f[3], "host": f[6], "addr": f[7], "port": int(f[8])})
+    return peers
+
+
+# the peer only answers an mDNS query, so provoke it unless avahi already knows one
 def discover(rounds, quiet):
     skip = mine()
+    peers = parse(sh("timeout", "3", "avahi-browse", "-rpt", "_airdrop._tcp").stdout, skip)
+    if peers:
+        return peers
     for i in range(rounds):
         p = subprocess.Popen(["timeout", "8", "opendrop", "find"],
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

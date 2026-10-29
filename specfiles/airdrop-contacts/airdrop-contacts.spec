@@ -1,5 +1,5 @@
 Name:           airdrop-contacts
-Version:        0.2.0
+Version:        0.2.1
 Release:        1%{?dist}
 Summary:        AirDrop sending to Contacts-Only Apple devices over AWDL
 
@@ -75,6 +75,9 @@ sh -n %{SOURCE3}
 %config(noreplace) %{_sysconfdir}/%{name}.conf
 
 %changelog
+* Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.2.1-1
+- Use the cached avahi record when there is one; only provoke if needed
+
 * Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.2.0-1
 - Send without restarting awdld; the BLE advert alone keeps peers reachable
 - AWDL re-init is now opt-in via --cycle
