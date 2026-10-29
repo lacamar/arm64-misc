@@ -1,6 +1,6 @@
 Name:           instant-hotspot
 Version:        0.2.0
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Apple Instant Hotspot client: start and join a same-account iPhone's hotspot
 
 License:        MIT
@@ -43,12 +43,18 @@ python3 -I %{SOURCE0} selftest
 %preun
 %systemd_user_preun instant-hotspot.service
 
+%postun
+%systemd_user_postun_with_restart instant-hotspot.service
+
 %files
 %{_bindir}/instant-hotspot
 %{_userunitdir}/instant-hotspot.service
 %{_datadir}/polkit-1/rules.d/49-%{name}.rules
 
 %changelog
+* Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.2.0-2
+- Restart the user unit on upgrade
+
 * Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.2.0-1
 - Pause awdld while associating; brcmfmac cannot join a new AP with AWDL up
 - Polkit rule: wheel may start/stop awdld.service
