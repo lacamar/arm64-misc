@@ -1,5 +1,5 @@
 #!/usr/bin/python3 -I
-import argparse, json, os, socket, subprocess, sys, time
+import argparse, json, os, signal, socket, subprocess, sys, threading, time
 
 IFACE = "awdl0"
 HELPER = ["pkexec", "/usr/libexec/airdrop-contacts/airdrop-privhelper"]
@@ -29,6 +29,25 @@ def mine():
         return set()
     b = bytes.fromhex(m.replace(":", ""))
     return {fe80(m), "169.254.%d.%d" % (b[4], b[5])}
+
+
+# the mDNS record carries no friendly name; it comes from AirDrop's Discover exchange
+def resolve_name(addr, port, timeout=4):
+    out = {}
+
+    def run():
+        try:
+            from opendrop.config import AirDropConfig
+            from opendrop.client import AirDropClient
+            cfg = AirDropConfig(interface=IFACE)
+            out["n"] = AirDropClient(cfg, (addr, port)).send_discover()
+        except Exception:
+            out["n"] = None
+
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+    t.join(timeout)
+    return out.get("n")
 
 
 def parse(out, skip):
@@ -72,13 +91,14 @@ def discover(rounds, quiet):
     return []
 
 
-def send(peer, path, quiet):
+def send(peer, paths, quiet):
     subprocess.run(HELPER + ["neigh", peer["addr"], mac_of(peer["addr"])], capture_output=True)
     os.makedirs(os.path.dirname(DISC), exist_ok=True)
     with open(DISC, "w") as f:
         json.dump([{"name": peer["id"], "address": peer["addr"], "port": peer["port"],
                     "id": peer["id"], "flags": 136, "discoverable": True}], f)
-    r = sh("timeout", "90", "opendrop", "send", "-r", "0", "-f", path)
+    args = [a for p in paths for a in ("-f", p)]
+    r = sh("timeout", "300", "opendrop", "send", "-r", "0", *args)
     out = r.stdout + r.stderr
     if not quiet:
         for line in out.splitlines():
@@ -87,9 +107,64 @@ def send(peer, path, quiet):
     return "successful" in out.lower()
 
 
+# print peers as they are seen so a picker can show them immediately
+def stream_list(quiet, seconds=60):
+    skip, seen, kids = mine(), set(), []
+    br = subprocess.Popen(["avahi-browse", "-rp", "_airdrop._tcp"],
+                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    stop = threading.Event()
+
+    def provoke():
+        while not stop.is_set():
+            p = subprocess.Popen(["timeout", "8", "opendrop", "find"],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            kids.append(p)
+            try:
+                p.wait(10)
+            except Exception:
+                p.kill()
+            stop.wait(2)
+
+    def cleanup(*_):
+        stop.set()
+        for p in [br] + kids:
+            try:
+                p.kill()
+            except Exception:
+                pass
+
+    # lf kills us when fzf returns; don't leave avahi-browse/opendrop behind
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(sig, lambda *_: (cleanup(), os._exit(0)))
+
+    threading.Thread(target=provoke, daemon=True).start()
+    threading.Timer(seconds, br.terminate).start()
+    try:
+        for line in br.stdout:
+            if not line.startswith("="):
+                continue
+            f = line.rstrip("\n").split(";")
+            if len(f) < 9 or f[7] in skip or not f[7].startswith("fe80::"):
+                continue
+            if f[3] in seen:          # AWDL MACs rotate, so key on the service id
+                continue
+            seen.add(f[3])
+            name = resolve_name(f[7], int(f[8])) or f[3]
+            print(f"{name}\t{f[7]}\t{f[8]}\t{f[3]}", flush=True)
+    except (BrokenPipeError, ValueError):
+        pass
+    finally:
+        stop.set()
+        for p in [br] + kids:
+            try:
+                p.kill()
+            except Exception:
+                pass
+
+
 def main():
     ap = argparse.ArgumentParser(prog="airdrop-send")
-    ap.add_argument("file", nargs="?")
+    ap.add_argument("file", nargs="*")
     ap.add_argument("-t", "--to", help="match peer id or hostname")
     ap.add_argument("-l", "--list", action="store_true", help="list peers and exit")
     ap.add_argument("-n", "--tries", type=int, default=3)
@@ -102,14 +177,14 @@ def main():
         sys.exit("airdrop-send: no awdl0 (is awdld running?)")
 
     if a.list:
-        for p in discover(3, a.quiet):
-            print(f"{p['id']}  {p['addr']}  port {p['port']}  {p['host']}")
+        stream_list(a.quiet)
         return
 
     if not a.file:
-        ap.error("a file is required")
-    if not os.path.isfile(a.file):
-        sys.exit(f"airdrop-send: no such file: {a.file}")
+        ap.error("at least one file is required")
+    for f in a.file:
+        if not os.path.isfile(f):
+            sys.exit(f"airdrop-send: no such file: {f}")
 
     for attempt in range(1, a.tries + 1):
         if not a.quiet:
@@ -122,7 +197,9 @@ def main():
         if not peers:
             continue
         if send(peers[0], a.file, a.quiet):
-            print(f"sent {os.path.basename(a.file)} to {peers[0]['id']}")
+            what = (os.path.basename(a.file[0]) if len(a.file) == 1
+                    else f"{len(a.file)} files")
+            print(f"sent {what} to {peers[0]['id']}")
             return
     sys.exit("airdrop-send: no transfer completed; is the peer's AirDrop screen open?")
 

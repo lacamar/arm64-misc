@@ -1,5 +1,5 @@
 Name:           airdrop-contacts
-Version:        0.3.1
+Version:        0.6.0
 Release:        1%{?dist}
 Summary:        AirDrop sending to Contacts-Only Apple devices over AWDL
 
@@ -79,6 +79,20 @@ sh -n %{SOURCE3}
 %{_userunitdir}/opendrop-receive.service.d/10-%{name}.conf
 
 %changelog
+* Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.6.0-1
+- Stream peers from --list as they are seen, for a picker that fills live
+- Cap the Discover name lookup so one slow peer cannot stall the list
+- Kill avahi-browse and opendrop children on exit or signal
+
+* Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.5.0-1
+- --list resolves the device name via Discover, tab separated output
+
+* Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.1-1
+- --list gathers peers across rounds; MACs rotate and records age out
+
+* Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0-1
+- Accept several files and send them in one transfer
+
 * Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.1-1
 - Default MODEL=MacBookPro18,3; newer ids render a generic icon on iOS
 
