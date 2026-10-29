@@ -1,6 +1,6 @@
 Name:           python-opendrop
 Version:        0.13.0
-Release:        12%{?dist}
+Release:        13%{?dist}
 Summary:        Open Apple AirDrop implementation
 
 License:        GPL-3.0-or-later
@@ -14,6 +14,8 @@ Patch4:         opendrop-awdl-robust.patch
 Patch5:         opendrop-dvzip-stored-flag.patch
 Patch6:         opendrop-drain-body.patch
 Patch7:         opendrop-send-ios.patch
+Patch8:         opendrop-send-multi.patch
+Patch9:         opendrop-dvzip-gzip-blocks.patch
 Source1:        opendrop-receive.service
 Source2:        90-opendrop.preset
 
@@ -64,6 +66,11 @@ install -Dm644 %{SOURCE2} %{buildroot}%{_userpresetdir}/90-opendrop.preset
 %{_userpresetdir}/90-opendrop.preset
 
 %changelog
+* Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.13.0-13
+- Send multiple files in one transfer (repeat -f)
+- Per-file UTI in Ask
+- dvzip: accept gzip-framed blocks, dump undecodable ones
+
 * Tue Oct 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.13.0-12
 - Enable receiver by default (user preset)
 

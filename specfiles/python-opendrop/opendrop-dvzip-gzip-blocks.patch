@@ -1,0 +1,25 @@
+--- a/opendrop/server.py	2026-10-29 18:31:42.390308626 +0100
++++ b/opendrop/server.py	2026-10-29 18:31:42.400602233 +0100
+@@ -146,11 +146,21 @@
+ 
+ def _dvzip_block(b):
+     # blocks that don't shrink are stored raw
+-    for wbits in (15, -15):
++    for wbits in (15, -15, 31):
+         try:
+             return zlib.decompress(b, wbits)
+         except zlib.error:
+             pass
++    # an undecodable block makes libarchive reject the whole stream; keep a copy so the
++    # framing can be worked out instead of guessed at
++    try:
++        dump = os.path.join(tempfile.gettempdir(), "opendrop-dvzip-undecodable.bin")
++        with open(dump, "wb") as f:
++            f.write(b)
++        logger.warning("dvzip: undecodable block, %d bytes, starts %s, saved to %s",
++                       len(b), b[:16].hex(), dump)
++    except OSError:
++        pass
+     return b
+ 
+ 

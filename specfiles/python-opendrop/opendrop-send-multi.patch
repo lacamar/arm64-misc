@@ -1,0 +1,85 @@
+diff -ruN '--exclude=__pycache__' a/opendrop/client.py b/opendrop/client.py
+--- a/opendrop/client.py	2026-10-29 18:30:52.694876686 +0100
++++ b/opendrop/client.py	2026-10-29 18:31:08.723491560 +0100
+@@ -163,6 +163,8 @@
+         def file_entries(files):
+             for file in files:
+                 file_name = os.path.basename(file)
++                with open(file, "rb") as f:
++                    flp = fleep.get(f.read(128))
+                 file_entry = {
+                     "FileName": file_name,
+                     "FileType": AirDropUtil.get_uti_type(flp),
+@@ -181,8 +183,7 @@
+         else:
+             # generate icon for first file
+             with open(file_path[0], "rb") as f:
+-                file_header = f.read(128)
+-                flp = fleep.get(file_header)
++                flp = fleep.get(f.read(128))
+                 if not icon and len(flp.mime) > 0 and "image" in flp.mime[0]:
+                     icon = AirDropUtil.generate_file_icon(f.name)
+             ask_body["Files"] = [e for e in file_entries(file_path)]
+@@ -203,12 +204,14 @@
+         # Don't send an upload request if we just sent a link
+         if is_url:
+             return
++        if isinstance(file_path, str):
++            file_path = [file_path]
+ 
+         headers = {
+             "Content-Type": "application/x-dvzip",
+             # iOS matches the upload to the accepted /Ask by TransferID
+             "TransferID": self.transfer_id,
+-            "TotalBytes": str(os.path.getsize(file_path)),
++            "TotalBytes": str(sum(os.path.getsize(f) for f in file_path)),
+         }
+         success, _ = self.send_POST("/Upload", io.BytesIO(dvzip(file_path)), headers=headers)
+ 
+@@ -237,14 +240,17 @@
+         0, ino, mode, uid, gid, 1, 0, mtime, len(n), len(data) if size is None else size) + n + data
+ 
+ 
+-def dvzip(file_path, block=1 << 17):
+-    # what iOS sends: an odc cpio of "." and the file, split into [u32 BE len][zlib] blocks; bit 31 = stored
+-    st = os.stat(file_path)
+-    with open(file_path, "rb") as f:
+-        data = f.read()
+-    parts = [_odc(".", 0o40700, ino=1, mtime=int(st.st_mtime)),
+-             _odc("./" + os.path.basename(file_path), 0o100644, ino=2, mtime=int(st.st_mtime), size=len(data))]
+-    parts += [data[i:i + block] for i in range(0, len(data), block)]
++def dvzip(file_paths, block=1 << 17):
++    # what iOS sends: an odc cpio of "." and the files, split into [u32 BE len][zlib] blocks; bit 31 = stored
++    if isinstance(file_paths, str):
++        file_paths = [file_paths]
++    parts = [_odc(".", 0o40700, ino=1, mtime=int(os.stat(file_paths[0]).st_mtime))]
++    for ino, file_path in enumerate(file_paths, 2):
++        st = os.stat(file_path)
++        with open(file_path, "rb") as f:
++            data = f.read()
++        parts.append(_odc("./" + os.path.basename(file_path), 0o100644, ino=ino, mtime=int(st.st_mtime), size=len(data)))
++        parts += [data[i:i + block] for i in range(0, len(data), block)]
+     trailer = _odc("TRAILER!!!", 0, uid=0, gid=0)
+     size = sum(map(len, parts)) + len(trailer)
+     parts.append(trailer + bytes(-size % 512))
+diff -ruN '--exclude=__pycache__' a/opendrop/cli.py b/opendrop/cli.py
+--- a/opendrop/cli.py	2026-10-29 18:30:52.694864770 +0100
++++ b/opendrop/cli.py	2026-10-29 18:31:08.723212975 +0100
+@@ -41,7 +41,7 @@
+     def __init__(self, args):
+         parser = argparse.ArgumentParser()
+         parser.add_argument("action", choices=["receive", "find", "send"])
+-        parser.add_argument("-f", "--file", help="File to be sent")
++        parser.add_argument("-f", "--file", action="append", help="File to be sent (repeatable)")
+         parser.add_argument(
+             "-u", "--url", help="'-f,--file is a URL", action="store_true"
+         )
+@@ -106,7 +106,7 @@
+             else:  # args.action == 'send'
+                 if args.file is None:
+                     parser.error("Need -f,--file when using send")
+-                if not os.path.isfile(args.file) and not args.url:
++                if not args.url and not all(os.path.isfile(f) for f in args.file):
+                     parser.error("File in -f,--file not found")
+                 self.file = args.file
+                 self.is_url = args.url
