@@ -1,6 +1,6 @@
 Name:           awdld
 Version:        0.2.0
-Release:        3%{?dist}
+Release:        4%{?dist}
 Summary:        AWDL peer manager for brcmfmac firmware AWDL
 
 License:        MIT
@@ -60,6 +60,10 @@ nmcli general reload conf >/dev/null 2>&1 || :
 %{_prefix}/lib/systemd/system-sleep/awdld
 
 %changelog
+* Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.2.0-4
+- awdlaw clock mode: anchor advert on real fw_time from awdl_aw
+- Add AWDLD_CHAN, AWDLD_PARENT_TTL, AWDLD_FEEDLOG knobs
+
 * Tue Oct 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.2.0-3
 - Enable by default (preset)
 

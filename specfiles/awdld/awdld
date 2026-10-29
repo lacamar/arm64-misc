@@ -22,7 +22,7 @@ try:
 except (OSError, ValueError):
     FW_T0 = 0
 REFRESH = float(os.environ.get("AWDLD_REFRESH", "1.0"))
-PARENT_TTL = 4.0
+PARENT_TTL = float(os.environ.get("AWDLD_PARENT_TTL", "4.0"))
 ISOLATE = os.environ.get("AWDLD_ISOLATE", "1") != "0"
 DEBOUNCE = os.environ.get("AWDLD_DEBOUNCE", "0") != "0"
 READD = os.environ.get("AWDLD_READD", "1") != "0"
@@ -125,10 +125,7 @@ def arpa_name(name):
     return bytes([len(name)]) + name.encode() + b"\xc0\x0c"
 
 def infra_channel():
-    try:
-        r = subprocess.run(["iw", "dev", DEV, "info"], capture_output=True, text=True)
-    except OSError:
-        return 0
+    r = subprocess.run(["iw", "dev", DEV, "info"], capture_output=True, text=True)
     for ln in r.stdout.splitlines():
         if ln.strip().startswith("channel"):
             return int(ln.split()[1])
@@ -238,6 +235,14 @@ def peer_election(tlvs):
         return dict(root=t5[5:11], hc=t5[3], rmet=u32(t5, 11), smet=u32(t5, 15))
     return None
 
+def read_awdl_aw():
+    # evt96 payload the kernel stashes: fw_time = big-endian u32 microseconds at [0:4]
+    try:
+        b = bytes.fromhex(open("/sys/module/brcmfmac/parameters/awdl_aw").read().strip())
+    except (OSError, ValueError):
+        return None
+    return (struct.unpack_from(">I", b, 0)[0], time.time_ns()) if len(b) >= 4 else None
+
 def advert_entry(mac, t4, el, rx):
     # awdl_peer_advert_add (0x2c), field order from IO80211AWDLPeerManager::programChipWithNewMaster
     e = bytearray(0x2c)
@@ -248,7 +253,10 @@ def advert_entry(mac, t4, el, rx):
     e[18] = el["hc"] & 0xff
     # fw counts AWs on its own clock: us since fw start (module param awdl_fw_t0, CLOCK_REALTIME ns)
     fw = (rx["host"] - FW_T0) // 1000 - FW_LAG if FW_T0 and rx.get("host") else rx["mt"]
-    struct.pack_into("<III", e, 0x14, ({"fw": fw, "mactime": rx["mt"], "phy": rx["phy"], "zero": 0, "rot16": ((rx["mt"] & 0xffff) << 16) | (rx["mt"] >> 16),
+    # awdlaw: map the anchor frame's host rx time onto the real fw clock via a live (fw_us, host_ns) evt96 pair
+    aw = read_awdl_aw() if MT_FIELD == "awdlaw" else None
+    awdlaw = ((aw[0] + (rx["host"] - aw[1]) // 1000) & 0xffffffff) if aw and rx.get("host") else rx["mt"]
+    struct.pack_into("<III", e, 0x14, ({"fw": fw, "awdlaw": awdlaw, "mactime": rx["mt"], "phy": rx["phy"], "zero": 0, "rot16": ((rx["mt"] & 0xffff) << 16) | (rx["mt"] >> 16),
                                         "bswap": int.from_bytes(rx["mt"].to_bytes(4, "little"), "big")}[MT_FIELD] + MT_ADD) & 0xffffffff, el["smet"], el["rmet"])
     e[0x20:0x26] = el["root"]
     e[0x26:0x2c] = mac
@@ -281,7 +289,7 @@ class Elect:
         s.me, s.peers, s.parent, s.last = me, {}, None, 0.0
         s.metric = 0
         sp = get_bss("awdl_sync_params")
-        s.chan = sp[6] if sp and len(sp) > 6 and sp[6] else 6
+        s.chan = int(os.environ.get("AWDLD_CHAN", "0")) or (sp[6] if sp and len(sp) > 6 and sp[6] else 6)
         cur = get_bss("awdl_election_tree")
         if cur and len(cur) >= 7:
             s.metric = u32(cur, 3)
@@ -343,6 +351,9 @@ class Elect:
         if rx and t4 and len(t4) >= 33 and el and u16(t4, 11) == 16:
             q = s.peers.setdefault(mac, dict(adv=0.0))
             q.update(t=now, t4=t4, el=el, rx=rx)
+            if os.environ.get("AWDLD_FEEDLOG"):
+                log("feed", mac.hex(":"), "t4ch", t4[3], "rxcs", hex(rx["cs"]), "chan", s.chan,
+                    "d", rx["phy"] - rx["tgt"], "ga", good_anchor(rx, t4, s.chan), "rmet", el["rmet"], "hc", el["hc"])
             if good_anchor(rx, t4, s.chan) and seq_steady(q, u16(t4, 29), rx["mt"]):
                 q["anchor"] = (t4, el, rx)
             if ELECT == "3":
