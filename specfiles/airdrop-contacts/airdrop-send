@@ -1,0 +1,118 @@
+#!/usr/bin/python3 -I
+import argparse, json, os, socket, subprocess, sys, time
+
+IFACE = "awdl0"
+HELPER = ["pkexec", "/usr/libexec/airdrop-contacts/airdrop-privhelper"]
+DISC = os.path.expanduser("~/.local/share/opendrop/discover.last.json")
+
+
+def sh(*a, **k):
+    return subprocess.run(a, capture_output=True, text=True, **k)
+
+
+def fe80(mac):
+    m = bytearray.fromhex(mac.replace(":", ""))
+    m[0] ^= 2
+    return "fe80::%02x%02x:%02xff:fe%02x:%02x%02x" % tuple(m)
+
+
+def mac_of(addr):
+    g = socket.inet_pton(socket.AF_INET6, addr)[8:]
+    return ":".join(f"{b:02x}" for b in bytes([g[0] ^ 2, g[1], g[2], g[5], g[6], g[7]]))
+
+
+def mine():
+    try:
+        with open(f"/sys/class/net/{IFACE}/address") as f:
+            m = f.read().strip()
+    except OSError:
+        return set()
+    b = bytes.fromhex(m.replace(":", ""))
+    return {fe80(m), "169.254.%d.%d" % (b[4], b[5])}
+
+
+# the peer only answers an mDNS query, so provoke it while browsing
+def discover(rounds, quiet):
+    skip = mine()
+    for i in range(rounds):
+        p = subprocess.Popen(["timeout", "8", "opendrop", "find"],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        out = sh("timeout", "9", "avahi-browse", "-rpt", "_airdrop._tcp").stdout
+        try:
+            p.wait(11)
+        except Exception:
+            p.kill()
+        peers = []
+        for line in out.splitlines():
+            if not line.startswith("="):
+                continue
+            f = line.split(";")
+            if len(f) < 9 or f[7] in skip or not f[7].startswith("fe80::"):
+                continue
+            peers.append({"id": f[3], "host": f[6], "addr": f[7], "port": int(f[8])})
+        if peers:
+            return peers
+        if not quiet:
+            print(f"  looking for peers ({i + 1}/{rounds})...", file=sys.stderr)
+    return []
+
+
+def send(peer, path, quiet):
+    subprocess.run(HELPER + ["neigh", peer["addr"], mac_of(peer["addr"])], capture_output=True)
+    os.makedirs(os.path.dirname(DISC), exist_ok=True)
+    with open(DISC, "w") as f:
+        json.dump([{"name": peer["id"], "address": peer["addr"], "port": peer["port"],
+                    "id": peer["id"], "flags": 136, "discoverable": True}], f)
+    r = sh("timeout", "90", "opendrop", "send", "-r", "0", "-f", path)
+    out = r.stdout + r.stderr
+    if not quiet:
+        for line in out.splitlines():
+            if any(w in line for w in ("Asking", "accepted", "Uploading", "Receiver")):
+                print("  " + line.strip())
+    return "successful" in out.lower()
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="airdrop-send")
+    ap.add_argument("file", nargs="?")
+    ap.add_argument("-t", "--to", help="match peer id or hostname")
+    ap.add_argument("-l", "--list", action="store_true", help="list peers and exit")
+    ap.add_argument("-n", "--tries", type=int, default=4)
+    ap.add_argument("-q", "--quiet", action="store_true")
+    a = ap.parse_args()
+
+    if not os.path.exists(f"/sys/class/net/{IFACE}"):
+        sys.exit("airdrop-send: no awdl0 (is awdld running?)")
+
+    if a.list:
+        for p in discover(3, a.quiet):
+            print(f"{p['id']}  {p['addr']}  port {p['port']}  {p['host']}")
+        return
+
+    if not a.file:
+        ap.error("a file is required")
+    if not os.path.isfile(a.file):
+        sys.exit(f"airdrop-send: no such file: {a.file}")
+
+    for attempt in range(1, a.tries + 1):
+        if not a.quiet:
+            print(f"attempt {attempt}/{a.tries}")
+        # peers are only reachable during AWDL re-init
+        subprocess.run(HELPER + ["cycle", "6"], capture_output=True)
+        peers = discover(2, a.quiet)
+        if a.to:
+            peers = [p for p in peers if a.to.lower() in (p["id"] + p["host"]).lower()]
+        if not peers:
+            continue
+        if send(peers[0], a.file, a.quiet):
+            print(f"sent {os.path.basename(a.file)} to {peers[0]['id']}")
+            return
+    sys.exit("airdrop-send: no transfer completed; is the peer's AirDrop screen open?")
+
+
+if len(sys.argv) > 1 and sys.argv[1] == "selftest":
+    assert fe80("9a:20:82:4e:b7:46") == "fe80::9820:82ff:fe4e:b746"
+    assert mac_of("fe80::9820:82ff:fe4e:b746") == "9a:20:82:4e:b7:46"
+    print("ok")
+else:
+    main()

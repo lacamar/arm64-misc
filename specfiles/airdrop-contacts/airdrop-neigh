@@ -1,0 +1,46 @@
+#!/usr/bin/python3 -I
+import re, subprocess, sys
+
+IFACE = "awdl0"
+MAC = re.compile(r"\b((?:[0-9a-f]{2}:){5}[0-9a-f]{2})\b")
+
+
+def fe80(mac):
+    m = bytearray.fromhex(mac.replace(":", ""))
+    m[0] ^= 2
+    return "fe80::%02x%02x:%02xff:fe%02x:%02x%02x" % tuple(m)
+
+
+def own():
+    try:
+        with open(f"/sys/class/net/{IFACE}/address") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+# AWDL NS/NA never resolves, so peers are unreachable until their entry is static
+def add(mac):
+    subprocess.run(["ip", "neigh", "replace", fe80(mac), "lladdr", mac,
+                    "dev", IFACE, "nud", "permanent"], capture_output=True)
+
+
+def main():
+    me, seen = own(), set()
+    p = subprocess.Popen(["journalctl", "-u", "awdld", "-f", "-n", "400", "-o", "cat"],
+                         stdout=subprocess.PIPE, text=True)
+    for line in p.stdout:
+        for mac in MAC.findall(line):
+            if mac == me or mac in seen or mac.startswith(("01:", "33:", "ff:")):
+                continue
+            seen.add(mac)
+            add(mac)
+            print("neigh +", mac, fe80(mac), flush=True)
+
+
+if len(sys.argv) > 1 and sys.argv[1] == "selftest":
+    assert fe80("9a:20:82:4e:b7:46") == "fe80::9820:82ff:fe4e:b746"
+    assert fe80("3a:f4:d2:d5:b2:1e") == "fe80::38f4:d2ff:fed5:b21e"
+    print("ok")
+else:
+    main()

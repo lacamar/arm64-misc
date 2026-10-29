@@ -1,0 +1,25 @@
+#!/bin/sh
+# Fixed privileged steps for airdrop-send. No arbitrary execution.
+set -u
+IFACE=awdl0
+
+case "${1:-}" in
+neigh)
+    case "${2:-}" in fe80::*) ;; *) echo "bad address" >&2; exit 2 ;; esac
+    case "${3:-}" in
+        [0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]) ;;
+        *) echo "bad mac" >&2; exit 2 ;;
+    esac
+    exec ip neigh replace "$2" lladdr "$3" dev "$IFACE" nud permanent
+    ;;
+cycle)
+    # peers can only reach us while AWDL is re-initialising, so re-init on demand
+    systemctl restart awdld || exit 1
+    sleep "${2:-6}"
+    exec ip link show "$IFACE" >/dev/null
+    ;;
+*)
+    echo "usage: airdrop-privhelper {neigh <fe80::..> <mac>|cycle [secs]}" >&2
+    exit 2
+    ;;
+esac

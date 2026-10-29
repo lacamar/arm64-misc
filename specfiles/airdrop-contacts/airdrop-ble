@@ -1,0 +1,84 @@
+#!/usr/bin/python3 -I
+import asyncio, plistlib, sys
+from dbus_next.aio import MessageBus
+from dbus_next.service import ServiceInterface, dbus_property, method
+from dbus_next import Variant, BusType, PropertyAccess
+
+CONF = "/etc/airdrop-contacts.conf"
+PATH = "/org/airdrop_contacts/adv0"
+APPLE = 0x004C
+
+
+def conf():
+    d = {}
+    try:
+        for line in open(CONF):
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                d[k.strip()] = v.strip().strip('"')
+    except OSError:
+        pass
+    return d
+
+
+def hashes(c):
+    if c.get("HASHES"):
+        hs = [h.strip() for h in c["HASHES"].split(",") if h.strip()]
+    else:
+        path = c.get("RECORD_PLIST", "/etc/airdrop-contacts/record.plist")
+        with open(path, "rb") as f:
+            p = plistlib.load(f)
+        hs = p.get("ValidatedEmailHashes", []) + p.get("ValidatedPhoneHashes", [])
+    if not hs:
+        sys.exit("airdrop-ble: no Apple ID hashes; set HASHES= or RECORD_PLIST= in " + CONF)
+    return b"".join(bytes.fromhex(h[:4]) for h in hs[:4])[:8].ljust(8, b"\0")
+
+
+# legacy v1 AirDrop advert; receivers match these hashes against their contacts
+def payload(c):
+    return bytes([0x05, 0x12]) + bytes(8) + b"\x01" + hashes(c) + b"\x00"
+
+
+class Adv(ServiceInterface):
+    def __init__(self, data):
+        super().__init__("org.bluez.LEAdvertisement1")
+        self.data = data
+
+    @method()
+    def Release(self):
+        pass
+
+    @dbus_property(access=PropertyAccess.READ)
+    def Type(self) -> 's':
+        return "peripheral"
+
+    @dbus_property(access=PropertyAccess.READ)
+    def ManufacturerData(self) -> 'a{qv}':
+        return {APPLE: Variant('ay', self.data)}
+
+
+async def main():
+    data = payload(conf())
+    print("advert 4c00" + data.hex(), flush=True)
+    while True:
+        try:
+            bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+            bus.export(PATH, Adv(data))
+            intro = await bus.introspect("org.bluez", "/org/bluez/hci0")
+            mgr = bus.get_proxy_object("org.bluez", "/org/bluez/hci0", intro) \
+                     .get_interface("org.bluez.LEAdvertisingManager1")
+            await mgr.call_register_advertisement(PATH, {})
+            print("registered", flush=True)
+            await bus.wait_for_disconnect()
+        except Exception as e:
+            print("retrying after:", e, flush=True)
+        await asyncio.sleep(10)
+
+
+if len(sys.argv) > 1 and sys.argv[1] == "selftest":
+    assert payload({"HASHES": "3959,7512,7fb5,abc8"}).hex() == \
+        "0512000000000000000001395975127fb5abc800"
+    print("ok")
+else:
+    asyncio.run(main())

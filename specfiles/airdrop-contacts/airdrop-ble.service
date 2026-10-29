@@ -1,0 +1,12 @@
+[Unit]
+Description=AirDrop Contacts-Only BLE advert (Apple ID hashes)
+After=bluetooth.service
+Requires=bluetooth.service
+
+[Service]
+ExecStart=/usr/libexec/airdrop-contacts/airdrop-ble
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

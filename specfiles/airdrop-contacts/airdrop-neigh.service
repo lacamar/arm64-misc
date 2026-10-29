@@ -1,0 +1,13 @@
+[Unit]
+Description=Static AWDL neighbours (awdl0 ND never resolves)
+After=awdld.service
+Wants=awdld.service
+ConditionPathExists=/sys/module/brcmfmac/parameters/awdl
+
+[Service]
+ExecStart=/usr/libexec/airdrop-contacts/airdrop-neigh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
