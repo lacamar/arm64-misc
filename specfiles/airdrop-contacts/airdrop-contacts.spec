@@ -1,5 +1,5 @@
 Name:           airdrop-contacts
-Version:        0.3.0
+Version:        0.3.1
 Release:        1%{?dist}
 Summary:        AirDrop sending to Contacts-Only Apple devices over AWDL
 
@@ -79,6 +79,9 @@ sh -n %{SOURCE3}
 %{_userunitdir}/opendrop-receive.service.d/10-%{name}.conf
 
 %changelog
+* Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.1-1
+- Default MODEL=MacBookPro18,3; newer ids render a generic icon on iOS
+
 * Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.0-1
 - Set the share-sheet name and model via MODEL=/NAME= in the config
 - Drop-in so the receiver advertises a real Mac model instead of OpenDrop
