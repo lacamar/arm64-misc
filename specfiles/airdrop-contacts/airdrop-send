@@ -101,7 +101,7 @@ def main():
         subprocess.run(HELPER + ["cycle", "6"], capture_output=True)
         peers = discover(2, a.quiet)
         if a.to:
-            peers = [p for p in peers if a.to.lower() in (p["id"] + p["host"]).lower()]
+            peers = [p for p in peers if a.to.lower() in (p["id"] + p["host"] + p["addr"]).lower()]
         if not peers:
             continue
         if send(peers[0], a.file, a.quiet):

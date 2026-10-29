@@ -1,6 +1,6 @@
 Name:           airdrop-contacts
 Version:        0.1.0
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        AirDrop sending to Contacts-Only Apple devices over AWDL
 
 License:        MIT
@@ -75,6 +75,9 @@ sh -n %{SOURCE3}
 %config(noreplace) %{_sysconfdir}/%{name}.conf
 
 %changelog
+* Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.0-2
+- Match --to against the peer address too (ids rotate each discovery)
+
 * Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.0-1
 - Initial package
 - BLE advert of Apple ID hashes for Contacts Only receivers
