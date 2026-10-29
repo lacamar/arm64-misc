@@ -1,0 +1,855 @@
+diff --git a/config.c b/config.c
+index b514cbe..ebb51e9 100644
+--- a/config.c
++++ b/config.c
+@@ -206,6 +206,7 @@ static const char *const binding_action_map[] = {
+     [BIND_ACTION_TOGGLE_SIDEBAR] = "toggle-sidebar",
+     [BIND_ACTION_QUICK_SWITCHER] = "quick-switcher",
+     [BIND_ACTION_REOPEN_TAB] = "reopen-tab",
++    [BIND_ACTION_SESSION_HISTORY] = "session-history",
+     [BIND_ACTION_RENAME_TAB] = "rename-tab",
+     [BIND_ACTION_PIN_TAB] = "pin-tab",
+     [BIND_ACTION_BROADCAST_INPUT] = "broadcast-input",
+@@ -1342,6 +1343,9 @@ parse_section_session(struct context *ctx)
+     else if (streq(key, "scrollback-lines"))
+         return value_to_uint32(ctx, 10, &conf->session.scrollback_lines);
+ 
++    else if (streq(key, "history"))
++        return value_to_uint32(ctx, 10, &conf->session.history);
++
+     else {
+         LOG_CONTEXTUAL_ERR("not a valid option: %s", key);
+         return false;
+@@ -3516,6 +3520,7 @@ add_default_key_bindings(struct config *conf)
+         {BIND_ACTION_MOVE_TAB_UP, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_SHIFT), {{XKB_KEY_Prior}}},
+         {BIND_ACTION_QUICK_SWITCHER, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_SHIFT), {{XKB_KEY_space}}},
+         {BIND_ACTION_REOPEN_TAB, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_SHIFT), {{XKB_KEY_y}}},
++        {BIND_ACTION_SESSION_HISTORY, m(XKB_MOD_NAME_CTRL "+" XKB_MOD_NAME_SHIFT), {{XKB_KEY_h}}},
+         {BIND_ACTION_FONT_SIZE_UP, m(XKB_MOD_NAME_CTRL), {{XKB_KEY_plus}}},
+         {BIND_ACTION_FONT_SIZE_UP, m(XKB_MOD_NAME_CTRL), {{XKB_KEY_equal}}},
+         {BIND_ACTION_FONT_SIZE_UP, m(XKB_MOD_NAME_CTRL), {{XKB_KEY_KP_Add}}},
+@@ -3725,6 +3730,7 @@ config_load(struct config *conf, const char *conf_path,
+             .enabled = true,
+             .save_interval_secs = 20,
+             .scrollback_lines = 1000,
++            .history = 10,
+             .restore_rules = tll_init(),
+             .duplicate_rules = tll_init(),
+         },
+diff --git a/config.h b/config.h
+index 50b9c75..50a9752 100644
+--- a/config.h
++++ b/config.h
+@@ -340,6 +340,7 @@ struct config {
+         bool enabled;
+         uint32_t save_interval_secs;
+         uint32_t scrollback_lines;
++        uint32_t history;
+         rule_list_t restore_rules;
+         rule_list_t duplicate_rules;
+     } session;
+diff --git a/doc/foot.ini.5.scd b/doc/foot.ini.5.scd
+index 81d1589..22481fb 100644
+--- a/doc/foot.ini.5.scd
++++ b/doc/foot.ini.5.scd
+@@ -882,6 +882,12 @@ xdg-session-management, if the compositor supports it.
+ 	How many additional lines of scrollback, on top of the visible
+ 	screen, to save for each window. Default: _1000_.
+ 
++*history*
++	How many previous sessions to keep. Each server start moves the
++	saved session into the history before restoring it; the sidebar's
++	history button lists them, along with recently closed tabs, and
++	opens one alongside the current windows. Default: _10_.
++
+ # SECTION: session-restore
+ 
+ Rules for re-launching programs in restored windows. Each key is
+@@ -974,9 +980,13 @@ The compositor's close action (e.g. a window manager's close-window
+ key) closes the current tab; closing the last tab closes the window.
+ 
+ Hovering a tab shows an *×* to close it; double-click a tab to rename
+-it. Pinned tabs stay at the top of the list and ask before closing.
++it. Pinned tabs stay at the top of the list and ask before closing;
++drag a tab into them to pin it, or out of them to unpin it.
+ Right-click *+* to reopen the most recently closed tab (the last ten
+ are kept, with their screen and relaunch rules as in session restore).
++The *◷* button next to it lists those tabs and the previous sessions
++(see *history* in *SECTION: session*); choosing a session opens its
++windows alongside the current ones.
+ 
+ In a split, drag the gap between panes to resize them, and use
+ *Broadcast input* from a pane's menu to type into all of its panes at
+@@ -1707,6 +1717,10 @@ e.g. *search-start=none*.
+ *reopen-tab*
+ 	Reopen the most recently closed tab. Default: _Control+Shift+y_.
+ 
++*session-history*
++	Show recently closed tabs and previous sessions, as the sidebar's
++	*◷* button does. Default: _Control+Shift+h_.
++
+ *rename-tab*, *pin-tab*
+ 	Rename / pin or unpin the current tab. Default: _none_.
+ 
+diff --git a/fdm.c b/fdm.c
+index 4822cd9..e1f724d 100644
+--- a/fdm.c
++++ b/fdm.c
+@@ -376,6 +376,7 @@ fdm_signal_add(struct fdm *fdm, int signo, fdm_signal_handler_t handler, void *d
+     }
+ 
+     received_signals[signo] = false;
++    sigdelset(&fdm->sigmask, signo);
+     fdm->signal_handlers[signo].callback = handler;
+     fdm->signal_handlers[signo].callback_data = data;
+     return true;
+diff --git a/foot.ini b/foot.ini
+index ba18d12..685cfc2 100644
+--- a/foot.ini
++++ b/foot.ini
+@@ -250,6 +250,7 @@
+ # toggle-sidebar=none
+ # quick-switcher=Control+Shift+space
+ # reopen-tab=Control+Shift+y
++# session-history=Control+Shift+h
+ # rename-tab=none
+ # pin-tab=none
+ # broadcast-input=none
+diff --git a/input.c b/input.c
+index a290504..2b8c29c 100644
+--- a/input.c
++++ b/input.c
+@@ -548,6 +548,10 @@ execute_binding(struct seat *seat, struct terminal *term,
+         tabs_reopen(term->window);
+         return true;
+ 
++    case BIND_ACTION_SESSION_HISTORY:
++        tabs_open_history(term->window);
++        return true;
++
+     case BIND_ACTION_RENAME_TAB:
+         tabs_open_rename(term->window, term);
+         return true;
+diff --git a/key-binding.h b/key-binding.h
+index 48ae60d..29ec92f 100644
+--- a/key-binding.h
++++ b/key-binding.h
+@@ -66,6 +66,7 @@ enum bind_action_normal {
+     BIND_ACTION_TOGGLE_SIDEBAR,
+     BIND_ACTION_QUICK_SWITCHER,
+     BIND_ACTION_REOPEN_TAB,
++    BIND_ACTION_SESSION_HISTORY,
+     BIND_ACTION_RENAME_TAB,
+     BIND_ACTION_PIN_TAB,
+     BIND_ACTION_BROADCAST_INPUT,
+diff --git a/main.c b/main.c
+index dd5d22a..2d187d5 100644
+--- a/main.c
++++ b/main.c
+@@ -236,6 +236,15 @@ main(int argc, char *const *argv)
+ 
+     sanitize_signals();
+ 
++    /* Pending until the handlers exist: e.g. a theme SIGUSR1 during session restore */
++    sigset_t early;
++    sigemptyset(&early);
++    sigaddset(&early, SIGINT);
++    sigaddset(&early, SIGTERM);
++    sigaddset(&early, SIGUSR1);
++    sigaddset(&early, SIGUSR2);
++    sigprocmask(SIG_BLOCK, &early, NULL);
++
+     /* XDG startup notifications */
+     const char *token = getenv("XDG_ACTIVATION_TOKEN");
+     unsetenv("XDG_ACTIVATION_TOKEN");
+diff --git a/render.c b/render.c
+index 675ac7e..72c4974 100644
+--- a/render.c
++++ b/render.c
+@@ -5794,6 +5794,12 @@ render_sidebar(struct wl_window *win)
+         sidebar_fill(buf, hover_bg, alpha, gamma, 0, fy, row_h, row_h);
+     if (win->hover.what == TAB_HOVER_SEARCH)
+         sidebar_fill(buf, hover_bg, alpha, gamma, w / 2 - row_h / 2, fy, row_h, row_h);
++    if (win->hover.what == TAB_HOVER_HISTORY)
++        sidebar_fill(buf, hover_bg, alpha, gamma, row_h, fy, row_h, row_h);
++    if (w / 2 - row_h / 2 >= 2 * row_h) {
++        const int hw = text_width(term, U"◷");
++        sidebar_text(term, buf, U"◷", row_h + (row_h - hw) / 2, fy, row_h, w, c->fg, gamma);
++    }
+     {
+         const int sw = text_width(term, U"⌕");
+         sidebar_text(term, buf, U"⌕", w / 2 - sw / 2, fy, row_h, w, c->fg, gamma);
+diff --git a/session.c b/session.c
+index e42c554..2d27849 100644
+--- a/session.c
++++ b/session.c
+@@ -109,6 +109,7 @@ struct session_tracked {
+     struct terminal *term;
+     struct wl_window *win;  /* compared only, may be freed */
+     bool closing;
++    bool detached;
+     const struct config *conf;
+     char *name;
+     size_t launch_argc;
+@@ -120,6 +121,13 @@ struct session_tracked {
+ struct closed_window {
+     struct session_window *w;
+     time_t at;
++    bool detached;  /* client died: kept until exit, e.g. at logout */
++};
++
++struct history_entry {
++    char *path;
++    time_t when;
++    size_t tabs, windows;
+ };
+ 
+ struct session {
+@@ -128,8 +136,13 @@ struct session {
+     struct reaper *reaper;
+     struct wayland *wayl;
+     char *path;
++    char *history_dir;
+     char *xdg_id;
+     int timer_fd;
++    session_restore_cb restore_cb;
++    void *restore_data;
++    struct history_entry *history;
++    size_t history_n;
+ 
+     tll(struct session_tracked *) windows;
+     tll(struct closed_window) closed;
+@@ -139,6 +152,7 @@ struct session {
+ 
+     char *written;
+     size_t written_len;
++    size_t written_count;
+ };
+ 
+ static time_t
+@@ -421,12 +435,12 @@ read_window(FILE *f)
+     return w;
+ }
+ 
+-static void
++static bool
+ read_state(const char *path, window_list_t *out, char **xdg_id)
+ {
+     FILE *f = fopen(path, "re");
+     if (f == NULL)
+-        return;
++        return false;
+ 
+     char magic[32];
+     int version;
+@@ -459,11 +473,100 @@ read_state(const char *path, window_list_t *out, char **xdg_id)
+             tll_remove(*out, it);
+         }
+     }
++    return ok;
++}
++
++static void
++windows_free(window_list_t *list)
++{
++    tll_foreach(*list, it) {
++        window_free(it->item);
++        tll_remove(*list, it);
++    }
++}
++
++/* History: previous sessions, newest first */
++
++static void
++history_free(struct session *s)
++{
++    for (size_t i = 0; i < s->history_n; i++)
++        free(s->history[i].path);
++    free(s->history);
++    s->history = NULL;
++    s->history_n = 0;
++}
++
++static int
++history_cmp(const void *_a, const void *_b)
++{
++    const struct history_entry *a = _a, *b = _b;
++    if (a->when != b->when)
++        return a->when > b->when ? -1 : 1;
++    return -strcmp(a->path, b->path);
++}
++
++static void
++history_scan(struct session *s)
++{
++    history_free(s);
++    DIR *d = opendir(s->history_dir);
++    if (d == NULL)
++        return;
++
++    for (struct dirent *e; (e = readdir(d)) != NULL;) {
++        const size_t len = strlen(e->d_name);
++        if (len <= 6 || !streq(e->d_name + len - 6, ".state"))
++            continue;
++        char *path = xasprintf("%s/%s", s->history_dir, e->d_name);
++        struct stat st;
++        if (stat(path, &st) < 0) {
++            free(path);
++            continue;
++        }
++        s->history = xrealloc(s->history, (s->history_n + 1) * sizeof(s->history[0]));
++        s->history[s->history_n++] = (struct history_entry){
++            .path = path, .when = st.st_mtime};
++    }
++    closedir(d);
++    qsort(s->history, s->history_n, sizeof(s->history[0]), &history_cmp);
++}
++
++static void
++history_prune(struct session *s)
++{
++    history_scan(s);
++    while (s->history_n > s->conf->session.history) {
++        struct history_entry *h = &s->history[--s->history_n];
++        unlink(h->path);
++        free(h->path);
++    }
++}
++
++/* Moves a saved session into the history, so it is never restored twice
++ * (e.g. if restoring crashes) yet is never lost either */
++static void
++archive_state(struct session *s, const char *src, window_list_t *out, char **xdg_id)
++{
++    struct stat st;
++    if (stat(src, &st) < 0)
++        return;
++
++    char *dst = xasprintf("%s/%lld.state", s->history_dir, (long long)st.st_mtime);
++    for (int i = 1; access(dst, F_OK) == 0; i++) {
++        free(dst);
++        dst = xasprintf("%s/%lld-%d.state", s->history_dir, (long long)st.st_mtime, i);
++    }
++
++    if (!mkdir_parent(dst) || rename(src, dst) < 0) {
++        LOG_ERRNO("%s: failed to move to %s", src, dst);
++        free(dst);
++        return;
++    }
+ 
+-    /* Never restore the same state twice, e.g. if restoring crashes */
+-    char *backup = xstrjoin(path, ".restored");
+-    rename(path, backup);
+-    free(backup);
++    if (read_state(dst, out, xdg_id) && tll_length(*out) == 0)
++        unlink(dst);
++    free(dst);
+ }
+ 
+ struct sort_key {
+@@ -506,7 +609,7 @@ write_state(struct session *s)
+ {
+     const time_t now = now_secs();
+     tll_foreach(s->closed, it) {
+-        if (now - it->item.at >= CLOSE_GRACE_SECS) {
++        if (!it->item.detached && now - it->item.at >= CLOSE_GRACE_SECS) {
+             struct session_window *w = it->item.w;
+             tll_remove(s->closed, it);
+             remove_toplevel_if_unused(s, w->name);
+@@ -560,6 +663,12 @@ write_state(struct session *s)
+         return;
+     }
+ 
++    /* Like a browser quitting with its last window: that window comes back */
++    if (count == 0 && s->written_count > 0) {
++        free(buf);
++        return;
++    }
++
+     if (s->written != NULL && s->written_len == len &&
+         memcmp(s->written, buf, len) == 0)
+     {
+@@ -575,6 +684,7 @@ write_state(struct session *s)
+         free(s->written);
+         s->written = buf;
+         s->written_len = len;
++        s->written_count = count;
+     } else
+         free(buf);
+ }
+@@ -1405,21 +1515,8 @@ restore_finish(struct restore_win *rw)
+ }
+ 
+ static void
+-restore(struct session *s, session_restore_cb cb, void *data)
++restore_windows(struct session *s, window_list_t windows)
+ {
+-    window_list_t windows = tll_init();
+-    read_state(s->path, &windows, &s->xdg_id);
+-
+-    if (s->wayl->session_manager != NULL) {
+-        s->wayl->xdg_session = xdg_session_manager_v1_get_session(
+-            s->wayl->session_manager,
+-            tll_length(windows) > 0
+-                ? XDG_SESSION_MANAGER_V1_REASON_SESSION_RESTORE
+-                : XDG_SESSION_MANAGER_V1_REASON_LAUNCH,
+-            s->xdg_id);
+-        xdg_session_v1_add_listener(s->wayl->xdg_session, &xdg_session_listener, s);
+-    }
+-
+     struct restore_win rw = {0};
+     tll_foreach(windows, it) {
+         struct session_window *w = it->item;
+@@ -1447,7 +1544,7 @@ restore(struct session *s, session_restore_cb cb, void *data)
+         const bool split = rw.prev != NULL && group != 0 && group == rw.prev_group;
+ 
+         struct terminal *term = script != NULL
+-            ? cb(data, s, w, w->cwd, argv, rw.win, split) : NULL;
++            ? s->restore_cb(s->restore_data, s, w, w->cwd, argv, rw.win, split) : NULL;
+ 
+         if (term == NULL) {
+             if (snapshot_path != NULL)
+@@ -1484,6 +1581,35 @@ restore(struct session *s, session_restore_cb cb, void *data)
+     restore_finish(&rw);
+ }
+ 
++static void
++restore(struct session *s)
++{
++    window_list_t windows = tll_init();
++
++    /* Left behind by older versions */
++    char *legacy = xstrjoin(s->path, ".restored");
++    char *legacy_id = NULL;
++    archive_state(s, legacy, &windows, &legacy_id);
++    windows_free(&windows);
++    free(legacy_id);
++    free(legacy);
++
++    archive_state(s, s->path, &windows, &s->xdg_id);
++    history_prune(s);
++
++    if (s->wayl->session_manager != NULL) {
++        s->wayl->xdg_session = xdg_session_manager_v1_get_session(
++            s->wayl->session_manager,
++            tll_length(windows) > 0
++                ? XDG_SESSION_MANAGER_V1_REASON_SESSION_RESTORE
++                : XDG_SESSION_MANAGER_V1_REASON_LAUNCH,
++            s->xdg_id);
++        xdg_session_v1_add_listener(s->wayl->xdg_session, &xdg_session_listener, s);
++    }
++
++    restore_windows(s, windows);
++}
++
+ /* Duplicate */
+ 
+ #define DUPLICATE_TIMEOUT_MS 2000
+@@ -1635,6 +1761,7 @@ session_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
+     char *path = state_path();
+     if (path == NULL)
+         return NULL;
++    const char *slash = strrchr(path, '/');
+ 
+     struct session *s = xmalloc(sizeof(*s));
+     *s = (struct session){
+@@ -1643,14 +1770,17 @@ session_init(const struct config *conf, struct fdm *fdm, struct reaper *reaper,
+         .reaper = reaper,
+         .wayl = wayl,
+         .path = path,
++        .history_dir = xasprintf("%.*s/history", (int)(slash - path), path),
+         .timer_fd = -1,
++        .restore_cb = restore_cb,
++        .restore_data = restore_data,
+         .windows = tll_init(),
+         .closed = tll_init(),
+         .relaunch = tll_init(),
+         .evals = tll_init(),
+     };
+ 
+-    restore(s, restore_cb, restore_data);
++    restore(s);
+ 
+     if (conf->session.save_interval_secs == 0)
+         return s;
+@@ -1723,8 +1853,10 @@ session_destroy(struct session *s)
+         tll_remove(s->windows, it);
+     }
+ 
++    history_free(s);
+     free(s->written);
+     free(s->xdg_id);
++    free(s->history_dir);
+     free(s->path);
+     free(s);
+ }
+@@ -1837,11 +1969,19 @@ remember_closed(struct session *s, const struct session_tracked *t)
+ }
+ 
+ char *
+-session_reopen_script(struct session *s, char **cwd)
++session_reopen_script(struct session *s, size_t idx, char **cwd)
+ {
+-    if (s == NULL || tll_length(s->recent) == 0)
++    if (s == NULL || idx >= tll_length(s->recent))
+         return NULL;
+-    struct session_window *w = tll_pop_front(s->recent);
++    struct session_window *w = NULL;
++    size_t i = 0;
++    tll_foreach(s->recent, it) {
++        if (i++ == idx) {
++            w = it->item;
++            tll_remove(s->recent, it);
++            break;
++        }
++    }
+     char *snapshot_path = write_snapshot_file(w->snapshot);
+     char *script = restore_script(snapshot_path, w, s->conf->shell);
+     free(snapshot_path);
+@@ -1866,7 +2006,8 @@ session_untrack(struct session_tracked *t)
+ 
+         /* Closing a tab alone must not bring it back as a window */
+         if (t->saved != NULL && (t->closing || !name_in_use(s, t->name))) {
+-            tll_push_back(s->closed, ((struct closed_window){t->saved, now_secs()}));
++            tll_push_back(s->closed, ((struct closed_window){
++                t->saved, now_secs(), t->detached}));
+             t->saved = NULL;
+         } else
+             remove_toplevel_if_unused(s, t->name);
+@@ -1894,7 +2035,7 @@ void
+ session_window_detached(struct session_tracked *t)
+ {
+     if (t != NULL)
+-        t->closing = true;
++        t->closing = t->detached = true;
+ }
+ 
+ void
+@@ -1933,3 +2074,128 @@ session_window_name(const struct session_window *w)
+ {
+     return w->name;
+ }
++
++/* History menu: recently closed tabs, then previous sessions */
++
++size_t
++session_history_load(struct session *s)
++{
++    if (s == NULL)
++        return 0;
++
++    history_scan(s);
++    size_t kept = 0;
++    for (size_t i = 0; i < s->history_n; i++) {
++        struct history_entry h = s->history[i];
++        window_list_t windows = tll_init();
++        char *xdg_id = NULL;
++        read_state(h.path, &windows, &xdg_id);
++        h.tabs = tll_length(windows);
++        const char *prev = NULL;
++        tll_foreach(windows, it) {
++            if (prev == NULL || !streq(prev, it->item->name))
++                h.windows++;
++            prev = it->item->name;
++        }
++        windows_free(&windows);
++        free(xdg_id);
++        if (h.tabs > 0)
++            s->history[kept++] = h;
++        else
++            free(h.path);
++    }
++    s->history_n = kept;
++    return tll_length(s->recent) + s->history_n;
++}
++
++bool
++session_history_is_tab(const struct session *s, size_t idx)
++{
++    return s != NULL && idx < tll_length(s->recent);
++}
++
++static char *
++tab_label(const struct session_window *w)
++{
++    const char *prog = "shell";
++    if (w->label != NULL && w->label[0] != '\0')
++        prog = w->label;
++    else if (tll_length(w->commands) > 0 && tll_front(w->commands).argc > 0)
++        prog = tll_front(w->commands).argv[0];
++    else if (w->launch_argc > 0)
++        prog = w->launch_argv[0];
++    const char *base = strrchr(prog, '/');
++    if (base != NULL && w->label == NULL)
++        prog = base + 1;
++
++    const char *home = getenv("HOME");
++    const size_t hl = home != NULL ? strlen(home) : 0;
++    if (hl > 1 && strncmp(w->cwd, home, hl) == 0 &&
++        (w->cwd[hl] == '/' || w->cwd[hl] == '\0'))
++    {
++        return xasprintf("↺ %s  ~%s", prog, w->cwd + hl);
++    }
++    return xasprintf("↺ %s  %s", prog, w->cwd);
++}
++
++char *
++session_history_label(const struct session *s, size_t idx)
++{
++    if (s == NULL)
++        return xstrdup("");
++
++    size_t i = 0;
++    tll_foreach(s->recent, it) {
++        if (i++ == idx)
++            return tab_label(it->item);
++    }
++
++    idx -= tll_length(s->recent);
++    if (idx >= s->history_n)
++        return xstrdup("");
++
++    const struct history_entry *h = &s->history[idx];
++    char when[64];
++    struct tm tm;
++    if (localtime_r(&h->when, &tm) == NULL ||
++        strftime(when, sizeof(when), "%a %d %b %H:%M", &tm) == 0)
++    {
++        when[0] = '\0';
++    }
++    return xasprintf("◷ Session %s  %zu tab%s, %zu window%s", when,
++                     h->tabs, h->tabs == 1 ? "" : "s",
++                     h->windows, h->windows == 1 ? "" : "s");
++}
++
++/* Opens alongside the current windows, never merging into them */
++void
++session_history_restore(struct session *s, size_t idx)
++{
++    if (s == NULL || idx < tll_length(s->recent))
++        return;
++    idx -= tll_length(s->recent);
++    if (idx >= s->history_n)
++        return;
++
++    window_list_t windows = tll_init();
++    char *xdg_id = NULL;
++    read_state(s->history[idx].path, &windows, &xdg_id);
++    free(xdg_id);
++
++    char *orig = NULL, *fresh = NULL;
++    tll_foreach(windows, it) {
++        struct session_window *w = it->item;
++        if (orig == NULL || !streq(orig, w->name)) {
++            free(orig);
++            free(fresh);
++            orig = xstrdup(w->name);
++            fresh = toplevel_name_new();
++        }
++        free(w->name);
++        w->name = xstrdup(fresh);
++    }
++    free(orig);
++    free(fresh);
++
++    restore_windows(s, windows);
++}
+diff --git a/session.h b/session.h
+index 8cc9d87..1456732 100644
+--- a/session.h
++++ b/session.h
+@@ -29,7 +29,11 @@ struct session_tracked *session_track_restored(
+     struct session *session, struct terminal *term, const struct config *conf,
+     struct session_window *w);
+ void session_untrack(struct session_tracked *tracked);
+-char *session_reopen_script(struct session *session, char **cwd);
++char *session_reopen_script(struct session *session, size_t idx, char **cwd);
++size_t session_history_load(struct session *session);
++bool session_history_is_tab(const struct session *session, size_t idx);
++char *session_history_label(const struct session *session, size_t idx);
++void session_history_restore(struct session *session, size_t idx);
+ char *session_duplicate_script(struct session *session, struct terminal *term,
+                                char **cwd);
+ void session_window_closing(struct session *session, struct wl_window *win);
+diff --git a/tabs.c b/tabs.c
+index d796ec6..3da5c54 100644
+--- a/tabs.c
++++ b/tabs.c
+@@ -1740,6 +1740,8 @@ sidebar_zone(const struct wl_window *win, int x, int y, int *row)
+             return TAB_HOVER_NEW;
+         if (x >= w / 2 - row_h / 2 && x < w / 2 + row_h / 2)
+             return TAB_HOVER_SEARCH;
++        if (x < 2 * row_h)
++            return TAB_HOVER_HISTORY;
+         return TAB_HOVER_NONE;
+     }
+     const int r = tabs_line_at(win, y);
+@@ -2308,6 +2310,10 @@ tabs_sidebar_button(struct seat *seat, struct wl_window *win, int button, bool p
+         tabs_reopen(win);
+         return;
+     }
++    if (zone == TAB_HOVER_HISTORY && button == BTN_LEFT) {
++        menu_open(win, win->term, TAB_MENU_HISTORY, sidebar_origin_px(win) + x, y);
++        return;
++    }
+     if (zone == TAB_HOVER_NONE && button == BTN_RIGHT) {
+         menu_open(win, win->term, TAB_MENU_SORT, sidebar_origin_px(win) + x, y);
+         return;
+@@ -2463,6 +2469,12 @@ tabs_sidebar_motion(struct seat *seat, struct wl_window *win)
+     }
+ 
+     const int line = min(tabs_line_at(win, y), tabs_line_count(win) - 1);
++
++    /* Dragged into the pinned block pins, out of it unpins */
++    const int pinned = pinned_lines(win);
++    if (pinned > 0 && (line < pinned) != t->tab_pinned)
++        tabs_pin(t, line < pinned);
++
+     const int target = tabs_row_of(win, tabs_line_term(win, line));
+     for (int cur = tabs_row_of(win, t); cur != target;) {
+         move_row(win, t, target > cur ? 1 : -1);
+@@ -2904,6 +2916,9 @@ tabs_menu_header(const struct wl_window *win)
+     case TAB_MENU_PREFIX:
+         h = xstrdup("Window prefix (empty: none)");
+         break;
++    case TAB_MENU_HISTORY:
++        h = xstrdup(win->menu.n > 0 ? "History" : "History (empty)");
++        break;
+     default:
+         return NULL;
+     }
+@@ -2935,6 +2950,12 @@ tabs_menu_line(const struct wl_window *win, int i)
+         free(s);
+         return r != NULL ? r : xc32dup(U"");
+     }
++    if (win->menu.kind == TAB_MENU_HISTORY) {
++        char *s = session_history_label(win->term->wl->session, i);
++        char32_t *r = ambstoc32(s);
++        free(s);
++        return r != NULL ? r : xc32dup(U"");
++    }
+     if (win->menu.kind != TAB_MENU_SWITCHER) {
+         char32_t *r = ambstoc32(menu_labels[win->menu.items[i]]);
+         return r != NULL ? r : xc32dup(U"");
+@@ -3059,6 +3080,9 @@ menu_open(struct wl_window *win, struct terminal *t, enum tab_menu_kind kind,
+         it[n++] = MI_PREFIX;
+         it[n++] = MI_REOPEN;
+         break;
++    case TAB_MENU_HISTORY:
++        n = (int)session_history_load(win->term->wl->session);
++        break;
+     case TAB_MENU_NONE:
+         return;
+     }
+@@ -3187,7 +3211,7 @@ tabs_reopen(struct wl_window *win)
+ {
+     struct wayland *wayl = win->term->wl;
+     char *cwd = NULL;
+-    char *script = session_reopen_script(wayl->session, &cwd);
++    char *script = session_reopen_script(wayl->session, 0, &cwd);
+     if (script != NULL) {
+         char *argv[] = {"/bin/sh", "-c", script, "foot", NULL};
+         server_new_tab(wayl->server, win, false, cwd, 4, argv);
+@@ -3202,6 +3226,12 @@ tabs_open_switcher(struct wl_window *win)
+     menu_open(win, win->term, TAB_MENU_SWITCHER, -1, -1);
+ }
+ 
++void
++tabs_open_history(struct wl_window *win)
++{
++    menu_open(win, win->term, TAB_MENU_HISTORY, -1, -1);
++}
++
+ void
+ tabs_open_rename(struct wl_window *win, struct terminal *t)
+ {
+@@ -3275,6 +3305,23 @@ menu_activate(struct seat *seat, struct wl_window *win, int i)
+         menu_commit_text(seat, win);
+         return;
+     }
++    if (win->menu.kind == TAB_MENU_HISTORY) {
++        struct wayland *wayl = win->term->wl;
++        tabs_menu_close(win);
++        if (!session_history_is_tab(wayl->session, i)) {
++            session_history_restore(wayl->session, i);
++            return;
++        }
++        char *cwd = NULL;
++        char *script = session_reopen_script(wayl->session, i, &cwd);
++        if (script != NULL) {
++            char *argv[] = {"/bin/sh", "-c", script, "foot", NULL};
++            server_new_tab(wayl->server, win, false, cwd, 4, argv);
++        }
++        free(script);
++        free(cwd);
++        return;
++    }
+     struct terminal *t = win->menu.target;
+     const int item = win->menu.items[i];
+     const int x = win->menu.x, y = win->menu.y;
+@@ -3312,7 +3359,8 @@ menu_activate(struct seat *seat, struct wl_window *win, int i)
+ int
+ tabs_menu_rows(const struct wl_window *win)
+ {
+-    return win->menu.kind == TAB_MENU_SWITCHER ? min(win->menu.n, 12) : win->menu.n;
++    return win->menu.kind == TAB_MENU_SWITCHER ? min(win->menu.n, 12)
++        : win->menu.kind == TAB_MENU_HISTORY ? min(win->menu.n, 20) : win->menu.n;
+ }
+ 
+ static void
+@@ -3486,6 +3534,10 @@ tabs_menu_key(struct seat *seat, struct wl_window *win, xkb_keysym_t sym,
+ 
+     const int n = win->menu.n;
+     const bool confirm = tabs_menu_is_confirm(win);
++    if (n == 0) {
++        tabs_menu_close(win);
++        return true;
++    }
+ 
+     if (confirm) {
+         switch (sym) {
+diff --git a/tabs.h b/tabs.h
+index 6be670e..233fb5b 100644
+--- a/tabs.h
++++ b/tabs.h
+@@ -122,6 +122,7 @@ void tabs_set_prefix(struct wl_window *win, const char *prefix);
+ char *tabs_title(const struct terminal *t, bool prefixed);
+ void tabs_apply_order(struct wl_window *win);
+ void tabs_pin(struct terminal *t, bool pin);
++void tabs_open_history(struct wl_window *win);
+ void tabs_toggle_broadcast(struct wl_window *win);
+ void tabs_reopen(struct wl_window *win);
+ void tabs_open_switcher(struct wl_window *win);
+diff --git a/terminal.c b/terminal.c
+index 2b3d7db..1c91b22 100644
+--- a/terminal.c
++++ b/terminal.c
+@@ -2730,6 +2730,9 @@ term_damage_all(struct terminal *term)
+ void
+ term_damage_view(struct terminal *term)
+ {
++    /* Not sized yet, e.g. a theme switch while restoring */
++    if (term->rows == 0)
++        return;
+     term_damage_rows_in_view(term, 0, term->rows - 1);
+ }
+ 
+diff --git a/wayland.h b/wayland.h
+index 66bb46d..e4d8cd8 100644
+--- a/wayland.h
++++ b/wayland.h
+@@ -374,12 +374,12 @@ enum tab_drop { TAB_DROP_NONE, TAB_DROP_SPLIT, TAB_DROP_DETACH };
+ enum tab_menu_kind {
+     TAB_MENU_NONE, TAB_MENU_ACTIONS, TAB_MENU_CONFIRM_KILL, TAB_MENU_SELECTION,
+     TAB_MENU_CONFIRM_CLOSE, TAB_MENU_RENAME, TAB_MENU_SWITCHER, TAB_MENU_SORT,
+-    TAB_MENU_PREFIX,
++    TAB_MENU_PREFIX, TAB_MENU_HISTORY,
+ };
+ 
+ enum tab_hover {
+     TAB_HOVER_NONE, TAB_HOVER_ROW, TAB_HOVER_NEW, TAB_HOVER_HIDE, TAB_HOVER_GRIP,
+-    TAB_HOVER_CLOSE, TAB_HOVER_SCROLLBAR, TAB_HOVER_SEARCH,
++    TAB_HOVER_CLOSE, TAB_HOVER_SCROLLBAR, TAB_HOVER_SEARCH, TAB_HOVER_HISTORY,
+ };
+ 
+ #define TAB_MIME "application/x-foot-tab"

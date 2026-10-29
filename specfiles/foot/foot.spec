@@ -4,7 +4,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        31%{?dist}
+Release:        32%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -22,6 +22,8 @@ Patch0:         foot-session-restore.patch
 Patch1:         foot-vulkan.patch
 Patch2:         foot-tabs.patch
 Patch3:         foot-theme-reload.patch
+Patch4:         foot-session-history.patch
+Patch5:         foot-tab-activity.patch
 
 BuildRequires:  gcc
 BuildRequires:  gpgverify
@@ -157,6 +159,15 @@ desktop-file-validate \
 
 
 %changelog
+* Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-32
+- Keep previous sessions in history
+- Add session history menu and button
+- Keep last window on close
+- Keep detached tabs until exit
+- Block signals until handlers exist
+- Drag tabs to pin or unpin
+- Add tab activity spinner
+
 * Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-31
 - Keep tabs whose footclient dies at logout
 
