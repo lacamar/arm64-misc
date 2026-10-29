@@ -1,5 +1,5 @@
 Name:           airdrop-contacts
-Version:        0.2.1
+Version:        0.3.0
 Release:        1%{?dist}
 Summary:        AirDrop sending to Contacts-Only Apple devices over AWDL
 
@@ -13,6 +13,7 @@ Source5:        airdrop-neigh.service
 Source6:        90-airdrop-contacts.preset
 Source7:        49-airdrop-contacts.rules
 Source8:        airdrop-contacts.conf
+Source9:        opendrop-model.conf
 
 BuildArch:      noarch
 BuildRequires:  python3
@@ -46,6 +47,7 @@ install -Dm644 %{SOURCE5} %{buildroot}%{_unitdir}/airdrop-neigh.service
 install -Dm644 %{SOURCE6} %{buildroot}%{_presetdir}/90-%{name}.preset
 install -Dm644 %{SOURCE7} %{buildroot}%{_datadir}/polkit-1/rules.d/49-%{name}.rules
 install -Dm644 %{SOURCE8} %{buildroot}%{_sysconfdir}/%{name}.conf
+install -Dm644 %{SOURCE9} %{buildroot}%{_userunitdir}/opendrop-receive.service.d/10-%{name}.conf
 
 %check
 python3 -I %{SOURCE0} selftest
@@ -73,8 +75,14 @@ sh -n %{SOURCE3}
 %{_presetdir}/90-%{name}.preset
 %{_datadir}/polkit-1/rules.d/49-%{name}.rules
 %config(noreplace) %{_sysconfdir}/%{name}.conf
+%dir %{_userunitdir}/opendrop-receive.service.d
+%{_userunitdir}/opendrop-receive.service.d/10-%{name}.conf
 
 %changelog
+* Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.0-1
+- Set the share-sheet name and model via MODEL=/NAME= in the config
+- Drop-in so the receiver advertises a real Mac model instead of OpenDrop
+
 * Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.2.1-1
 - Use the cached avahi record when there is one; only provoke if needed
 
