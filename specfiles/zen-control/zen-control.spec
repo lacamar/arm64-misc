@@ -9,7 +9,7 @@
 
 Name:           zen-control
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        19%{?dist}
+Release:        20%{?dist}
 Summary:        MCP bridge and WebExtension to drive the Zen browser from Claude Code
 
 License:        LicenseRef-Not-specified
@@ -100,6 +100,9 @@ chmod 0755 %{buildroot}%{_bindir}/%{name}
 %config(noreplace) %{_sysconfdir}/zen/policies/policies.json
 
 %changelog
+* Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-20
+- Bump extension version so Zen reinstalls it
+
 * Wed Oct 28 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-19
 - Fix frozen tab switching from controlled background tabs
 - Keep pages visible via docShellIsActive, not print-preview set

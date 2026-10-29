@@ -42,7 +42,7 @@ diff -Naur a/extension/manifest.json b/extension/manifest.json
    "manifest_version": 2,
    "name": "Zen Control",
 -  "version": "0.1.2.13",
-+  "version": "0.1.2.14",
++  "version": "0.1.2.15",
    "description": "Lets Claude Code drive this browser through a local MCP bridge (ws://127.0.0.1:17373).",
    "browser_specific_settings": {
      "gecko": {
