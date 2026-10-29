@@ -296,9 +296,11 @@ async def fetch_hotspot(creds):
 
     # connect while discovery runs: BlueZ then sends a direct LE connect instead of waiting on the accept list
     async with BleakScanner(seen_cb):
-        await asyncio.sleep(4)
-        if not seen:
-            await asyncio.sleep(6)
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < 10:
+            if any(h for h, _, _ in seen.values()) or seen and time.monotonic() - t0 > 3:
+                break
+            await asyncio.sleep(0.1)
         if not seen:
             raise LookupError('no Apple phone nearby')
         last = None
@@ -358,19 +360,69 @@ def _join(ssid, password):
     try:
         os.write(fd, f'802-11-wireless-security.psk:{password}\n'.encode())
         os.close(fd)
-        for _ in range(8):
-            nm('device', 'wifi', 'rescan', check=False)
-            time.sleep(3)
-            if subprocess.run(['nmcli', 'connection', 'up', name, 'passwd-file', path], capture_output=True).returncode == 0:
+        for _ in range(3):
+            if wait_for_ssid(ssid, 20) and subprocess.run(
+                    ['nmcli', '--wait', '30', 'connection', 'up', name, 'passwd-file', path], capture_output=True).returncode == 0:
                 return name
         raise ConnectionError(f'could not join {ssid}')
     finally:
         os.unlink(path)
 
 
-def online():
-    # 'limited' is what NM reports with Wi-Fi gone but awdl0/tailscale still up
-    return nm('networking', 'connectivity', 'check', check=False).strip() in ('full', 'portal')
+def wait_for_ssid(ssid, timeout):
+    nm('device', 'wifi', 'rescan', 'ssid', ssid, check=False)
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        if ssid in nm('-t', '-f', 'SSID', 'device', 'wifi', 'list', '--rescan', 'no', check=False).splitlines():
+            return True
+        time.sleep(0.3)
+    return False
+
+
+def active_wifi_ssids():
+    out = nm('-t', '-f', 'TYPE,DEVICE', 'connection', 'show', '--active', check=False)
+    devs = [l.split(':', 1)[1] for l in out.splitlines() if l.startswith('802-11-wireless:')]
+    return {l.split(':', 1)[1] for d in devs for l in nm('-t', '-f', 'ACTIVE,SSID', 'device', 'wifi', 'list', 'ifname', d, '--rescan', 'no', check=False).splitlines() if l.startswith('yes:')}
+
+
+NM_CONNECTING = 40
+NM_PORTAL, NM_FULL = 2, 4
+
+
+async def watch(creds):
+    from dbus_next import BusType, Variant
+    from dbus_next.aio import MessageBus
+
+    bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+    path = '/org/freedesktop/NetworkManager'
+    intro = await bus.introspect('org.freedesktop.NetworkManager', path)
+    obj = bus.get_proxy_object('org.freedesktop.NetworkManager', path, intro)
+    nmi = obj.get_interface('org.freedesktop.NetworkManager')
+    props = obj.get_interface('org.freedesktop.DBus.Properties')
+    changed = asyncio.Event()
+    props.on_properties_changed(lambda iface, ch, inv: ('Connectivity' in ch or 'State' in ch) and changed.set())
+    hotspot = None
+    print('watching connectivity', flush=True)
+    while True:
+        conn, state = await nmi.get_connectivity(), await nmi.get_state()
+        # 'limited' is what NM reports with Wi-Fi gone but awdl0/tailscale still up
+        offline = conn not in (NM_PORTAL, NM_FULL) and state != NM_CONNECTING
+        if offline and not (hotspot and hotspot in active_wifi_ssids()):
+            print('offline, asking the phone for its hotspot', flush=True)
+            try:
+                info = await fetch_hotspot(creds)
+                print(f"hotspot {info['name']} channel {info.get('chan')}", flush=True)
+                hotspot = info['name']
+                name = await asyncio.get_running_loop().run_in_executor(None, join, info['name'], info['pass'])
+                print('joined', name, flush=True)
+            except Exception as e:
+                print(f'instant-hotspot: {e}', flush=True)
+                await asyncio.sleep(10)  # phone out of range etc.; NM signals alone would spin
+        changed.clear()
+        try:
+            await asyncio.wait_for(changed.wait(), 60)
+        except asyncio.TimeoutError:
+            pass
 
 
 def run(creds, show):
@@ -404,15 +456,7 @@ def main():
         except (LookupError, ConnectionError, PermissionError, RuntimeError, TimeoutError, OSError) as e:
             sys.exit(f'instant-hotspot: {e}')
         return
-    print('watching connectivity', flush=True)
-    while True:
-        if not online():
-            print('offline, asking the phone for its hotspot', flush=True)
-            try:
-                run(a.creds, False)
-            except Exception as e:
-                print(f'instant-hotspot: {e}', flush=True)
-        time.sleep(20)
+    asyncio.run(watch(a.creds))
 
 
 if __name__ == '__main__':

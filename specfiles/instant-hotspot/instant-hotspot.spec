@@ -1,5 +1,5 @@
 Name:           instant-hotspot
-Version:        0.2.1
+Version:        0.3.0
 Release:        1%{?dist}
 Summary:        Apple Instant Hotspot client: start and join a same-account iPhone's hotspot
 
@@ -52,6 +52,12 @@ python3 -I %{SOURCE0} selftest
 %{_datadir}/polkit-1/rules.d/49-%{name}.rules
 
 %changelog
+* Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.0-1
+- --auto reacts to NetworkManager D-Bus state instead of polling every 20s
+- Skip while already on the hotspot; ignore drops during a connect
+- Stop scanning as soon as a hotspot phone is seen
+- Join on targeted SSID scan instead of fixed sleeps
+
 * Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.2.1-1
 - Treat limited connectivity as offline (awdl0/tailscale keep NM at limited)
 - Log when --auto acts
