@@ -1,5 +1,5 @@
 Name:           instant-hotspot
-Version:        0.3.0
+Version:        0.3.1
 Release:        1%{?dist}
 Summary:        Apple Instant Hotspot client: start and join a same-account iPhone's hotspot
 
@@ -52,6 +52,10 @@ python3 -I %{SOURCE0} selftest
 %{_datadir}/polkit-1/rules.d/49-%{name}.rules
 
 %changelog
+* Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.1-1
+- Stop awdld in parallel with the BLE exchange
+- Skip the blocking BlueZ Disconnect (2.5s); bluetoothd drops the idle link
+
 * Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.0-1
 - --auto reacts to NetworkManager D-Bus state instead of polling every 20s
 - Skip while already on the hotspot; ignore drops during a connect

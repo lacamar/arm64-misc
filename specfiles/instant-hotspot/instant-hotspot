@@ -280,11 +280,12 @@ async def fetch_hotspot(creds):
 
     def talk(addr):
         r = Rapport(addr)
-        r.pair_verify(edsk)
-        return r.request('com.sharing.hotspot.request', {
-            'reqT': 1, 'sID': int.from_bytes(os.urandom(4), 'little'),
-            'altDSID': gena.get('accountAltDSID', ''), 'aplID': gena.get('accountID', ''),
-            'devnm': socket.gethostname(), 'icld': 1, 'proVer': '15.2', '5ghz': True})
+        with r.s:
+            r.pair_verify(edsk)
+            return r.request('com.sharing.hotspot.request', {
+                'reqT': 1, 'sID': int.from_bytes(os.urandom(4), 'little'),
+                'altDSID': gena.get('accountAltDSID', ''), 'aplID': gena.get('accountID', ''),
+                'devnm': socket.gethostname(), 'icld': 1, 'proVer': '15.2', '5ghz': True})
 
     def seen_cb(d, a):
         v = nearby_info(a)
@@ -324,10 +325,7 @@ async def connect_and_talk(dev, talk):
     try:
         return await asyncio.get_running_loop().run_in_executor(None, talk, dev.address)
     finally:
-        try:
-            await d1.call_disconnect()
-        except Exception:
-            pass
+        # no Disconnect call: it blocks ~2.5s, and bluetoothd drops an idle profile-less LE link itself
         bus.disconnect()
 
 
@@ -335,19 +333,29 @@ def nm(*args, check=True):
     return subprocess.run(['nmcli', *args], capture_output=True, text=True, check=check).stdout
 
 
-def join(ssid, password):
+def awdl_stop():
     # brcmfmac cannot associate to a new AP while AWDL runs; it is fine to restart once joined
-    awdl = subprocess.run(['systemctl', 'is-active', '--quiet', 'awdld'], check=False).returncode == 0
-    if awdl:
-        subprocess.run(['systemctl', 'stop', 'awdld'], check=False)
+    if subprocess.run(['systemctl', 'is-active', '--quiet', 'awdld'], check=False).returncode:
+        return False
+    subprocess.run(['systemctl', 'stop', 'awdld'], check=False)
+    return True
+
+
+async def hotspot_once(creds):
+    loop = asyncio.get_running_loop()
+    paused = loop.run_in_executor(None, awdl_stop)  # overlaps the BLE exchange
     try:
-        return _join(ssid, password)
+        info = await fetch_hotspot(creds)
+        print(f"hotspot {info['name']} channel {info.get('chan')}", flush=True)
+        await paused
+        name = await loop.run_in_executor(None, join, info['name'], info['pass'])
+        return info, name
     finally:
-        if awdl:
+        if await paused:
             subprocess.run(['systemctl', 'start', 'awdld'], check=False)
 
 
-def _join(ssid, password):
+def join(ssid, password):
     profiles = [l.rsplit(':', 1) for l in nm('-t', '-f', 'NAME,TYPE', 'connection', 'show').splitlines()]
     names = [n for n, t in profiles if t == '802-11-wireless' and nm('-g', '802-11-wireless.ssid', 'connection', 'show', n, check=False).strip() == ssid]
     if names:
@@ -360,9 +368,9 @@ def _join(ssid, password):
     try:
         os.write(fd, f'802-11-wireless-security.psk:{password}\n'.encode())
         os.close(fd)
+        up = ['nmcli', '--wait', '30', 'connection', 'up', name, 'passwd-file', path]
         for _ in range(3):
-            if wait_for_ssid(ssid, 20) and subprocess.run(
-                    ['nmcli', '--wait', '30', 'connection', 'up', name, 'passwd-file', path], capture_output=True).returncode == 0:
+            if wait_for_ssid(ssid, 20) and subprocess.run(up, capture_output=True).returncode == 0:
                 return name
         raise ConnectionError(f'could not join {ssid}')
     finally:
@@ -410,10 +418,8 @@ async def watch(creds):
         if offline and not (hotspot and hotspot in active_wifi_ssids()):
             print('offline, asking the phone for its hotspot', flush=True)
             try:
-                info = await fetch_hotspot(creds)
-                print(f"hotspot {info['name']} channel {info.get('chan')}", flush=True)
+                info, name = await hotspot_once(creds)
                 hotspot = info['name']
-                name = await asyncio.get_running_loop().run_in_executor(None, join, info['name'], info['pass'])
                 print('joined', name, flush=True)
             except Exception as e:
                 print(f'instant-hotspot: {e}', flush=True)
@@ -426,9 +432,10 @@ async def watch(creds):
 
 
 def run(creds, show):
-    info = asyncio.run(fetch_hotspot(creds))
-    print(f"hotspot {info['name']} channel {info.get('chan')}" + (f" password {info['pass']}" if show else ''), flush=True)
-    print('joined', join(info['name'], info['pass']), flush=True)
+    info, name = asyncio.run(hotspot_once(creds))
+    if show:
+        print('password', info['pass'], flush=True)
+    print('joined', name, flush=True)
 
 
 def selftest():
