@@ -1,0 +1,11 @@
+[Unit]
+Description=Join the iPhone's Personal Hotspot when offline
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/instant-hotspot --auto
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target
