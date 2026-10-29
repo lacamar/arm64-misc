@@ -1,21 +1,20 @@
+%global debug_package %{nil}
+
 Name:           instant-hotspot
-Version:        0.3.1
+Version:        0.4.0
 Release:        1%{?dist}
 Summary:        Apple Instant Hotspot client: start and join a same-account iPhone's hotspot
 
 License:        MIT
-Source0:        instant-hotspot
+Source0:        instant-hotspot-%{version}.tar.gz
 Source1:        instant-hotspot.service
 Source2:        49-instant-hotspot.rules
 
-BuildArch:      noarch
-BuildRequires:  python3
+BuildRequires:  cargo-rpm-macros >= 26
+BuildRequires:  gcc
+BuildRequires:  pkgconfig(dbus-1)
 BuildRequires:  systemd-rpm-macros
 
-Requires:       python3
-Requires:       python3-bleak
-Requires:       python3-cryptography
-Requires:       python3-dbus-next
 Requires:       bluez
 Requires:       NetworkManager
 Requires:       polkit
@@ -23,35 +22,51 @@ Requires:       polkit
 %description
 Asks a nearby iPhone on the same Apple account to turn on Personal Hotspot
 over Rapport (BLE L2CAP), using the Rapport identity of an Apple device on
-that account, then joins the network with NetworkManager. The user unit runs
-it whenever the machine is offline. Credentials go in
-~/.config/instant-hotspot/ (rapport_selfidentity.bin, rapport_selfidentity_gena.bin).
+that account, then joins the network with NetworkManager. The phone needs no
+interaction. The user unit watches NetworkManager and joins whenever the
+machine is offline, idling on D-Bus signals rather than polling. Credentials
+go in ~/.config/instant-hotspot/ (rapport_selfidentity.bin,
+rapport_selfidentity_gena.bin).
 
 %prep
+%autosetup -n instant-hotspot-%{version}
+%cargo_prep -N
+# build online: the crates are not packaged for Fedora
+sed -i 's/^offline = true$//' .cargo/config.toml
+
+%build
+%cargo_build
 
 %install
-install -Dm755 %{SOURCE0} %{buildroot}%{_bindir}/instant-hotspot
-install -Dm644 %{SOURCE1} %{buildroot}%{_userunitdir}/instant-hotspot.service
+install -Dpsm0755 target/rpm/%{name} %{buildroot}%{_bindir}/%{name}
+install -Dm644 %{SOURCE1} %{buildroot}%{_userunitdir}/%{name}.service
 install -Dm644 %{SOURCE2} %{buildroot}%{_datadir}/polkit-1/rules.d/49-%{name}.rules
 
 %check
-python3 -I %{SOURCE0} selftest
+%cargo_test
 
 %post
-%systemd_user_post instant-hotspot.service
+%systemd_user_post %{name}.service
 
 %preun
-%systemd_user_preun instant-hotspot.service
+%systemd_user_preun %{name}.service
 
 %postun
-%systemd_user_postun_with_restart instant-hotspot.service
+%systemd_user_postun_with_restart %{name}.service
 
 %files
-%{_bindir}/instant-hotspot
-%{_userunitdir}/instant-hotspot.service
+%license LICENSE
+%doc README.md
+%{_bindir}/%{name}
+%{_userunitdir}/%{name}.service
 %{_datadir}/polkit-1/rules.d/49-%{name}.rules
 
 %changelog
+* Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0-1
+- Rewritten in Rust: ~4 MB resident, no CPU while idle, no Python runtime
+- Unit tests, including a fake phone that completes Pair-Verify
+- Keep BLE discovery running while connecting, as BlueZ needs
+
 * Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.1-1
 - Stop awdld in parallel with the BLE exchange
 - Skip the blocking BlueZ Disconnect (2.5s); bluetoothd drops the idle link
