@@ -4,7 +4,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        32%{?dist}
+Release:        33%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -159,6 +159,10 @@ desktop-file-validate \
 
 
 %changelog
+* Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-33
+- Spin tabs whose command uses CPU
+- Dot for quiet running commands
+
 * Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-32
 - Keep previous sessions in history
 - Add session history menu and button

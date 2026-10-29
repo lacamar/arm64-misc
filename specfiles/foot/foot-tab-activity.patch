@@ -1,8 +1,8 @@
 diff --git a/render.c b/render.c
-index 72c4974..dc6a062 100644
+index 72c4974..33e9b47 100644
 --- a/render.c
 +++ b/render.c
-@@ -5692,8 +5692,14 @@ render_sidebar(struct wl_window *win)
+@@ -5692,8 +5692,17 @@ render_sidebar(struct wl_window *win)
          }
  
          const int cx = tabs_close_x(win);
@@ -16,22 +16,202 @@ index 72c4974..dc6a062 100644
 +        if (spin)
 +            sidebar_text(term, buf, spin_ch, right ? w - pad - slot + pad / 2 : pad, y, row_h,
 +                         w, accent, gamma);
++        else if (tabs_busy_quiet(t))
++            sidebar_text(term, buf, U"•", right ? w - pad - slot + pad / 2 : pad, y, row_h,
++                         w, color_blend_towards(c->fg, c->bg, 1.6), gamma);
  
          if (win->split_cue_line == l - 1) {
              /* Dropping here splits the dragged tab with this one */
 diff --git a/tabs.c b/tabs.c
-index 3da5c54..9913b1f 100644
+index 3da5c54..43d5fb1 100644
 --- a/tabs.c
 +++ b/tabs.c
-@@ -817,6 +817,58 @@ anim_start(struct wl_window *win)
+@@ -10,7 +10,10 @@
+ #include <unistd.h>
+ #include <wctype.h>
+ 
++#include <dirent.h>
++#include <termios.h>
+ #include <sys/epoll.h>
++#include <sys/syscall.h>
+ #include <sys/timerfd.h>
+ 
+ #include <linux/input-event-codes.h>
+@@ -817,6 +820,224 @@ anim_start(struct wl_window *win)
      win->anim.fd = fd;
  }
  
++enum tab_busy { BUSY_NONE, BUSY_QUIET, BUSY_CPU };
++
++#define BUSY_CPU_TICKS 5  /* per second: 5% of a core */
++
 +bool
 +tabs_spinning(const struct terminal *term)
 +{
 +    const uint64_t now = tabs_now_ms();
-+    return term->spin_last - term->spin_prev < 2000 && now - term->spin_last < 2000;
++    return term->busy == BUSY_CPU ||
++        (term->spin_last - term->spin_prev < 2000 && now - term->spin_last < 2000);
++}
++
++bool
++tabs_busy_quiet(const struct terminal *term)
++{
++    return term->busy == BUSY_QUIET && !tabs_spinning(term);
++}
++
++/* Blocked reading the terminal: waiting for the user */
++static bool
++reads_tty(pid_t pid)
++{
++    char path[64], buf[128];
++    snprintf(path, sizeof(path), "/proc/%d/syscall", (int)pid);
++    FILE *f = fopen(path, "re");
++    if (f == NULL)
++        return false;
++    long nr = -1;
++    unsigned long fd = 1;
++    const bool ok = fscanf(f, "%ld %lx", &nr, &fd) == 2;
++    fclose(f);
++    if (!ok || nr != SYS_read || fd != 0)
++        return false;
++
++    snprintf(path, sizeof(path), "/proc/%d/fd/0", (int)pid);
++    const ssize_t n = readlink(path, buf, sizeof(buf) - 1);
++    return n > 0 && strncmp(buf, "/dev/pts/", 9) == 0;
++}
++
++struct job {
++    pid_t fg;
++    int procs;
++    int children;
++    unsigned long long cpu;
++    bool reading;
++};
++
++/* Descendants of the shell in the terminal's foreground process group */
++static void
++job_walk(pid_t pid, bool self, struct job *job, int depth)
++{
++    char path[64];
++    {
++        snprintf(path, sizeof(path), "/proc/%d/stat", (int)pid);
++        FILE *f = fopen(path, "re");
++        if (f == NULL)
++            return;
++        char buf[1024];
++        const size_t n = fread(buf, 1, sizeof(buf) - 1, f);
++        fclose(f);
++        buf[n] = '\0';
++        const char *p = strrchr(buf, ')');
++        int pgrp;
++        unsigned long ut, st;
++        long cut, cst;
++        if (p == NULL ||
++            sscanf(p + 1, " %*c %*d %d %*d %*d %*d %*u %*u %*u %*u %*u %lu %lu %ld %ld",
++                   &pgrp, &ut, &st, &cut, &cst) != 5)
++        {
++            return;
++        }
++        if (pgrp == job->fg) {
++            job->procs++;
++            job->children += !self;
++            /* A shell's reaped children are finished commands */
++            job->cpu += ut + st + (self ? 0 : cut + cst);
++            job->reading = job->reading || reads_tty(pid);
++        }
++    }
++    if (depth >= 16)
++        return;
++
++    snprintf(path, sizeof(path), "/proc/%d/task", (int)pid);
++    DIR *d = opendir(path);
++    if (d == NULL)
++        return;
++    for (struct dirent *e; (e = readdir(d)) != NULL;) {
++        if (e->d_name[0] == '.')
++            continue;
++        char cpath[96];
++        snprintf(cpath, sizeof(cpath), "/proc/%d/task/%.16s/children", (int)pid, e->d_name);
++        FILE *f = fopen(cpath, "re");
++        if (f == NULL)
++            continue;
++        for (int child; fscanf(f, "%d", &child) == 1;)
++            job_walk(child, false, job, depth + 1);
++        fclose(f);
++    }
++    closedir(d);
++}
++
++/* Returns whether a command is running in the terminal */
++static bool
++busy_check(struct terminal *t)
++{
++    struct job job = {.fg = t->ptmx >= 0 ? tcgetpgrp(t->ptmx) : -1};
++    if (job.fg > 0 && t->slave > 0)
++        job_walk(t->slave, true, &job, 0);
++
++    const unsigned long long prev = t->busy_cpu;
++    t->busy_cpu = job.cpu;
++    if (job.procs == 0) {
++        t->busy = BUSY_NONE;
++        return false;
++    }
++
++    struct termios tio;
++    if (prev != 0 && job.cpu > prev && job.cpu - prev >= BUSY_CPU_TICKS)
++        t->busy = BUSY_CPU;
++    else if (job.reading || (tcgetattr(t->ptmx, &tio) == 0 && !(tio.c_lflag & ICANON)))
++        t->busy = BUSY_NONE;  /* waiting for input, or an interactive program */
++    else
++        t->busy = BUSY_QUIET;
++    return job.children > 0 || t->busy != BUSY_NONE;
++}
++
++static bool
++fdm_busy(struct fdm *fdm, int fd, int events, void *data)
++{
++    struct wl_window *win = data;
++    uint64_t expirations;
++    (void)!read(fd, &expirations, sizeof(expirations));
++
++    bool running = false, changed = false, cpu = false;
++    tll_foreach(win->tabs, it) {
++        struct terminal *t = it->item;
++        const int was = t->busy;
++        running |= busy_check(t);
++        changed |= t->busy != was;
++        cpu |= t->busy == BUSY_CPU;
++    }
++    if (!running) {
++        fdm_del(fdm, fd);
++        win->busy_fd = -1;
++    }
++    if (cpu)
++        tabs_spin_poke(win);
++    if (changed)
++        render_refresh_sidebar(win);
++    return true;
++}
++
++void
++tabs_busy_poke(struct wl_window *win)
++{
++    if (win->busy_fd >= 0)
++        return;
++    int fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
++    if (fd < 0)
++        return;
++    const struct itimerspec its = {
++        .it_interval = {.tv_sec = 1},
++        .it_value = {.tv_sec = 1},
++    };
++    if (timerfd_settime(fd, 0, &its, NULL) < 0 ||
++        !fdm_add(win->term->fdm, fd, EPOLLIN, &fdm_busy, win))
++    {
++        close(fd);
++        return;
++    }
++    win->busy_fd = fd;
 +}
 +
 +int
@@ -83,37 +263,42 @@ index 3da5c54..9913b1f 100644
  float
  tabs_anim_line(struct wl_window *win, int line)
 diff --git a/tabs.h b/tabs.h
-index 233fb5b..8b05f6e 100644
+index 233fb5b..638f626 100644
 --- a/tabs.h
 +++ b/tabs.h
-@@ -19,6 +19,10 @@ char *tabs_sock_pointer(void);
+@@ -19,6 +19,12 @@ char *tabs_sock_pointer(void);
  void tabs_sock_focus(struct wayland *wayl);
  void tabs_sock_release(struct wayland *wayl);
  
 +bool tabs_spinning(const struct terminal *term);
 +void tabs_spin_poke(struct wl_window *win);
++void tabs_busy_poke(struct wl_window *win);
++bool tabs_busy_quiet(const struct terminal *term);
 +int tabs_spin_frame(void);
 +
  bool tabs_is_active(const struct terminal *term);
  bool tabs_is_visible(const struct terminal *term);
  bool tabs_sidebar_visible(const struct wl_window *win);
 diff --git a/terminal.c b/terminal.c
-index 1c91b22..0d3fb19 100644
+index 1c91b22..531af23 100644
 --- a/terminal.c
 +++ b/terminal.c
-@@ -118,6 +118,7 @@ term_paste_data_to_slave(struct terminal *term, const void *data, size_t len)
+@@ -118,6 +118,9 @@ term_paste_data_to_slave(struct terminal *term, const void *data, size_t len)
  bool
  term_to_slave(struct terminal *term, const void *data, size_t len)
  {
 +    term->typed_until = tabs_now_ms() + 100;
++    if (term->window != NULL)
++        tabs_busy_poke(term->window);
      if (term->wl != NULL && term->wl->key_target == term && term->group_broadcast &&
          term->window != NULL)
      {
-@@ -313,6 +314,15 @@ fdm_ptmx(struct fdm *fdm, int fd, int events, void *data)
+@@ -313,6 +316,16 @@ fdm_ptmx(struct fdm *fdm, int fd, int events, void *data)
          got = true;
      }
  
 +    if (got && term->window != NULL) {
++        tabs_busy_poke(term->window);
 +        const uint64_t t = tabs_now_ms();
 +        if (t >= term->typed_until && t - term->spin_last >= 250) {
 +            term->spin_prev = term->spin_last;
@@ -126,47 +311,53 @@ index 1c91b22..0d3fb19 100644
          tll_free(term->normal.scroll_damage);
          tll_free(term->alt.scroll_damage);
 diff --git a/terminal.h b/terminal.h
-index 1c77ef7..47ca3da 100644
+index 1c77ef7..67b097d 100644
 --- a/terminal.h
 +++ b/terminal.h
-@@ -652,6 +652,7 @@ struct terminal {
+@@ -652,6 +652,9 @@ struct terminal {
      uint64_t scrolled_lines;
      uint64_t activity_since;
      bool tab_activity;
 +    uint64_t spin_prev, spin_last, typed_until;
++    unsigned long long busy_cpu;
++    int busy;  /* enum tab_busy */
      uint64_t activity_mute_until;
      bool ptmx_added;
      uint32_t group;
 diff --git a/wayland.c b/wayland.c
-index 04eaaf2..46f4478 100644
+index 04eaaf2..9aa4550 100644
 --- a/wayland.c
 +++ b/wayland.c
-@@ -2163,6 +2163,7 @@ wayl_win_init(struct terminal *term, const char *token, const char *toplevel_nam
+@@ -2163,6 +2163,8 @@ wayl_win_init(struct terminal *term, const char *token, const char *toplevel_nam
      win->drop_row = -1;
      win->split_cue_line = -1;
      win->anim.fd = -1;
 +    win->spin_fd = -1;
++    win->busy_fd = -1;
      win->pane_drag.hover = -1;
      win->anim.last_line = -1;
      win->sidebar_hidden = !conf->tabs.show;
-@@ -2442,6 +2443,8 @@ wayl_win_destroy(struct wl_window *win)
+@@ -2442,6 +2444,10 @@ wayl_win_destroy(struct wl_window *win)
      wayl_win_subsurface_destroy(&win->hint_surf);
      if (win->anim.fd >= 0)
          fdm_del(wayl->fdm, win->anim.fd);
 +    if (win->spin_fd >= 0)
 +        fdm_del(wayl->fdm, win->spin_fd);
++    if (win->busy_fd >= 0)
++        fdm_del(wayl->fdm, win->busy_fd);
  
      csd_destroy(win);
      wayl_win_subsurface_destroy(&win->search);
 diff --git a/wayland.h b/wayland.h
-index e4d8cd8..a4a6213 100644
+index e4d8cd8..ef17751 100644
 --- a/wayland.h
 +++ b/wayland.h
-@@ -444,6 +444,7 @@ struct wl_window {
+@@ -444,6 +444,8 @@ struct wl_window {
          bool highlight;
          bool slide;
      } anim;
 +    int spin_fd;
++    int busy_fd;
      int drop_row;      /* insertion line while a tab is dragged over the sidebar, or -1 */
      bool drop_split;   /* split hint while a tab is dragged over the terminal */
      int drop_pos, drop_n;
