@@ -216,19 +216,50 @@ def load_creds(d):
         gena = opack_unpack(open(os.path.join(d, 'rapport_selfidentity_gena.bin'), 'rb').read())
     except OSError:
         pass
-    return ident['edSK'], gena
+    return ident['edSK'], ident.get('dIRK'), gena
 
 
-def is_hotspot_phone(adv):
+def siphash24(key, msg):
+    m64 = (1 << 64) - 1
+
+    def rotl(x, b):
+        return ((x << b) | (x >> (64 - b))) & m64
+
+    k0, k1 = int.from_bytes(key[:8], 'little'), int.from_bytes(key[8:], 'little')
+    v = [k0 ^ 0x736f6d6570736575, k1 ^ 0x646f72616e646f6d, k0 ^ 0x6c7967656e657261, k1 ^ 0x7465646279746573]
+
+    def rnd():
+        v[0] = (v[0] + v[1]) & m64; v[1] = rotl(v[1], 13) ^ v[0]; v[0] = rotl(v[0], 32)
+        v[2] = (v[2] + v[3]) & m64; v[3] = rotl(v[3], 16) ^ v[2]
+        v[0] = (v[0] + v[3]) & m64; v[3] = rotl(v[3], 21) ^ v[0]
+        v[2] = (v[2] + v[1]) & m64; v[1] = rotl(v[1], 17) ^ v[2]; v[2] = rotl(v[2], 32)
+
+    n = len(msg) // 8 * 8
+    blocks = [int.from_bytes(msg[i:i + 8], 'little') for i in range(0, n, 8)]
+    blocks.append((len(msg) << 56) | int.from_bytes(msg[n:].ljust(8, b'\0'), 'little') & ((1 << 56) - 1))
+    for b in blocks:
+        v[3] ^= b; rnd(); rnd(); v[0] ^= b
+    v[2] ^= 0xff
+    for _ in range(4):
+        rnd()
+    return v[0] ^ v[1] ^ v[2] ^ v[3]
+
+
+def nearby_info(adv):
     md = adv.manufacturer_data.get(APPLE, b'')
     i = 0
     while i + 2 <= len(md):
         t, n = md[i], md[i + 1]
         v = md[i + 2:i + 2 + n]
-        if t == 0x10 and len(v) >= 2 and v[1] & 0x02:
-            return True
+        if t == 0x10 and len(v) >= 2:
+            return v
         i += 2 + n
-    return False
+    return None
+
+
+def own_tag(dirk, addr):
+    h = siphash24(dirk, bytes.fromhex(addr.replace(':', '')))
+    return (h & ((1 << 48) - 1)).to_bytes(6, 'big')[:3]
 
 
 def drop_classic_phone_links():
@@ -242,10 +273,8 @@ def drop_classic_phone_links():
 
 async def fetch_hotspot(creds):
     from bleak import BleakScanner
-    from dbus_next import BusType
-    from dbus_next.aio import MessageBus
 
-    edsk, gena = load_creds(creds)
+    edsk, dirk, gena = load_creds(creds)
     drop_classic_phone_links()
     seen = {}
 
@@ -257,30 +286,47 @@ async def fetch_hotspot(creds):
             'altDSID': gena.get('accountAltDSID', ''), 'aplID': gena.get('accountID', ''),
             'devnm': socket.gethostname(), 'icld': 1, 'proVer': '15.2', '5ghz': True})
 
+    def seen_cb(d, a):
+        v = nearby_info(a)
+        if not v or a.rssi < -85:
+            return
+        if dirk and v[1] & 0x10 and len(v) >= 5 and v[2:5] == own_tag(dirk, d.address):
+            return  # the Apple device whose identity we use
+        seen[d.address] = (bool(v[1] & 0x02), a.rssi, d)
+
     # connect while discovery runs: BlueZ then sends a direct LE connect instead of waiting on the accept list
-    async with BleakScanner(lambda d, a: is_hotspot_phone(a) and seen.__setitem__(d.address, (a.rssi, d))):
-        for _ in range(20):
-            await asyncio.sleep(0.5)
-            if seen:
-                await asyncio.sleep(1)
-                break
+    async with BleakScanner(seen_cb):
+        await asyncio.sleep(4)
         if not seen:
-            raise LookupError('no iPhone offering hotspot nearby')
-        rssi, dev = max(seen.values(), key=lambda x: x[0])
-        # plain Device1.Connect: the phone drops centrals that run GATT discovery (BleakClient does)
-        bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
-        path = dev.details['path']
-        intro = await bus.introspect('org.bluez', path)
-        d1 = bus.get_proxy_object('org.bluez', path, intro).get_interface('org.bluez.Device1')
-        await asyncio.wait_for(d1.call_connect(), 20)
-        try:
-            return await asyncio.get_running_loop().run_in_executor(None, talk, dev.address)
-        finally:
+            await asyncio.sleep(6)
+        if not seen:
+            raise LookupError('no Apple phone nearby')
+        last = None
+        for hotspot, rssi, dev in sorted(seen.values(), key=lambda x: (x[0], x[1]), reverse=True)[:3]:
             try:
-                await d1.call_disconnect()
-            except Exception:
-                pass
-            bus.disconnect()
+                return await connect_and_talk(dev, talk)
+            except Exception as e:  # dbus, socket, auth: try the next candidate
+                last = e
+        raise ConnectionError(f'no phone answered: {last}')
+
+
+async def connect_and_talk(dev, talk):
+    from dbus_next import BusType
+    from dbus_next.aio import MessageBus
+    # plain Device1.Connect: the phone drops centrals that run GATT discovery (BleakClient does)
+    bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+    path = dev.details['path']
+    intro = await bus.introspect('org.bluez', path)
+    d1 = bus.get_proxy_object('org.bluez', path, intro).get_interface('org.bluez.Device1')
+    await asyncio.wait_for(d1.call_connect(), 20)
+    try:
+        return await asyncio.get_running_loop().run_in_executor(None, talk, dev.address)
+    finally:
+        try:
+            await d1.call_disconnect()
+        except Exception:
+            pass
+        bus.disconnect()
 
 
 def nm(*args, check=True):
@@ -288,6 +334,18 @@ def nm(*args, check=True):
 
 
 def join(ssid, password):
+    # brcmfmac cannot associate to a new AP while AWDL runs; it is fine to restart once joined
+    awdl = subprocess.run(['systemctl', 'is-active', '--quiet', 'awdld'], check=False).returncode == 0
+    if awdl:
+        subprocess.run(['systemctl', 'stop', 'awdld'], check=False)
+    try:
+        return _join(ssid, password)
+    finally:
+        if awdl:
+            subprocess.run(['systemctl', 'start', 'awdld'], check=False)
+
+
+def _join(ssid, password):
     profiles = [l.rsplit(':', 1) for l in nm('-t', '-f', 'NAME,TYPE', 'connection', 'show').splitlines()]
     names = [n for n, t in profiles if t == '802-11-wireless' and nm('-g', '802-11-wireless.ssid', 'connection', 'show', n, check=False).strip() == ssid]
     if names:
@@ -325,6 +383,7 @@ def selftest():
               'l': [1, 'x', None, True], 's': 'y' * 40}
     assert opack_unpack(opack_pack(sample)) == sample
     assert opack_pack({'_pd': b''}) == b'\xe1\x43_pd\x70'
+    assert siphash24(bytes(range(16)), bytes(range(15))) == 0xa129ca6149be45e5
     assert tlv_unpack(tlv_pack({5: b'a' * 300, 6: b'\x01'})) == {5: b'a' * 300, 6: b'\x01'}
     assert opack_unpack(bytes.fromhex('e2 41 61 41 62 41 63 a1')) == {'a': 'b', 'c': 'b'}
     print('ok')

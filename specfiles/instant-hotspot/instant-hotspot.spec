@@ -1,11 +1,12 @@
 Name:           instant-hotspot
-Version:        0.1.0
+Version:        0.2.0
 Release:        1%{?dist}
 Summary:        Apple Instant Hotspot client: start and join a same-account iPhone's hotspot
 
 License:        MIT
 Source0:        instant-hotspot
 Source1:        instant-hotspot.service
+Source2:        49-instant-hotspot.rules
 
 BuildArch:      noarch
 BuildRequires:  python3
@@ -17,6 +18,7 @@ Requires:       python3-cryptography
 Requires:       python3-dbus-next
 Requires:       bluez
 Requires:       NetworkManager
+Requires:       polkit
 
 %description
 Asks a nearby iPhone on the same Apple account to turn on Personal Hotspot
@@ -30,6 +32,7 @@ it whenever the machine is offline. Credentials go in
 %install
 install -Dm755 %{SOURCE0} %{buildroot}%{_bindir}/instant-hotspot
 install -Dm644 %{SOURCE1} %{buildroot}%{_userunitdir}/instant-hotspot.service
+install -Dm644 %{SOURCE2} %{buildroot}%{_datadir}/polkit-1/rules.d/49-%{name}.rules
 
 %check
 python3 -I %{SOURCE0} selftest
@@ -43,8 +46,14 @@ python3 -I %{SOURCE0} selftest
 %files
 %{_bindir}/instant-hotspot
 %{_userunitdir}/instant-hotspot.service
+%{_datadir}/polkit-1/rules.d/49-%{name}.rules
 
 %changelog
+* Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.2.0-1
+- Pause awdld while associating; brcmfmac cannot join a new AP with AWDL up
+- Polkit rule: wheel may start/stop awdld.service
+- Try phones without the hotspot advert flag; skip our own identity's device
+
 * Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.0-1
 - Initial package
 - Rapport same-account Pair-Verify over BLE L2CAP 0x81
