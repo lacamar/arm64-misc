@@ -107,11 +107,10 @@ def send(peer, paths, quiet):
     return "successful" in out.lower()
 
 
-# print peers as they are seen so a picker can show them immediately
+# print peers as they are seen so a picker can show them immediately.
+# avahi-browse without -t emits nothing at all, so poll the -rpt form instead.
 def stream_list(quiet, seconds=60):
     skip, seen, kids = mine(), set(), []
-    br = subprocess.Popen(["avahi-browse", "-rp", "_airdrop._tcp"],
-                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
     stop = threading.Event()
 
     def provoke():
@@ -127,39 +126,32 @@ def stream_list(quiet, seconds=60):
 
     def cleanup(*_):
         stop.set()
-        for p in [br] + kids:
+        for p in kids:
             try:
                 p.kill()
             except Exception:
                 pass
 
-    # lf kills us when fzf returns; don't leave avahi-browse/opendrop behind
+    # lf kills us when fzf returns; don't leave opendrop behind
     for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         signal.signal(sig, lambda *_: (cleanup(), os._exit(0)))
 
     threading.Thread(target=provoke, daemon=True).start()
-    threading.Timer(seconds, br.terminate).start()
+    deadline = time.time() + seconds
     try:
-        for line in br.stdout:
-            if not line.startswith("="):
-                continue
-            f = line.rstrip("\n").split(";")
-            if len(f) < 9 or f[7] in skip or not f[7].startswith("fe80::"):
-                continue
-            if f[3] in seen:          # AWDL MACs rotate, so key on the service id
-                continue
-            seen.add(f[3])
-            name = resolve_name(f[7], int(f[8])) or f[3]
-            print(f"{name}\t{f[7]}\t{f[8]}\t{f[3]}", flush=True)
+        while time.time() < deadline:
+            out = sh("timeout", "3", "avahi-browse", "-rpt", "_airdrop._tcp").stdout
+            for pr in parse(out, skip):
+                if pr["id"] in seen:      # AWDL MACs rotate, so key on the service id
+                    continue
+                seen.add(pr["id"])
+                name = resolve_name(pr["addr"], pr["port"]) or pr["id"]
+                print(f"{name}\t{pr['addr']}\t{pr['port']}\t{pr['id']}", flush=True)
+            stop.wait(1)
     except (BrokenPipeError, ValueError):
         pass
     finally:
-        stop.set()
-        for p in [br] + kids:
-            try:
-                p.kill()
-            except Exception:
-                pass
+        cleanup()
 
 
 def main():

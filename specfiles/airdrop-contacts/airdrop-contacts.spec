@@ -1,5 +1,5 @@
 Name:           airdrop-contacts
-Version:        0.6.0
+Version:        0.6.1
 Release:        1%{?dist}
 Summary:        AirDrop sending to Contacts-Only Apple devices over AWDL
 
@@ -79,6 +79,9 @@ sh -n %{SOURCE3}
 %{_userunitdir}/opendrop-receive.service.d/10-%{name}.conf
 
 %changelog
+* Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.6.1-1
+- Poll avahi-browse -rpt; without -t it never emits anything, so 0.6.0 listed nothing
+
 * Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.6.0-1
 - Stream peers from --list as they are seen, for a picker that fills live
 - Cap the Discover name lookup so one slow peer cannot stall the list
