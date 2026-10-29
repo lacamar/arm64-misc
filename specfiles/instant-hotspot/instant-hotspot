@@ -369,7 +369,8 @@ def _join(ssid, password):
 
 
 def online():
-    return nm('networking', 'connectivity', 'check', check=False).strip() in ('full', 'limited', 'portal')
+    # 'limited' is what NM reports with Wi-Fi gone but awdl0/tailscale still up
+    return nm('networking', 'connectivity', 'check', check=False).strip() in ('full', 'portal')
 
 
 def run(creds, show):
@@ -403,8 +404,10 @@ def main():
         except (LookupError, ConnectionError, PermissionError, RuntimeError, TimeoutError, OSError) as e:
             sys.exit(f'instant-hotspot: {e}')
         return
+    print('watching connectivity', flush=True)
     while True:
         if not online():
+            print('offline, asking the phone for its hotspot', flush=True)
             try:
                 run(a.creds, False)
             except Exception as e:

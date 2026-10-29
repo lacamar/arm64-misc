@@ -1,6 +1,6 @@
 Name:           instant-hotspot
-Version:        0.2.0
-Release:        2%{?dist}
+Version:        0.2.1
+Release:        1%{?dist}
 Summary:        Apple Instant Hotspot client: start and join a same-account iPhone's hotspot
 
 License:        MIT
@@ -52,6 +52,10 @@ python3 -I %{SOURCE0} selftest
 %{_datadir}/polkit-1/rules.d/49-%{name}.rules
 
 %changelog
+* Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.2.1-1
+- Treat limited connectivity as offline (awdl0/tailscale keep NM at limited)
+- Log when --auto acts
+
 * Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.2.0-2
 - Restart the user unit on upgrade
 
