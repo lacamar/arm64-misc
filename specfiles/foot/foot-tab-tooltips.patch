@@ -1,0 +1,319 @@
+diff --git a/render.c b/render.c
+index 33e9b47..38473a7 100644
+--- a/render.c
++++ b/render.c
+@@ -6074,6 +6074,80 @@ render_tab_drop_hint(struct wl_window *win)
+     wl_surface_commit(win->surface.surf);
+ }
+ 
++void
++render_tab_tooltip(struct wl_window *win, const char *text)
++{
++    if (text == NULL)
++        return;
++
++    struct terminal *term = win->term;
++    if (win->tip_surf.surface.surf == NULL) {
++        if (!wayl_win_subsurface_new(win, &win->tip_surf, false))
++            return;
++        wl_subsurface_set_desync(win->tip_surf.sub);
++    }
++
++    const struct colors *c = &term->colors;
++    const bool gamma = wayl_do_linear_blending(term->wl, term->conf);
++    const float scale = term->scale;
++    const int pad = (int)roundf(6 * scale);
++    const int line = max(1, (int)roundf(scale));
++    const int lh = term->cell_height;
++
++    int W, H;
++    tabs_win_size(win, &W, &H);
++
++    char32_t *lines[4];
++    int n = 0, tw = 0;
++    char *copy = xstrdup(text);
++    char *save = NULL;
++    for (char *tok = strtok_r(copy, "\n", &save); tok != NULL && n < (int)ALEN(lines);
++         tok = strtok_r(NULL, "\n", &save))
++    {
++        char32_t *l = ambstoc32(tok);
++        if (l == NULL)
++            continue;
++        lines[n++] = l;
++        tw = max(tw, text_width(term, l));
++    }
++    free(copy);
++
++    const int w = min(tw + 2 * pad, (int)roundf(W * scale));
++    const int h = n * lh + 2 * pad;
++    struct buffer *buf = shm_get_buffer(win->sidebar_chain, w, h);
++    pixman_image_set_clip_region32(buf->pix[0], NULL);
++    sidebar_fill(buf, c->bg, 0xffff, gamma, 0, 0, w, h);
++    sidebar_outline(buf, color_blend_towards(c->bg, c->fg, 1.6), gamma, 0, 0, w, h, line);
++    for (int i = 0; i < n; i++) {
++        sidebar_text(term, buf, lines[i], pad, pad + i * lh, lh, w - pad,
++                     i == 0 ? c->fg : color_blend_towards(c->fg, c->bg, 1.6), gamma);
++        free(lines[i]);
++    }
++
++    /* Rows: beside the sidebar; everything else: above the pointer */
++    const bool right = term->conf->tabs.right;
++    const int gap = 6;
++    const int lw = (int)roundf(w / scale), lht = (int)roundf(h / scale);
++    const int sb = (int)roundf(tabs_sidebar_width_px(win) / scale);
++    int x, y;
++    if (win->hover.btn) {
++        x = right ? W - lw - gap : gap;
++        y = H - (int)roundf(tabs_sidebar_btn_px(win) / scale) - lht - gap;
++    } else if (win->hover.what == TAB_HOVER_ROW) {
++        x = right ? W - sb - lw - gap : sb + gap;
++        y = (int)roundf(tabs_line_y(win, win->hover.row) / scale);
++    } else {
++        x = (right ? W - sb : 0) + (int)roundf(win->hover.x / scale) + gap;
++        y = (int)roundf(win->hover.y / scale) - lht - gap;
++    }
++    x = max(0, min(x, W - lw));
++    y = max(0, min(y, H - lht));
++
++    wl_subsurface_set_position(win->tip_surf.sub, x, y);
++    ui_commit(win, &win->tip_surf.surface, buf, w, h, true);
++    wl_surface_commit(win->surface.surf);
++}
++
+ void
+ render_tab_drag_icon(struct wayland *wayl)
+ {
+diff --git a/render.h b/render.h
+index 2f76597..cc6f263 100644
+--- a/render.h
++++ b/render.h
+@@ -31,6 +31,7 @@ void render_sidebar(struct wl_window *win);
+ void render_sidebar_btn(struct wl_window *win);
+ void render_tab_menu(struct wl_window *win);
+ void render_tab_drop_hint(struct wl_window *win);
++void render_tab_tooltip(struct wl_window *win, const char *text);
+ void render_tab_drag_icon(struct wayland *wayl);
+ void render_split_layout(struct wl_window *win);
+ void render_set_window_geometry(struct wl_window *win, float scale, int width,
+diff --git a/tabs.c b/tabs.c
+index 7896397..1104b30 100644
+--- a/tabs.c
++++ b/tabs.c
+@@ -734,6 +734,8 @@ sidebar_update(struct wl_window *win)
+             wayl_win_subsurface_new(win, &win->sidebar, true);
+     } else if (win->sidebar.surface.surf != NULL) {
+         sub_drop(win, &win->sidebar);
++        win->hover.what = TAB_HOVER_NONE;
++        tabs_tooltip_hide(win);
+         memset(&win->sidebar_drag, 0, sizeof(win->sidebar_drag));
+         memset(&win->sidebar_resize, 0, sizeof(win->sidebar_resize));
+     }
+@@ -743,6 +745,8 @@ sidebar_update(struct wl_window *win)
+             wayl_win_subsurface_new(win, &win->sidebar_btn, true);
+     } else {
+         /* Destroyed under the pointer: no leave event will reset this */
++        if (win->hover.btn)
++            tabs_tooltip_hide(win);
+         win->hover.btn = false;
+         sub_drop(win, &win->sidebar_btn);
+     }
+@@ -1975,6 +1979,102 @@ sidebar_zone(const struct wl_window *win, int x, int y, int *row)
+     return TAB_HOVER_ROW;
+ }
+ 
++static char *
++tooltip_text(const struct wl_window *win)
++{
++    if (win->hover.btn)
++        return xstrdup("Show tabs");
++    switch (win->hover.what) {
++    case TAB_HOVER_NEW:       return xstrdup("New tab\nRight-click: reopen closed tab");
++    case TAB_HOVER_HISTORY:   return xstrdup("Session history");
++    case TAB_HOVER_SEARCH:    return xstrdup("Search tabs");
++    case TAB_HOVER_HIDE:      return xstrdup("Hide tabs");
++    case TAB_HOVER_GRIP:      return xstrdup("Drag to resize");
++    case TAB_HOVER_SCROLLBAR: return xstrdup("Drag to scroll");
++    case TAB_HOVER_CLOSE:     return xstrdup("Close tab");
++    case TAB_HOVER_ROW:       break;
++    default:                  return NULL;
++    }
++
++    const struct terminal *t = tabs_line_term(win, win->hover.row);
++    if (t == NULL)
++        return NULL;
++    char *title = tabs_title(t, false);
++    if (t->tab_label != NULL && t->window_title != NULL && t->window_title[0] != '\0' &&
++        strcmp(t->tab_label, t->window_title) != 0)
++    {
++        char *s = xasprintf("%s\n%s", title, t->window_title);
++        free(title);
++        title = s;
++    }
++
++    const char *states[] = {
++        t->tab_pinned ? "pinned" : NULL,
++        t->group_broadcast ? "broadcasting input" : NULL,
++        tabs_spinning(t) ? "busy" : tabs_busy_quiet(t) ? "running" : NULL,
++        t->tab_marker ? "bell" : NULL,
++        t->tab_done ? "finished" : NULL,
++        t->tab_activity ? "new output" : NULL,
++    };
++    char status[128] = "";
++    for (size_t i = 0; i < ALEN(states); i++) {
++        if (states[i] == NULL)
++            continue;
++        const size_t len = strlen(status);
++        snprintf(&status[len], sizeof(status) - len, "%s%s", len > 0 ? " · " : "", states[i]);
++    }
++    if (status[0] == '\0')
++        return title;
++    char *s = xasprintf("%s\n%s", title, status);
++    free(title);
++    return s;
++}
++
++void
++tabs_tooltip_hide(struct wl_window *win)
++{
++    static const struct itimerspec off = {0};
++    if (win->hover.tip_fd >= 0)
++        timerfd_settime(win->hover.tip_fd, 0, &off, NULL);
++    win->hover.tip = false;
++    sub_drop(win, &win->tip_surf);
++}
++
++static bool
++fdm_tip(struct fdm *fdm, int fd, int events, void *data)
++{
++    struct wl_window *win = data;
++    uint64_t expirations;
++    (void)!read(fd, &expirations, sizeof(expirations));
++    char *text = tooltip_text(win);
++    win->hover.tip = text != NULL;
++    render_tab_tooltip(win, text);
++    free(text);
++    return true;
++}
++
++static void
++tooltip_arm(struct wl_window *win)
++{
++    /* Once a tooltip is up, moving to the next element shows its tooltip at once */
++    const bool warm = win->hover.tip;
++    tabs_tooltip_hide(win);
++    if (win->hover.what == TAB_HOVER_NONE && !win->hover.btn)
++        return;
++    if (win->hover.tip_fd < 0) {
++        int fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
++        if (fd < 0)
++            return;
++        if (!fdm_add(win->term->fdm, fd, EPOLLIN, &fdm_tip, win)) {
++            close(fd);
++            return;
++        }
++        win->hover.tip_fd = fd;
++    }
++    const struct itimerspec its = {.it_value = {.tv_nsec = warm ? 30000000 : 600000000}};
++    timerfd_settime(win->hover.tip_fd, 0, &its, NULL);
++}
++
+ static void
+ set_hover(struct seat *seat, struct wl_window *win, enum tab_hover what, int row)
+ {
+@@ -1983,6 +2083,7 @@ set_hover(struct seat *seat, struct wl_window *win, enum tab_hover what, int row
+     win->hover.what = what;
+     win->hover.row = row;
+     win->sidebar_resize.hover = what == TAB_HOVER_GRIP;
++    tooltip_arm(win);
+     render_redraw_sidebar(win);
+     if (seat != NULL && seat->mouse_focus != NULL)
+         term_xcursor_update_for_seat(seat->mouse_focus, seat);
+@@ -1993,6 +2094,7 @@ tabs_sidebar_scroll(struct wl_window *win, int lines)
+ {
+     win->sidebar_scroll += lines;
+     tabs_sidebar_scroll_fix(win);
++    tabs_tooltip_hide(win);
+     render_redraw_sidebar(win);
+ }
+ 
+@@ -2008,6 +2110,7 @@ tabs_sidebar_btn_hover(struct wl_window *win, bool hover)
+     if (win->hover.btn == hover)
+         return;
+     win->hover.btn = hover;
++    tooltip_arm(win);
+     sidebar_place(win);
+     render_redraw_sidebar(win);
+ }
+@@ -2449,6 +2552,7 @@ void
+ tabs_sidebar_button(struct seat *seat, struct wl_window *win, int button, bool pressed)
+ {
+     const int x = seat->mouse.x, y = seat->mouse.y;
++    tabs_tooltip_hide(win);
+ 
+     if (!pressed) {
+         if (button != BTN_LEFT)
+@@ -2617,6 +2721,8 @@ void
+ tabs_sidebar_motion(struct seat *seat, struct wl_window *win)
+ {
+     const int x = seat->mouse.x, y = seat->mouse.y;
++    win->hover.x = x;
++    win->hover.y = y;
+ 
+     if (win->sidebar_resize.seat == seat) {
+         if (!win->term->conf->tabs.right)
+diff --git a/tabs.h b/tabs.h
+index 638f626..f37b020 100644
+--- a/tabs.h
++++ b/tabs.h
+@@ -23,6 +23,7 @@ bool tabs_spinning(const struct terminal *term);
+ void tabs_spin_poke(struct wl_window *win);
+ void tabs_busy_poke(struct wl_window *win);
+ bool tabs_busy_quiet(const struct terminal *term);
++void tabs_tooltip_hide(struct wl_window *win);
+ int tabs_spin_frame(void);
+ 
+ bool tabs_is_active(const struct terminal *term);
+diff --git a/wayland.c b/wayland.c
+index 9aa4550..84ed29e 100644
+--- a/wayland.c
++++ b/wayland.c
+@@ -2165,6 +2165,7 @@ wayl_win_init(struct terminal *term, const char *token, const char *toplevel_nam
+     win->anim.fd = -1;
+     win->spin_fd = -1;
+     win->busy_fd = -1;
++    win->hover.tip_fd = -1;
+     win->pane_drag.hover = -1;
+     win->anim.last_line = -1;
+     win->sidebar_hidden = !conf->tabs.show;
+@@ -2442,6 +2443,9 @@ wayl_win_destroy(struct wl_window *win)
+     wayl_win_subsurface_destroy(&win->sidebar_btn);
+     wayl_win_subsurface_destroy(&win->menu_surf);
+     wayl_win_subsurface_destroy(&win->hint_surf);
++    wayl_win_subsurface_destroy(&win->tip_surf);
++    if (win->hover.tip_fd >= 0)
++        fdm_del(wayl->fdm, win->hover.tip_fd);
+     if (win->anim.fd >= 0)
+         fdm_del(wayl->fdm, win->anim.fd);
+     if (win->spin_fd >= 0)
+diff --git a/wayland.h b/wayland.h
+index ef17751..76f5767 100644
+--- a/wayland.h
++++ b/wayland.h
+@@ -394,6 +394,7 @@ struct wl_window {
+     struct wayl_sub_surface sidebar_btn;
+     struct wayl_sub_surface menu_surf;
+     struct wayl_sub_surface hint_surf;
++    struct wayl_sub_surface tip_surf;
+     struct buffer_chain *sidebar_chain;
+     struct buffer_chain *menu_chain;
+     struct buffer_chain *bg_chain;
+@@ -426,6 +427,9 @@ struct wl_window {
+         enum tab_hover what;
+         int row;
+         bool btn;
++        int x, y;  /* pointer, sidebar-local px */
++        int tip_fd;
++        bool tip;
+     } hover;
+     struct {
+         struct seat *seat;

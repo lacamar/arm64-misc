@@ -4,7 +4,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        34%{?dist}
+Release:        35%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -24,6 +24,7 @@ Patch2:         foot-tabs.patch
 Patch3:         foot-theme-reload.patch
 Patch4:         foot-session-history.patch
 Patch5:         foot-tab-activity.patch
+Patch6:         foot-tab-tooltips.patch
 
 BuildRequires:  gcc
 BuildRequires:  gpgverify
@@ -159,6 +160,9 @@ desktop-file-validate \
 
 
 %changelog
+* Fri Oct 30 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-35
+- Tooltips for sidebar tabs and buttons
+
 * Fri Oct 30 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-34
 - Spin only on sustained output
 - Raise CPU busy threshold to 20%
