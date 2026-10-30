@@ -4,7 +4,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        33%{?dist}
+Release:        34%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -159,6 +159,10 @@ desktop-file-validate \
 
 
 %changelog
+* Fri Oct 30 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-34
+- Spin only on sustained output
+- Raise CPU busy threshold to 20%
+
 * Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-33
 - Spin tabs whose command uses CPU
 - Dot for quiet running commands

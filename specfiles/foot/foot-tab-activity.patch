@@ -43,14 +43,14 @@ index 3da5c54..43d5fb1 100644
  
 +enum tab_busy { BUSY_NONE, BUSY_QUIET, BUSY_CPU };
 +
-+#define BUSY_CPU_TICKS 5  /* per second: 5% of a core */
++#define BUSY_CPU_TICKS 20  /* per second: 20% of a core */
 +
 +bool
 +tabs_spinning(const struct terminal *term)
 +{
 +    const uint64_t now = tabs_now_ms();
 +    return term->busy == BUSY_CPU ||
-+        (term->spin_last - term->spin_prev < 2000 && now - term->spin_last < 2000);
++        (term->spin_run >= 3 && now - term->spin_last < 1500);
 +}
 +
 +bool
@@ -301,7 +301,7 @@ index 1c91b22..531af23 100644
 +        tabs_busy_poke(term->window);
 +        const uint64_t t = tabs_now_ms();
 +        if (t >= term->typed_until && t - term->spin_last >= 250) {
-+            term->spin_prev = term->spin_last;
++            term->spin_run = t - term->spin_last < 600 ? term->spin_run + 1 : 0;
 +            term->spin_last = t;
 +            tabs_spin_poke(term->window);
 +        }
@@ -318,7 +318,7 @@ index 1c77ef7..67b097d 100644
      uint64_t scrolled_lines;
      uint64_t activity_since;
      bool tab_activity;
-+    uint64_t spin_prev, spin_last, typed_until;
++    uint64_t spin_run, spin_last, typed_until;
 +    unsigned long long busy_cpu;
 +    int busy;  /* enum tab_busy */
      uint64_t activity_mute_until;
