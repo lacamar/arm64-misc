@@ -4168,7 +4168,7 @@ diff --git a/src/backend/winit.rs b/src/backend/winit.rs
 index 624c587..1e842ef 100644
 --- a/src/backend/winit.rs
 +++ b/src/backend/winit.rs
-@@ -5,13 +5,17 @@ use std::rc::Rc;
+@@ -5,14 +5,18 @@ use std::rc::Rc;
  use std::sync::{Arc, Mutex};
  
  use anyhow::Context as _;
@@ -4187,6 +4187,7 @@ index 624c587..1e842ef 100644
 +use smithay::backend::renderer::vulkan::VulkanRenderer;
 +use smithay::backend::renderer::{Bind, DebugFlags, Frame, ImportDma, ImportEgl, Renderer};
  use smithay::backend::winit::{self, WinitEvent, WinitGraphicsBackend};
+ use smithay::input::keyboard::KeyboardSource;
  use smithay::output::{Mode, Output, PhysicalProperties, Subpixel};
  use smithay::reexports::calloop::LoopHandle;
 @@ -19,6 +23,7 @@ use smithay::reexports::wayland_protocols::wp::presentation_time::server::wp_pre
