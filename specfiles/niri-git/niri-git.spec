@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        30%{?dist}
+Release:        31%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -76,6 +76,8 @@ Patch:          niri-vulkan.patch
 Patch:          niri-edr.patch
 # move-column-to-index --id without focus shift; niri msg action --no-animation
 Patch:          niri-move-column-by-id.patch
+# wlr-output-power-management-v1
+Patch:          niri-output-power.patch
 
 BuildRequires:  cargo-rpm-macros >= 26
 BuildRequires:  pkgconfig(udev)
@@ -180,6 +182,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Sat Oct 31 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^13.git.b22eb842-31
+- Add wlr-output-power-management-v1
+
 * Sat Oct 31 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^13.git.b22eb842-30
 - Update to commit b22eb842ca9506d4e2ff997b116031cdb3f650f8
 - Rebase vulkan patch
