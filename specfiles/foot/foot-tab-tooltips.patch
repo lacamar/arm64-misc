@@ -96,7 +96,7 @@ index 2f76597..cc6f263 100644
  void render_split_layout(struct wl_window *win);
  void render_set_window_geometry(struct wl_window *win, float scale, int width,
 diff --git a/tabs.c b/tabs.c
-index 7896397..1104b30 100644
+index 1c4135a..0ce598f 100644
 --- a/tabs.c
 +++ b/tabs.c
 @@ -734,6 +734,8 @@ sidebar_update(struct wl_window *win)
@@ -117,7 +117,7 @@ index 7896397..1104b30 100644
          win->hover.btn = false;
          sub_drop(win, &win->sidebar_btn);
      }
-@@ -1975,6 +1979,102 @@ sidebar_zone(const struct wl_window *win, int x, int y, int *row)
+@@ -1992,6 +1996,102 @@ sidebar_zone(const struct wl_window *win, int x, int y, int *row)
      return TAB_HOVER_ROW;
  }
  
@@ -220,7 +220,7 @@ index 7896397..1104b30 100644
  static void
  set_hover(struct seat *seat, struct wl_window *win, enum tab_hover what, int row)
  {
-@@ -1983,6 +2083,7 @@ set_hover(struct seat *seat, struct wl_window *win, enum tab_hover what, int row
+@@ -2000,6 +2100,7 @@ set_hover(struct seat *seat, struct wl_window *win, enum tab_hover what, int row
      win->hover.what = what;
      win->hover.row = row;
      win->sidebar_resize.hover = what == TAB_HOVER_GRIP;
@@ -228,7 +228,7 @@ index 7896397..1104b30 100644
      render_redraw_sidebar(win);
      if (seat != NULL && seat->mouse_focus != NULL)
          term_xcursor_update_for_seat(seat->mouse_focus, seat);
-@@ -1993,6 +2094,7 @@ tabs_sidebar_scroll(struct wl_window *win, int lines)
+@@ -2010,6 +2111,7 @@ tabs_sidebar_scroll(struct wl_window *win, int lines)
  {
      win->sidebar_scroll += lines;
      tabs_sidebar_scroll_fix(win);
@@ -236,7 +236,7 @@ index 7896397..1104b30 100644
      render_redraw_sidebar(win);
  }
  
-@@ -2008,6 +2110,7 @@ tabs_sidebar_btn_hover(struct wl_window *win, bool hover)
+@@ -2025,6 +2127,7 @@ tabs_sidebar_btn_hover(struct wl_window *win, bool hover)
      if (win->hover.btn == hover)
          return;
      win->hover.btn = hover;
@@ -244,7 +244,7 @@ index 7896397..1104b30 100644
      sidebar_place(win);
      render_redraw_sidebar(win);
  }
-@@ -2449,6 +2552,7 @@ void
+@@ -2466,6 +2569,7 @@ void
  tabs_sidebar_button(struct seat *seat, struct wl_window *win, int button, bool pressed)
  {
      const int x = seat->mouse.x, y = seat->mouse.y;
@@ -252,7 +252,7 @@ index 7896397..1104b30 100644
  
      if (!pressed) {
          if (button != BTN_LEFT)
-@@ -2617,6 +2721,8 @@ void
+@@ -2634,6 +2738,8 @@ void
  tabs_sidebar_motion(struct seat *seat, struct wl_window *win)
  {
      const int x = seat->mouse.x, y = seat->mouse.y;

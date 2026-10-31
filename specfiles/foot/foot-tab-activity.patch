@@ -23,7 +23,7 @@ index 72c4974..33e9b47 100644
          if (win->split_cue_line == l - 1) {
              /* Dropping here splits the dragged tab with this one */
 diff --git a/tabs.c b/tabs.c
-index 3da5c54..43d5fb1 100644
+index 3da5c54..1c4135a 100644
 --- a/tabs.c
 +++ b/tabs.c
 @@ -10,7 +10,10 @@
@@ -37,7 +37,7 @@ index 3da5c54..43d5fb1 100644
  #include <sys/timerfd.h>
  
  #include <linux/input-event-codes.h>
-@@ -817,6 +820,224 @@ anim_start(struct wl_window *win)
+@@ -817,6 +820,241 @@ anim_start(struct wl_window *win)
      win->anim.fd = fd;
  }
  
@@ -45,9 +45,26 @@ index 3da5c54..43d5fb1 100644
 +
 +#define BUSY_CPU_TICKS 20  /* per second: 20% of a core */
 +
++/* Claude Code: ◐/◑ title prefix while working, ✳ when idle */
++static int
++title_busy(const struct terminal *term)
++{
++    const char *t = term->window_title;
++    if (t == NULL)
++        return 0;
++    if (strncmp(t, "◐", strlen("◐")) == 0 || strncmp(t, "◑", strlen("◑")) == 0)
++        return 1;
++    if (strncmp(t, "✳", strlen("✳")) == 0)
++        return -1;
++    return 0;
++}
++
 +bool
 +tabs_spinning(const struct terminal *term)
 +{
++    const int title = title_busy(term);
++    if (title != 0)
++        return title > 0;
 +    const uint64_t now = tabs_now_ms();
 +    return term->busy == BUSY_CPU ||
 +        (term->spin_run >= 3 && now - term->spin_last < 1500);
@@ -56,7 +73,7 @@ index 3da5c54..43d5fb1 100644
 +bool
 +tabs_busy_quiet(const struct terminal *term)
 +{
-+    return term->busy == BUSY_QUIET && !tabs_spinning(term);
++    return term->busy == BUSY_QUIET && title_busy(term) == 0 && !tabs_spinning(term);
 +}
 +
 +/* Blocked reading the terminal: waiting for the user */
@@ -280,7 +297,7 @@ index 233fb5b..638f626 100644
  bool tabs_is_visible(const struct terminal *term);
  bool tabs_sidebar_visible(const struct wl_window *win);
 diff --git a/terminal.c b/terminal.c
-index 1c91b22..531af23 100644
+index 1c91b22..8c7dc49 100644
 --- a/terminal.c
 +++ b/terminal.c
 @@ -118,6 +118,9 @@ term_paste_data_to_slave(struct terminal *term, const void *data, size_t len)
@@ -311,7 +328,7 @@ index 1c91b22..531af23 100644
          tll_free(term->normal.scroll_damage);
          tll_free(term->alt.scroll_damage);
 diff --git a/terminal.h b/terminal.h
-index 1c77ef7..67b097d 100644
+index 1c77ef7..ca8a935 100644
 --- a/terminal.h
 +++ b/terminal.h
 @@ -652,6 +652,9 @@ struct terminal {

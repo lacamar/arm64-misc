@@ -4,7 +4,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        35%{?dist}
+Release:        36%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -160,6 +160,9 @@ desktop-file-validate \
 
 
 %changelog
+* Sat Oct 31 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-36
+- Use Claude Code title state for tab spinner
+
 * Fri Oct 30 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-35
 - Tooltips for sidebar tabs and buttons
 
