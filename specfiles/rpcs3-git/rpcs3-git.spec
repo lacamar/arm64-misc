@@ -1,7 +1,7 @@
-%global bumpver 19
+%global bumpver 20
 
 %global tag 0.0.43
-%global commit 8e26652c85bb5658965fa5731d9a0309ca10b42b
+%global commit df090aa12797b5c5f4a6f2567f1578ec3e85409d
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:       rpcs3-git
@@ -163,6 +163,9 @@ cmake -B build -G Ninja \
 
 
 %changelog
+* Sat Oct 31 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.43^20.git.df090aa-1
+- Update to commit df090aa12797b5c5f4a6f2567f1578ec3e85409d
+
 * Fri Oct 30 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.43^19.git.8e26652-1
 - Update to commit 8e26652c85bb5658965fa5731d9a0309ca10b42b
 
