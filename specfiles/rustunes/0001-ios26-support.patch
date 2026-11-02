@@ -1,7 +1,7 @@
 From ae673b8639161454ed41474fa8fdc09f0084c864 Mon Sep 17 00:00:00 2001
 From: lacamar <lchlnm@pm.me>
 Date: Mon, 2 Nov 2026 18:28:20 +0100
-Subject: [PATCH] Support iOS 26 and iTunes-era libraries
+Subject: [PATCH 1/7] Support iOS 26 and iTunes-era libraries
 
 - Accept iOS 26 Music database (2350000)
 - Tolerate orphan companion rows, absent anchor, no album artist
@@ -631,6 +631,2077 @@ index c4ab851..7c9fc88 100644
  /// The command runs on its own thread with this stack. An unoptimised build
  /// gives each awaited future of a command its own stack frame copies, and a
  /// debug `validate` or `sync` passed the main thread's 8 MiB;
+-- 
+2.56.0
+
+
+From 8ed71f9f2d74b9f7f5b57db40b8d790772c1364e Mon Sep 17 00:00:00 2001
+From: Lachlan Marie <lchlnm@pm.me>
+Date: Mon, 2 Nov 2026 22:28:37 +0100
+Subject: [PATCH 2/7] Add playlist push, list and remove
+
+- playlist push: M3U/M3U8 to an ordinary playlist
+- Replace changed managed playlists by delete + insert
+- Never touch playlists made elsewhere
+- playlist list with kind and managed flag
+- playlist remove for managed playlists
+- Extra fields in the JSON result record
+- Accent-insensitive fallback for ASCII-exported paths
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01F3FjoJj4RV14hgXJuf9gh7
+---
+ README.md                                     |  25 +-
+ .../music-protocol/src/catalogue/mutation.rs  | 181 +++++
+ crates/rustunes/src/cli.rs                    |   9 +
+ crates/rustunes/src/cli/machine.rs            |  17 +-
+ crates/rustunes/src/cli/playlist.rs           | 169 +++++
+ crates/rustunes/src/engine/execution.rs       |   1 +
+ .../rustunes/src/engine/execution/playlist.rs | 667 ++++++++++++++++++
+ docs/05-receiver-operations.md                |   1 +
+ 8 files changed, 1064 insertions(+), 6 deletions(-)
+ create mode 100644 crates/rustunes/src/cli/playlist.rs
+ create mode 100644 crates/rustunes/src/engine/execution/playlist.rs
+
+diff --git a/README.md b/README.md
+index 999ed6c..f60e7af 100644
+--- a/README.md
++++ b/README.md
+@@ -57,6 +57,8 @@ from the protocol analysis to the code.
+   cable or lose Wi-Fi, then run the same command again.
+ - **Leaves the rest alone:** it only changes tracks it sent or adopted, and it
+   never modifies your music files.
++- **Playlists:** M3U and M3U8 files become ordinary playlists on the phone,
++  replaced when their tracks or order change.
+ - **USB or Wi-Fi:** the same commands work over both. Over Wi-Fi the phone can
+   stay locked in your pocket.
+ - **Fast repeat runs:** a 399-track library with nothing to do syncs in under
+@@ -428,6 +430,22 @@ All three take these options:
+ | `--journal DIR`, `--state-dir DIR`, `--host-name NAME` | See [shared options](#options-shared-by-many-commands). |
+ | `--recursive` | `prune` only: read the folder's subfolders too. |
+ 
++### Playlists
++
++```
++rustunes playlist push ~/Music/Mix.m3u8     # create, or replace when changed
++rustunes playlist push Mix.m3u --folder Trips
++rustunes playlist list                      # (rustunes) marks the ones it made
++rustunes playlist remove Mix
++```
++
++Entries are paths relative to the playlist file, absolute paths or `file://`
++URIs; `#EXT` lines are ignored. Each entry must be a track this host sent or
++pulled; the others are left out with a notice. A playlist is named after its
++file unless `--name` says otherwise. Only playlists rustunes created (recorded
++in `playlists.json` next to the journal) are ever replaced or removed: one with
++the same name made elsewhere stays, and the pushed one is added beside it.
++
+ ### Editing tracks on the phone
+ 
+ Usually it is simpler to retag your file and run `sync`, which sends the
+@@ -772,9 +790,10 @@ covers).
+ 
+ - **No backup.** Removed tracks exist only in your source files.
+ - **Tested on one phone and two iOS versions** (see [Supported phones](#supported-phones)).
+-- **No playlist editing.** rustunes does not create or edit playlists. It
+-  removes members of ordinary playlists when it removes a track, and refuses to
+-  remove members of smart playlists, folders or playlists made on the phone.
++- **Only its own playlists.** rustunes creates and replaces ordinary playlists
++  from M3U files, and never edits playlists made elsewhere. Removing a track
++  removes it from ordinary playlists; a track in a smart playlist, a folder or
++  a playlist made on the phone is not removed.
+ - **Albums and artists can linger.** The phone decides when to drop an emptied
+   album or artist, and some stay after their tracks are removed.
+ - **Some tag changes need a replacement.** Clearing a genre or composer can't
+diff --git a/crates/music-protocol/src/catalogue/mutation.rs b/crates/music-protocol/src/catalogue/mutation.rs
+index 20b67f6..619657c 100644
+--- a/crates/music-protocol/src/catalogue/mutation.rs
++++ b/crates/music-protocol/src/catalogue/mutation.rs
+@@ -124,6 +124,108 @@ fn prepare_playlists(
+     envelope(revision, timestamp, operations)
+ }
+ 
++/// A playlist as `insert_playlist` or `update_playlist` sends it: the
++/// complete ordered member list (track sync ids), and for a folder or a
++/// playlist inside one, the folder flag and parent playlist.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct PlaylistContent<'a> {
++    pub pid: u64,
++    pub name: &'a str,
++    pub members: &'a [u64],
++    pub parent: u64,
++    pub folder: bool,
++}
++
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub enum PlaylistChange<'a> {
++    Delete(u64),
++    Insert(PlaylistContent<'a>),
++    Update(PlaylistContent<'a>),
++}
++
++/// One session of playlist operations after `update_db_info`, in order
++/// (docs/02-atc-sync-protocol.md, section 10). The bytes prove nothing; the
++/// caller verifies the playlists afterwards.
++pub fn playlist_changes(
++    catalog: &Catalog,
++    changes: &[PlaylistChange<'_>],
++    timestamp: SystemTime,
++) -> Result<Vec<u8>> {
++    prepare_playlist_changes(catalog_identity(catalog), changes, timestamp)
++}
++
++fn prepare_playlist_changes(
++    catalog: CatalogIdentity,
++    changes: &[PlaylistChange<'_>],
++    timestamp: SystemTime,
++) -> Result<Vec<u8>> {
++    ensure!(
++        catalog.database != 0 && catalog.primary_container != 0,
++        "missing current catalog identity"
++    );
++    ensure!(!changes.is_empty(), "no playlist changes");
++    let revision = catalog
++        .anchor
++        .checked_add(1)
++        .context("Media anchor exhausted")?;
++    let mut operations = vec![db_info_update(&catalog)];
++    for change in changes {
++        let (kind, pid, content) = match change {
++            PlaylistChange::Delete(pid) => ("delete_playlist", *pid, None),
++            PlaylistChange::Insert(c) => ("insert_playlist", c.pid, Some(c)),
++            PlaylistChange::Update(c) => ("update_playlist", c.pid, Some(c)),
++        };
++        ensure!(
++            pid != 0 && pid != catalog.primary_container,
++            "playlist {pid:016x} is zero or the library container"
++        );
++        let mut operation = Dictionary::new();
++        operation.insert("operation".into(), kind.into());
++        operation.insert("pid".into(), (pid as i64).into());
++        if let Some(c) = content {
++            ensure!(
++                !c.name.is_empty() && c.name.len() <= 255,
++                "playlist name must be 1 to 255 bytes"
++            );
++            ensure!(
++                !c.folder || c.members.is_empty(),
++                "a playlist folder holds no tracks"
++            );
++            let mut seen = std::collections::BTreeSet::new();
++            ensure!(
++                c.members.iter().all(|m| *m != 0 && seen.insert(*m)),
++                "playlist members must be distinct nonzero tracks"
++            );
++            let date = Value::Date(timestamp.into());
++            let mut container = Dictionary::new();
++            container.insert("name".into(), c.name.into());
++            container.insert("date_created".into(), date.clone());
++            container.insert("date_modified".into(), date);
++            if c.parent != 0 {
++                container.insert("parent_pid".into(), (c.parent as i64).into());
++            }
++            if c.folder {
++                container.insert("smart_is_folder".into(), true.into());
++            }
++            let mut ui = Dictionary::new();
++            ui.insert("play_order".into(), 1.into());
++            ui.insert("album_field_order".into(), 0.into());
++            ui.insert("repeat_mode".into(), 0.into());
++            ui.insert("is_reversed".into(), false.into());
++            ui.insert("shuffle_items".into(), false.into());
++            ui.insert("has_been_shuffled".into(), false.into());
++            operation.insert("container".into(), Value::Dictionary(container));
++            operation.insert("container_ui".into(), Value::Dictionary(ui));
++            operation.insert(
++                "item_to_container".into(),
++                Value::Array(c.members.iter().map(|m| (*m as i64).into()).collect()),
++            );
++        }
++        operations.push(Value::Dictionary(operation));
++    }
++    envelope(revision, timestamp, operations)
++}
++
+ fn validate_unfilled(track: &Track) -> Result<()> {
+     let state = &track.availability;
+     ensure!(
+@@ -458,6 +560,85 @@ mod tests {
+         assert!(prepare_playlists(identity(40), &lists, time).is_err());
+     }
+ 
++    #[test]
++    fn playlist_insert_carries_container_ui_and_signed_members() {
++        let time = UNIX_EPOCH + Duration::from_secs(1_000_000_000);
++        let members = [5, 0x8000_0000_0000_0007];
++        let content = PlaylistContent {
++            pid: 0x9000_0000_0000_0001,
++            name: "Mix",
++            members: &members,
++            parent: 0,
++            folder: false,
++        };
++        let bytes = prepare_playlist_changes(
++            identity(40),
++            &[PlaylistChange::Delete(9), PlaylistChange::Insert(content.clone())],
++            time,
++        )
++        .unwrap();
++        let root = Value::from_reader(Cursor::new(&bytes)).unwrap();
++        let operations = root.as_dictionary().unwrap()["operations"]
++            .as_array()
++            .unwrap()
++            .clone();
++        assert_eq!(operations.len(), 3);
++        let delete = operations[1].as_dictionary().unwrap();
++        assert_eq!(delete["operation"].as_string(), Some("delete_playlist"));
++        assert_eq!(keys(delete), BTreeSet::from(["operation", "pid"]));
++        let insert = operations[2].as_dictionary().unwrap();
++        assert_eq!(
++            keys(insert),
++            BTreeSet::from(["operation", "pid", "container", "container_ui", "item_to_container"])
++        );
++        assert_eq!(insert["operation"].as_string(), Some("insert_playlist"));
++        assert_eq!(insert["pid"].as_signed_integer(), Some(i64::MIN + 1 + 0x1000_0000_0000_0000));
++        let container = insert["container"].as_dictionary().unwrap();
++        assert_eq!(
++            keys(container),
++            BTreeSet::from(["name", "date_created", "date_modified"])
++        );
++        assert_eq!(container["name"].as_string(), Some("Mix"));
++        assert_eq!(
++            keys(insert["container_ui"].as_dictionary().unwrap()).len(),
++            6
++        );
++        let items: Vec<i64> = insert["item_to_container"]
++            .as_array()
++            .unwrap()
++            .iter()
++            .map(|v| v.as_signed_integer().unwrap())
++            .collect();
++        assert_eq!(items, [5, i64::MIN + 7]);
++        let folder = PlaylistContent {
++            members: &[],
++            folder: true,
++            ..content.clone()
++        };
++        let bytes =
++            prepare_playlist_changes(identity(40), &[PlaylistChange::Update(folder)], time).unwrap();
++        let root = Value::from_reader(Cursor::new(&bytes)).unwrap();
++        let update = root.as_dictionary().unwrap()["operations"].as_array().unwrap()[1]
++            .as_dictionary()
++            .unwrap()
++            .clone();
++        assert_eq!(update["operation"].as_string(), Some("update_playlist"));
++        assert_eq!(
++            update["container"].as_dictionary().unwrap()["smart_is_folder"].as_boolean(),
++            Some(true)
++        );
++        for bad in [
++            PlaylistContent { members: &[5, 5], ..content.clone() },
++            PlaylistContent { name: "", ..content.clone() },
++            PlaylistContent { folder: true, ..content.clone() },
++            PlaylistContent { pid: u64::MAX - 2, ..content.clone() },
++        ] {
++            assert!(
++                prepare_playlist_changes(identity(40), &[PlaylistChange::Insert(bad)], time).is_err()
++            );
++        }
++    }
++
+     #[test]
+     fn playlist_deletes_share_one_envelope_in_order() {
+         let time = UNIX_EPOCH + Duration::from_secs(1_000_000_000);
+diff --git a/crates/rustunes/src/cli.rs b/crates/rustunes/src/cli.rs
+index 303d174..060de99 100644
+--- a/crates/rustunes/src/cli.rs
++++ b/crates/rustunes/src/cli.rs
+@@ -9,6 +9,7 @@ pub(crate) mod library_view;
+ mod logging;
+ mod machine;
+ mod metadata_set;
++mod playlist;
+ mod progress;
+ mod pull;
+ mod recovery;
+@@ -175,6 +176,11 @@ enum Command {
+         #[command(flatten)]
+         options: deletion::Options,
+     },
++    /// Create, update, list or remove playlists from M3U files.
++    Playlist {
++        #[command(subcommand)]
++        action: playlist::PlaylistCommand,
++    },
+     /// Discover USB devices and inspect the selected paired phone.
+     Device {
+         #[command(subcommand)]
+@@ -777,6 +783,7 @@ fn run_state(command: &Command) -> Option<PathBuf> {
+         Command::Prune { options, .. }
+         | Command::Delete { options, .. }
+         | Command::Clear { options } => options.state_dir().map(std::path::Path::to_path_buf),
++        Command::Playlist { action } => action.state_dir().map(std::path::Path::to_path_buf),
+         _ => return None,
+     };
+     chosen.map(Ok).unwrap_or_else(default_state_directory).ok()
+@@ -848,6 +855,7 @@ fn reaches_phone(command: &Command) -> bool {
+         Command::Metadata {
+             action: MetadataCommand::Set { .. },
+         } | Command::Prune { .. }
++            | Command::Playlist { .. }
+             | Command::Delete { .. }
+             | Command::Clear { .. }
+             | Command::Device {
+@@ -981,6 +989,7 @@ async fn dispatch(cli: Cli, engine: &engine::Engine) -> Result<ExitCode> {
+                 return Ok(ExitCode::from(3));
+             }
+         }
++        Command::Playlist { action } => playlist::run(action, engine).await?,
+         Command::Device {
+             view: DeviceCommand::List { json },
+         } => {
+diff --git a/crates/rustunes/src/cli/machine.rs b/crates/rustunes/src/cli/machine.rs
+index 70cbf87..c3bd1bb 100644
+--- a/crates/rustunes/src/cli/machine.rs
++++ b/crates/rustunes/src/cli/machine.rs
+@@ -45,6 +45,7 @@ struct State {
+     phase: Option<&'static str>,
+     streams: BTreeMap<&'static str, Stream>,
+     outcome: Option<&'static str>,
++    result: Option<Value>,
+ }
+ 
+ /// One progress stream since its pass began: a pass begins again when its
+@@ -209,6 +210,13 @@ pub(super) fn outcome(outcome: &'static str) {
+     }
+ }
+ 
++/// Extra fields for the `result` record.
++pub(super) fn result_fields(fields: Value) {
++    if let Some(sink) = SINK.get() {
++        sink.state.lock().unwrap_or_else(|e| e.into_inner()).result = Some(fields);
++    }
++}
++
+ /// Ask on stdin: write a `confirm` record, then read one line. `yes` or `y`
+ /// confirms; anything else, or the end of stdin, declines.
+ pub(super) fn confirm(code: &'static str, prompt: String, fields: Value) -> Result<bool> {
+@@ -472,9 +480,10 @@ fn merge(record: &mut Value, extra: Value) {
+ /// leave with: an error becomes code 1 and is not printed again.
+ pub(super) fn finish(result: Result<ExitCode>) -> ExitCode {
+     let code = exit_code(&result);
+-    let outcome = SINK
+-        .get()
+-        .and_then(|sink| sink.state.lock().unwrap_or_else(|e| e.into_inner()).outcome);
++    let (outcome, extra) = SINK.get().map_or((None, None), |sink| {
++        let state = sink.state.lock().unwrap_or_else(|e| e.into_inner());
++        (state.outcome, state.result.clone())
++    });
+     let mut fields = json!({
+         "ok": code == 0,
+         "exit_code": code,
+@@ -487,6 +496,8 @@ pub(super) fn finish(result: Result<ExitCode>) -> ExitCode {
+     });
+     if let Err(error) = &result {
+         fields["error"] = error_json(error);
++    } else if let Some(extra) = extra {
++        merge(&mut fields, extra);
+     }
+     match write("result", fields) {
+         Ok(()) => ExitCode::from(code),
+diff --git a/crates/rustunes/src/cli/playlist.rs b/crates/rustunes/src/cli/playlist.rs
+new file mode 100644
+index 0000000..7fae5a6
+--- /dev/null
++++ b/crates/rustunes/src/cli/playlist.rs
+@@ -0,0 +1,169 @@
++//! `playlist`: M3U playlists on the phone, only ever changing those this
++//! host created.
++use super::{machine, notice};
++use crate::engine::execution::playlist;
++use anyhow::Result;
++use clap::Subcommand;
++use serde_json::json;
++use std::path::PathBuf;
++
++#[derive(Subcommand)]
++pub(super) enum PlaylistCommand {
++    /// Create or update a playlist from an M3U or M3U8 file whose tracks are on the phone; one made on the phone or by another host is never changed.
++    Push {
++        playlist: PathBuf,
++        /// The playlist's name on the phone; defaults to the file name without its extension.
++        #[arg(long)]
++        name: Option<String>,
++        /// Put it in this playlist folder, created by rustunes when absent.
++        #[arg(long)]
++        folder: Option<String>,
++        /// Show what would change without sending it.
++        #[arg(long)]
++        dry_run: bool,
++        #[command(flatten)]
++        common: Common,
++    },
++    /// List the phone's playlists, marking those rustunes created as managed.
++    List {
++        #[arg(long)]
++        json: bool,
++        #[command(flatten)]
++        common: Common,
++    },
++    /// Delete a playlist rustunes created.
++    Remove {
++        name: String,
++        #[arg(long)]
++        folder: Option<String>,
++        #[command(flatten)]
++        common: Common,
++    },
++}
++
++#[derive(clap::Args)]
++pub(super) struct Common {
++    #[arg(long)]
++    state_dir: Option<PathBuf>,
++    #[arg(long, default_value = "rustunes")]
++    host_name: String,
++    #[arg(long, default_value_t = 600, value_parser = clap::value_parser!(u64).range(1..=1800))]
++    seconds: u64,
++}
++
++impl PlaylistCommand {
++    pub(super) fn state_dir(&self) -> Option<&std::path::Path> {
++        match self {
++            Self::Push { common, .. } | Self::List { common, .. } | Self::Remove { common, .. } => {
++                common.state_dir.as_deref()
++            }
++        }
++    }
++}
++
++pub(super) async fn run(command: PlaylistCommand, engine: &crate::engine::Engine) -> Result<()> {
++    let state = |common: &Common| {
++        common
++            .state_dir
++            .clone()
++            .map(Ok)
++            .unwrap_or_else(super::default_state_directory)
++    };
++    match command {
++        PlaylistCommand::Push {
++            playlist,
++            name,
++            folder,
++            dry_run,
++            common,
++        } => {
++            let state = state(&common)?;
++            let connection = engine.command_options();
++            let outcome = engine
++                .scope(playlist::push(
++                    playlist::PushOptions {
++                        playlist: &playlist,
++                        name,
++                        folder,
++                        state: &state,
++                        host_name: &common.host_name,
++                        dry_run,
++                        connection: &connection,
++                    },
++                    || engine.control(common.seconds),
++                    |missing| {
++                        let _ = notice(
++                            "playlist_track_missing",
++                            machine::Level::Warning,
++                            format!("Not on the phone, left out: {}", missing.display()),
++                            json!({"path": missing}),
++                        );
++                    },
++                ))
++                .await?;
++            let fields = serde_json::to_value(&outcome)?;
++            if machine::enabled() {
++                machine::outcome(outcome.action);
++                machine::result_fields(fields);
++            } else {
++                let verb = match (outcome.action, dry_run) {
++                    ("unchanged", _) => "Unchanged",
++                    ("created", false) => "Created",
++                    ("created", true) => "Would create",
++                    (_, false) => "Replaced",
++                    (_, true) => "Would replace",
++                };
++                println!(
++                    "{verb} playlist {:?}: {} tracks, {} not on the phone",
++                    outcome.playlist,
++                    outcome.members,
++                    outcome.missing.len()
++                );
++            }
++        }
++        PlaylistCommand::List { json, common } => {
++            let state = state(&common)?;
++            let listed = engine
++                .scope(playlist::list(&state, || engine.control(common.seconds)))
++                .await?;
++            if machine::enabled() {
++                machine::report("playlists", &listed)?;
++            } else if json {
++                println!("{}", serde_json::to_string_pretty(&json!({"playlists": listed}))?);
++            } else {
++                for p in &listed {
++                    println!(
++                        "{:016x}  {:<10} {:>5}  {}{}",
++                        p.playlist.pid,
++                        p.playlist.kind,
++                        p.playlist.members.len(),
++                        p.playlist.name,
++                        if p.managed { "  (rustunes)" } else { "" }
++                    );
++                }
++            }
++        }
++        PlaylistCommand::Remove {
++            name,
++            folder,
++            common,
++        } => {
++            let state = state(&common)?;
++            let removed = engine
++                .scope(playlist::remove(
++                    &name,
++                    folder.as_deref(),
++                    &state,
++                    &common.host_name,
++                    || engine.control(common.seconds),
++                ))
++                .await?;
++            if machine::enabled() {
++                machine::result_fields(json!({"playlist": name, "removed": removed.removed}));
++            } else {
++                println!("Removed playlist {name:?}");
++            }
++        }
++    }
++    Ok(())
++}
+diff --git a/crates/rustunes/src/engine/execution.rs b/crates/rustunes/src/engine/execution.rs
+index 76047f8..19931db 100644
+--- a/crates/rustunes/src/engine/execution.rs
++++ b/crates/rustunes/src/engine/execution.rs
+@@ -11,6 +11,7 @@ pub(crate) mod insert_batch;
+ pub(crate) mod metadata_batch;
+ pub(crate) mod native_artwork;
+ pub(crate) mod native_insert;
++pub(crate) mod playlist;
+ pub(crate) mod pull;
+ pub(crate) mod removal_batch;
+ pub(crate) mod replace;
+diff --git a/crates/rustunes/src/engine/execution/playlist.rs b/crates/rustunes/src/engine/execution/playlist.rs
+new file mode 100644
+index 0000000..ed3e6e8
+--- /dev/null
++++ b/crates/rustunes/src/engine/execution/playlist.rs
+@@ -0,0 +1,667 @@
++//! Playlists from M3U files: one metadata-only session per change, verified
++//! by reading the phone's playlists back. Only playlists this host created
++//! (recorded next to the journal) are ever replaced or deleted.
++use anyhow::{Context, Result, bail, ensure};
++use serde::{Deserialize, Serialize};
++use std::{
++    collections::{BTreeMap, BTreeSet},
++    fs,
++    io::Read,
++    path::{Component, Path, PathBuf},
++    time::SystemTime,
++};
++
++use crate::engine::{
++    execution::native_insert::{Control, durable_write},
++    execution::removal_batch::{self, Before, Requests, Sent, hex, sha},
++    state::journal::{Identity, Journal},
++    state::layout,
++};
++use music_protocol::catalogue::mutation::{self, PlaylistChange, PlaylistContent};
++use music_protocol::catalogue::removal::{Tables, playlists::ordinary};
++use music_protocol::catalogue::sqlite::tables::Cell;
++
++const MANAGED: &str = "playlists.json";
++
++/// The entries of an M3U or M3U8 playlist, as absolute paths in file order.
++pub(crate) fn parse_m3u(text: &str, base: &Path) -> Vec<PathBuf> {
++    text.trim_start_matches('\u{feff}')
++        .lines()
++        .map(str::trim)
++        .filter(|line| !line.is_empty() && !line.starts_with('#'))
++        .map(|line| {
++            let path = match line.strip_prefix("file://") {
++                Some(uri) => PathBuf::from(percent_decode(uri.trim_start_matches("localhost"))),
++                None => PathBuf::from(line),
++            };
++            normalize(&base.join(path))
++        })
++        .collect()
++}
++
++fn percent_decode(text: &str) -> String {
++    let bytes = text.as_bytes();
++    let mut out = Vec::with_capacity(bytes.len());
++    let mut i = 0;
++    while i < bytes.len() {
++        let hex = bytes
++            .get(i + 1..i + 3)
++            .and_then(|h| std::str::from_utf8(h).ok())
++            .and_then(|h| u8::from_str_radix(h, 16).ok());
++        match (bytes[i], hex) {
++            (b'%', Some(byte)) => {
++                out.push(byte);
++                i += 3;
++            }
++            (byte, _) => {
++                out.push(byte);
++                i += 1;
++            }
++        }
++    }
++    String::from_utf8_lossy(&out).into_owned()
++}
++
++/// A path's letters and digits, lowercase and without accents, for entries
++/// an older export wrote in ASCII ("Uber" for "Über").
++fn folded(path: &Path) -> String {
++    const FROM: &str = "àáâãäåèéêëìíîïòóôõöøùúûüýÿñçæœß";
++    const TO: [&str; 31] = [
++        "a", "a", "a", "a", "a", "a", "e", "e", "e", "e", "i", "i", "i", "i", "o", "o", "o", "o",
++        "o", "o", "u", "u", "u", "u", "y", "y", "n", "c", "ae", "oe", "ss",
++    ];
++    let mut out = String::new();
++    for c in path.to_string_lossy().chars().flat_map(char::to_lowercase) {
++        match FROM.chars().position(|f| f == c) {
++            Some(i) => out.push_str(TO[i]),
++            None if c.is_alphanumeric() => out.push(c),
++            None => {}
++        }
++    }
++    out
++}
++
++fn normalize(path: &Path) -> PathBuf {
++    let mut out = PathBuf::new();
++    for part in path.components() {
++        match part {
++            Component::ParentDir => {
++                out.pop();
++            }
++            Component::CurDir => {}
++            other => out.push(other),
++        }
++    }
++    out
++}
++
++#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
++pub struct PhonePlaylist {
++    pub pid: u64,
++    pub name: String,
++    pub kind: &'static str,
++    #[serde(skip_serializing_if = "is_zero")]
++    pub parent: u64,
++    pub members: Vec<u64>,
++}
++
++fn is_zero(value: &u64) -> bool {
++    *value == 0
++}
++
++/// Every playlist a person sees on the phone, built-in ones left out.
++pub(crate) fn phone_playlists(tables: &Tables) -> Result<Vec<PhonePlaylist>> {
++    let table = |name: &str| tables.get(name).with_context(|| format!("no {name} table"));
++    let containers = table("container")?;
++    let info = table("db_info")?;
++    let mut primary = BTreeSet::new();
++    for row in info.rows.keys() {
++        primary.insert(info.at(row, "primary_container_pid")?.integer()?);
++    }
++    let plain = ordinary(tables)?;
++    let store = table("item_store")?;
++    let mut sync_ids = BTreeMap::new();
++    for row in store.rows.keys() {
++        sync_ids.insert(
++            store.at(row, "item_pid")?.integer()?,
++            store.at(row, "sync_id")?.integer()? as u64,
++        );
++    }
++    let mut members: BTreeMap<i64, Vec<(i64, u64)>> = BTreeMap::new();
++    if let Some(items) = tables.get("container_item") {
++        for row in items.rows.keys() {
++            let item = items.at(row, "item_pid")?.integer()?;
++            members
++                .entry(items.at(row, "container_pid")?.integer()?)
++                .or_default()
++                .push((
++                    items.at(row, "position")?.integer()?,
++                    sync_ids.get(&item).copied().unwrap_or(0),
++                ));
++        }
++    }
++    let mut playlists = Vec::new();
++    for row in containers.rows.keys() {
++        let int = |column: &str| containers.at(row, column).and_then(Cell::integer);
++        let pid = int("container_pid")?;
++        if primary.contains(&pid) || int("distinguished_kind")? != 0 || int("is_hidden")? != 0 {
++            continue;
++        }
++        let sync_id = int("sync_id")? as u64;
++        let kind = if int("smart_is_folder")? != 0 {
++            "folder"
++        } else if *containers.at(row, "smart_criteria")? != Cell::Null {
++            "smart"
++        } else if sync_id == 0 {
++            "phone-made"
++        } else if plain.contains(&pid) {
++            "ordinary"
++        } else {
++            "other"
++        };
++        let mut list = members.remove(&pid).unwrap_or_default();
++        list.sort();
++        playlists.push(PhonePlaylist {
++            pid: if sync_id == 0 { pid as u64 } else { sync_id },
++            name: containers.at(row, "name")?.text()?.to_owned(),
++            kind,
++            parent: int("parent_pid")? as u64,
++            members: list.into_iter().map(|(_, m)| m).collect(),
++        });
++    }
++    Ok(playlists)
++}
++
++/// Playlists and folders this host created, by key, newest pid last.
++#[derive(Default, Serialize, Deserialize)]
++struct Managed {
++    #[serde(default)]
++    playlists: BTreeMap<String, Vec<u64>>,
++    #[serde(default)]
++    folders: BTreeMap<String, Vec<u64>>,
++}
++
++impl Managed {
++    fn load(path: &Path) -> Result<Self> {
++        match fs::read(path) {
++            Ok(bytes) => serde_json::from_slice(&bytes).context("reading managed playlists"),
++            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
++            Err(e) => Err(e.into()),
++        }
++    }
++    fn save(&self, path: &Path) -> Result<()> {
++        let parent = path.parent().context("managed playlists have no directory")?;
++        let temporary = parent.join(format!("{MANAGED}.new"));
++        let mut file = fs::File::create(&temporary)?;
++        std::io::Write::write_all(&mut file, &serde_json::to_vec_pretty(self)?)?;
++        file.sync_all()?;
++        fs::rename(&temporary, path)?;
++        fs::File::open(parent)?.sync_all()?;
++        Ok(())
++    }
++    fn all(&self) -> BTreeSet<u64> {
++        self.playlists
++            .values()
++            .chain(self.folders.values())
++            .flatten()
++            .copied()
++            .collect()
++    }
++}
++
++/// Key of a managed playlist: its name, inside its folder when it has one.
++fn key(name: &str, folder: Option<&str>) -> String {
++    match folder {
++        Some(folder) => format!("{folder}/{name}"),
++        None => name.to_owned(),
++    }
++}
++
++#[derive(Debug, PartialEq, Eq)]
++pub(crate) enum Decision {
++    Unchanged(u64),
++    Replace(Vec<u64>),
++    Create,
++}
++
++/// What a push does, from the managed playlists of this key still on the
++/// phone (`present`).
++pub(crate) fn decide(present: &[&PhonePlaylist], name: &str, members: &[u64], parent: u64) -> Decision {
++    match present {
++        [] => Decision::Create,
++        [one] if one.name == name && one.members == members && one.parent == parent => {
++            Decision::Unchanged(one.pid)
++        }
++        many => Decision::Replace(many.iter().map(|p| p.pid).collect()),
++    }
++}
++
++pub struct PushOptions<'a> {
++    pub playlist: &'a Path,
++    pub name: Option<String>,
++    pub folder: Option<String>,
++    pub state: &'a Path,
++    pub host_name: &'a str,
++    pub dry_run: bool,
++    pub connection: &'a str,
++}
++
++#[derive(Debug, Serialize)]
++pub struct PushOutcome {
++    pub playlist: String,
++    pub pid: u64,
++    pub members: usize,
++    pub missing: Vec<PathBuf>,
++    pub action: &'static str,
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub folder: Option<String>,
++}
++
++struct Started {
++    operation: Vec<u8>,
++    signature: [u8; 21],
++}
++
++impl music_protocol::protocol::session::StartedOperation for Started {
++    fn operation(&self) -> &[u8] {
++        &self.operation
++    }
++    fn signature(&self) -> &[u8; 21] {
++        &self.signature
++    }
++}
++
++struct Opened {
++    identity: Identity,
++    before: Before,
++    journal: PathBuf,
++    managed_path: PathBuf,
++    managed: Managed,
++    playlists: Vec<PhonePlaylist>,
++}
++
++async fn open(state: &Path, directory: &Path, control: &Control) -> Result<Opened> {
++    let (identity, before) = removal_batch::capture_fresh(directory, control).await?;
++    let journal = layout::journal_path(
++        state,
++        &before.snapshot.identity.device_identifier_sha256,
++        &before.snapshot.identity.library_identity_sha256,
++    )?;
++    let managed_path = journal
++        .parent()
++        .context("journal has no directory")?
++        .join(MANAGED);
++    let managed = Managed::load(&managed_path)?;
++    let playlists = phone_playlists(&before.sql.tables)?;
++    Ok(Opened {
++        identity,
++        before,
++        journal,
++        managed_path,
++        managed,
++        playlists,
++    })
++}
++
++fn present<'a>(playlists: &'a [PhonePlaylist], pids: Option<&Vec<u64>>, kind: &str) -> Vec<&'a PhonePlaylist> {
++    let pids = pids.map(Vec::as_slice).unwrap_or_default();
++    playlists
++        .iter()
++        .filter(|p| pids.contains(&p.pid) && p.kind == kind)
++        .collect()
++}
++
++fn fresh_pid(before: &Before, taken: &BTreeSet<u64>) -> Result<u64> {
++    let mut occupied = taken.clone();
++    for (table, columns) in [
++        ("container", &["container_pid", "sync_id"][..]),
++        ("item_store", &["item_pid", "sync_id"][..]),
++    ] {
++        let t = before.sql.table(table)?;
++        for row in t.rows.keys() {
++            for column in columns {
++                occupied.insert(t.at(row, column)?.integer()? as u64);
++            }
++        }
++    }
++    let mut random = fs::File::open("/dev/urandom")?;
++    for _ in 0..128 {
++        let mut bytes = [0; 8];
++        random.read_exact(&mut bytes)?;
++        let pid = u64::from_le_bytes(bytes);
++        if pid >= 1000 && !occupied.contains(&pid) {
++            return Ok(pid);
++        }
++    }
++    bail!("unable to allocate a playlist identity")
++}
++
++/// Send `changes` as one metadata-only session from `opened`'s exact state.
++/// `started` runs once the session is Ready, before anything is staged.
++async fn send(
++    before: &Before,
++    changes: &[PlaylistChange<'_>],
++    host_name: &str,
++    control: &Control,
++    started: impl FnOnce() -> Result<()>,
++) -> Result<()> {
++    let operation = mutation::playlist_changes(&before.current.catalog, changes, SystemTime::now())?;
++    let input = serde_json::to_vec_pretty(&serde_json::json!({
++        "schema": "rustunes.playlist-input",
++        "base_anchor": before.anchor(),
++        "operation_sha256": hex(&sha(&operation)),
++        "before_current_sha256": hex(&before.current.receipt_sha256),
++        "host_name": host_name,
++    }))?;
++    durable_write(&before.directory, "input.json", &input)?;
++    durable_write(&before.directory, "operation.plist", &operation)?;
++    let sent = removal_batch::send_metadata_only(
++        before,
++        &operation,
++        Requests::None,
++        sha(&input),
++        host_name,
++        &before.directory.join("send"),
++        control,
++        |_, signature| {
++            started()?;
++            Ok(Started {
++                operation: operation.clone(),
++                signature,
++            })
++        },
++    )
++    .await;
++    match sent {
++        Sent::Unsent(error) => Err(error.context("nothing was sent to the phone")),
++        // A transport error after Started may still have applied; the
++        // caller's readback decides.
++        Sent::Started(wire) => {
++            if let Err(error) = wire {
++                tracing::warn!("playlist session ended with {error:#}; reading the phone back");
++            }
++            Ok(())
++        }
++    }
++}
++
++/// Push one M3U playlist: create it, replace a managed one whose tracks or
++/// order changed, or leave it.
++pub async fn push(
++    o: PushOptions<'_>,
++    control: impl Fn() -> Control,
++    mut notice: impl FnMut(&Path),
++) -> Result<PushOutcome> {
++    let text = fs::read(o.playlist)
++        .with_context(|| format!("reading {}", o.playlist.display()))?;
++    let base = std::path::absolute(o.playlist)?;
++    let entries = parse_m3u(
++        &String::from_utf8_lossy(&text),
++        base.parent().context("playlist has no directory")?,
++    );
++    let name = match o.name {
++        Some(name) => name,
++        None => o
++            .playlist
++            .file_stem()
++            .and_then(|s| s.to_str())
++            .context("playlist file name is not UTF-8")?
++            .to_owned(),
++    };
++    let run = layout::new_run(o.state)?;
++    let control = control();
++    let mut opened = open(o.state, &run.join("before"), &control).await?;
++    ensure!(
++        opened.journal.join("journal.sqlite").try_exists()?,
++        "no journal for this phone yet; run `rustunes push` or `rustunes pull` first"
++    );
++    crate::engine::execution::replace::ensure_no_unfinished_attempt(
++        &opened.journal,
++        &opened.identity,
++        o.state,
++        &run.join("before").join("snapshot"),
++        o.connection,
++    )?;
++    let sources = Journal::open_read_only(&opened.journal, &opened.identity)?.recorded_sources()?;
++    let on_phone: BTreeSet<u64> = opened
++        .before
++        .current
++        .catalog
++        .tracks()
++        .iter()
++        .map(|t| t.sync_id)
++        .collect();
++    let by_path: BTreeMap<PathBuf, u64> = sources
++        .into_iter()
++        .filter(|(track, _)| on_phone.contains(track))
++        .flat_map(|(track, path)| {
++            let canonical = fs::canonicalize(&path).ok();
++            [Some(path), canonical]
++                .into_iter()
++                .flatten()
++                .map(move |p| (p, track))
++        })
++        .collect();
++    let mut by_folded: BTreeMap<String, Option<u64>> = BTreeMap::new();
++    for (path, track) in &by_path {
++        by_folded
++            .entry(folded(path))
++            .and_modify(|t| {
++                if *t != Some(*track) {
++                    *t = None
++                }
++            })
++            .or_insert(Some(*track));
++    }
++    let mut members = Vec::new();
++    let mut missing = Vec::new();
++    for entry in entries {
++        let track = by_path
++            .get(&entry)
++            .or_else(|| fs::canonicalize(&entry).ok().and_then(|c| by_path.get(&c)))
++            .or_else(|| by_folded.get(&folded(&entry)).and_then(Option::as_ref));
++        match track {
++            Some(track) if !members.contains(track) => members.push(*track),
++            Some(_) => {}
++            None => {
++                notice(&entry);
++                missing.push(entry);
++            }
++        }
++    }
++    ensure!(
++        !members.is_empty(),
++        "none of the playlist's tracks is on the phone"
++    );
++    let key = key(&name, o.folder.as_deref());
++    let mut taken = opened.managed.all();
++    let mut changes = Vec::new();
++    let mut new_folder = None;
++    let parent = match &o.folder {
++        None => 0,
++        Some(folder) => {
++            match present(&opened.playlists, opened.managed.folders.get(folder), "folder").first() {
++                Some(existing) => existing.pid,
++                None => {
++                    let pid = fresh_pid(&opened.before, &taken)?;
++                    taken.insert(pid);
++                    new_folder = Some(pid);
++                    pid
++                }
++            }
++        }
++    };
++    let existing = present(&opened.playlists, opened.managed.playlists.get(&key), "ordinary");
++    let decision = decide(&existing, &name, &members, parent);
++    let outcome = |pid, action| PushOutcome {
++        playlist: name.clone(),
++        pid,
++        members: members.len(),
++        missing: missing.clone(),
++        action,
++        folder: o.folder.clone(),
++    };
++    let replaced = match decision {
++        Decision::Unchanged(pid) => return Ok(outcome(pid, "unchanged")),
++        Decision::Replace(old) => old,
++        Decision::Create => Vec::new(),
++    };
++    let pid = fresh_pid(&opened.before, &taken)?;
++    let action = if replaced.is_empty() { "created" } else { "replaced" };
++    if o.dry_run {
++        return Ok(outcome(pid, action));
++    }
++    let folder_name = o.folder.clone().unwrap_or_default();
++    if let Some(folder) = new_folder {
++        changes.push(PlaylistChange::Insert(PlaylistContent {
++            pid: folder,
++            name: &folder_name,
++            members: &[],
++            parent: 0,
++            folder: true,
++        }));
++    }
++    changes.extend(replaced.iter().map(|p| PlaylistChange::Delete(*p)));
++    changes.push(PlaylistChange::Insert(PlaylistContent {
++        pid,
++        name: &name,
++        members: &members,
++        parent,
++        folder: false,
++    }));
++    let managed_path = opened.managed_path.clone();
++    send(&opened.before, &changes, o.host_name, &control, || {
++        opened.managed.playlists.entry(key.clone()).or_default().push(pid);
++        if let (Some(folder), Some(name)) = (new_folder, &o.folder) {
++            opened.managed.folders.entry(name.clone()).or_default().push(folder);
++        }
++        opened.managed.save(&managed_path)
++    })
++    .await?;
++    let after = open(o.state, &run.join("after"), &control).await?;
++    let made = after
++        .playlists
++        .iter()
++        .find(|p| p.pid == pid)
++        .context("the phone did not create the playlist; nothing else changed")?;
++    ensure!(
++        made.name == name && made.members == members && made.parent == parent,
++        "the phone holds playlist {pid:016x} with other content than sent: {made:?}"
++    );
++    if let Some(left) = after.playlists.iter().find(|p| replaced.contains(&p.pid)) {
++        bail!("the replaced playlist {:016x} is still on the phone", left.pid);
++    }
++    let mut managed = after.managed;
++    managed.playlists.insert(key, vec![pid]);
++    managed.save(&after.managed_path)?;
++    Ok(outcome(pid, action))
++}
++
++pub struct RemoveOutcome {
++    pub removed: Vec<u64>,
++}
++
++/// Delete the managed playlist `name` (in `folder`) from the phone.
++pub async fn remove(
++    name: &str,
++    folder: Option<&str>,
++    state: &Path,
++    host_name: &str,
++    control: impl Fn() -> Control,
++) -> Result<RemoveOutcome> {
++    let run = layout::new_run(state)?;
++    let control = control();
++    let opened = open(state, &run.join("before"), &control).await?;
++    let key = key(name, folder);
++    let pids: Vec<u64> = present(&opened.playlists, opened.managed.playlists.get(&key), "ordinary")
++        .iter()
++        .map(|p| p.pid)
++        .collect();
++    if pids.is_empty() {
++        let foreign = opened.playlists.iter().any(|p| p.name == name);
++        bail!(
++            "no playlist named {name:?} that rustunes created is on the phone{}",
++            if foreign { "; the one there was made elsewhere and is left alone" } else { "" }
++        );
++    }
++    let changes: Vec<PlaylistChange> = pids.iter().map(|p| PlaylistChange::Delete(*p)).collect();
++    send(&opened.before, &changes, host_name, &control, || Ok(())).await?;
++    let after = open(state, &run.join("after"), &control).await?;
++    ensure!(
++        !after.playlists.iter().any(|p| pids.contains(&p.pid)),
++        "the phone kept the playlist"
++    );
++    let mut managed = after.managed;
++    managed.playlists.remove(&key);
++    managed.save(&after.managed_path)?;
++    Ok(RemoveOutcome { removed: pids })
++}
++
++#[derive(Serialize)]
++pub struct ListedPlaylist {
++    #[serde(flatten)]
++    pub playlist: PhonePlaylist,
++    pub managed: bool,
++}
++
++pub async fn list(state: &Path, control: impl Fn() -> Control) -> Result<Vec<ListedPlaylist>> {
++    let run = layout::new_run(state)?;
++    let opened = open(state, &run.join("list"), &control()).await?;
++    let managed = opened.managed.all();
++    Ok(opened
++        .playlists
++        .into_iter()
++        .map(|playlist| ListedPlaylist {
++            managed: managed.contains(&playlist.pid),
++            playlist,
++        })
++        .collect())
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn m3u_entries_resolve_against_the_playlist() {
++        let text = "\u{feff}#EXTM3U\r\n#EXTINF:123,A - B\r\nA/01 B.m4a\r\n\r\n../Other/x.mp3\n/abs/y.flac\nfile:///abs/z%20z.m4a\nfile://localhost/abs/w.m4a\n";
++        assert_eq!(
++            parse_m3u(text, Path::new("/music/Playlists")),
++            [
++                "/music/Playlists/A/01 B.m4a",
++                "/music/Other/x.mp3",
++                "/abs/y.flac",
++                "/abs/z z.m4a",
++                "/abs/w.m4a",
++            ]
++            .map(PathBuf::from)
++        );
++    }
++
++    #[test]
++    fn ascii_exports_match_accented_paths() {
++        assert_eq!(
++            folded(Path::new("/m/Über den Sternen/01 Æther.m4a")),
++            folded(Path::new("/m/Uber den Sternen/01 AEther.m4a"))
++        );
++        assert_ne!(folded(Path::new("/m/a/1.m4a")), folded(Path::new("/m/a/2.m4a")));
++    }
++
++    #[test]
++    fn push_replaces_only_on_a_difference() {
++        let list = |pid, members: Vec<u64>| PhonePlaylist {
++            pid,
++            name: "Mix".into(),
++            kind: "ordinary",
++            parent: 0,
++            members,
++        };
++        let a = list(7, vec![1, 2]);
++        assert_eq!(decide(&[], "Mix", &[1, 2], 0), Decision::Create);
++        assert_eq!(decide(&[&a], "Mix", &[1, 2], 0), Decision::Unchanged(7));
++        assert_eq!(decide(&[&a], "Mix", &[2, 1], 0), Decision::Replace(vec![7]));
++        assert_eq!(decide(&[&a], "Mix", &[1, 2], 9), Decision::Replace(vec![7]));
++        let b = list(8, vec![1, 2]);
++        assert_eq!(decide(&[&a, &b], "Mix", &[1, 2], 0), Decision::Replace(vec![7, 8]));
++    }
++}
+diff --git a/docs/05-receiver-operations.md b/docs/05-receiver-operations.md
+index c34c2d8..e7a952c 100644
+--- a/docs/05-receiver-operations.md
++++ b/docs/05-receiver-operations.md
+@@ -744,6 +744,7 @@ A session of three `delete_playlist` operations for emptied playlists, killed at
+ | `delete_album`, `delete_artist` | Ignored |
+ | `delete_playlist` ×10 | All removed |
+ | `delete_playlist` ×3, killed at first `Progress` | Applied |
++| `delete_playlist` of a 2-member list, then `insert_playlist` of the same members reordered under a new pid, one session (iOS 26.7.2) | Old list gone, new list in the new order |
+ 
+ ---
+ 
+-- 
+2.56.0
+
+
+From fe2cef92d4484452b1e11c415ea72dd3f5be062e Mon Sep 17 00:00:00 2001
+From: Lachlan Marie <lchlnm@pm.me>
+Date: Mon, 2 Nov 2026 22:33:09 +0100
+Subject: [PATCH 3/7] Update changed playlists in place
+
+- Send update_playlist for a changed managed playlist
+- Fall back to delete + insert when it does not apply
+- Document update_playlist as confirmed
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01F3FjoJj4RV14hgXJuf9gh7
+---
+ README.md                                     |  5 +-
+ .../rustunes/src/engine/execution/playlist.rs | 72 ++++++++++++++-----
+ docs/02-atc-sync-protocol.md                  |  4 +-
+ docs/05-receiver-operations.md                |  5 +-
+ 4 files changed, 62 insertions(+), 24 deletions(-)
+
+diff --git a/README.md b/README.md
+index f60e7af..9bfeff5 100644
+--- a/README.md
++++ b/README.md
+@@ -58,7 +58,7 @@ from the protocol analysis to the code.
+ - **Leaves the rest alone:** it only changes tracks it sent or adopted, and it
+   never modifies your music files.
+ - **Playlists:** M3U and M3U8 files become ordinary playlists on the phone,
+-  replaced when their tracks or order change.
++  updated in place when their tracks, order or name change.
+ - **USB or Wi-Fi:** the same commands work over both. Over Wi-Fi the phone can
+   stay locked in your pocket.
+ - **Fast repeat runs:** a 399-track library with nothing to do syncs in under
+@@ -444,7 +444,8 @@ URIs; `#EXT` lines are ignored. Each entry must be a track this host sent or
+ pulled; the others are left out with a notice. A playlist is named after its
+ file unless `--name` says otherwise. Only playlists rustunes created (recorded
+ in `playlists.json` next to the journal) are ever replaced or removed: one with
+-the same name made elsewhere stays, and the pushed one is added beside it.
++the same name made elsewhere stays, and the pushed one is added beside it. A changed playlist is updated in place, so
++it keeps its identity on the phone.
+ 
+ ### Editing tracks on the phone
+ 
+diff --git a/crates/rustunes/src/engine/execution/playlist.rs b/crates/rustunes/src/engine/execution/playlist.rs
+index ed3e6e8..1d11bae 100644
+--- a/crates/rustunes/src/engine/execution/playlist.rs
++++ b/crates/rustunes/src/engine/execution/playlist.rs
+@@ -475,7 +475,6 @@ pub async fn push(
+     );
+     let key = key(&name, o.folder.as_deref());
+     let mut taken = opened.managed.all();
+-    let mut changes = Vec::new();
+     let mut new_folder = None;
+     let parent = match &o.folder {
+         None => 0,
+@@ -506,29 +505,45 @@ pub async fn push(
+         Decision::Replace(old) => old,
+         Decision::Create => Vec::new(),
+     };
+-    let pid = fresh_pid(&opened.before, &taken)?;
++    // update_playlist keeps the pid, so the phone keeps the playlist's
++    // identity; a move between folders is untested and goes delete + insert.
++    let update = match replaced.as_slice() {
++        [one] => existing.iter().any(|p| p.pid == *one && p.parent == parent),
++        _ => false,
++    };
++    let pid = if update {
++        replaced[0]
++    } else {
++        fresh_pid(&opened.before, &taken)?
++    };
+     let action = if replaced.is_empty() { "created" } else { "replaced" };
+     if o.dry_run {
+         return Ok(outcome(pid, action));
+     }
+     let folder_name = o.folder.clone().unwrap_or_default();
+-    if let Some(folder) = new_folder {
+-        changes.push(PlaylistChange::Insert(PlaylistContent {
++    let folder_change = new_folder.map(|folder| {
++        PlaylistChange::Insert(PlaylistContent {
+             pid: folder,
+             name: &folder_name,
+             members: &[],
+             parent: 0,
+             folder: true,
+-        }));
+-    }
+-    changes.extend(replaced.iter().map(|p| PlaylistChange::Delete(*p)));
+-    changes.push(PlaylistChange::Insert(PlaylistContent {
++        })
++    });
++    let content = |pid| PlaylistContent {
+         pid,
+         name: &name,
+         members: &members,
+         parent,
+         folder: false,
+-    }));
++    };
++    let mut changes: Vec<PlaylistChange> = folder_change.into_iter().collect();
++    if update {
++        changes.push(PlaylistChange::Update(content(pid)));
++    } else {
++        changes.extend(replaced.iter().map(|p| PlaylistChange::Delete(*p)));
++        changes.push(PlaylistChange::Insert(content(pid)));
++    }
+     let managed_path = opened.managed_path.clone();
+     send(&opened.before, &changes, o.host_name, &control, || {
+         opened.managed.playlists.entry(key.clone()).or_default().push(pid);
+@@ -538,17 +553,38 @@ pub async fn push(
+         opened.managed.save(&managed_path)
+     })
+     .await?;
+-    let after = open(o.state, &run.join("after"), &control).await?;
+-    let made = after
+-        .playlists
+-        .iter()
+-        .find(|p| p.pid == pid)
+-        .context("the phone did not create the playlist; nothing else changed")?;
++    let mut after = open(o.state, &run.join("after"), &control).await?;
++    let holds = |after: &Opened, pid: u64| {
++        after
++            .playlists
++            .iter()
++            .any(|p| p.pid == pid && p.name == name && p.members == members && p.parent == parent)
++    };
++    let mut pid = pid;
++    if update && !holds(&after, pid) {
++        tracing::warn!("update_playlist did not apply; replacing the playlist instead");
++        pid = fresh_pid(&after.before, &after.managed.all())?;
++        let changes = [
++            PlaylistChange::Delete(replaced[0]),
++            PlaylistChange::Insert(content(pid)),
++        ];
++        let managed_path = after.managed_path.clone();
++        send(&after.before, &changes, o.host_name, &control, || {
++            after.managed.playlists.entry(key.clone()).or_default().push(pid);
++            after.managed.save(&managed_path)
++        })
++        .await?;
++        after = open(o.state, &run.join("after-fallback"), &control).await?;
++    }
+     ensure!(
+-        made.name == name && made.members == members && made.parent == parent,
+-        "the phone holds playlist {pid:016x} with other content than sent: {made:?}"
++        holds(&after, pid),
++        "the phone does not hold playlist {pid:016x} as sent; nothing else changed"
+     );
+-    if let Some(left) = after.playlists.iter().find(|p| replaced.contains(&p.pid)) {
++    if let Some(left) = after
++        .playlists
++        .iter()
++        .find(|p| p.pid != pid && replaced.contains(&p.pid))
++    {
+         bail!("the replaced playlist {:016x} is still on the phone", left.pid);
+     }
+     let mut managed = after.managed;
+diff --git a/docs/02-atc-sync-protocol.md b/docs/02-atc-sync-protocol.md
+index a5f9ada..04429d6 100644
+--- a/docs/02-atc-sync-protocol.md
++++ b/docs/02-atc-sync-protocol.md
+@@ -604,7 +604,7 @@ Operation names appear inside the operation file. They are not ATC commands. The
+ | Operation | Payload | Evidence |
+ | --- | --- | --- |
+ | `insert_playlist` | `pid`, `container`, `container_ui`, `item_to_container` | CONFIRMED: sent from Linux twice (one-member and two-member ordinary playlists); also present once in Apple's reset session |
+-| `update_playlist` | same constructor, existing PID, complete ordered member list | INFERRED from code (`0x469c2c`, `0x469e42`); encoded by test tooling but never sent to a phone |
++| `update_playlist` | same constructor, existing PID, complete ordered member list | CONFIRMED (Linux, iOS 26.7.2): reorder, append, member removal and rename, PID kept |
+ | `delete_playlist` | `{operation, pid}` | CONFIRMED on the phone |
+ | `delete_track` | `{operation, pid}` | CONFIRMED. Removing a track from the library also removes its playlist membership. It is not a command to remove only a membership. |
+ 
+@@ -644,7 +644,7 @@ operations:
+ 
+ ### 10.2 update_playlist
+ 
+-The constructor shares the insert path with an existing PID. Triggers in the host: change codes `tdpd` and `atmp` (AMP `0x14046a25f`, `0x140469e13`). The host builds a candidate dictionary, compares it with the cached copy using `CFEqual`, and logs `skipping update_playlist operation` when equal (`0x46a3c2-0x46a450`). INFERRED uses are rename, reorder and membership change. None was tested on a phone.
++The constructor shares the insert path with an existing PID. Triggers in the host: change codes `tdpd` and `atmp` (AMP `0x14046a25f`, `0x140469e13`). The host builds a candidate dictionary, compares it with the cached copy using `CFEqual`, and logs `skipping update_playlist operation` when equal (`0x46a3c2-0x46a450`). CONFIRMED on the phone (iOS 26.7.2, ordinary playlist this host created, ALAC test tones): the same dictionary as `insert_playlist` (`container` with `name`, `date_created`, `date_modified`; `container_ui`; complete `item_to_container`) under the existing PID reordered two members, appended a third, removed one and renamed the playlist, one session each. The PID and `sync_id` stayed, positions closed up from 0, the media count row followed the member count, and the single seed row stayed. Moving a playlist between folders by `parent_pid` in an update, and an update of a playlist this host did not create, are OPEN.
+ 
+ ### 10.3 delete_playlist
+ 
+diff --git a/docs/05-receiver-operations.md b/docs/05-receiver-operations.md
+index e7a952c..3aeef2a 100644
+--- a/docs/05-receiver-operations.md
++++ b/docs/05-receiver-operations.md
+@@ -653,7 +653,7 @@ Track pids are wire pids (`item_store.sync_id`), not internal row ids. The order
+ 
+ **Static capabilities.** The same constructor (`0x464eb4` to `0x465a1e`, 1.6.4.94) can emit these conditional fields: `description`, `description_long`, `uuid`, `distinguished_kind`, `parent_pid`, `is_hidden`, `cloud_id`, `liked_state`, `date_liked`, `source_device_guid`, `artwork_cache_id`, `is_external_vendor_playlist`, `external_vendor_identifier`, `external_vendor_display_name`, `external_tag`, `smart_is_folder`, `smart_is_dynamic`, `smart_is_filtered`, `smart_is_genius`, `smart_enabled_only`, `smart_is_limited`, `smart_limit_kind`, `smart_limit_value`, `smart_limit_order`, `smart_evaluation_order`, `smart_reverse_limit_order`, `smart_criteria`, `genius_seed_tracks`. A key's presence in the constructor is not evidence that the phone accepts it. In the ordinary branch, zero `distinguished_kind` and false `is_hidden` may be omitted.
+ 
+-**Update (ordering).** `update_playlist` uses the same constructor with an existing pid and the complete ordered member list (`0x469c2c` dispatch, `0x46a3c2` to `0x46a450`, log string at `0x46a416`). The host compares the candidate with its cached dictionary using `CFEqual` and skips an identical update ("skipping update_playlist operation"). No dedicated add-member, remove-member, append or position-patch operation was found in the retained captures. No `update_playlist` was captured from Apple Devices, and **no `update_playlist` was ever sent to the phone in these experiments**. Whether reordering, renaming or appending by a full-list update works, and whether an identical update is a receiver no-op, are OPEN.
++**Update (ordering).** `update_playlist` uses the same constructor with an existing pid and the complete ordered member list (`0x469c2c` dispatch, `0x46a3c2` to `0x46a450`, log string at `0x46a416`). The host compares the candidate with its cached dictionary using `CFEqual` and skips an identical update ("skipping update_playlist operation"). No dedicated add-member, remove-member, append or position-patch operation was found in the retained captures. No `update_playlist` was captured from Apple Devices. From Linux (iOS 26.7.2) a full-list update under the existing pid is CONFIRMED for reorder, append, member removal and rename: the pid stays, members close up from position 0 and the media count follows. Whether an identical update is a receiver no-op is OPEN; the tool does not send one.
+ 
+ **Deletion.** `{operation: "delete_playlist", pid: <playlist pid>}`. The host builds `delete_playlist`, `delete_album` and `delete_artist` as bare `{operation, pid}` dictionaries, the same shape as `delete_track`. The builders: `140461880(kind, pid)` creates the dictionary (`delete_playlist` returns it at `1404658cc`; `delete_album` at `14046609b`; `delete_artist` from `1404658fc`) (1.6.4.90). The pid is the host's persistent id, which the phone stores as the row's `sync_id`. A playlist created from Linux has `container_pid` equal to `sync_id`. An album's or album artist's `sync_id` is the pid that a track insert named for it. Item artists have `sync_id` 0 (209 rows in one library), so `delete_artist` could only name an album artist.
+ 
+@@ -744,6 +744,7 @@ A session of three `delete_playlist` operations for emptied playlists, killed at
+ | `delete_album`, `delete_artist` | Ignored |
+ | `delete_playlist` ×10 | All removed |
+ | `delete_playlist` ×3, killed at first `Progress` | Applied |
++| `update_playlist`: reorder 2, append a 3rd, remove one, rename (iOS 26.7.2) | Applied each; pid kept |
+ | `delete_playlist` of a 2-member list, then `insert_playlist` of the same members reordered under a new pid, one session (iOS 26.7.2) | Old list gone, new list in the new order |
+ 
+ ---
+@@ -811,7 +812,7 @@ A recovery procedure needs to read the phone after a kill, not assume either out
+ - When the phone deletes a target's file during a delete session, and whether a rollback of a larger batch could also lose files.
+ - Why a session killed at the first `Progress` is rolled back for track deletes but applied for `delete_playlist`.
+ - What `[handler+0x64]` holds and whether a device with a lower value acts on album and artist deletes.
+-- Whether `delete_playlist` works on playlists made on the phone, smart playlists or folders; whether `update_playlist` reorders or appends members; whether an identical update is a no-op.
++- Whether `delete_playlist` works on playlists made on the phone, smart playlists or folders; whether an identical `update_playlist` is a no-op.
+ - Two-session move of a non-representative item artist or album artist; how to clear a genre or composer.
+ - The exact rule for recomputing representatives when an item joins a group; whether an insert session moves a coverless representative; whether a composer's representative moves to a covered member on delete, as artists and genres do.
+ - What the phone does with the MP3 gapless values beyond storing them as sent (Apple's host-side rule is chapter 06, section 13).
+-- 
+2.56.0
+
+
+From 0207d72a3b1021db139a4ad2eb9d06278eb603f8 Mon Sep 17 00:00:00 2001
+From: Lachlan Marie <lchlnm@pm.me>
+Date: Mon, 2 Nov 2026 22:37:04 +0100
+Subject: [PATCH 4/7] Add playlist folders
+
+- playlist push/remove --folder
+- Create managed folder on first use, drop it with its last playlist
+- Count folder children as ordinary playlists
+- Skip files next to journals when pruning runs
+- Document folder insert as confirmed
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01F3FjoJj4RV14hgXJuf9gh7
+---
+ README.md                                     |  3 +-
+ .../rustunes/src/engine/execution/playlist.rs | 45 +++++++++++++++++--
+ crates/rustunes/src/engine/state/layout.rs    |  2 +-
+ docs/05-receiver-operations.md                |  4 ++
+ 4 files changed, 49 insertions(+), 5 deletions(-)
+
+diff --git a/README.md b/README.md
+index 9bfeff5..5b5c147 100644
+--- a/README.md
++++ b/README.md
+@@ -442,7 +442,8 @@ rustunes playlist remove Mix
+ Entries are paths relative to the playlist file, absolute paths or `file://`
+ URIs; `#EXT` lines are ignored. Each entry must be a track this host sent or
+ pulled; the others are left out with a notice. A playlist is named after its
+-file unless `--name` says otherwise. Only playlists rustunes created (recorded
++file unless `--name` says otherwise. `--folder NAME` puts it in a playlist
++folder rustunes creates, and removes once its last playlist is removed. Only playlists rustunes created (recorded
+ in `playlists.json` next to the journal) are ever replaced or removed: one with
+ the same name made elsewhere stays, and the pushed one is added beside it. A changed playlist is updated in place, so
+ it keeps its identity on the phone.
+diff --git a/crates/rustunes/src/engine/execution/playlist.rs b/crates/rustunes/src/engine/execution/playlist.rs
+index 1d11bae..40c1f0b 100644
+--- a/crates/rustunes/src/engine/execution/playlist.rs
++++ b/crates/rustunes/src/engine/execution/playlist.rs
+@@ -154,7 +154,7 @@ pub(crate) fn phone_playlists(tables: &Tables) -> Result<Vec<PhonePlaylist>> {
+             "smart"
+         } else if sync_id == 0 {
+             "phone-made"
+-        } else if plain.contains(&pid) {
++        } else if plain.contains(&pid) || in_folder(&|c| int(c), pid, sync_id)? {
+             "ordinary"
+         } else {
+             "other"
+@@ -172,6 +172,28 @@ pub(crate) fn phone_playlists(tables: &Tables) -> Result<Vec<PhonePlaylist>> {
+     Ok(playlists)
+ }
+ 
++/// An ordinary playlist but for its parent folder, which `ordinary` refuses.
++fn in_folder(int: &dyn Fn(&str) -> Result<i64>, pid: i64, sync_id: u64) -> Result<bool> {
++    if int("parent_pid")? == 0 || sync_id != pid as u64 || int("is_src_remote")? != 1 {
++        return Ok(false);
++    }
++    for column in [
++        "container_type",
++        "smart_is_dynamic",
++        "smart_is_filtered",
++        "smart_is_genius",
++        "is_external_vendor_playlist",
++        "is_collaborative",
++        "cloud_is_subscribed",
++        "store_cloud_id",
++    ] {
++        if int(column)? != 0 {
++            return Ok(false);
++        }
++    }
++    Ok(true)
++}
++
+ /// Playlists and folders this host created, by key, newest pid last.
+ #[derive(Default, Serialize, Deserialize)]
+ struct Managed {
+@@ -620,15 +642,32 @@ pub async fn remove(
+             if foreign { "; the one there was made elsewhere and is left alone" } else { "" }
+         );
+     }
+-    let changes: Vec<PlaylistChange> = pids.iter().map(|p| PlaylistChange::Delete(*p)).collect();
++    let mut changes: Vec<PlaylistChange> =
++        pids.iter().map(|p| PlaylistChange::Delete(*p)).collect();
++    // A managed folder goes with its last playlist.
++    let folder = folder
++        .and_then(|f| present(&opened.playlists, opened.managed.folders.get(f), "folder").first().map(|p| p.pid))
++        .filter(|f| {
++            opened
++                .playlists
++                .iter()
++                .all(|p| p.parent != *f || pids.contains(&p.pid))
++        });
++    changes.extend(folder.map(PlaylistChange::Delete));
+     send(&opened.before, &changes, host_name, &control, || Ok(())).await?;
+     let after = open(state, &run.join("after"), &control).await?;
+     ensure!(
+-        !after.playlists.iter().any(|p| pids.contains(&p.pid)),
++        !after
++            .playlists
++            .iter()
++            .any(|p| pids.contains(&p.pid) || Some(p.pid) == folder),
+         "the phone kept the playlist"
+     );
+     let mut managed = after.managed;
+     managed.playlists.remove(&key);
++    if folder.is_some() {
++        managed.folders.retain(|_, pids| !pids.iter().any(|p| Some(*p) == folder));
++    }
+     managed.save(&after.managed_path)?;
+     Ok(RemoveOutcome { removed: pids })
+ }
+diff --git a/crates/rustunes/src/engine/state/layout.rs b/crates/rustunes/src/engine/state/layout.rs
+index b3aef69..aa270ee 100644
+--- a/crates/rustunes/src/engine/state/layout.rs
++++ b/crates/rustunes/src/engine/state/layout.rs
+@@ -188,7 +188,7 @@ fn journal_references(state: &Path) -> Result<[References; 2]> {
+                 for library in fs::read_dir(device?.path())? {
+                     for journal in fs::read_dir(library?.path())? {
+                         let journal = journal?.path();
+-                        if journal.join("journal.sqlite").try_exists()? {
++                        if journal.is_dir() && journal.join("journal.sqlite").try_exists()? {
+                             journals.push(journal);
+                         }
+                     }
+diff --git a/docs/05-receiver-operations.md b/docs/05-receiver-operations.md
+index 3aeef2a..731f63a 100644
+--- a/docs/05-receiver-operations.md
++++ b/docs/05-receiver-operations.md
+@@ -651,6 +651,8 @@ operations:
+ 
+ Track pids are wire pids (`item_store.sync_id`), not internal row ids. The order of `item_to_container` is the playlist order. Unsigned hexadecimal pids are sent as signed 64-bit integers (the bit pattern is preserved, so a pid may be negative). No audio or artwork is transferred: the session had zero asset transfers and two unrelated foreign asset requests declined with `FileError` 16. A 15-frame ATC session was audited.
+ 
++**Folders.** CONFIRMED (iOS 26.7.2): `insert_playlist` with `smart_is_folder` true inside `container` and an empty `item_to_container` creates a playlist folder; a playlist whose `container` carries `parent_pid` (the folder's pid) is created inside it. The child keeps every ordinary-playlist value except `parent_pid`. Deleting a folder that still holds playlists was not tried.
++
+ **Static capabilities.** The same constructor (`0x464eb4` to `0x465a1e`, 1.6.4.94) can emit these conditional fields: `description`, `description_long`, `uuid`, `distinguished_kind`, `parent_pid`, `is_hidden`, `cloud_id`, `liked_state`, `date_liked`, `source_device_guid`, `artwork_cache_id`, `is_external_vendor_playlist`, `external_vendor_identifier`, `external_vendor_display_name`, `external_tag`, `smart_is_folder`, `smart_is_dynamic`, `smart_is_filtered`, `smart_is_genius`, `smart_enabled_only`, `smart_is_limited`, `smart_limit_kind`, `smart_limit_value`, `smart_limit_order`, `smart_evaluation_order`, `smart_reverse_limit_order`, `smart_criteria`, `genius_seed_tracks`. A key's presence in the constructor is not evidence that the phone accepts it. In the ordinary branch, zero `distinguished_kind` and false `is_hidden` may be omitted.
+ 
+ **Update (ordering).** `update_playlist` uses the same constructor with an existing pid and the complete ordered member list (`0x469c2c` dispatch, `0x46a3c2` to `0x46a450`, log string at `0x46a416`). The host compares the candidate with its cached dictionary using `CFEqual` and skips an identical update ("skipping update_playlist operation"). No dedicated add-member, remove-member, append or position-patch operation was found in the retained captures. No `update_playlist` was captured from Apple Devices. From Linux (iOS 26.7.2) a full-list update under the existing pid is CONFIRMED for reorder, append, member removal and rename: the pid stays, members close up from position 0 and the media count follows. Whether an identical update is a receiver no-op is OPEN; the tool does not send one.
+@@ -744,6 +746,8 @@ A session of three `delete_playlist` operations for emptied playlists, killed at
+ | `delete_album`, `delete_artist` | Ignored |
+ | `delete_playlist` ×10 | All removed |
+ | `delete_playlist` ×3, killed at first `Progress` | Applied |
++| `insert_playlist` of a folder (`container.smart_is_folder` true, no members), then a playlist with `container.parent_pid` = folder pid, one session (iOS 26.7.2) | Folder row with `smart_is_folder` 1; child `parent_pid` set; a second child and an `update_playlist` of the first kept both in it |
++| `delete_playlist` of a folder's last child, then of the folder, one session | Both removed |
+ | `update_playlist`: reorder 2, append a 3rd, remove one, rename (iOS 26.7.2) | Applied each; pid kept |
+ | `delete_playlist` of a 2-member list, then `insert_playlist` of the same members reordered under a new pid, one session (iOS 26.7.2) | Old list gone, new list in the new order |
+ 
+-- 
+2.56.0
+
+
+From 56af6536c3f86458cfb3d869e91d99f7531a76b2 Mon Sep 17 00:00:00 2001
+From: Lachlan Marie <lchlnm@pm.me>
+Date: Mon, 2 Nov 2026 22:48:38 +0100
+Subject: [PATCH 5/7] Document audio replacement and clearing experiments
+
+- Bare update_track asks for no audio
+- location updates ask for no audio
+- Changed audio stays delete + insert
+- genre "" with genre_id 0 is no clear
+- iOS 26 composer edit only moves the search key
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01F3FjoJj4RV14hgXJuf9gh7
+---
+ docs/05-receiver-operations.md | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/docs/05-receiver-operations.md b/docs/05-receiver-operations.md
+index 731f63a..292af65 100644
+--- a/docs/05-receiver-operations.md
++++ b/docs/05-receiver-operations.md
+@@ -362,6 +362,10 @@ CONFIRMED (six sessions on one test track whose album, genre and composer had no
+ 
+ A genre or composer has no clearing form. Only removing the track and inserting it again without one clears either. How Apple's own host clears a genre or composer, if it can, is OPEN (no capture exists).
+ 
++iOS 26.7.2 (catalogue `user_version` 2350000), one ALAC test track: `genre` `""` together with `genre_id` 0 in one `update_track` is not a clear either; the genre stayed and `genre_order` became 0, as for `""` alone. CONFIRMED.
++
++**Composer edits on iOS 26 (catalogue 2350000).** CONFIRMED on one test track without a composer: an `update_track` carrying `composer` and `sort_composer` (with a `genre` in the same item) applied the genre as on earlier phones, but for the composer only wrote a `sort_map` row for the name and set `item_search.search_composer` to it. No `composer` row was created, and `item.composer_pid` and `composer_order` stayed 0. The tool therefore sends no composer edit to this receiver; a changed composer goes through `sync --replace-changed`, and a batch that sent one verifies against this narrower effect. Whether a track that already has a composer behaves the same is OPEN.
++
+ #### Group fields
+ 
+ Each group row (`item_artist`, `album_artist`, `album`, `composer`) stores a `representative_item_pid`. That stored value decides what an artist or album-artist edit does.
+@@ -425,6 +429,8 @@ OPEN on the phone. No capture exists of the phone replacing the audio of a track
+ | `delete_track` | `update_track` | Both kept, in order, bare update included |
+ | `insert_track` or `update_track` | `delete_track` | Both kept, in order |
+ 
++On the phone (iOS 26.7.2, one ALAC test track, CONFIRMED): a bare `{operation: "update_track", pid}`, an `update_track` with `location: {kind}` and a new `total_time_ms`, and one whose `location` also carried an empty `location` and `file_size` 0, each completed with no asset request for the track. The phone applied `total_time_ms`, kept its file name and size, and served the old audio. No update form makes the phone fetch new audio under an existing pid, so changed audio stays a delete plus insert.
++
+ A delete followed by an insert is never turned into an update. For a sender the safe route is `delete_track` for the old pid and a new `insert_track` with a new pid (INFERRED; each half is confirmed on its own, and the re-add of the same audio after a delete is confirmed in section 3). Do not overwrite a file under `iTunes_Control/Music` over AFC: a fresh staged path does not protect the old row either. Chapter 07 describes how the client orders the two operations.
+ 
+ ### Interruption and recovery
+@@ -822,7 +828,7 @@ A recovery procedure needs to read the phone after a kill, not assume either out
+ - What the phone does with the MP3 gapless values beyond storing them as sent (Apple's host-side rule is chapter 06, section 13).
+ - Which other kinds of session finish an album an interrupted insert left unevaluated (seen: a metadata session, an emptying delete).
+ - What the phone does when a cover's metadata arrives without its image (a cover-only session killed at `AssetManifest`); not observed.
+-- Whether the phone replaces the audio of a track under an existing pid at all, and what the host's bare `update_track` does to a track that already has a file.
++- Whether any operation other than delete plus insert replaces the audio of a track under an existing pid (a bare `update_track` and `location` updates do not ask for audio).
+ - Whether `update_playlist` on the primary container adds tracks to it.
+ - An ordinary track inserted first and a compilation track added to its album afterwards; compilations without an explicit album artist.
+ - Whether updating a title that equals its sort title writes one shared `sort_map` row or two.
+-- 
+2.56.0
+
+
+From 5c3d72179dc38fdc4fb401fe8a0d4b18e98f3f02 Mon Sep 17 00:00:00 2001
+From: Lachlan Marie <lchlnm@pm.me>
+Date: Mon, 2 Nov 2026 22:48:48 +0100
+Subject: [PATCH 6/7] Pick a cover when no picture is the front cover
+
+- First picture that is not a back cover
+- Several front covers still go without
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01F3FjoJj4RV14hgXJuf9gh7
+---
+ crates/music-protocol/src/media/mpeg.rs       | 23 +++++++++----------
+ crates/music-protocol/src/media/mpeg/tests.rs |  8 ++-----
+ .../engine/execution/flac_to_alac/tests.rs    | 13 ++++-------
+ docs/06-audio-formats-and-gapless.md          |  2 +-
+ 4 files changed, 18 insertions(+), 28 deletions(-)
+
+diff --git a/crates/music-protocol/src/media/mpeg.rs b/crates/music-protocol/src/media/mpeg.rs
+index 9f78aa7..b51eb19 100644
+--- a/crates/music-protocol/src/media/mpeg.rs
++++ b/crates/music-protocol/src/media/mpeg.rs
+@@ -714,10 +714,10 @@ pub(crate) fn image_facts(mime: &[u8], image: &[u8]) -> Result<(&'static str, (u
+ 
+ /// Which of a source's pictures sync sends as its cover: the one picture
+ /// marked as the front cover (type 3; an MP4 `covr` image counts as one), or
+-/// the file's only picture whatever its type (FFmpeg marks an attached
+-/// picture "other" by default). A file with several pictures and not exactly
+-/// one front cover goes without a cover; [`cover_left_out`] says why. Every
+-/// picture stays in the transferred file either way.
++/// the first picture that is not a back cover when none is marked (FFmpeg
++/// marks an attached picture "other" by default). A file with several front covers goes without a
++/// cover; [`cover_left_out`] says why. Every picture stays in the transferred
++/// file either way.
+ pub fn cover_index(pictures: &[Picture]) -> Option<usize> {
+     if pictures.len() == 1 {
+         return Some(0);
+@@ -729,6 +729,10 @@ pub fn cover_index(pictures: &[Picture]) -> Option<usize> {
+         .map(|(index, _)| index);
+     match (fronts.next(), fronts.next()) {
+         (Some(index), None) => Some(index),
++        (None, _) => pictures
++            .iter()
++            .position(|p| p.picture_type != 4)
++            .or((!pictures.is_empty()).then_some(0)),
+         _ => None,
+     }
+ }
+@@ -745,14 +749,9 @@ pub fn cover_left_out(pictures: &[Picture]) -> Option<String> {
+         return None;
+     }
+     let fronts = pictures.iter().filter(|p| p.picture_type == 3).count();
+-    Some(if fronts == 0 {
+-        format!(
+-            "it holds {} pictures and none is marked as the front cover, so it goes without a cover",
+-            pictures.len()
+-        )
+-    } else {
+-        format!("it holds {fronts} pictures marked as the front cover, so it goes without a cover")
+-    })
++    Some(format!(
++        "it holds {fronts} pictures marked as the front cover, so it goes without a cover"
++    ))
+ }
+ 
+ /// Exact cover bytes (the picture [`cover_index`] chooses, as the file holds
+diff --git a/crates/music-protocol/src/media/mpeg/tests.rs b/crates/music-protocol/src/media/mpeg/tests.rs
+index 04ff0bf..f5d30cb 100644
+--- a/crates/music-protocol/src/media/mpeg/tests.rs
++++ b/crates/music-protocol/src/media/mpeg/tests.rs
+@@ -275,12 +275,8 @@ fn apic_validates_exact_jpeg_and_has_no_native_checksum() {
+             4,
+         ))
+         .unwrap();
+-    assert_eq!(cover_index(&unmarked.artwork), None);
+-    assert!(
+-        cover_left_out(&unmarked.artwork)
+-            .unwrap()
+-            .contains("none is marked as the front cover")
+-    );
++    assert_eq!(cover_index(&unmarked.artwork), Some(1));
++    assert!(cover_left_out(&unmarked.artwork).is_none());
+     let mut changed = tagged(vec![frame("APIC", &apic, 4)], 4);
+     let last = changed.len() - 1;
+     changed[last] ^= 1;
+diff --git a/crates/rustunes/src/engine/execution/flac_to_alac/tests.rs b/crates/rustunes/src/engine/execution/flac_to_alac/tests.rs
+index 0d121a3..ac45fe6 100644
+--- a/crates/rustunes/src/engine/execution/flac_to_alac/tests.rs
++++ b/crates/rustunes/src/engine/execution/flac_to_alac/tests.rs
+@@ -435,7 +435,7 @@ fn the_cover_rule_picks_what_a_flac_sends_whatever_ffmpeg_attached() {
+     assert_eq!(cover_index(&source.source().artwork), Some(1));
+     let sent = converted.cover.unwrap();
+     assert_eq!(hex(&sent.sha256), source.source().artwork[1].sha256);
+-    // Two pictures and no front cover: the ALAC goes without one.
++    // Two pictures and no front cover: the first that is not a back cover.
+     let neither = flac_with_pictures(
+         &temp,
+         "neither.flac",
+@@ -445,14 +445,9 @@ fn the_cover_rule_picks_what_a_flac_sends_whatever_ffmpeg_attached() {
+         ],
+     );
+     let (source, converted) = convert(&neither);
+-    assert_eq!(cover_index(&source.source().artwork), None);
+-    assert!(converted.cover.is_none());
+-    assert!(
+-        music_protocol::media::artwork::read(&converted.path)
+-            .unwrap()
+-            .cover
+-            .is_none()
+-    );
++    assert_eq!(cover_index(&source.source().artwork), Some(0));
++    let sent = converted.cover.unwrap();
++    assert_eq!(hex(&sent.sha256), source.source().artwork[0].sha256);
+     // A GIF cover is held, and sent, as its JPEG. FFmpeg's FLAC writer
+     // cannot attach a GIF, so lofty adds it.
+     let gif = flac_with_pictures(&temp, "gif.flac", &[]);
+diff --git a/docs/06-audio-formats-and-gapless.md b/docs/06-audio-formats-and-gapless.md
+index f2e0ff0..10788d5 100644
+--- a/docs/06-audio-formats-and-gapless.md
++++ b/docs/06-audio-formats-and-gapless.md
+@@ -853,7 +853,7 @@ So a sender should send a JPEG. Apple's own sync would send a PNG as it is and l
+ | 12 | Whether a received `.flac` kind 0 has any user-visible effect (for example in "kind" display). | OPEN; it plays. |
+ | 13 | A pure-Rust JPEG path with a strict entropy check as a replacement for ffmpeg in cover checks. | OPEN; not prototyped. |
+ | 14 | What the phone keeps of a CMYK or 12-bit JPEG original. | OPEN; neither has been sent. |
+-| 15 | Which picture Apple's sync uses when none is marked as the front cover (ffmpeg writes type 0, "other", by default). | OPEN; not researched. rustunes sends a file's only picture whatever its type, and no cover from a file with several pictures and not exactly one front cover. |
++| 15 | Which picture Apple's sync uses when none is marked as the front cover (ffmpeg writes type 0, "other", by default). | OPEN; not researched. rustunes sends the one front cover, else the first picture that is not a back cover, and no cover from a file with several front covers. |
+ 
+ ## 17. Evidence
+ 
+-- 
+2.56.0
+
+
+From b14027cb54c0fd4e04176fbffae42bf1b0eff1a7 Mon Sep 17 00:00:00 2001
+From: Lachlan Marie <lchlnm@pm.me>
+Date: Mon, 2 Nov 2026 22:54:25 +0100
+Subject: [PATCH 7/7] Handle iOS 26 composer edits
+
+- Route composer changes to replacement on catalogue 2350000
+- Verify a sent composer edit against its search-key-only effect
+- README limitations for edits and changed audio
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01F3FjoJj4RV14hgXJuf9gh7
+---
+ README.md                                     | 11 +++++---
+ .../src/engine/execution/metadata_batch.rs    | 25 +++++++++++++----
+ .../rustunes/src/engine/planning/additive.rs  |  4 +--
+ .../src/engine/planning/additive/tests.rs     | 18 +++++++++++--
+ .../src/engine/planning/additive/update.rs    | 27 ++++++++++++++-----
+ .../engine/verification/metadata_edit_sql.rs  | 19 ++++++++++++-
+ 6 files changed, 85 insertions(+), 19 deletions(-)
+
+diff --git a/README.md b/README.md
+index 5b5c147..6899a1e 100644
+--- a/README.md
++++ b/README.md
+@@ -799,15 +799,20 @@ covers).
+ - **Albums and artists can linger.** The phone decides when to drop an emptied
+   album or artist, and some stay after their tracks are removed.
+ - **Some tag changes need a replacement.** Clearing a genre or composer can't
+-  be sent as an edit; `sync --replace-changed` replaces the track instead.
++  be sent as an edit, and iOS 26 ignores composer edits;
++  `sync --replace-changed` replaces the track instead.
++- **Changed audio means a new track.** The phone never fetches new audio for a
++  track it holds, so `sync --replace-changed` removes and re-adds it: its play
++  counts and playlist memberships go with it (playlists rustunes pushed are
++  restored on their next push).
+ - **One value per tag field.** A file whose tag holds a field more than once is
+   skipped, naming the field, until the tag is edited. The exception is a FLAC's
+   repeated artists and composers, which are sent joined with ", "
+   (`Artist A, Artist B`).
+ - **No iCloud, purchased or Apple Music items.** Those are left alone.
+ - **One rustunes process at a time** per computer.
+-- **Covers.** A file with several pictures needs exactly one marked as the
+-  front cover; otherwise it is sent without a cover.
++- **Covers.** A file with several pictures marked as the front cover is sent
++  without a cover; with none marked, the first one that is not a back cover is.
+ 
+ ## Documentation
+ 
+diff --git a/crates/rustunes/src/engine/execution/metadata_batch.rs b/crates/rustunes/src/engine/execution/metadata_batch.rs
+index e636075..a19c96e 100644
+--- a/crates/rustunes/src/engine/execution/metadata_batch.rs
++++ b/crates/rustunes/src/engine/execution/metadata_batch.rs
+@@ -302,21 +302,30 @@ pub(crate) async fn settle(
+             updated: 0,
+         });
+     }
+-    let receipt = match window {
++    let verify = |operation: &[u8]| match window {
+         Window::SameRun => metadata_edit_sql::verify(
+             &before_sql.tables,
+             &after_sql.tables,
+-            &batch.operation,
++            operation,
+             batch.base_anchor,
+         ),
+         Window::LaterRun => metadata_edit_sql::verify_later(
+             &before_sql.tables,
+             &after_sql.tables,
+-            &batch.operation,
++            operation,
+             batch.base_anchor,
+         ),
+-    }
+-    .with_context(|| {
++    };
++    let mut composer_ignored = false;
++    let receipt = verify(&batch.operation)
++        .or_else(|error| {
++            if !sends_composer(&batch.operation) {
++                return Err(error);
++            }
++            composer_ignored = true;
++            metadata_edit_sql::composer_search_only(|| verify(&batch.operation))
++        })
++        .with_context(|| {
+         format!(
+             "the phone's catalogue is not the modelled edit; batch {} stays Started and {} keeps the delta",
+             batch.id.as_i64(),
+@@ -329,6 +338,7 @@ pub(crate) async fn settle(
+         "before_index_sha256":hex(&batch.before_index),
+         "after_index_sha256":hex(&after.index_receipt_sha256),
+         "edit":receipt,"audio_files_unchanged":true,
++        "composer_ignored":composer_ignored,
+     });
+     removal_batch::allocation_changed(&mut verification, &before, &after);
+     let bytes = serde_json::to_vec_pretty(&verification)?;
+@@ -342,6 +352,11 @@ pub(crate) async fn settle(
+     })
+ }
+ 
++fn sends_composer(operation: &[u8]) -> bool {
++    metadata_edit::decode(operation)
++        .is_ok_and(|(_, updates)| updates.iter().any(|u| u.item.contains_key("composer")))
++}
++
+ /// Whether the targets' catalogue rows are as before: exactly within the
+ /// batch's own run; for a later run, apart from plays and skips since
+ /// (`catalogue_listening`).
+diff --git a/crates/rustunes/src/engine/planning/additive.rs b/crates/rustunes/src/engine/planning/additive.rs
+index 3a404ad..97f18bb 100644
+--- a/crates/rustunes/src/engine/planning/additive.rs
++++ b/crates/rustunes/src/engine/planning/additive.rs
+@@ -672,7 +672,7 @@ fn build_inner_with_control(
+                     )
+                 } else {
+                     let changes = &row.matches[0].catalog_differences;
+-                    match update::from_differences(&projected, device[&exact[0]], changes) {
++                    match update::from_differences(&projected, device[&exact[0]], changes, update::composer_edits(catalog)) {
+                         Ok(Some(_)) => Decision::Update {
+                             track_id: pid(exact[0]),
+                             changes: changes
+@@ -1400,7 +1400,7 @@ fn retagged_mpeg_decision(
+         );
+     };
+     let changes = &found.catalog_differences;
+-    match update::from_differences(fields, current, changes) {
++    match update::from_differences(fields, current, changes, update::composer_edits(catalog)) {
+         Ok(Some(_)) => Decision::Update {
+             track_id: pid(track),
+             changes: changes
+diff --git a/crates/rustunes/src/engine/planning/additive/tests.rs b/crates/rustunes/src/engine/planning/additive/tests.rs
+index 7d8a784..a742f0c 100644
+--- a/crates/rustunes/src/engine/planning/additive/tests.rs
++++ b/crates/rustunes/src/engine/planning/additive/tests.rs
+@@ -1727,7 +1727,7 @@ fn an_update_request_carries_only_differing_fields_and_clears_what_an_edit_can()
+     m.disc_count = s.disc_total.unwrap_or(0);
+     m.total_time_ms = s.total_time_ms as u32;
+     let request = |s: &ProjectedFields, t: &music_protocol::catalogue::sqlite::Track| {
+-        update::from_differences(s, t, &differences(s, t))
++        update::from_differences(s, t, &differences(s, t), true)
+     };
+     assert!(request(&s, &track).unwrap().is_none());
+     // The phone's spelling of a shared group name is not a change.
+@@ -1805,15 +1805,29 @@ fn an_update_request_carries_only_differing_fields_and_clears_what_an_edit_can()
+         &commented,
+         &track,
+         &difference(json!(null), json!("Line one\nLine two")),
++        true,
+     )
+     .unwrap()
+     .unwrap();
+     assert_eq!(update::fields(&edit), ["comment"]);
+     assert_eq!(edit.comment.as_deref(), Some("Line one\nLine two"));
+-    let edit = update::from_differences(&s, &track, &difference(json!("Old"), json!(null)))
++    let edit = update::from_differences(&s, &track, &difference(json!("Old"), json!(null)), true)
+         .unwrap()
+         .unwrap();
+     assert_eq!(edit.comment.as_deref(), Some(""));
++    let mut composed = s.clone();
++    composed.composer = Some("Someone".into());
++    let composer = [FieldDifference {
++        field: "composer",
++        current: json!(null),
++        desired: json!("Someone"),
++    }];
++    let edit = update::from_differences(&composed, &track, &composer, true)
++        .unwrap()
++        .unwrap();
++    assert_eq!(edit.composer.as_deref(), Some("Someone"));
++    let error = update::from_differences(&composed, &track, &composer, false).unwrap_err();
++    assert!(error.downcast_ref::<update::NeedsReplacement>().is_some());
+ }
+ 
+ #[test]
+diff --git a/crates/rustunes/src/engine/planning/additive/update.rs b/crates/rustunes/src/engine/planning/additive/update.rs
+index f41229d..ad825b2 100644
+--- a/crates/rustunes/src/engine/planning/additive/update.rs
++++ b/crates/rustunes/src/engine/planning/additive/update.rs
+@@ -22,11 +22,13 @@ pub(crate) struct NeedsReplacement(pub(crate) &'static str);
+ 
+ impl std::fmt::Display for NeedsReplacement {
+     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+-        write!(
+-            f,
+-            "the source has no {}, and an edit cannot clear one on the phone",
+-            self.0
+-        )
++        match self.0 {
++            "composer edit" => write!(f, "this phone does not apply a composer edit"),
++            field => write!(
++                f,
++                "the source has no {field}, and an edit cannot clear one on the phone"
++            ),
++        }
+     }
+ }
+ 
+@@ -48,13 +50,21 @@ pub(crate) fn request(
+         desired,
+         track,
+         &super::catalogue_differences(desired, catalog, track),
++        composer_edits(catalog),
+     )
+ }
+ 
++/// Whether the phone applies a composer edit. The iOS 26 receiver of
++/// catalogue 2350000 only moves the search key (docs/05, section 2).
++pub(crate) fn composer_edits(catalog: &Catalog) -> bool {
++    catalog.user_version() != 2_350_000
++}
++
+ pub(super) fn from_differences(
+     desired: &ProjectedFields,
+     track: &Track,
+     differences: &[FieldDifference],
++    composer_edits: bool,
+ ) -> Result<Option<EditRequest>> {
+     if differences.is_empty() {
+         return Ok(None);
+@@ -91,7 +101,12 @@ pub(super) fn from_differences(
+             "album" => request.album = Some(desired.album.clone()),
+             "album_artist" => request.album_artist = Some(desired.grouping_artist.clone()),
+             "genre" => request.genre = group("genre", &desired.genre),
+-            "composer" => request.composer = group("composer", &desired.composer),
++            "composer" => {
++                request.composer = match composer_edits {
++                    true => group("composer", &desired.composer),
++                    false => group("composer edit", &None),
++                };
++            }
+             "copyright" => request.copyright = Some(desired.copyright.clone().unwrap_or_default()),
+             "comment" => request.comment = Some(desired.comment.clone().unwrap_or_default()),
+             "year" => request.year = number("year", desired.year)?,
+diff --git a/crates/rustunes/src/engine/verification/metadata_edit_sql.rs b/crates/rustunes/src/engine/verification/metadata_edit_sql.rs
+index 67adf37..187d945 100644
+--- a/crates/rustunes/src/engine/verification/metadata_edit_sql.rs
++++ b/crates/rustunes/src/engine/verification/metadata_edit_sql.rs
+@@ -815,7 +815,11 @@ impl Model<'_> {
+                 search.set("search_album_artist", int(shown))?;
+             }
+         }
+-        if let Some((composer, sort)) = &e.composer {
++        if let Some((composer, _)) = &e.composer
++            && COMPOSER_SEARCH_ONLY.get()
++        {
++            search.set("search_composer", int(self.order(composer)?.0))?;
++        } else if let Some((composer, sort)) = &e.composer {
+             let found = self.resolve_by_key(Class::Composer, composer, Some(sort), pid, year)?;
+             let old = item.int("composer_pid")?;
+             if found.created {
+@@ -1050,6 +1054,19 @@ pub(crate) fn verify_later(
+     verify_in(before, after, operation, base_anchor, Window::LaterRun)
+ }
+ 
++thread_local! {
++    static COMPOSER_SEARCH_ONLY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
++}
++
++/// Run `f` modelling the iOS 26 receiver (catalogue 2350000), which applies a
++/// composer edit only to the search key: no composer group, no composer order.
++pub(crate) fn composer_search_only<T>(f: impl FnOnce() -> T) -> T {
++    COMPOSER_SEARCH_ONLY.set(true);
++    let out = f();
++    COMPOSER_SEARCH_ONLY.set(false);
++    out
++}
++
+ fn verify_in(
+     before: &Tables,
+     after: &Tables,
 -- 
 2.56.0
 
