@@ -1,0 +1,636 @@
+From ae673b8639161454ed41474fa8fdc09f0084c864 Mon Sep 17 00:00:00 2001
+From: lacamar <lchlnm@pm.me>
+Date: Mon, 2 Nov 2026 18:28:20 +0100
+Subject: [PATCH] Support iOS 26 and iTunes-era libraries
+
+- Accept iOS 26 Music database (2350000)
+- Tolerate orphan companion rows, absent anchor, no album artist
+- Unsynced non-music items may hold files
+- Files up to 1 GiB
+- MP4: trimmed mdhd duration, music videos
+- Compact and free-text release dates
+- DisabledAssetTypes without Photo
+- iOS 26 hex artwork tokens
+- Skip unpreparable MP3s in candidates
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01F3FjoJj4RV14hgXJuf9gh7
+---
+ crates/music-protocol/src/catalogue/sqlite.rs | 152 ++++++++++++------
+ .../src/catalogue/sqlite/tables.rs            |   2 +-
+ .../src/catalogue/sqlite/tests.rs             |  21 ++-
+ crates/music-protocol/src/media/container.rs  |   2 +-
+ .../music-protocol/src/media/container/mp4.rs |  36 +++--
+ .../music-protocol/src/media/fingerprint.rs   |   2 +-
+ .../src/media/fingerprint/transferred.rs      |   2 +-
+ crates/music-protocol/src/media/metadata.rs   |  35 ++--
+ crates/music-protocol/src/media/mpeg.rs       |   2 +-
+ .../src/media/mpeg/projection.rs              |   9 +-
+ .../music-protocol/src/media/mpeg/timing.rs   |   2 +-
+ .../music-protocol/src/media/other_audio.rs   |   2 +-
+ crates/music-protocol/src/protocol/session.rs |  17 +-
+ .../src/engine/planning/candidates.rs         |   7 +-
+ .../rustunes/src/engine/state/audio_index.rs  |   2 +-
+ crates/rustunes/src/lib.rs                    |   1 +
+ crates/rustunes/src/main.rs                   |   1 +
+ 17 files changed, 197 insertions(+), 98 deletions(-)
+
+diff --git a/crates/music-protocol/src/catalogue/sqlite.rs b/crates/music-protocol/src/catalogue/sqlite.rs
+index fd0ac4a..765cacb 100644
+--- a/crates/music-protocol/src/catalogue/sqlite.rs
++++ b/crates/music-protocol/src/catalogue/sqlite.rs
+@@ -7,7 +7,7 @@
+ 
+ use anyhow::{Context, Result, bail, ensure};
+ use rusqlite::{
+-    Connection, OpenFlags, Row,
++    Connection, OpenFlags, OptionalExtension, Row,
+     config::DbConfig,
+     hooks::{AuthAction, Authorization},
+     limits::Limit,
+@@ -33,7 +33,9 @@ const MAX_TOTAL_ROWS: usize = 200_000;
+ const MAX_TEXT_BYTES: usize = 1024 * 1024;
+ const MAX_TOTAL_TEXT_BYTES: usize = 64 * 1024 * 1024;
+ /// Lowest MediaLibrary user_version read. Older databases are refused.
+-pub const USER_VERSION_FLOOR: i64 = 2_400_060;
++/// 2_350_000 is iOS 26.x; its album/item_store tables lack nine columns iOS 27
++/// added, none of which the catalogue reader selects.
++pub const USER_VERSION_FLOOR: i64 = 2_350_000;
+ /// The user_versions this reader was qualified against on a phone. Any other
+ /// version at or above the floor is read, and `Catalog` reports it untested.
+ pub const TESTED_USER_VERSIONS: &[i64] = &[2_400_060, 2_410_000];
+@@ -1405,15 +1407,20 @@ fn wire_id(row: &Row<'_>, name: &str) -> Result<u64> {
+ fn unsynced_item(row: &Row<'_>) -> Result<i64> {
+     let internal_id = integer(row, "item_pid")?;
+     ensure!(internal_id != 0, "required track join identity is zero");
+-    ensure!(
+-        integer(row, "base_location_id")? == 0
+-            && matches!(
+-                row.get_ref("location")?,
+-                ValueRef::Null | ValueRef::Text(b"")
+-            )
+-            && !flag(row, "has_non_purgeable_asset")?,
+-        "an item no sync made holds a file on the phone"
+-    );
++    // A music item (media_type 8) the phone added without a sync identity is an
++    // Apple Music stream and holds no file. Non-music unsynced items (downloaded
++    // podcasts, audiobooks) may hold a file and are outside music sync's scope.
++    if integer(row, "media_type")? == 8 {
++        ensure!(
++            integer(row, "base_location_id")? == 0
++                && matches!(
++                    row.get_ref("location")?,
++                    ValueRef::Null | ValueRef::Text(b"")
++                )
++                && !flag(row, "has_non_purgeable_asset")?,
++            "an unsynced music item holds a file on the phone"
++        );
++    }
+     Ok(internal_id)
+ }
+ fn number(row: &Row<'_>, name: &str) -> Result<u32> {
+@@ -1479,13 +1486,15 @@ fn parse_catalog(
+     );
+     for table in ["item_extra", "item_store", "item_state", "item_stats"] {
+         check_control(control)?;
+-        ensure!(
+-            counts[table] == counts["item"],
+-            "catalog item companion cardinality differs"
+-        );
+-        let orphans: i64 = connection.query_row(&format!("SELECT count(*) FROM {table} t LEFT JOIN item i USING(item_pid) WHERE i.item_pid IS NULL"), [], |r| r.get(0))?;
++        // Every item must have exactly one companion row. Stale orphan companion
++        // rows (no matching item) are left by the phone after a deletion and are
++        // never read through an item, so they are tolerated.
++        let missing: i64 = connection.query_row(&format!("SELECT count(*) FROM item i LEFT JOIN {table} t USING(item_pid) WHERE t.item_pid IS NULL"), [], |r| r.get(0))?;
+         check_control(control)?;
+-        ensure!(orphans == 0, "catalog item companion has orphan rows");
++        ensure!(missing == 0, "catalog item missing {table} companion");
++        let duplicates: i64 = connection.query_row(&format!("SELECT count(*) FROM (SELECT item_pid FROM {table} GROUP BY item_pid HAVING count(*) > 1)"), [], |r| r.get(0))?;
++        check_control(control)?;
++        ensure!(duplicates == 0, "catalog item has duplicate {table} companion");
+     }
+     let mut text = TextBudget(0);
+     check_control(control)?;
+@@ -1497,13 +1506,18 @@ fn parse_catalog(
+     let database_pid = wire_id(row, "db_pid")?;
+     let primary_container_pid = wire_id(row, "primary_container_pid")?;
+     check_control(control)?;
++    // The phone's own -[MLSyncClient currentSyncAnchor] returns "0" when the
++    // property is absent (never desktop-synced, or a DB rebuild cleared it), so
++    // an absent anchor is a fresh library at revision 0, not an error.
+     let anchor_text: String = connection
+         .query_row(
+             "SELECT value FROM _MLDatabaseProperties WHERE key='MLSyncClientSyncAnchor'",
+             [],
+             |r| r.get(0),
+         )
+-        .context("persisted Media anchor absent")?;
++        .optional()
++        .context("persisted Media anchor query failed")?
++        .unwrap_or_else(|| "0".to_string());
+     check_control(control)?;
+     ensure!(
+         !anchor_text.is_empty()
+@@ -1568,16 +1582,21 @@ fn parse_catalog(
+         let internal_id = integer(row, "album_pid")?;
+         let sync_id = integer(row, "sync_id")? as u64;
+         let artist_internal_id = integer(row, "album_artist_pid")?;
+-        // An album with a sync identity must be under an artist with one.
+-        let artist_sync_id = artists
+-            .get(&artist_internal_id)
+-            .or_else(|| {
+-                (sync_id == 0)
+-                    .then(|| unsynced_artists.get(&artist_internal_id))
+-                    .flatten()
+-            })
+-            .context("album artist join absent")?
+-            .sync_id;
++        // album_artist_pid 0 is the phone's "no album artist" sentinel (loose
++        // singles with no album-artist tag). Such an album has no artist identity.
++        let artist_sync_id = if artist_internal_id == 0 {
++            0
++        } else {
++            artists
++                .get(&artist_internal_id)
++                .or_else(|| {
++                    (sync_id == 0)
++                        .then(|| unsynced_artists.get(&artist_internal_id))
++                        .flatten()
++                })
++                .context("album artist join absent")?
++                .sync_id
++        };
+         ensure!(
+             internal_id != 0 && (sync_id == 0 || album_sync_ids.insert(sync_id)),
+             "ambiguous catalog album identity"
+@@ -1701,24 +1720,39 @@ fn parse_catalog(
+             "unsupported nonlocal or nonmusic catalog item"
+         );
+         let internal_id = integer(row, "item_pid")?;
+-        ensure!(
+-            internal_id != 0 && integer(row, "item_artist_pid")? != 0,
+-            "required track join identity is zero"
+-        );
++        ensure!(internal_id != 0, "required track join identity is zero");
++        let is_compilation = flag(row, "is_compilation")?;
++        let album_artist_pid = integer(row, "album_artist_pid")?;
+         let album = albums
+             .get_mut(&integer(row, "album_pid")?)
+             .context("track album join absent")?;
+-        let artist = artists
+-            .get_mut(&integer(row, "album_artist_pid")?)
+-            .context("track artist join absent")?;
+-        ensure!(
+-            album.artist_internal_id == artist.internal_id,
+-            "track and album artist joins conflict"
+-        );
+         album.live_track_count += 1;
+-        let is_compilation = flag(row, "is_compilation")?;
+         album.has_compilation_tracks |= is_compilation;
+-        artist.live_track_count += 1;
++        let album_sync_id = album.sync_id;
++        let album_name = album.name.clone();
++        let album_artist_internal_id = album.artist_internal_id;
++        // album_artist_pid 0 is "no album artist"; the track carries an empty one.
++        let (artist_sync_id, album_artist_name) = if album_artist_pid == 0 {
++            ensure!(
++                album_artist_internal_id == 0,
++                "track and album artist joins conflict"
++            );
++            (0u64, String::new())
++        } else {
++            let artist = artists
++                .get_mut(&album_artist_pid)
++                .context("track artist join absent")?;
++            ensure!(
++                album_artist_internal_id == artist.internal_id,
++                "track and album artist joins conflict"
++            );
++            artist.live_track_count += 1;
++            (artist.sync_id, artist.name.clone())
++        };
++        ensure!(
++            integer(row, "item_artist_pid")? == 0 || text.optional(row, "artist")?.is_some(),
++            "track artist join absent"
++        );
+         let genre = text.optional(row, "genre")?;
+         let composer = text.optional(row, "composer")?;
+         ensure!(
+@@ -1780,13 +1814,13 @@ fn parse_catalog(
+         tracks.push(Track {
+             sync_id,
+             internal_id,
+-            album_sync_id: album.sync_id,
+-            artist_sync_id: artist.sync_id,
++            album_sync_id,
++            artist_sync_id,
+             metadata: TrackMetadata {
+                 title: text.required(row, "title")?,
+-                artist: text.required(row, "artist")?,
+-                album: text.cloned(&album.name)?,
+-                album_artist: text.cloned(&artist.name)?,
++                artist: text.optional(row, "artist")?.unwrap_or_default(),
++                album: text.cloned(&album_name)?,
++                album_artist: text.cloned(&album_artist_name)?,
+                 genre,
+                 composer,
+                 copyright: text.optional(row, "copyright")?,
+@@ -2145,15 +2179,27 @@ fn parse_artwork(
+                 .registration_rows += 1;
+             continue;
+         }
+-        let id = cache_id(row)?;
++        let shape = || -> Result<_> {
++            Ok((
++                integer(row, "entity_type")?,
++                integer(row, "artwork_type")?,
++                integer(row, "artwork_variant_type")?,
++            ))
++        };
++        // iOS 26 keys phone-made artwork (e.g. type 5 on entity type 1) by a
++        // SHA-256 hex token; only track and album shapes use decimal IDs.
++        let id = match cache_id(row) {
++            Ok(id) => id,
++            Err(_) if shape().is_ok_and(|s| !matches!(s, (0, 1, 0) | (4, 6, 0))) => {
++                inventory.source300_rows.registration_rows += 1;
++                inventory.unmapped_source300_token_rows += 1;
++                continue;
++            }
++            Err(error) => return Err(error),
++        };
+         inventory.source300_rows.registration_rows += 1;
+         inventory.occupied_cache_ids.insert(id);
+-        let shape = (
+-            integer(row, "entity_type")?,
+-            integer(row, "artwork_type")?,
+-            integer(row, "artwork_variant_type")?,
+-        );
+-        match shape {
++        match shape()? {
+             (0, 1, 0) => {
+                 let entity = integer(row, "entity_pid")?;
+                 if unsynced_items.contains(&entity) {
+diff --git a/crates/music-protocol/src/catalogue/sqlite/tables.rs b/crates/music-protocol/src/catalogue/sqlite/tables.rs
+index b7dcd6d..cb761b0 100644
+--- a/crates/music-protocol/src/catalogue/sqlite/tables.rs
++++ b/crates/music-protocol/src/catalogue/sqlite/tables.rs
+@@ -932,7 +932,7 @@ mod layout_tests {
+         assert!(newer.layout_qualified().unwrap());
+ 
+         let mut older = tested.clone();
+-        older.version = 2_400_059;
++        older.version = 2_349_999;
+         assert!(!older.layout_qualified().unwrap());
+ 
+         for sql in [
+diff --git a/crates/music-protocol/src/catalogue/sqlite/tests.rs b/crates/music-protocol/src/catalogue/sqlite/tests.rs
+index a916bdb..3262a67 100644
+--- a/crates/music-protocol/src/catalogue/sqlite/tests.rs
++++ b/crates/music-protocol/src/catalogue/sqlite/tests.rs
+@@ -419,7 +419,7 @@ fn absent_and_empty_wal_are_distinguished() {
+ fn schema_missing_columns_and_wrong_versions_fail() {
+     for sql in [
+         "PRAGMA user_version=1",
+-        "PRAGMA user_version=2400059",
++        "PRAGMA user_version=2349999",
+         "PRAGMA user_version=2410000; ALTER TABLE item_extra RENAME COLUMN title TO absent",
+         "DROP TABLE item_stats",
+         "ALTER TABLE item_extra RENAME COLUMN content_rating TO absent",
+@@ -672,7 +672,7 @@ fn anchor_is_required_and_canonical() {
+         .connection
+         .execute("DELETE FROM _MLDatabaseProperties", [])
+         .unwrap();
+-    assert!(fixture.read(false).is_err());
++    assert_eq!(fixture.read(false).unwrap().persisted_media_anchor(), 0);
+ }
+ 
+ #[test]
+@@ -1378,3 +1378,20 @@ fn artwork_recent_pair_fingerprint_excludes_only_the_two_recent_counters() {
+ }
+ 
+ mod memory_temp;
++
++#[test]
++fn phone_made_hex_artwork_tokens_are_unmapped() {
++    let fixture = Fixture::new(false);
++    fixture
++        .connection
++        .execute_batch(
++            "INSERT INTO artwork_token(entity_pid,artwork_token,artwork_source_type,artwork_type,entity_type,artwork_variant_type) VALUES(-7227189981317816596,'b9d5388889e4edff15f313b91e959beb49f851285ed39c7c002ecc139760b486',300,5,1,0)",
++        )
++        .unwrap();
++    fixture.read(false).unwrap();
++    fixture
++        .connection
++        .execute_batch("UPDATE artwork_token SET entity_type=0,artwork_type=1 WHERE artwork_type=5")
++        .unwrap();
++    assert!(fixture.read(false).is_err());
++}
+diff --git a/crates/music-protocol/src/media/container.rs b/crates/music-protocol/src/media/container.rs
+index 1143fee..75e31e0 100644
+--- a/crates/music-protocol/src/media/container.rs
++++ b/crates/music-protocol/src/media/container.rs
+@@ -16,7 +16,7 @@ pub mod mp4;
+ pub mod mpeg;
+ pub mod wav;
+ 
+-pub(crate) const MAX_FILE_BYTES: u64 = 512 * 1024 * 1024;
++pub(crate) const MAX_FILE_BYTES: u64 = 1024 * 1024 * 1024;
+ /// Tag data a reader may hold in memory (pictures included).
+ pub(crate) const MAX_TAG_BYTES: u64 = 16 * 1024 * 1024;
+ 
+diff --git a/crates/music-protocol/src/media/container/mp4.rs b/crates/music-protocol/src/media/container/mp4.rs
+index c60b669..02cd49d 100644
+--- a/crates/music-protocol/src/media/container/mp4.rs
++++ b/crates/music-protocol/src/media/container/mp4.rs
+@@ -36,13 +36,20 @@ pub fn inspect(input: &mut (impl Read + Seek), size: u64) -> Result<Option<Layou
+         "fragmented MP4 is not supported"
+     );
+     let (movie_scale, _) = media_header(&bounded_payload(input, one(&movie, b"mvhd")?, 1024)?)?;
+-    let trak = children(input, one(&movie, b"trak")?, 0)?;
+-    let mdia = children(input, one(&trak, b"mdia")?, 0)?;
+-    let handler = one(&mdia, b"hdlr")?;
+-    ensure!(
+-        read_at::<4>(input, handler, 8)? == *b"soun",
+-        "the MP4 track is not audio"
+-    );
++    // A music video keeps its video track beside the one audio track.
++    let mut audio_traks = Vec::new();
++    let traks: Vec<_> = movie.iter().filter(|a| &a.kind == b"trak").copied().collect();
++    for &atom in &traks {
++        let trak = children(input, atom, 0)?;
++        let mdia = children(input, one(&trak, b"mdia")?, 0)?;
++        if read_at::<4>(input, one(&mdia, b"hdlr")?, 8)? == *b"soun" {
++            audio_traks.push((trak, mdia));
++        }
++    }
++    ensure!(!audio_traks.is_empty(), "the MP4 track is not audio");
++    ensure!(audio_traks.len() == 1, "multiple MP4 audio tracks are unsupported");
++    let interleaved = traks.len() > 1;
++    let (trak, mdia) = audio_traks.pop().context("audio track")?;
+     let (timescale, duration) = media_header(&bounded_payload(input, one(&mdia, b"mdhd")?, 1024)?)?;
+     let minf = children(input, one(&mdia, b"minf")?, 0)?;
+     self_contained(input, &minf)?;
+@@ -90,8 +97,15 @@ pub fn inspect(input: &mut (impl Read + Seek), size: u64) -> Result<Option<Layou
+ 
+     let times = bounded_payload(input, one(&table, b"stts")?, 8 + MAX_TIME_ENTRIES * 8)?;
+     let (ticks, packets) = time_table(&times)?;
++    // Some encoders write a duration already trimmed by the edit's delay.
++    let edit_start = if trak.iter().any(|a| &a.kind == b"edts") {
++        let edts = children(input, one(&trak, b"edts")?, 0)?;
++        Some(edit(&bounded_payload(input, one(&edts, b"elst")?, 4096)?)?.1)
++    } else {
++        None
++    };
+     ensure!(
+-        ticks == duration,
++        ticks == duration || Some(ticks.wrapping_sub(duration)) == edit_start,
+         "MP4 sample times disagree with the track duration"
+     );
+     let sizes = bounded_payload(
+@@ -121,7 +135,11 @@ pub fn inspect(input: &mut (impl Read + Seek), size: u64) -> Result<Option<Layou
+     );
+     // An encoder may leave bytes in `mdat` that no sample uses (exhale writes
+     // two before its first); they stay outside the identity, like tags.
+-    let media = sample_extent(input, &table, media, &sizes, fixed_size, sample_count)?;
++    let media = if interleaved {
++        media
++    } else {
++        sample_extent(input, &table, media, &sizes, fixed_size, sample_count)?
++    };
+ 
+     let sample_rate = audio.output_rate;
+     let to_samples = |ticks: u64| -> Result<u64> {
+diff --git a/crates/music-protocol/src/media/fingerprint.rs b/crates/music-protocol/src/media/fingerprint.rs
+index 9af39d1..95e9fd2 100644
+--- a/crates/music-protocol/src/media/fingerprint.rs
++++ b/crates/music-protocol/src/media/fingerprint.rs
+@@ -15,7 +15,7 @@ use super::held_source::same_observed_file as same_metadata;
+ use anyhow::{Context, Result, ensure};
+ use sha2::{Digest, Sha256};
+ 
+-const MAX_FILE_BYTES: u64 = 512 * 1024 * 1024;
++const MAX_FILE_BYTES: u64 = 1024 * 1024 * 1024;
+ const MAX_BOXES: usize = 128;
+ pub(crate) const MAX_SAMPLES: u32 = 1_048_576;
+ const MAX_CHUNKS: u32 = MAX_SAMPLES;
+diff --git a/crates/music-protocol/src/media/fingerprint/transferred.rs b/crates/music-protocol/src/media/fingerprint/transferred.rs
+index 52553e7..8e7f309 100644
+--- a/crates/music-protocol/src/media/fingerprint/transferred.rs
++++ b/crates/music-protocol/src/media/fingerprint/transferred.rs
+@@ -239,7 +239,7 @@ impl TransferredSource {
+ 
+     pub fn validate(&self) -> Result<()> {
+         ensure!(
+-            (1..=512 * 1024 * 1024).contains(&self.file_bytes) && self.full_file_sha256 != [0; 32],
++            (1..=1024 * 1024 * 1024).contains(&self.file_bytes) && self.full_file_sha256 != [0; 32],
+             "invalid transferred source bounds"
+         );
+         match &self.audio.codec {
+diff --git a/crates/music-protocol/src/media/metadata.rs b/crates/music-protocol/src/media/metadata.rs
+index 5a87a3a..7b6275f 100644
+--- a/crates/music-protocol/src/media/metadata.rs
++++ b/crates/music-protocol/src/media/metadata.rs
+@@ -21,7 +21,7 @@ use lofty::{
+ };
+ 
+ // Separate from ATC's wire-frame and AFC readback bounds.
+-const MAX_SOURCE_BYTES: u64 = 512 * 1024 * 1024;
++const MAX_SOURCE_BYTES: u64 = 1024 * 1024 * 1024;
+ 
+ /// Parsed source observations. These fields are not execution permits or ownership claims.
+ /// Standard-atom provenance remains internal to the parser and its projections.
+@@ -229,23 +229,25 @@ fn from_mp4(mp4: &Mp4File, timing: crate::media::timing::Timing) -> Result<Metad
+     })
+ }
+ 
++/// `2024`, `2024-05-01…`, `20240501` or text such as `May 1, 2024`.
++pub(crate) fn date_year(date: &str) -> Option<u32> {
++    let digits = |s: &str| s.len() == 4 && s.bytes().all(|b| b.is_ascii_digit());
++    let year = if date.starts_with(|c: char| c.is_ascii_digit()) {
++        let compact = date.len() == 8 && date.bytes().all(|b| b.is_ascii_digit());
++        date.get(..4)
++            .filter(|p| digits(p) && (compact || matches!(date.as_bytes().get(4), None | Some(b'-'))))
++    } else {
++        date.split(|c: char| !c.is_ascii_digit()).find(|t| digits(t))
++    };
++    year.and_then(|y| y.parse().ok())
++}
++
+ fn standard_year(tag: &Ilst) -> Result<Option<u32>> {
+     let dates = standard_text(tag, *b"\xa9day")?;
+     let Some(date) = tag_values(&dates).next() else {
+         return Ok(None);
+     };
+-    let prefix = date
+-        .get(..4)
+-        .context("standard date has no four-digit year")?;
+-    ensure!(
+-        prefix.bytes().all(|b| b.is_ascii_digit()),
+-        "invalid standard date year"
+-    );
+-    ensure!(
+-        date.len() == 4 || date.as_bytes().get(4) == Some(&b'-'),
+-        "unsupported standard date format"
+-    );
+-    let year = prefix.parse::<u32>()?;
++    let year = date_year(date).context("standard date has no four-digit year")?;
+     ensure!(year > 0, "zero standard date year");
+     Ok(Some(year))
+ }
+@@ -1127,6 +1129,13 @@ mod tests {
+         assert!(standard_text(&tag, *b"\xa9nam").is_err());
+     }
+ 
++    #[test]
++    fn date_years() {
++        for (date, year) in [("2024", Some(2024)), ("2024-05-01T07:00:00Z", Some(2024)), ("20230830", Some(2023)), ("May 7, 2023", Some(2023)), ("12345", None), ("", None)] {
++            assert_eq!(date_year(date), year, "{date}");
++        }
++    }
++
+     #[test]
+     fn standard_release_date_and_rating_keep_native_values_without_freeform_fallback() {
+         let mut tag = Ilst::new();
+diff --git a/crates/music-protocol/src/media/mpeg.rs b/crates/music-protocol/src/media/mpeg.rs
+index 9b9a5a2..9f78aa7 100644
+--- a/crates/music-protocol/src/media/mpeg.rs
++++ b/crates/music-protocol/src/media/mpeg.rs
+@@ -20,7 +20,7 @@ pub mod gapless;
+ pub mod projection;
+ pub mod timing;
+ 
+-const MAX_BYTES: u64 = 512 * 1024 * 1024;
++const MAX_BYTES: u64 = 1024 * 1024 * 1024;
+ const MAX_TAG: usize = 16 * 1024 * 1024;
+ const MAX_TEXT: usize = 64 * 1024;
+ 
+diff --git a/crates/music-protocol/src/media/mpeg/projection.rs b/crates/music-protocol/src/media/mpeg/projection.rs
+index 50eac80..71ea8a6 100644
+--- a/crates/music-protocol/src/media/mpeg/projection.rs
++++ b/crates/music-protocol/src/media/mpeg/projection.rs
+@@ -290,13 +290,8 @@ fn project_tags(tags: &Tags, flac: bool) -> Result<Metadata> {
+     // A full date (`2024-05-01`, `2024-05-01T07:00:00Z`) gives its year.
+     let year = text(&tags.release_date, "release date", false)?
+         .map(|value| {
+-            ensure!(
+-                value.len() >= 4
+-                    && value.as_bytes()[..4].iter().all(u8::is_ascii_digit)
+-                    && (value.len() == 4 || value.as_bytes()[4] == b'-'),
+-                "a release date must start with a four-digit year"
+-            );
+-            let year = value[..4].parse::<u32>()?;
++            let year = crate::media::metadata::date_year(&value)
++                .context("a release date must start with a four-digit year")?;
+             ensure!(year != 0, "zero release year");
+             Ok(year)
+         })
+diff --git a/crates/music-protocol/src/media/mpeg/timing.rs b/crates/music-protocol/src/media/mpeg/timing.rs
+index fb5119a..3bcb947 100644
+--- a/crates/music-protocol/src/media/mpeg/timing.rs
++++ b/crates/music-protocol/src/media/mpeg/timing.rs
+@@ -9,7 +9,7 @@ use std::{
+     io::{Read, Seek, SeekFrom},
+ };
+ 
+-const MAX_BYTES: u64 = 512 * 1024 * 1024;
++const MAX_BYTES: u64 = 1024 * 1024 * 1024;
+ const MAX_FRAMES: u32 = 2_000_000;
+ const SAMPLES: u64 = 1152;
+ 
+diff --git a/crates/music-protocol/src/media/other_audio.rs b/crates/music-protocol/src/media/other_audio.rs
+index 38eac08..ec4a02c 100644
+--- a/crates/music-protocol/src/media/other_audio.rs
++++ b/crates/music-protocol/src/media/other_audio.rs
+@@ -9,7 +9,7 @@ use std::{
+     fs::{self, File},
+     path::Path,
+ };
+-const MAX_FILE_BYTES: u64 = 512 * 1024 * 1024;
++const MAX_FILE_BYTES: u64 = 1024 * 1024 * 1024;
+ use std::io::{Read, Seek, SeekFrom};
+ 
+ #[derive(Clone, PartialEq, Eq)]
+diff --git a/crates/music-protocol/src/protocol/session.rs b/crates/music-protocol/src/protocol/session.rs
+index 57f5b6f..ef32f61 100644
+--- a/crates/music-protocol/src/protocol/session.rs
++++ b/crates/music-protocol/src/protocol/session.rs
+@@ -1448,10 +1448,19 @@ fn check_allowed(params: &Dictionary) -> Result<()> {
+             && params["EducationModeEnabled"].as_boolean() == Some(false),
+         "device is not ready for this unprotected manual Media session"
+     );
+-    strings(
+-        params.get("DisabledAssetTypes"),
+-        &["Photo", "Movie", "TVEpisode", "HomeVideo"],
+-    )
++    // Which other types are off varies by phone (Photo is absent when photo sync is on).
++    let disabled = params["DisabledAssetTypes"]
++        .as_array()
++        .context("expected string array")?;
++    ensure!(
++        disabled.iter().all(|v| v.as_string().is_some()),
++        "unexpected dataclass/asset-type array"
++    );
++    ensure!(
++        !disabled.iter().any(|v| v.as_string() == Some("Music")),
++        "Music sync is disabled on the device"
++    );
++    Ok(())
+ }
+ 
+ struct SessionTransport(atc::Atc);
+diff --git a/crates/rustunes/src/engine/planning/candidates.rs b/crates/rustunes/src/engine/planning/candidates.rs
+index c04f70c..4980915 100644
+--- a/crates/rustunes/src/engine/planning/candidates.rs
++++ b/crates/rustunes/src/engine/planning/candidates.rs
+@@ -40,10 +40,13 @@ pub fn generate(
+         && journal.outstanding()?.is_none()
+     {
+         for source in &sources.mp3_tracks {
+-            let prepared = PreparedSource::read_expected(
++            // Planning reports why an unpreparable source is refused.
++            let Ok(prepared) = PreparedSource::read_expected(
+                 &sources.base_directory.join(&source.relative_path),
+                 &source.source,
+-            )?;
++            ) else {
++                continue;
++            };
+             if prepared.ensure_batch_insertion_allowed().is_err() {
+                 continue;
+             }
+diff --git a/crates/rustunes/src/engine/state/audio_index.rs b/crates/rustunes/src/engine/state/audio_index.rs
+index 1124569..edd526b 100644
+--- a/crates/rustunes/src/engine/state/audio_index.rs
++++ b/crates/rustunes/src/engine/state/audio_index.rs
+@@ -31,7 +31,7 @@ use tokio::time::{Instant, sleep, sleep_until};
+ use music_protocol::catalogue::sqlite::{Catalog, SourceHashes, Track};
+ use music_protocol::media::fingerprint::{self, SourceFingerprint};
+ 
+-pub const MAX_FILE_BYTES: u64 = 512 * 1024 * 1024;
++pub const MAX_FILE_BYTES: u64 = 1024 * 1024 * 1024;
+ pub const MAX_TOTAL_BYTES: u64 = 64 * 1024 * 1024 * 1024;
+ const MAX_TRACKS: usize = 50_000;
+ const CATALOG_NAMES: [&str; 3] = [
+diff --git a/crates/rustunes/src/lib.rs b/crates/rustunes/src/lib.rs
+index 25dda47..53a99d4 100644
+--- a/crates/rustunes/src/lib.rs
++++ b/crates/rustunes/src/lib.rs
+@@ -1,4 +1,5 @@
+ //! iPhone Music synchronization application and engine.
++#![recursion_limit = "512"]
+ pub mod cli;
+ pub mod engine;
+ 
+diff --git a/crates/rustunes/src/main.rs b/crates/rustunes/src/main.rs
+index c4ab851..7c9fc88 100644
+--- a/crates/rustunes/src/main.rs
++++ b/crates/rustunes/src/main.rs
+@@ -1,3 +1,4 @@
++#![recursion_limit = "512"]
+ /// The command runs on its own thread with this stack. An unoptimised build
+ /// gives each awaited future of a command its own stack frame copies, and a
+ /// debug `validate` or `sync` passed the main thread's 8 MiB;
+-- 
+2.56.0
+
