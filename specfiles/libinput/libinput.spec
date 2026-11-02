@@ -3,7 +3,7 @@
 
 Name:           libinput
 Version:        %{tag}
-Release:        5%{?dist}
+Release:        6%{?dist}
 Summary:        Input device library
 
 # SPDX
@@ -103,6 +103,9 @@ rm %{buildroot}{%{_libexecdir}/libinput/libinput-test,%{_mandir}/man1/libinput-t
 
 
 %changelog
+* Mon Nov 02 2026 Lachlan Marie <lchlnm@pm.me> - 1.32.0-6
+- Force click threshold 270
+
 * Mon Nov 02 2026 Lachlan Marie <lchlnm@pm.me> - 1.32.0-5
 - Force click button (BTN_TASK) from pressure quirk
 - Apple MTP quirk: force threshold, palm pressure off

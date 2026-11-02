@@ -21,7 +21,7 @@ index 98572e5..f2038d2 100644
  AttrTouchSizeRange=150:130
  AttrPalmSizeThreshold=1600
 +AttrPalmPressureThreshold=0
-+AttrForceClickPressureThreshold=220
++AttrForceClickPressureThreshold=270
  
  [Apple Laptop Keyboard (MTP)]
  MatchUdevType=keyboard
