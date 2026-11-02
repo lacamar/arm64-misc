@@ -5,7 +5,7 @@
 
 Name:           pw-airplay
 Version:        0^20261017git%{shortcommit}
-Release:        3%{?dist}
+Release:        4%{?dist}
 Summary:        AirPlay 2 output for PipeWire
 License:        GPL-2.0-or-later
 URL:            https://github.com/superlemon57/pw-airplay
@@ -70,7 +70,7 @@ CFLAGS="%{build_cflags}" LDFLAGS="%{build_ldflags}" %make_build
 
 %install
 install -Dm755 owntone/src/owntone %{buildroot}%{engine}/sbin/owntone
-install -Dm755 owntone/src/.libs/owntone-sqlext.so %{buildroot}%{engine}/lib/owntone/owntone-sqlext.so
+install -Dm755 owntone/sqlext/.libs/owntone-sqlext.so %{buildroot}%{engine}/lib/owntone/owntone-sqlext.so
 mkdir -p %{buildroot}%{engine}/share/owntone
 cp -a owntone/htdocs %{buildroot}%{engine}/share/owntone/
 install -Dm755 owntone/src/libairptp/daemon/airptpd %{buildroot}%{engine}/sbin/airptpd
@@ -108,6 +108,9 @@ sed -e 's|/usr/local/sbin/airptpd|%{engine}/sbin/airptpd|' -e '/^After=/a Confli
 %config(noreplace) %{_sysconfdir}/pipewire/pipewire.conf.d/50-pw-airplay-no-raop.conf
 
 %changelog
+* Mon Nov 02 2026 Lachlan Marie <lchlnm@pm.me> - 0^20261017gitff12df8-4
+- Fix owntone-sqlext.so install path
+
 * Mon Nov 02 2026 Lachlan Marie <lchlnm@pm.me> - 0^20261017gitff12df8-3
 - Ship OwnTone web root; engine failed to start
 
