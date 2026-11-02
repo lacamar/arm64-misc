@@ -1,3 +1,4 @@
+# copr-exclude-chroots: fedora-43-aarch64
 %global commit ff12df8f64fba33e77dacc9e7ed93901e353f928
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 %global owntone_version 29.3
@@ -5,7 +6,7 @@
 
 Name:           pw-airplay
 Version:        0^20261017git%{shortcommit}
-Release:        4%{?dist}
+Release:        5%{?dist}
 Summary:        AirPlay 2 output for PipeWire
 License:        GPL-2.0-or-later
 URL:            https://github.com/superlemon57/pw-airplay
@@ -108,6 +109,9 @@ sed -e 's|/usr/local/sbin/airptpd|%{engine}/sbin/airptpd|' -e '/^After=/a Confli
 %config(noreplace) %{_sysconfdir}/pipewire/pipewire.conf.d/50-pw-airplay-no-raop.conf
 
 %changelog
+* Mon Nov 02 2026 Lachlan Marie <lchlnm@pm.me> - 0^20261017gitff12df8-5
+- Skip fedora-43 COPR chroot
+
 * Mon Nov 02 2026 Lachlan Marie <lchlnm@pm.me> - 0^20261017gitff12df8-4
 - Fix owntone-sqlext.so install path
 
