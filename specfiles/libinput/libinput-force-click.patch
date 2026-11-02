@@ -1,0 +1,160 @@
+diff --git doc/user/device-quirks.rst doc/user/device-quirks.rst
+index e0959a2..b026ad3 100644
+--- doc/user/device-quirks.rst
++++ doc/user/device-quirks.rst
+@@ -183,6 +183,9 @@ AttrPressureRange=N:M, AttrPalmPressureThreshold=O, AttrThumbPressureThreshold=P
+     :ref:`touchpad_pressure_hwdb` for more details.
+     An AttrPalmPressureThreshold of zero unsets any threshold that has been
+     inherited from another quirk.
++AttrForceClickPressureThreshold=N
++    Pressure at which a physical click on a pressure-reporting touchpad also
++    sends a BTN_TASK press; released below 75% of N or on button release.
+ AttrLidSwitchReliability=reliable|unreliable|write_open
+     Indicates the reliability of the lid switch. This is a string enum.
+     Very few devices need this, if in doubt do not set. See :ref:`switches_lid`
+diff --git quirks/50-system-apple.quirks quirks/50-system-apple.quirks
+index 98572e5..f2038d2 100644
+--- quirks/50-system-apple.quirks
++++ quirks/50-system-apple.quirks
+@@ -139,6 +139,8 @@ ModelAppleTouchpad=1
+ AttrSizeHint=104x75
+ AttrTouchSizeRange=150:130
+ AttrPalmSizeThreshold=1600
++AttrPalmPressureThreshold=0
++AttrForceClickPressureThreshold=220
+ 
+ [Apple Laptop Keyboard (MTP)]
+ MatchUdevType=keyboard
+diff --git src/evdev-mt-touchpad-buttons.c src/evdev-mt-touchpad-buttons.c
+index db3a33e..f08a5b9 100644
+--- src/evdev-mt-touchpad-buttons.c
++++ src/evdev-mt-touchpad-buttons.c
+@@ -1333,9 +1333,40 @@ tp_post_clickpadbutton_buttons(struct tp_dispatch *tp, usec_t time)
+ 	return 0;
+ }
+ 
++static void
++tp_post_force_click(struct tp_dispatch *tp, usec_t time)
++{
++	struct tp_touch *t;
++	int max = 0;
++	bool want;
++
++	if (!tp->force_click.threshold)
++		return;
++
++	tp_for_each_touch(tp, t) {
++		if (t->state == TOUCH_BEGIN || t->state == TOUCH_UPDATE)
++			max = max(max, t->pressure);
++	}
++
++	want = tp->buttons.state &&
++	       max >= (tp->force_click.active ? tp->force_click.threshold * 3 / 4
++						      : tp->force_click.threshold);
++	if (want == tp->force_click.active)
++		return;
++
++	tp->force_click.active = want;
++	evdev_pointer_notify_physical_button(tp->device,
++					     time,
++					     evdev_usage_from(EVDEV_BTN_TASK),
++					     want ? LIBINPUT_BUTTON_STATE_PRESSED
++						  : LIBINPUT_BUTTON_STATE_RELEASED);
++}
++
+ int
+ tp_post_button_events(struct tp_dispatch *tp, usec_t time)
+ {
++	tp_post_force_click(tp, time);
++
+ 	if (tp->buttons.is_clickpad ||
+ 	    tp->device->model_flags & EVDEV_MODEL_APPLE_TOUCHPAD_ONEBUTTON)
+ 		return tp_post_clickpadbutton_buttons(tp, time);
+diff --git src/evdev-mt-touchpad.c src/evdev-mt-touchpad.c
+index 81b803d..75a6fb9 100644
+--- src/evdev-mt-touchpad.c
++++ src/evdev-mt-touchpad.c
+@@ -3819,9 +3819,27 @@ tp_init_touch_size(struct tp_dispatch *tp, struct evdev_device *device)
+ 	return true;
+ }
+ 
++static int
++tp_read_force_click_threshold(struct evdev_device *device)
++{
++	uint32_t threshold = 0;
++
++	_unref_(quirks) *q = libinput_device_get_quirks(&device->base);
++	if (q)
++		quirks_get_uint32(q, QUIRK_ATTR_FORCE_CLICK_PRESSURE_THRESHOLD, &threshold);
++
++	return threshold;
++}
++
+ static void
+ tp_init_pressurepad(struct tp_dispatch *tp, struct evdev_device *device)
+ {
++	if (libevdev_has_event_code(device->evdev, EV_ABS, ABS_MT_PRESSURE))
++		tp->force_click.threshold = tp_read_force_click_threshold(device);
++
++	if (tp->force_click.threshold)
++		return;
++
+ 	/* On traditional touchpads, the pressure value equals contact
+ 	 * size. On PressurePads, pressure is a real physical axis for the
+ 	 * force down. So we disable it here because we don't do anything
+diff --git src/evdev-mt-touchpad.h src/evdev-mt-touchpad.h
+index 48375b7..fdd9795 100644
+--- src/evdev-mt-touchpad.h
++++ src/evdev-mt-touchpad.h
+@@ -340,6 +340,12 @@ struct tp_dispatch {
+ 		struct ratelimit warning;
+ 	} jump;
+ 
++	/* physical click plus pressure above threshold sends BTN_TASK */
++	struct {
++		int threshold;
++		bool active;
++	} force_click;
++
+ 	/* if pressure goes above high -> touch down,
+ 	   if pressure then goes below low -> touch up */
+ 	struct {
+diff --git src/quirks.c src/quirks.c
+index 8d03ba6..4f9f90f 100644
+--- src/quirks.c
++++ src/quirks.c
+@@ -317,6 +317,8 @@ quirk_get_name(enum quirk q)
+ 		return "AttrPressureRange";
+ 	case QUIRK_ATTR_PALM_PRESSURE_THRESHOLD:
+ 		return "AttrPalmPressureThreshold";
++	case QUIRK_ATTR_FORCE_CLICK_PRESSURE_THRESHOLD:
++		return "AttrForceClickPressureThreshold";
+ 	case QUIRK_ATTR_RESOLUTION_HINT:
+ 		return "AttrResolutionHint";
+ 	case QUIRK_ATTR_TRACKPOINT_MULTIPLIER:
+@@ -855,6 +857,13 @@ parse_attr(struct quirks_context *ctx,
+ 		p->type = PT_UINT;
+ 		p->value.u = v;
+ 		rc = true;
++	} else if (streq(key, quirk_get_name(QUIRK_ATTR_FORCE_CLICK_PRESSURE_THRESHOLD))) {
++		p->id = QUIRK_ATTR_FORCE_CLICK_PRESSURE_THRESHOLD;
++		if (!safe_atou(value, &v))
++			goto out;
++		p->type = PT_UINT;
++		p->value.u = v;
++		rc = true;
+ 	} else if (streq(key, quirk_get_name(QUIRK_ATTR_RESOLUTION_HINT))) {
+ 		p->id = QUIRK_ATTR_RESOLUTION_HINT;
+ 		if (!parse_dimension_property(value, &dim.x, &dim.y))
+diff --git src/quirks.h src/quirks.h
+index 25bb95e..fb2dd90 100644
+--- src/quirks.h
++++ src/quirks.h
+@@ -100,6 +100,7 @@ enum quirk {
+ 
+ 	QUIRK_ATTR_SIZE_HINT = 300,
+ 	QUIRK_ATTR_EVENT_CODE,
++	QUIRK_ATTR_FORCE_CLICK_PRESSURE_THRESHOLD,
+ 	QUIRK_ATTR_INPUT_PROP,
+ 	QUIRK_ATTR_IS_VIRTUAL,
+ 	QUIRK_ATTR_KEYBOARD_INTEGRATION,

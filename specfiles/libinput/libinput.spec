@@ -3,7 +3,7 @@
 
 Name:           libinput
 Version:        %{tag}
-Release:        4%{?dist}
+Release:        5%{?dist}
 Summary:        Input device library
 
 # SPDX
@@ -12,6 +12,7 @@ URL:            https://gitlab.freedesktop.org/libinput/libinput/-/archive/
 Source0:        https://gitlab.freedesktop.org/libinput/libinput/-/archive/%{version}/libinput-%{version}.tar.bz2
 
 Patch0:         enable_apple_edge_palm_detection.patch
+Patch1:         libinput-force-click.patch
 
 BuildRequires:  git-core
 BuildRequires:  gcc
@@ -102,6 +103,10 @@ rm %{buildroot}{%{_libexecdir}/libinput/libinput-test,%{_mandir}/man1/libinput-t
 
 
 %changelog
+* Mon Nov 02 2026 Lachlan Marie <lchlnm@pm.me> - 1.32.0-5
+- Force click button (BTN_TASK) from pressure quirk
+- Apple MTP quirk: force threshold, palm pressure off
+
 * Sat Oct 03 2026 Lachlan Marie <lchlnm@pm.me> - 1.32.0-4
  - Drop test subpackage
 
