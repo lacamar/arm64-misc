@@ -5,7 +5,7 @@
 
 Name:           pw-airplay
 Version:        0^20261017git%{shortcommit}
-Release:        1%{?dist}
+Release:        3%{?dist}
 Summary:        AirPlay 2 output for PipeWire
 License:        GPL-2.0-or-later
 URL:            https://github.com/superlemon57/pw-airplay
@@ -61,8 +61,8 @@ patch -p1 -d owntone <engine/owntone-%{owntone_version}.patch
 %build
 cd owntone
 autoreconf -fi
-%configure --prefix=%{engine} --sbindir=%{engine}/sbin --sysconfdir=%{_sysconfdir} \
-    --localstatedir=%{_localstatedir} --disable-chromecast --disable-spotify --disable-mpd
+%configure --prefix=%{engine} --sbindir=%{engine}/sbin --libdir=%{engine}/lib --sysconfdir=%{_sysconfdir} \
+    --datadir=%{engine}/share --localstatedir=%{_localstatedir} --disable-chromecast --disable-spotify --disable-mpd
 %make_build
 (cd src/libairptp && %configure --prefix=%{engine} --sbindir=%{engine}/sbin --enable-daemon && %make_build)
 cd ..
@@ -70,6 +70,9 @@ CFLAGS="%{build_cflags}" LDFLAGS="%{build_ldflags}" %make_build
 
 %install
 install -Dm755 owntone/src/owntone %{buildroot}%{engine}/sbin/owntone
+install -Dm755 owntone/src/.libs/owntone-sqlext.so %{buildroot}%{engine}/lib/owntone/owntone-sqlext.so
+mkdir -p %{buildroot}%{engine}/share/owntone
+cp -a owntone/htdocs %{buildroot}%{engine}/share/owntone/
 install -Dm755 owntone/src/libairptp/daemon/airptpd %{buildroot}%{engine}/sbin/airptpd
 install -Dm755 pw-airplayd %{buildroot}%{_bindir}/pw-airplayd
 install -Dm644 config/pw-airplay.conf %{buildroot}%{_datadir}/%{name}/pw-airplay.conf
@@ -105,6 +108,12 @@ sed -e 's|/usr/local/sbin/airptpd|%{engine}/sbin/airptpd|' -e '/^After=/a Confli
 %config(noreplace) %{_sysconfdir}/pipewire/pipewire.conf.d/50-pw-airplay-no-raop.conf
 
 %changelog
+* Mon Nov 02 2026 Lachlan Marie <lchlnm@pm.me> - 0^20261017gitff12df8-3
+- Ship OwnTone web root; engine failed to start
+
+* Mon Nov 02 2026 Lachlan Marie <lchlnm@pm.me> - 0^20261017gitff12df8-2
+- Ship owntone-sqlext.so plugin
+
 * Mon Oct 26 2026 Lachlan Marie <lchlnm@pm.me> - 0^20261017gitff12df8-1
 - Initial package
 - Bundle patched OwnTone 29.3 engine and airptpd
