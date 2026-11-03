@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        32%{?dist}
+Release:        33%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -182,6 +182,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Tue Nov 03 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^14.git.a8562a11-33
+- Rebase gestures, vulkan patches for fuzz 0
+
 * Tue Nov 03 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^14.git.a8562a11-32
 - Update to commit a8562a1126922ed4c1c94d34c1dbb26633491d05
 - Rebase pr4392 patch

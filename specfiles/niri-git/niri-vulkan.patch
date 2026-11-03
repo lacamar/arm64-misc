@@ -60,7 +60,7 @@ index 9d663b0..e09efb2 100644
      "use_system_lib",
      "wayland_frontend",
 diff --git a/niri-config/src/debug.rs b/niri-config/src/debug.rs
-index 32de7f5..aa37107 100644
+index d63e5cc..81806b0 100644
 --- a/niri-config/src/debug.rs
 +++ b/niri-config/src/debug.rs
 @@ -13,6 +13,7 @@ pub struct Debug {
@@ -71,7 +71,7 @@ index 32de7f5..aa37107 100644
      pub ignored_drm_devices: Vec<PathBuf>,
      pub force_pipewire_invalid_modifier: bool,
      pub disable_pipewire_dmabuf: bool,
-@@ -48,6 +49,8 @@ pub struct DebugPart {
+@@ -49,6 +50,8 @@ pub struct DebugPart {
      pub force_disable_connectors_on_resume: Option<Flag>,
      #[knuffel(child, unwrap(argument))]
      pub render_drm_device: Option<PathBuf>,
@@ -80,8 +80,8 @@ index 32de7f5..aa37107 100644
      #[knuffel(children(name = "ignore-drm-device"), unwrap(argument))]
      pub ignored_drm_devices: Vec<PathBuf>,
      #[knuffel(child)]
-@@ -101,7 +104,7 @@ impl MergeWith<DebugPart> for Debug {
-             disable_10bit_output,
+@@ -105,7 +108,7 @@ impl MergeWith<DebugPart> for Debug {
+             nested_show_host_cursor,
          );
  
 -        merge_clone_opt!((self, part), preview_render, render_drm_device);
@@ -89,7 +89,7 @@ index 32de7f5..aa37107 100644
  
          self.ignored_drm_devices
              .extend(part.ignored_drm_devices.iter().cloned());
-@@ -113,3 +116,9 @@ pub enum PreviewRender {
+@@ -117,3 +120,9 @@ pub enum PreviewRender {
      Screencast,
      ScreenCapture,
  }
@@ -100,10 +100,10 @@ index 32de7f5..aa37107 100644
 +    Vulkan,
 +}
 diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
-index 59907b1..7845182 100644
+index b7bc253..7ecb4b3 100644
 --- a/niri-config/src/lib.rs
 +++ b/niri-config/src/lib.rs
-@@ -2861,6 +2861,7 @@ mod tests {
+@@ -2911,6 +2911,7 @@ mod tests {
                  render_drm_device: Some(
                      "/dev/dri/renderD129",
                  ),
@@ -4041,7 +4041,7 @@ index 53bfe2e..dbd2fc9 100644
          self.renderer.as_mut().map(f)
      }
 diff --git a/src/backend/mod.rs b/src/backend/mod.rs
-index 1a307da..0e05735 100644
+index 815aad6..23dbb68 100644
 --- a/src/backend/mod.rs
 +++ b/src/backend/mod.rs
 @@ -5,7 +5,7 @@ use std::time::Duration;
@@ -4165,10 +4165,10 @@ index 77059ac..2a66173 100644
  
      pub fn primary_render_node(&mut self) -> Option<DrmNode> {
 diff --git a/src/backend/winit.rs b/src/backend/winit.rs
-index 624c587..1e842ef 100644
+index 4e6127c..546caa5 100644
 --- a/src/backend/winit.rs
 +++ b/src/backend/winit.rs
-@@ -5,14 +5,18 @@ use std::rc::Rc;
+@@ -5,13 +5,17 @@ use std::rc::Rc;
  use std::sync::{Arc, Mutex};
  
  use anyhow::Context as _;
@@ -4189,8 +4189,7 @@ index 624c587..1e842ef 100644
  use smithay::backend::winit::{self, WinitEvent, WinitGraphicsBackend};
  use smithay::input::keyboard::KeyboardSource;
  use smithay::output::{Mode, Output, PhysicalProperties, Subpixel};
- use smithay::reexports::calloop::LoopHandle;
-@@ -19,6 +23,7 @@ use smithay::reexports::wayland_protocols::wp::presentation_time::server::wp_pre
+@@ -20,6 +24,7 @@ use smithay::reexports::wayland_protocols::wp::presentation_time::server::wp_pre
  use smithay::reexports::winit::dpi::LogicalSize;
  use smithay::reexports::winit::platform::wayland::WindowAttributesWayland;
  use smithay::reexports::winit::window::WindowAttributes;
@@ -4198,7 +4197,7 @@ index 624c587..1e842ef 100644
  use smithay::wayland::dmabuf::{DmabufFeedbackBuilder, DmabufGlobal};
  use smithay::wayland::presentation::Refresh;
  
-@@ -28,16 +33,29 @@ use crate::render_helpers::debug::draw_damage;
+@@ -29,16 +34,29 @@ use crate::render_helpers::debug::draw_damage;
  use crate::render_helpers::{resources, shaders, RenderCtx, RenderTarget};
  use crate::utils::{get_monotonic_time, logical_output, WinitScale};
  
@@ -4229,7 +4228,7 @@ index 624c587..1e842ef 100644
  }
  
  impl Winit {
-@@ -163,22 +181,50 @@ impl Winit {
+@@ -177,22 +195,50 @@ impl Winit {
              #[cfg(feature = "xdp-gnome-screencast")]
              gbm_device: None,
              ipc_outputs,
@@ -4283,7 +4282,7 @@ index 624c587..1e842ef 100644
          if let Some(src) = config.animations.window_resize.custom_shader.as_deref() {
              shaders::set_custom_resize_program(renderer, Some(src));
          }
-@@ -192,23 +238,6 @@ impl Winit {
+@@ -206,23 +252,6 @@ impl Winit {
  
          niri.update_shaders();
  
@@ -4307,7 +4306,7 @@ index 624c587..1e842ef 100644
          self.create_dmabuf_global(niri);
  
          #[cfg(feature = "xdp-gnome-screencast")]
-@@ -219,8 +248,30 @@ impl Winit {
+@@ -233,8 +262,30 @@ impl Winit {
          niri.add_output(self.output.clone(), None, false);
      }
  
@@ -4339,7 +4338,7 @@ index 624c587..1e842ef 100644
          EGLDevice::device_for_display(display)
              .context("error getting EGL device")?
              .try_get_render_node()
-@@ -229,13 +280,11 @@ impl Winit {
+@@ -243,13 +294,11 @@ impl Winit {
      }
  
      pub fn create_dmabuf_global(&mut self, niri: &mut Niri) {
@@ -4356,7 +4355,7 @@ index 624c587..1e842ef 100644
              let primary_formats = renderer.dmabuf_formats();
              DmabufFeedbackBuilder::new(node.dev_id(), primary_formats)
                  .build()
-@@ -295,9 +344,9 @@ impl Winit {
+@@ -309,9 +358,9 @@ impl Winit {
  
      pub fn with_primary_renderer<T>(
          &mut self,
@@ -4368,7 +4367,7 @@ index 624c587..1e842ef 100644
      }
  
      pub fn primary_render_node(&mut self) -> Option<DrmNode> {
-@@ -309,7 +358,7 @@ impl Winit {
+@@ -323,7 +372,7 @@ impl Winit {
  
          // Render the elements.
          let ctx = RenderCtx {
@@ -4377,7 +4376,7 @@ index 624c587..1e842ef 100644
              target: RenderTarget::Output,
              xray: None,
          };
-@@ -321,6 +370,11 @@ impl Winit {
+@@ -335,6 +384,11 @@ impl Winit {
              draw_damage(&mut output_state.debug_damage_tracker, &mut elements);
          }
  
@@ -4389,7 +4388,7 @@ index 624c587..1e842ef 100644
          // Hand them over to winit.
          let res = {
              let (renderer, mut framebuffer) = self.backend.bind().unwrap();
-@@ -333,10 +387,71 @@ impl Winit {
+@@ -347,10 +401,71 @@ impl Winit {
                  .unwrap()
          };
  
@@ -4463,7 +4462,7 @@ index 624c587..1e842ef 100644
              if self
                  .config
                  .borrow()
-@@ -344,14 +459,14 @@ impl Winit {
+@@ -358,14 +473,14 @@ impl Winit {
                  .wait_for_frame_completion_before_queueing
              {
                  let _span = tracy_client::span!("wait for completion");
@@ -4481,7 +4480,7 @@ index 624c587..1e842ef 100644
              presentation_feedbacks.presented::<_, smithay::utils::Monotonic>(
                  get_monotonic_time(),
                  Refresh::Unknown,
-@@ -385,12 +500,12 @@ impl Winit {
+@@ -399,12 +514,12 @@ impl Winit {
      }
  
      pub fn toggle_debug_tint(&mut self) {
@@ -4805,10 +4804,10 @@ index 37b1609..5f1d923 100644
          tile_size: Size<f64, Logical>,
          tile_pos: Point<f64, Logical>,
 diff --git a/src/niri.rs b/src/niri.rs
-index f591261..2d169a1 100644
+index 48b4334..bacac56 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
-@@ -34,7 +34,7 @@ use smithay::backend::renderer::element::{
+@@ -35,7 +35,7 @@ use smithay::backend::renderer::element::{
      default_primary_scanout_output_compare, Element, Id, Kind, PrimaryScanoutOutput, RenderElement,
      RenderElementStates,
  };
@@ -4817,7 +4816,7 @@ index f591261..2d169a1 100644
  use smithay::backend::renderer::sync::SyncPoint;
  use smithay::backend::renderer::Color32F;
  use smithay::desktop::utils::{
-@@ -4911,7 +4911,7 @@ impl Niri {
+@@ -4910,7 +4910,7 @@ impl Niri {
          push(backdrop);
      }
  
@@ -4826,7 +4825,7 @@ index f591261..2d169a1 100644
          let _span = tracy_client::span!("Niri::fill_xray_elements");
  
          // Make sure the xrayed elements themselves cannot use xray by mistake.
-@@ -5887,7 +5887,7 @@ impl Niri {
+@@ -5886,7 +5886,7 @@ impl Niri {
  
      pub fn render_for_screencopy_with_damage(
          &mut self,
@@ -4835,7 +4834,7 @@ index f591261..2d169a1 100644
          output: &Output,
      ) {
          let _span = tracy_client::span!("Niri::render_for_screencopy_with_damage");
-@@ -5962,7 +5962,7 @@ impl Niri {
+@@ -5961,7 +5961,7 @@ impl Niri {
  
      pub fn render_for_screencopy_without_damage(
          &mut self,
@@ -4844,7 +4843,7 @@ index f591261..2d169a1 100644
          manager: &ZwlrScreencopyManagerV1,
          screencopy: Screencopy,
      ) -> anyhow::Result<()> {
-@@ -6014,7 +6014,7 @@ impl Niri {
+@@ -6013,7 +6013,7 @@ impl Niri {
  
      pub fn render_for_image_copy_capture(
          &mut self,
@@ -4853,7 +4852,7 @@ index f591261..2d169a1 100644
          output: &Output,
          target_presentation_time: Duration,
      ) {
-@@ -6154,7 +6154,7 @@ impl Niri {
+@@ -6153,7 +6153,7 @@ impl Niri {
  
      pub fn render_for_image_copy_cursor_capture(
          &mut self,
@@ -4862,7 +4861,7 @@ index f591261..2d169a1 100644
          output: &Output,
          target_presentation_time: Duration,
      ) {
-@@ -6256,9 +6256,9 @@ impl Niri {
+@@ -6255,9 +6255,9 @@ impl Niri {
  
      pub fn render_cursor_for_capture(
          &self,
@@ -4874,7 +4873,7 @@ index f591261..2d169a1 100644
          let int_scale = output.current_scale().integer_scale();
          let output_scale = Scale::from(output.current_scale().fractional_scale());
  
-@@ -6431,9 +6431,9 @@ impl Niri {
+@@ -6430,9 +6430,9 @@ impl Niri {
  
      #[allow(clippy::type_complexity)]
      fn render_for_screencopy_internal(
@@ -4886,7 +4885,7 @@ index f591261..2d169a1 100644
          states: RenderElementStates,
          screencopy: &Screencopy,
      ) -> anyhow::Result<Option<SyncPoint>> {
-@@ -6481,7 +6481,7 @@ impl Niri {
+@@ -6480,7 +6480,7 @@ impl Niri {
  
      pub fn capture_screenshots<'a>(
          &'a self,
@@ -4895,7 +4894,7 @@ index f591261..2d169a1 100644
      ) -> impl Iterator<Item = (Output, [OutputScreenshot; 3])> + 'a {
          self.global_space.outputs().cloned().filter_map(|output| {
              let size = output.current_mode().unwrap().size;
-@@ -6562,7 +6562,7 @@ impl Niri {
+@@ -6561,7 +6561,7 @@ impl Niri {
  
      pub fn screenshot(
          &mut self,
@@ -4904,7 +4903,7 @@ index f591261..2d169a1 100644
          output: &Output,
          write_to_disk: bool,
          include_pointer: bool,
-@@ -6599,7 +6599,7 @@ impl Niri {
+@@ -6598,7 +6598,7 @@ impl Niri {
  
      pub fn screenshot_window(
          &self,
@@ -4913,7 +4912,7 @@ index f591261..2d169a1 100644
          output: &Output,
          mapped: &Mapped,
          write_to_disk: bool,
-@@ -6616,7 +6616,7 @@ impl Niri {
+@@ -6615,7 +6615,7 @@ impl Niri {
                  mapped.rules().opacity.unwrap_or(1.).clamp(0., 1.)
              };
  
@@ -4922,7 +4921,7 @@ index f591261..2d169a1 100644
  
          // Add pointer if requested and it's over this window.
          if show_pointer {
-@@ -6775,7 +6775,7 @@ impl Niri {
+@@ -6774,7 +6774,7 @@ impl Niri {
      #[cfg(feature = "dbus")]
      pub fn screenshot_all_outputs(
          &mut self,
@@ -4931,7 +4930,7 @@ index f591261..2d169a1 100644
          include_pointer: bool,
          on_done: impl FnOnce(PathBuf) + Send + 'static,
      ) -> anyhow::Result<()> {
-@@ -7330,7 +7330,7 @@ impl Niri {
+@@ -7329,7 +7329,7 @@ impl Niri {
          }
      }
  
@@ -7524,7 +7523,7 @@ index 0b92e47..17808a8 100644
      mod_key: ModKey,
      scale: f64,
 diff --git a/src/ui/mru.rs b/src/ui/mru.rs
-index 7c1194d..d421688 100644
+index 5ce7ed0..acd8d0d 100644
 --- a/src/ui/mru.rs
 +++ b/src/ui/mru.rs
 @@ -17,7 +17,7 @@ use smithay::backend::renderer::element::utils::{
@@ -7631,7 +7630,7 @@ index 7d26f85..44972b3 100644
          clock: Clock,
      ) -> Self {
 diff --git a/src/ui/screenshot_ui.rs b/src/ui/screenshot_ui.rs
-index 75dada3..b67e141 100644
+index da0d992..c68040d 100644
 --- a/src/ui/screenshot_ui.rs
 +++ b/src/ui/screenshot_ui.rs
 @@ -15,7 +15,7 @@ use smithay::backend::allocator::Fourcc;
@@ -7675,7 +7674,7 @@ index 75dada3..b67e141 100644
      ) -> anyhow::Result<(Size<i32, Physical>, Vec<u8>)> {
          let _span = tracy_client::span!("ScreenshotUi::capture");
  
-@@ -1083,10 +1083,10 @@ impl ScreenshotUi {
+@@ -1084,10 +1084,10 @@ impl ScreenshotUi {
  
  impl OutputScreenshot {
      pub fn from_textures(
@@ -7689,7 +7688,7 @@ index 75dada3..b67e141 100644
      ) -> Self {
          let buffer = PrimaryGpuTextureRenderElement(TextureRenderElement::from_texture_buffer(
              TextureBuffer::from_texture(
-@@ -1165,10 +1165,10 @@ fn is_within_capture_button(
+@@ -1166,10 +1166,10 @@ fn is_within_capture_button(
  }
  
  fn render_panel(
