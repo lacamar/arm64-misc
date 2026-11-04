@@ -4,7 +4,7 @@
 
 Name:           rustunes
 Version:        0.1.0
-Release:        2.%{commitdate}git%{shortcommit}%{?dist}
+Release:        3.%{commitdate}git%{shortcommit}%{?dist}
 Summary:        Sync a music library into the iPhone Music app
 
 License:        MIT
@@ -46,6 +46,11 @@ target/rpm/%{name} completions bash > %{buildroot}%{bash_completions_dir}/%{name
 %{bash_completions_dir}/%{name}
 
 %changelog
+* Wed Nov 04 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.0-3.20261031git057ee8f
+- Cache AAC and MP3 inspections across runs
+- Inspect sources in parallel
+- Hash MP4 sources once
+
 * Mon Nov 02 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.0-2.20261031git057ee8f
 - Add playlist push, list and remove
 - Update changed playlists in place

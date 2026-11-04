@@ -1,7 +1,7 @@
 From ae673b8639161454ed41474fa8fdc09f0084c864 Mon Sep 17 00:00:00 2001
 From: lacamar <lchlnm@pm.me>
 Date: Mon, 2 Nov 2026 18:28:20 +0100
-Subject: [PATCH 1/7] Support iOS 26 and iTunes-era libraries
+Subject: [PATCH 1/8] Support iOS 26 and iTunes-era libraries
 
 - Accept iOS 26 Music database (2350000)
 - Tolerate orphan companion rows, absent anchor, no album artist
@@ -638,7 +638,7 @@ index c4ab851..7c9fc88 100644
 From 8ed71f9f2d74b9f7f5b57db40b8d790772c1364e Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Mon, 2 Nov 2026 22:28:37 +0100
-Subject: [PATCH 2/7] Add playlist push, list and remove
+Subject: [PATCH 2/8] Add playlist push, list and remove
 
 - playlist push: M3U/M3U8 to an ordinary playlist
 - Replace changed managed playlists by delete + insert
@@ -1888,7 +1888,7 @@ index c34c2d8..e7a952c 100644
 From fe2cef92d4484452b1e11c415ea72dd3f5be062e Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Mon, 2 Nov 2026 22:33:09 +0100
-Subject: [PATCH 3/7] Update changed playlists in place
+Subject: [PATCH 3/8] Update changed playlists in place
 
 - Send update_playlist for a changed managed playlist
 - Fall back to delete + insert when it does not apply
@@ -2099,7 +2099,7 @@ index e7a952c..3aeef2a 100644
 From 0207d72a3b1021db139a4ad2eb9d06278eb603f8 Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Mon, 2 Nov 2026 22:37:04 +0100
-Subject: [PATCH 4/7] Add playlist folders
+Subject: [PATCH 4/8] Add playlist folders
 
 - playlist push/remove --folder
 - Create managed folder on first use, drop it with its last playlist
@@ -2249,7 +2249,7 @@ index 3aeef2a..731f63a 100644
 From 56af6536c3f86458cfb3d869e91d99f7531a76b2 Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Mon, 2 Nov 2026 22:48:38 +0100
-Subject: [PATCH 5/7] Document audio replacement and clearing experiments
+Subject: [PATCH 5/8] Document audio replacement and clearing experiments
 
 - Bare update_track asks for no audio
 - location updates ask for no audio
@@ -2303,7 +2303,7 @@ index 731f63a..292af65 100644
 From 5c3d72179dc38fdc4fb401fe8a0d4b18e98f3f02 Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Mon, 2 Nov 2026 22:48:48 +0100
-Subject: [PATCH 6/7] Pick a cover when no picture is the front cover
+Subject: [PATCH 6/8] Pick a cover when no picture is the front cover
 
 - First picture that is not a back cover
 - Several front covers still go without
@@ -2435,7 +2435,7 @@ index f2e0ff0..10788d5 100644
 From b14027cb54c0fd4e04176fbffae42bf1b0eff1a7 Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Mon, 2 Nov 2026 22:54:25 +0100
-Subject: [PATCH 7/7] Handle iOS 26 composer edits
+Subject: [PATCH 7/8] Handle iOS 26 composer edits
 
 - Route composer changes to replacement on catalogue 2350000
 - Verify a sent composer edit against its search-key-only effect
@@ -2702,6 +2702,811 @@ index 67adf37..187d945 100644
  fn verify_in(
      before: &Tables,
      after: &Tables,
+-- 
+2.56.0
+
+
+From 5c0d78231f33cf230d8dcebf210053aaa178b838 Mon Sep 17 00:00:00 2001
+From: Lachlan Marie <lchlnm@pm.me>
+Date: Wed, 4 Nov 2026 15:06:01 +0100
+Subject: [PATCH 8/8] Cache inspections of every format but ALAC
+
+- Persist mpeg::read results by file identity
+- Route planning re-reads through the cache
+- Warm AAC and MP3 reads in parallel
+- Reuse the MP4 full-file hash
+- Fix temp dir collision in MP3 preparation tests
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01F3FjoJj4RV14hgXJuf9gh7
+---
+ crates/music-protocol/src/media.rs            | 21 +++++
+ .../music-protocol/src/media/audio_source.rs  | 12 ++-
+ crates/music-protocol/src/media/container.rs  |  3 +
+ .../src/media/container/flac.rs               |  1 +
+ .../music-protocol/src/media/container/mp4.rs |  3 +-
+ .../src/media/container/mpeg.rs               |  1 +
+ .../src/media/fingerprint/transferred.rs      | 16 +++-
+ crates/music-protocol/src/media/format.rs     |  4 +-
+ crates/music-protocol/src/media/mpeg.rs       | 45 ++++-----
+ .../music-protocol/src/media/mpeg/gapless.rs  | 13 +--
+ .../music-protocol/src/media/mpeg/timing.rs   | 28 +++---
+ .../rustunes/src/engine/planning/additive.rs  |  4 +-
+ .../src/engine/planning/source_collection.rs  |  2 +-
+ .../mp3/preparation/tests.rs                  |  4 +-
+ .../src/engine/planning/source_reads.rs       | 93 ++++++++++++++++++-
+ .../src/engine/planning/source_reads/tests.rs | 21 +++++
+ .../src/engine/planning/source_validation.rs  |  6 +-
+ .../state/journal/source_attribution.rs       |  4 +-
+ 18 files changed, 221 insertions(+), 60 deletions(-)
+
+diff --git a/crates/music-protocol/src/media.rs b/crates/music-protocol/src/media.rs
+index c211984..4cfe18f 100644
+--- a/crates/music-protocol/src/media.rs
++++ b/crates/music-protocol/src/media.rs
+@@ -19,3 +19,24 @@ pub mod jpeg;
+ pub mod mpeg;
+ pub mod other_audio;
+ pub mod png;
++
++/// Spelled as an alias so serde doesn't borrow it from the input.
++pub type Name = &'static str;
++
++/// A `&'static str` field read back from a cache: each distinct value is
++/// leaked once, and these fields hold a handful of codec and schema names.
++pub(crate) fn interned<'de, D: serde::Deserializer<'de>>(d: D) -> Result<&'static str, D::Error> {
++    use std::{collections::HashSet, sync::Mutex};
++    static SEEN: Mutex<Option<HashSet<&'static str>>> = Mutex::new(None);
++    let text = <String as serde::Deserialize>::deserialize(d)?;
++    let mut seen = SEEN.lock().unwrap_or_else(|e| e.into_inner());
++    let seen = seen.get_or_insert_default();
++    Ok(match seen.get(text.as_str()) {
++        Some(known) => known,
++        None => {
++            let leaked: &'static str = Box::leak(text.into_boxed_str());
++            seen.insert(leaked);
++            leaked
++        }
++    })
++}
+diff --git a/crates/music-protocol/src/media/audio_source.rs b/crates/music-protocol/src/media/audio_source.rs
+index 23821ef..995d435 100644
+--- a/crates/music-protocol/src/media/audio_source.rs
++++ b/crates/music-protocol/src/media/audio_source.rs
+@@ -7,7 +7,7 @@
+ use std::io::{Cursor, Read, Seek, SeekFrom};
+ 
+ use anyhow::{Context, Result, bail, ensure};
+-use serde::Serialize;
++use serde::{Deserialize, Serialize};
+ use sha2::{Digest, Sha256};
+ 
+ use crate::media::{
+@@ -23,7 +23,7 @@ use crate::media::{
+ const MAX_TEXT: usize = 64 * 1024;
+ 
+ /// What a source of these formats carries in place of MPEG-1 frame timing.
+-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct Stream {
+     pub format: Format,
+     /// PCM bits of a lossless format; 0 for a lossy one.
+@@ -34,7 +34,8 @@ pub struct Stream {
+     pub encoder_padding: u64,
+     /// Samples a player plays: the coded ones less delay and padding.
+     pub valid_samples: u64,
+-    #[serde(skip)]
++    // Left out of reports; a cache that reads a Stream back restores it.
++    #[serde(skip_serializing, default = "EncodedAudio::placeholder")]
+     pub encoded: EncodedAudio,
+ }
+ 
+@@ -47,7 +48,10 @@ pub(crate) fn read_layout(
+ ) -> Result<Source> {
+     let e = &layout.encoded;
+     e.validate(size)?;
+-    let full = container::hash_span(file, 0, size)?;
++    let full = match layout.file_sha256 {
++        Some(full) => full,
++        None => container::hash_span(file, 0, size)?,
++    };
+     let (metadata, id3_version, frames) = read_tags(file, &layout)?;
+     let mut artwork = Vec::new();
+     read_pictures(file, &layout, &mut |facts, _| {
+diff --git a/crates/music-protocol/src/media/container.rs b/crates/music-protocol/src/media/container.rs
+index 75e31e0..8202deb 100644
+--- a/crates/music-protocol/src/media/container.rs
++++ b/crates/music-protocol/src/media/container.rs
+@@ -27,6 +27,8 @@ pub struct Layout {
+     pub stream: Stream,
+     /// Where the tags are, in file order.
+     pub tags: Vec<TagRegion>,
++    /// The whole file's SHA-256, when inspection already hashed it.
++    pub file_sha256: Option<[u8; 32]>,
+ }
+ 
+ /// Facts about the coded stream that an insert carries.
+@@ -260,6 +262,7 @@ pub(crate) fn pcm_layout(
+         (u64::from(sample_rate) * u64::from(channels) * u64::from(bits_per_sample) + 500) / 1000,
+     )?;
+     Ok(Layout {
++        file_sha256: None,
+         encoded,
+         stream: Stream {
+             bit_rate_kbps,
+diff --git a/crates/music-protocol/src/media/container/flac.rs b/crates/music-protocol/src/media/container/flac.rs
+index 557bc38..1630449 100644
+--- a/crates/music-protocol/src/media/container/flac.rs
++++ b/crates/music-protocol/src/media/container/flac.rs
+@@ -102,6 +102,7 @@ pub fn inspect(input: &mut (impl Read + Seek), size: u64) -> Result<Layout> {
+         audio_sha256: hash_span(input, position, audio_bytes)?,
+     };
+     Ok(Layout {
++        file_sha256: None,
+         stream: Stream {
+             bit_rate_kbps: average_kbps(audio_bytes, samples, sample_rate)?,
+             variable_bit_rate: true,
+diff --git a/crates/music-protocol/src/media/container/mp4.rs b/crates/music-protocol/src/media/container/mp4.rs
+index 02cd49d..fa7e617 100644
+--- a/crates/music-protocol/src/media/container/mp4.rs
++++ b/crates/music-protocol/src/media/container/mp4.rs
+@@ -173,7 +173,7 @@ pub fn inspect(input: &mut (impl Read + Seek), size: u64) -> Result<Option<Layou
+         (0, 0)
+     };
+ 
+-    let (_, audio_sha256) = hash_file_and_media(input, size, media)?;
++    let (file_sha256, audio_sha256) = hash_file_and_media(input, size, media)?;
+     // The configuration is what a decoder reads: the AudioSpecificConfig, as
+     // ALAC's identity takes its magic cookie. A remux rewrites the esds bit
+     // rate fields, which decode nothing.
+@@ -200,6 +200,7 @@ pub fn inspect(input: &mut (impl Read + Seek), size: u64) -> Result<Option<Layou
+         average_kbps(media.len(), coded_samples, sample_rate)?
+     };
+     Ok(Some(Layout {
++        file_sha256: Some(file_sha256),
+         encoded,
+         stream: Stream {
+             bit_rate_kbps,
+diff --git a/crates/music-protocol/src/media/container/mpeg.rs b/crates/music-protocol/src/media/container/mpeg.rs
+index a49edae..6724ae8 100644
+--- a/crates/music-protocol/src/media/container/mpeg.rs
++++ b/crates/music-protocol/src/media/container/mpeg.rs
+@@ -83,6 +83,7 @@ pub fn inspect(input: &mut (impl Read + Seek), size: u64) -> Result<Option<Layou
+         audio_sha256: hash_span(input, start, audio_bytes)?,
+     };
+     Ok(Some(Layout {
++        file_sha256: None,
+         stream: Stream {
+             bit_rate_kbps: if constant {
+                 kbps[0]
+diff --git a/crates/music-protocol/src/media/fingerprint/transferred.rs b/crates/music-protocol/src/media/fingerprint/transferred.rs
+index 8e7f309..5898bd6 100644
+--- a/crates/music-protocol/src/media/fingerprint/transferred.rs
++++ b/crates/music-protocol/src/media/fingerprint/transferred.rs
+@@ -29,7 +29,7 @@ enum Codec {
+ /// which have their own identities. The digest covers the
+ /// codec configuration and the coded payload, never tags, pictures, padding or
+ /// where the payload sits, so retagging a file keeps it.
+-#[derive(Clone, Debug, PartialEq, Eq)]
++#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+ pub struct EncodedAudio {
+     pub format: Format,
+     pub sample_rate: u32,
+@@ -52,6 +52,20 @@ pub struct EncodedAudio {
+ }
+ 
+ impl EncodedAudio {
++    pub fn placeholder() -> Self {
++        Self {
++            format: Format::Mpeg1Layer3,
++            sample_rate: 0,
++            channels: 0,
++            bits_per_sample: 0,
++            packets: 0,
++            coded_samples: 0,
++            audio_offset: 0,
++            audio_bytes: 0,
++            config_sha256: [0; 32],
++            audio_sha256: [0; 32],
++        }
++    }
+     pub fn sha256(&self) -> [u8; 32] {
+         let mut h = Sha256::new();
+         h.update(b"music-protocol/encoded-audio\0");
+diff --git a/crates/music-protocol/src/media/format.rs b/crates/music-protocol/src/media/format.rs
+index 9931c40..38d8aab 100644
+--- a/crates/music-protocol/src/media/format.rs
++++ b/crates/music-protocol/src/media/format.rs
+@@ -4,9 +4,9 @@
+ //! the phone itself advertises (Lockdown `com.apple.mobile.iTunes`,
+ //! `AudioCodecs`).
+ use anyhow::{Result, ensure};
+-use serde::Serialize;
++use serde::{Deserialize, Serialize};
+ 
+-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
++#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+ #[serde(rename_all = "kebab-case")]
+ pub enum Format {
+     Mpeg1Layer3,
+diff --git a/crates/music-protocol/src/media/mpeg.rs b/crates/music-protocol/src/media/mpeg.rs
+index b51eb19..448d0cb 100644
+--- a/crates/music-protocol/src/media/mpeg.rs
++++ b/crates/music-protocol/src/media/mpeg.rs
+@@ -6,7 +6,7 @@
+ //!
+ //! [`audio_source`]: crate::media::audio_source
+ use anyhow::{Context, Result, ensure};
+-use serde::Serialize;
++use serde::{Deserialize, Serialize};
+ use sha2::{Digest, Sha256};
+ use std::{
+     collections::BTreeMap,
+@@ -24,15 +24,16 @@ const MAX_BYTES: u64 = 1024 * 1024 * 1024;
+ const MAX_TAG: usize = 16 * 1024 * 1024;
+ const MAX_TEXT: usize = 64 * 1024;
+ 
+-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct Fingerprint {
+     pub file_bytes: u64,
+     pub full_file_sha256: String,
+     pub audio: EncodedMpeg,
+ }
+-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct EncodedMpeg {
+-    pub format: &'static str,
++    #[serde(deserialize_with = "crate::media::interned")]
++    pub format: crate::media::Name,
+     pub sha256: String,
+     pub frame_bytes_sha256: String,
+     pub sample_rate: u32,
+@@ -41,7 +42,7 @@ pub struct EncodedMpeg {
+     pub audio_bytes: u64,
+     pub coded_samples: u64,
+ }
+-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
++#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct Tags {
+     pub title: Vec<String>,
+     pub artist: Vec<String>,
+@@ -58,22 +59,22 @@ pub struct Tags {
+     pub compilation: Option<bool>,
+     /// COMM frames that say something. A frame with an empty description and
+     /// empty text is left out: it has nothing a catalogue could hold.
+-    #[serde(skip_serializing_if = "Vec::is_empty")]
++    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+     pub comments: Vec<Comment>,
+     /// Explicit sort names: ID3 TSOT, TSOP, TSOA, TSO2 and TSOC, MP4 sonm,
+     /// soar, soal, soaa and soco, and the Vorbis `*SORT` comments.
+-    #[serde(skip_serializing_if = "Vec::is_empty")]
++    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+     pub sort_title: Vec<String>,
+-    #[serde(skip_serializing_if = "Vec::is_empty")]
++    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+     pub sort_artist: Vec<String>,
+-    #[serde(skip_serializing_if = "Vec::is_empty")]
++    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+     pub sort_album: Vec<String>,
+-    #[serde(skip_serializing_if = "Vec::is_empty")]
++    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+     pub sort_album_artist: Vec<String>,
+-    #[serde(skip_serializing_if = "Vec::is_empty")]
++    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+     pub sort_composer: Vec<String>,
+     /// What Apple's sync reads from an ID3v2 tag for an MP3's gapless fields.
+-    #[serde(skip_serializing_if = "gapless::EncoderHints::is_empty")]
++    #[serde(default, skip_serializing_if = "gapless::EncoderHints::is_empty")]
+     pub encoder_hints: gapless::EncoderHints,
+ }
+ impl Tags {
+@@ -94,22 +95,23 @@ impl Tags {
+         texts
+     }
+ }
+-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct Comment {
+     pub language: String,
+     pub description: String,
+     pub text: String,
+ }
+-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct FrameEvidence {
+     pub id: String,
+     pub bytes: usize,
+     pub sha256: String,
+ }
+-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct Picture {
+     /// What the bytes are, whatever the container declared.
+-    pub mime: &'static str,
++    #[serde(deserialize_with = "crate::media::interned")]
++    pub mime: crate::media::Name,
+     /// The container declared an image type (see [`image_facts`]), as FFmpeg
+     /// needs to read a FLAC's picture; not in the JSON.
+     #[serde(skip)]
+@@ -124,20 +126,21 @@ pub struct Picture {
+     pub structure_verified: bool,
+     pub image_decode_verified: bool,
+ }
+-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct Source {
+     /// The format's name (`mpeg1-layer3`, `aac-lc`, `flac`, ...).
+-    pub codec: &'static str,
++    #[serde(deserialize_with = "crate::media::interned")]
++    pub codec: crate::media::Name,
+     pub fingerprint: Fingerprint,
+     /// MPEG-1 Layer III frame timing; `None` for every other format.
+-    #[serde(skip_serializing_if = "Option::is_none")]
++    #[serde(default, skip_serializing_if = "Option::is_none")]
+     pub timing: Option<timing::TimingEvidence>,
+     /// Every other format's stream; `None` for MPEG-1 Layer III.
+-    #[serde(skip_serializing_if = "Option::is_none")]
++    #[serde(default, skip_serializing_if = "Option::is_none")]
+     pub stream: Option<crate::media::audio_source::Stream>,
+     /// The timing and gapless fields Apple's sync sends for an MPEG Layer III
+     /// stream; `None` for every other format.
+-    #[serde(skip_serializing_if = "Option::is_none")]
++    #[serde(default, skip_serializing_if = "Option::is_none")]
+     pub apple_timing: Option<gapless::AppleTiming>,
+     pub metadata: Tags,
+     pub id3_version: Option<u8>,
+diff --git a/crates/music-protocol/src/media/mpeg/gapless.rs b/crates/music-protocol/src/media/mpeg/gapless.rs
+index d35957c..972ea5c 100644
+--- a/crates/music-protocol/src/media/mpeg/gapless.rs
++++ b/crates/music-protocol/src/media/mpeg/gapless.rs
+@@ -7,7 +7,7 @@
+ //! Fraunhofer's CRC-protected `0xB4` marker is not read; a file with one goes
+ //! by the search.
+ use anyhow::{Context, Result, ensure};
+-use serde::Serialize;
++use serde::{Deserialize, Serialize};
+ use std::io::{Read, Seek, SeekFrom};
+ use symphonia_core::{
+     audio::SampleBuffer,
+@@ -23,7 +23,7 @@ const ANALYSED: u32 = 0x0200_0003;
+ 
+ /// What Apple's rule reads from an ID3v2 tag besides the catalogue fields
+ /// (`0x140436bc8`, `0x14043686c`).
+-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
++#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct EncoderHints {
+     /// The last TENC or TSSE text; before one, the first comment's
+     /// description, or its text when it has none. At most 255 bytes.
+@@ -33,7 +33,7 @@ pub struct EncoderHints {
+     /// starts `MusicMatch` or `Amazon.com`: the file is a CD rip.
+     pub cd_rip: bool,
+     /// The text of a comment described `iTunSMPB`.
+-    #[serde(skip_serializing_if = "Option::is_none")]
++    #[serde(default, skip_serializing_if = "Option::is_none")]
+     pub itunsmpb: Option<String>,
+ }
+ 
+@@ -85,7 +85,7 @@ fn truncated(text: &str) -> &str {
+ /// how they were found (`heuristic`) and where the eighth frame from the end
+ /// starts (`resynch`, an MP3's only). An insert sends them as its gapless
+ /// fields.
+-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct Gapless {
+     pub delay: u64,
+     pub drain: u64,
+@@ -104,7 +104,7 @@ impl Gapless {
+ }
+ 
+ /// What Apple's sync sends for one MPEG Layer III file.
+-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct AppleTiming {
+     /// The frames Apple counts: a Xing or VBRI header's count when it
+     /// differs from the byte estimate, else the estimate when it is within
+@@ -127,7 +127,8 @@ pub struct AppleTiming {
+     pub heuristic: u32,
+     /// Where delay and drain came from: `itunsmpb`, `lame_tag`, `smpb_frame`
+     /// or `analysis` (the encoder rule and the tail search).
+-    pub source: &'static str,
++    #[serde(deserialize_with = "crate::media::interned")]
++    pub source: crate::media::Name,
+ }
+ 
+ #[derive(Clone, Copy)]
+diff --git a/crates/music-protocol/src/media/mpeg/timing.rs b/crates/music-protocol/src/media/mpeg/timing.rs
+index 3bcb947..f2d02a6 100644
+--- a/crates/music-protocol/src/media/mpeg/timing.rs
++++ b/crates/music-protocol/src/media/mpeg/timing.rs
+@@ -2,7 +2,7 @@
+ //! The complete bounded frame scan is hash-bound to EncodedMpeg1Layer3. Fractions
+ //! retain sample counts/rate exactly; no rounded duration enters identity.
+ use anyhow::{Result, ensure};
+-use serde::Serialize;
++use serde::{Deserialize, Serialize};
+ use sha2::{Digest, Sha256};
+ use std::{
+     collections::BTreeMap,
+@@ -13,23 +13,23 @@ const MAX_BYTES: u64 = 1024 * 1024 * 1024;
+ const MAX_FRAMES: u32 = 2_000_000;
+ const SAMPLES: u64 = 1152;
+ 
+-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct SampleDuration {
+     pub samples: u64,
+     pub sample_rate: u32,
+ }
+-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct BitrateCount {
+     pub kbps: u16,
+     pub frames: u32,
+ }
+-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+ #[serde(rename_all = "snake_case")]
+ pub enum BitrateMode {
+     Constant,
+     Variable,
+ }
+-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct FrameSummary {
+     pub frame_count: u32,
+     pub coded_duration: SampleDuration,
+@@ -39,9 +39,10 @@ pub struct FrameSummary {
+     pub channel_mode_counts: [u32; 4],
+     pub crc_protected_frames: u32,
+ }
+-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct TimingEvidence {
+-    pub schema: &'static str,
++    #[serde(deserialize_with = "crate::media::interned")]
++    pub schema: crate::media::Name,
+     pub frame_bytes_sha256: String,
+     pub physical: FrameSummary,
+     /// Only Xing/Info explicitly establishes a separate leading metadata frame.
+@@ -52,14 +53,14 @@ pub struct TimingEvidence {
+     pub header: Option<SeekHeader>,
+     pub native_timing_qualified: bool,
+ }
+-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+ #[serde(tag = "kind", rename_all = "snake_case")]
+ pub enum SeekHeader {
+     Xing(XingInfo),
+     Info(XingInfo),
+     Vbri(Vbri),
+ }
+-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct XingInfo {
+     pub frame_offset: u16,
+     pub flags: u32,
+@@ -71,9 +72,10 @@ pub struct XingInfo {
+     pub quality: Option<u32>,
+     pub encoder: Option<EncoderTag>,
+ }
+-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct EncoderTag {
+-    pub family: &'static str,
++    #[serde(deserialize_with = "crate::media::interned")]
++    pub family: crate::media::Name,
+     pub identifier_hex: String,
+     pub revision: u8,
+     pub method: u8,
+@@ -84,13 +86,13 @@ pub struct EncoderTag {
+     pub raw_tag_sha256: String,
+     pub crc_verified: bool,
+ }
+-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+ #[serde(rename_all = "snake_case")]
+ pub enum VbriCountBasis {
+     PhysicalFrames,
+     ExcludingFirstFrame,
+ }
+-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
++#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct Vbri {
+     pub frame_offset: u16,
+     pub version: u16,
+diff --git a/crates/rustunes/src/engine/planning/additive.rs b/crates/rustunes/src/engine/planning/additive.rs
+index 97f18bb..0bd6abe 100644
+--- a/crates/rustunes/src/engine/planning/additive.rs
++++ b/crates/rustunes/src/engine/planning/additive.rs
+@@ -1009,7 +1009,7 @@ fn mp3_row(
+         .filter(|t| t.file_bytes == f.file_bytes && hex(&t.full_file_sha256) == f.full_file_sha256)
+         .collect();
+     let fresh =
+-        music_protocol::media::mpeg::read(&sources.base_directory.join(&source.relative_path));
++        crate::engine::planning::source_reads::mpeg(&sources.base_directory.join(&source.relative_path));
+     let revalidated = fresh.as_ref().is_ok_and(|s| s == &source.source);
+     let duplicate = sources
+         .mp3_tracks
+@@ -1579,7 +1579,7 @@ pub(crate) fn uninsertable_sources(sources: &SourceCollection) -> Vec<(String, S
+             > 1;
+         let refusal = unconvertible(sources, &source.source)
+             .or_else(|| {
+-                music_protocol::media::mpeg::read(&path)
++                crate::engine::planning::source_reads::mpeg(&path)
+                     .and_then(|fresh| {
+                         ensure!(
+                             fresh == source.source,
+diff --git a/crates/rustunes/src/engine/planning/source_collection.rs b/crates/rustunes/src/engine/planning/source_collection.rs
+index b30b39a..9d5eb54 100644
+--- a/crates/rustunes/src/engine/planning/source_collection.rs
++++ b/crates/rustunes/src/engine/planning/source_collection.rs
+@@ -599,7 +599,7 @@ fn inspect_other(source: &SelectedSource) -> Result<music_protocol::media::mpeg:
+         )?,
+         "selected source changed since discovery"
+     );
+-    let inspected = music_protocol::media::mpeg::read(&source.absolute_path)?;
++    let inspected = crate::engine::planning::source_reads::mpeg(&source.absolute_path)?;
+     ensure!(
+         same_metadata(
+             &source.discovered,
+diff --git a/crates/rustunes/src/engine/planning/source_collection/mp3/preparation/tests.rs b/crates/rustunes/src/engine/planning/source_collection/mp3/preparation/tests.rs
+index 4d4e66d..7c733a6 100644
+--- a/crates/rustunes/src/engine/planning/source_collection/mp3/preparation/tests.rs
++++ b/crates/rustunes/src/engine/planning/source_collection/mp3/preparation/tests.rs
+@@ -7,9 +7,11 @@ mod pins;
+ struct Temp(PathBuf);
+ impl Temp {
+     fn new() -> Self {
++        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+         let path = std::env::temp_dir().join(format!(
+-            "mpeg-preparation-{}-{}",
++            "mpeg-preparation-{}-{}-{}",
+             std::process::id(),
++            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+             std::time::SystemTime::now()
+                 .duration_since(UNIX_EPOCH)
+                 .unwrap()
+diff --git a/crates/rustunes/src/engine/planning/source_reads.rs b/crates/rustunes/src/engine/planning/source_reads.rs
+index ffb4f99..a8345e2 100644
+--- a/crates/rustunes/src/engine/planning/source_reads.rs
++++ b/crates/rustunes/src/engine/planning/source_reads.rs
+@@ -18,6 +18,7 @@ use crate::engine::state::cache_database;
+ use anyhow::{Result, ensure};
+ use music_protocol::media::artwork;
+ use music_protocol::media::fingerprint;
++use music_protocol::media::{fingerprint::EncodedAudio, mpeg};
+ use rusqlite::{Connection, OptionalExtension, params};
+ use sha2::{Digest, Sha256};
+ use std::{
+@@ -73,6 +74,7 @@ impl Key {
+ 
+ static FINGERPRINTS: Mutex<Option<HashMap<Key, fingerprint::SourceFingerprint>>> = Mutex::new(None);
+ static ARTWORK: Mutex<Option<HashMap<Key, artwork::SourceArtwork>>> = Mutex::new(None);
++static MPEG: Mutex<Option<HashMap<Key, mpeg::Source>>> = Mutex::new(None);
+ static DISK: OnceLock<Disk> = OnceLock::new();
+ 
+ fn kept<T: Clone + Persisted>(
+@@ -117,6 +119,12 @@ pub(crate) fn fingerprint(path: &Path) -> Result<fingerprint::SourceFingerprint>
+     kept(&FINGERPRINTS, path, fingerprint::read)
+ }
+ 
++/// `mpeg::read` (every format but ALAC), unless this file was read unchanged
++/// before.
++pub(crate) fn mpeg(path: &Path) -> Result<mpeg::Source> {
++    kept(&MPEG, path, mpeg::read)
++}
++
+ /// `artwork::read`, unless this file was read unchanged before.
+ pub(crate) fn artwork(path: &Path) -> Result<artwork::SourceArtwork> {
+     kept(&ARTWORK, path, artwork::read)
+@@ -138,13 +146,15 @@ pub(crate) fn report() -> Option<(u64, u64)> {
+     (counts != (0, 0)).then_some(counts)
+ }
+ 
+-/// Reads every M4A's fingerprint and artwork on a few threads, so the
++/// Reads every source's fingerprint and artwork on a few threads, so the
+ /// sequential passes that follow find them kept. Failures are left for those
+ /// passes to report.
+ pub(crate) fn warm<'a>(paths: impl IntoIterator<Item = &'a Path>) {
+     let paths: Vec<&Path> = paths
+         .into_iter()
+-        .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("m4a")))
++        .filter(|p| {
++            p.extension().is_some_and(|e| e.eq_ignore_ascii_case("m4a")) || mpeg::is_other_audio(p)
++        })
+         .collect();
+     let workers = std::thread::available_parallelism()
+         .map_or(1, |n| n.get())
+@@ -158,7 +168,9 @@ pub(crate) fn warm<'a>(paths: impl IntoIterator<Item = &'a Path>) {
+         for _ in 0..workers {
+             scope.spawn(|| {
+                 while let Some(path) = paths.get(next.fetch_add(1, Ordering::Relaxed)) {
+-                    let _ = fingerprint(path);
++                    if fingerprint(path).is_err() {
++                        let _ = mpeg(path);
++                    }
+                     let _ = artwork(path);
+                 }
+             });
+@@ -180,6 +192,10 @@ const SCHEMA: cache_database::Schema = cache_database::Schema {
+             "covers",
+             "CREATE TABLE covers(sha256 BLOB PRIMARY KEY CHECK(length(sha256)=32), bytes BLOB NOT NULL CHECK(length(bytes)>0)) STRICT, WITHOUT ROWID",
+         ),
++        (
++            "mpeg_sources",
++            "CREATE TABLE mpeg_sources(path BLOB PRIMARY KEY CHECK(length(path) BETWEEN 1 AND 4096), stat BLOB NOT NULL CHECK(length(stat)=56), source TEXT NOT NULL, stored INTEGER NOT NULL) STRICT, WITHOUT ROWID",
++        ),
+         (
+             "fingerprints",
+             "CREATE TABLE fingerprints(path BLOB PRIMARY KEY CHECK(length(path) BETWEEN 1 AND 4096), stat BLOB NOT NULL CHECK(length(stat)=56), full_file_sha256 BLOB NOT NULL CHECK(length(full_file_sha256)=32), audio_sha256 BLOB NOT NULL CHECK(length(audio_sha256)=32), alac_config_sha256 BLOB NOT NULL CHECK(length(alac_config_sha256)=32), sample_sizes_sha256 BLOB NOT NULL CHECK(length(sample_sizes_sha256)=32), media_sha256 BLOB NOT NULL CHECK(length(media_sha256)=32), timescale INTEGER NOT NULL, duration_ticks INTEGER NOT NULL, media_bytes INTEGER NOT NULL, stored INTEGER NOT NULL) STRICT, WITHOUT ROWID",
+@@ -254,6 +270,7 @@ fn open(directory: &Path) -> Result<Connection> {
+     let cutoff = unix_now() - KEEP_DAYS * 86_400;
+     c.execute("DELETE FROM fingerprints WHERE stored<?1", [cutoff])?;
+     c.execute("DELETE FROM artwork WHERE stored<?1", [cutoff])?;
++    c.execute("DELETE FROM mpeg_sources WHERE stored<?1", [cutoff])?;
+     c.execute(
+         "DELETE FROM covers WHERE sha256 NOT IN (SELECT cover_sha256 FROM artwork WHERE cover_sha256 IS NOT NULL)",
+         [],
+@@ -461,6 +478,76 @@ impl Persisted for artwork::SourceArtwork {
+     }
+ }
+ 
++/// A `mpeg::Source` with the fields its report form leaves out.
++#[derive(serde::Serialize, serde::Deserialize)]
++struct StoredMpeg {
++    source: mpeg::Source,
++    encoded: Option<EncodedAudio>,
++    declared_types: Vec<bool>,
++}
++impl StoredMpeg {
++    fn new(source: &mpeg::Source) -> Self {
++        Self {
++            source: source.clone(),
++            encoded: source.stream.as_ref().map(|s| s.encoded.clone()),
++            declared_types: source.artwork.iter().map(|p| p.declared_type).collect(),
++        }
++    }
++    fn restore(self) -> Result<mpeg::Source> {
++        let mut source = self.source;
++        ensure!(
++            source.stream.is_some() == self.encoded.is_some()
++                && source.artwork.len() == self.declared_types.len(),
++            "source cache row is incomplete"
++        );
++        if let (Some(stream), Some(encoded)) = (source.stream.as_mut(), self.encoded) {
++            stream.encoded = encoded;
++        }
++        for (picture, declared) in source.artwork.iter_mut().zip(self.declared_types) {
++            picture.declared_type = declared;
++        }
++        Ok(source)
++    }
++}
++impl Persisted for mpeg::Source {
++    fn load(c: &Connection, key: &Key) -> Result<Option<Self>> {
++        let Some(text) = c
++            .query_row(
++                "SELECT source FROM mpeg_sources WHERE path=?1 AND stat=?2",
++                params![key.path(), key.stat()],
++                |r| r.get::<_, String>(0),
++            )
++            .optional()?
++        else {
++            return Ok(None);
++        };
++        let source = serde_json::from_str::<StoredMpeg>(&text)?.restore()?;
++        ensure!(
++            source.fingerprint.file_bytes == key.size,
++            "source cache row size differs from its file"
++        );
++        Ok(Some(source))
++    }
++    fn store(&self, c: &Connection, key: &Key) -> Result<()> {
++        ensure!(
++            self.fingerprint.file_bytes == key.size,
++            "source size differs from its file"
++        );
++        let text = serde_json::to_string(&StoredMpeg::new(self))?;
++        // Kept only when it reads back identical, so a field the stored form
++        // can't carry costs a read instead of changing a plan.
++        ensure!(
++            serde_json::from_str::<StoredMpeg>(&text)?.restore()? == *self,
++            "source does not survive the cache"
++        );
++        c.execute(
++            "INSERT OR REPLACE INTO mpeg_sources VALUES (?1,?2,?3,?4)",
++            params![key.path(), key.stat(), text, unix_now()],
++        )?;
++        Ok(())
++    }
++}
++
+ #[cfg(test)]
+ impl Persisted for Vec<u8> {
+     fn load(_: &Connection, _: &Key) -> Result<Option<Self>> {
+diff --git a/crates/rustunes/src/engine/planning/source_reads/tests.rs b/crates/rustunes/src/engine/planning/source_reads/tests.rs
+index 48a17c7..b654323 100644
+--- a/crates/rustunes/src/engine/planning/source_reads/tests.rs
++++ b/crates/rustunes/src/engine/planning/source_reads/tests.rs
+@@ -250,3 +250,24 @@ fn a_row_stored_under_another_composite_definition_loads_with_this_builds() {
+     assert!(loaded == fingerprint);
+     assert_eq!(loaded.audio.sha256, loaded.audio.composite_sha256());
+ }
++
++#[test]
++fn every_other_format_persists_and_reads_back_identical() {
++    let dir = Temp::new("mpeg");
++    let cache = dir.0.join("cache");
++    for name in ["tone-aac.m4a", "tone-mp3-vbr.mp3", "tone-mpeg2.mp3", "tone-flac.flac", "tone-wav.wav", "tone-aiff.aif"] {
++        let path = dir.0.join(name);
++        std::fs::copy(
++            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures").join(name),
++            &path,
++        )
++        .unwrap();
++        let stat = key(&path).unwrap();
++        let source = mpeg::read(&path).unwrap();
++        Disk::new(cache.clone(), true).store(&stat, &source);
++        let later = Disk::new(cache.clone(), true);
++        assert!(later.load::<mpeg::Source>(&stat) == Some(source), "{name}");
++        std::fs::write(&path, b"changed").unwrap();
++        assert!(later.load::<mpeg::Source>(&key(&path).unwrap()).is_none(), "{name}");
++    }
++}
+diff --git a/crates/rustunes/src/engine/planning/source_validation.rs b/crates/rustunes/src/engine/planning/source_validation.rs
+index 5674ff8..e84e18c 100644
+--- a/crates/rustunes/src/engine/planning/source_validation.rs
++++ b/crates/rustunes/src/engine/planning/source_validation.rs
+@@ -216,7 +216,7 @@ pub fn inspect(path: &Path, decode: bool) -> Report {
+     // An M4A that is not ALAC may be AAC, which the other reader takes.
+     let other = music_protocol::media::mpeg::is_other_audio(path)
+         || (super::source_reads::fingerprint(path).is_err()
+-            && music_protocol::media::mpeg::read(path).is_ok());
++            && crate::engine::planning::source_reads::mpeg(path).is_ok());
+     if other {
+         // Every source this reader takes goes in an insert batch.
+         report.profile = if music_protocol::media::mpeg::is_mp3(path) {
+@@ -225,7 +225,7 @@ pub fn inspect(path: &Path, decode: bool) -> Report {
+             OTHER_PROFILE
+         };
+         report.mp3_library_eligibility = Some("not_checked");
+-        match music_protocol::media::mpeg::read(path) {
++        match crate::engine::planning::source_reads::mpeg(path) {
+             Ok(source) => {
+                 report.profile = if source.stream.is_none() {
+                     MPEG1_PROFILE
+@@ -339,7 +339,7 @@ fn inspect_inner(path: &Path, decode: bool, report: &mut Report) -> Result<()> {
+         "source must be a regular nonsymlink file"
+     );
+     let fingerprint = super::source_reads::fingerprint(path)
+-        .map_err(|error| match music_protocol::media::mpeg::read(path) {
++        .map_err(|error| match crate::engine::planning::source_reads::mpeg(path) {
+             Err(other) => crate::engine::planning::source_collection::refused_m4a(error, &other),
+             Ok(_) => error,
+         })
+diff --git a/crates/rustunes/src/engine/state/journal/source_attribution.rs b/crates/rustunes/src/engine/state/journal/source_attribution.rs
+index c485790..386aad9 100644
+--- a/crates/rustunes/src/engine/state/journal/source_attribution.rs
++++ b/crates/rustunes/src/engine/state/journal/source_attribution.rs
+@@ -208,7 +208,7 @@ fn original_physical(
+     let source = if binding.content.source.is_alac() {
+         music_protocol::media::fingerprint::read(path)?.into()
+     } else {
+-        music_protocol::media::mpeg::read(path)?.transferred_identity()?
++        crate::engine::planning::source_reads::mpeg(path)?.transferred_identity()?
+     };
+     ensure!(
+         source == binding.content.source,
+@@ -308,7 +308,7 @@ fn producer(
+                     && digest(&input["library_sha256"])? == identity.library_digest(),
+                 "MPEG producer identity scope differs"
+             );
+-            let inspected = music_protocol::media::mpeg::read(
++            let inspected = crate::engine::planning::source_reads::mpeg(
+                 original_source.context("original MPEG source required")?,
+             )?;
+             ensure!(
 -- 
 2.56.0
 
