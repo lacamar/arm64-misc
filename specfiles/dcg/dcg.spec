@@ -4,7 +4,7 @@
 %global rustflags_codegen_units 16
 
 Name:           dcg
-Version:        0.15.3
+Version:        0.16.0
 Release:        1%{?dist}
 Summary:        Block destructive commands run by AI coding agents
 
@@ -48,6 +48,9 @@ target/rpm/%{name} completions fish | install -Dm0644 /dev/stdin %{buildroot}%{f
 %{fish_completions_dir}/%{name}.fish
 
 %changelog
+* Thu Nov 05 2026 Lachlan Marie <lchlnm@pm.me> - 0.16.0-1
+- Update to 0.16.0
+
 * Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 0.15.3-1
 - Update to 0.15.3
 - Fix aws-lc-sys jitterentropy build
