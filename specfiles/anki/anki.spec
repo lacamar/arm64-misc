@@ -1,6 +1,6 @@
 %global __requires_exclude_from ^%{_datadir}/anki/.*$
 %global __provides_exclude_from ^%{_datadir}/anki/.*$
-%global tag 26.09.3
+%global tag 26.09.4
 
 Name:           anki
 Version:        %{tag}
@@ -90,6 +90,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/anki.desktop
 %{_datadir}/pixmaps/anki.png
 
 %changelog
+* Thu Nov 05 2026 Lachlan Marie <lchlnm@pm.me> - 26.09.4-3
+- Update to 26.09.4
+
 * Sat Oct 03 2026 Lachlan Marie <lchlnm@pm.me> - 26.09.3-3
  - Drop setuptools/wheel from venv
 
