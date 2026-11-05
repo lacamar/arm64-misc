@@ -1,6 +1,6 @@
 Name:           python-bleak
 Version:        3.0.2
-Release:        3%{?dist}
+Release:        4%{?dist}
 Summary:        Cross-platform Bluetooth Low Energy client
 
 License:        MIT
@@ -22,6 +22,7 @@ Summary:        %{summary}
 
 %prep
 %autosetup -n bleak-%{version}
+sed -i 's/"uv_build[^"]*"/"uv_build>=0.10.9"/' pyproject.toml
 
 %generate_buildrequires
 %pyproject_buildrequires
@@ -39,6 +40,9 @@ Summary:        %{summary}
 %files -n python3-bleak -f %{pyproject_files}
 
 %changelog
+* Fri Nov 06 2026 Lachlan Marie <lchlnm@pm.me> - 3.0.2-4
+- Relax uv_build upper bound for F45
+
 * Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 3.0.2-3
 - Fix subpackage name
 - Skip non-Linux imports

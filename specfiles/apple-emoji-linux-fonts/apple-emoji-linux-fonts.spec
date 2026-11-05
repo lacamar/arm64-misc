@@ -6,7 +6,7 @@
 
 Name:           %{fontname}-fonts
 Version:        26.2.1
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Apple Color Emoji font for Linux
 
 License:        OFL-1.1 AND Apache-2.0
@@ -105,6 +105,9 @@ appstream-util validate-relax --nonet \
 %{_metainfodir}/%{fontname}.metainfo.xml
 
 %changelog
+* Fri Nov 06 2026 Lachlan Marie <lchlnm@pm.me> - 26.2.1-3
+- Rebuild for F45
+
 * Thu Aug 20 2026 Lachlan Marie <lchlnm@pm.me> - 26.2.1-2
 - Fix 77 default (no skin-tone modifier) hand/body emoji rendering with the
   dark skin tone instead of the standard yellow default (upstream regression

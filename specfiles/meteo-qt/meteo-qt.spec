@@ -2,7 +2,7 @@
 
 Name:           meteo-qt
 Version:        %{tag}
-Release:        %autorelease
+Release:        2%{?dist}
 Summary:        Weather status system tray application
 License:        GPLv3
 URL:            https://github.com/dglent/meteo-qt
@@ -61,6 +61,9 @@ rm -rf %{buildroot}%{python3_sitelib}/usr
 
 
 %changelog
+* Fri Nov 06 2026 Lachlan Marie <lchlnm@pm.me> - 4.3-2
+- Rebuild for Python 3.15
+
 * Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 4.3-1
  - Update to 4.3
 

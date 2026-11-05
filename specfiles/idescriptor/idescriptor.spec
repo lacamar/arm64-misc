@@ -7,7 +7,7 @@
 
 Name:           idescriptor
 Version:        0.6.2
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Cross-platform tool for managing iDevices (iPhone, iPad, iPod)
 
 License:        AGPL-3.0-or-later
@@ -108,6 +108,9 @@ udevadm control --reload-rules >/dev/null 2>&1 || :
 %{_udevrulesdir}/99-idevice.rules
 
 %changelog
+* Fri Nov 06 2026 Lachlan Marie <lchlnm@pm.me> - 0.6.2-3
+- Rebuild for ffmpeg 9
+
 * Wed Sep 02 2026 Lachlan Marie <lchlnm@pm.me> - 0.6.2-2
 - Drop the >= 2.7.0 version constraint on libplist-devel: Fedora 43 only
   ships 2.6.0, so the constraint made `dnf5 builddep` fail to resolve on
