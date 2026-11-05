@@ -1,5 +1,5 @@
 diff --git a/src/handlers/compositor.rs b/src/handlers/compositor.rs
-index 88158cd..cc2ace6 100644
+index 88158cdc..cc2ace65 100644
 --- a/src/handlers/compositor.rs
 +++ b/src/handlers/compositor.rs
 @@ -7,6 +7,7 @@ use smithay::reexports::wayland_server::protocol::wl_buffer;
@@ -23,7 +23,7 @@ index 88158cd..cc2ace6 100644
  
      fn commit(&mut self, surface: &WlSurface) {
 diff --git a/src/niri.rs b/src/niri.rs
-index 774586f..10b94c1 100644
+index b6378e0b..5dc9f763 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -62,6 +62,7 @@ use smithay::reexports::calloop::{
@@ -63,7 +63,7 @@ index 774586f..10b94c1 100644
  use crate::protocols::mutter_x11_interop::MutterX11InteropManagerState;
  use crate::protocols::output_management::OutputManagementManagerState;
 -use crate::protocols::session_management::{self, SessionManagementState};
- use crate::protocols::screencopy::{Screencopy, ScreencopyBuffer, ScreencopyManagerState};
+ use crate::protocols::screencopy::{Screencopy, ScreencopyManagerState};
 +use crate::protocols::session_management::{self, SessionManagementState};
  use crate::render_helpers::blur::BlurOptions;
  use crate::render_helpers::debug::push_opaque_regions;
@@ -86,7 +86,7 @@ index 774586f..10b94c1 100644
          // Handle commits for surfaces whose blockers cleared this cycle. This should happen before
          // layout.refresh() since this is where these surfaces handle commits.
          self.notify_blocker_cleared();
-@@ -2738,6 +2748,11 @@ impl Niri {
+@@ -2792,6 +2802,11 @@ impl Niri {
              )
              .unwrap();
  
@@ -98,7 +98,7 @@ index 774586f..10b94c1 100644
          let mutter_x11_interop_state =
              MutterX11InteropManagerState::new::<State, _>(&display_handle, move |_| true);
  
-@@ -2980,6 +2995,8 @@ impl Niri {
+@@ -3034,6 +3049,8 @@ impl Niri {
              pointer_contents: PointContents::default(),
              pointer_visibility: PointerVisibility::Visible,
              pointer_inactivity_timer: None,
@@ -107,7 +107,7 @@ index 774586f..10b94c1 100644
              pointer_inactivity_timer_got_reset: false,
              notified_activity_this_iteration: false,
              pointer_inside_hot_corner: false,
-@@ -5166,15 +5183,29 @@ impl Niri {
+@@ -5226,15 +5243,29 @@ impl Niri {
  
          let current = current
              || self.layout.windows_for_output(output).any(|mapped| {
@@ -144,7 +144,7 @@ index 774586f..10b94c1 100644
                          {
                              visible = true;
                          }
-@@ -5510,6 +5541,7 @@ impl Niri {
+@@ -5570,6 +5601,7 @@ impl Niri {
  
          let state = self.output_state.get(output).unwrap();
          let sequence = state.frame_callback_sequence;
@@ -152,7 +152,7 @@ index 774586f..10b94c1 100644
  
          let should_send = |surface: &WlSurface, states: &SurfaceData| {
              // Do the standard primary scanout output check. For pointer surfaces it deduplicates
-@@ -5538,6 +5570,7 @@ impl Niri {
+@@ -5598,6 +5630,7 @@ impl Niri {
  
              if send {
                  *last_sent_at = Some((output.clone(), sequence));
@@ -160,7 +160,7 @@ index 774586f..10b94c1 100644
                  Some(output.clone())
              } else {
                  None
-@@ -5617,24 +5650,19 @@ impl Niri {
+@@ -5677,24 +5710,19 @@ impl Niri {
          let output = &output;
  
          let frame_callback_time = get_monotonic_time();
@@ -192,7 +192,7 @@ index 774586f..10b94c1 100644
              }
  
              if let Some(surface) = &state.lock_surface {
-@@ -5643,7 +5671,7 @@ impl Niri {
+@@ -5703,7 +5731,7 @@ impl Niri {
                      output,
                      frame_callback_time,
                      FRAME_CALLBACK_THROTTLE,
@@ -201,7 +201,7 @@ index 774586f..10b94c1 100644
                  );
              }
          }
-@@ -5654,7 +5682,7 @@ impl Niri {
+@@ -5714,7 +5742,7 @@ impl Niri {
                  output,
                  frame_callback_time,
                  FRAME_CALLBACK_THROTTLE,
@@ -210,7 +210,7 @@ index 774586f..10b94c1 100644
              );
          }
  
-@@ -5664,11 +5692,59 @@ impl Niri {
+@@ -5724,11 +5752,59 @@ impl Niri {
                  output,
                  frame_callback_time,
                  FRAME_CALLBACK_THROTTLE,
@@ -271,7 +271,7 @@ index 774586f..10b94c1 100644
      pub fn take_presentation_feedbacks(
          &mut self,
          output: &Output,
-@@ -7494,3 +7570,18 @@ niri_render_elements! {
+@@ -7626,3 +7702,18 @@ niri_render_elements! {
          RelocatedMemoryBuffer = RelocateRenderElement<MemoryRenderBufferRenderElement<R>>,
      }
  }

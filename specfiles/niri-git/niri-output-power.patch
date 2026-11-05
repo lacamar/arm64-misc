@@ -1,5 +1,5 @@
 diff --git a/src/niri.rs b/src/niri.rs
-index 2d169a1..3c9fc37 100644
+index 493a16ee..8a4411a3 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -172,6 +172,7 @@ use crate::protocols::color_management::{self, ColorManagementState};
@@ -9,7 +9,7 @@ index 2d169a1..3c9fc37 100644
 +use crate::protocols::output_power::OutputPowerManagerState;
  use crate::protocols::mutter_x11_interop::MutterX11InteropManagerState;
  use crate::protocols::output_management::OutputManagementManagerState;
- use crate::protocols::screencopy::{Screencopy, ScreencopyBuffer, ScreencopyManagerState};
+ use crate::protocols::screencopy::{Screencopy, ScreencopyManagerState};
 @@ -360,6 +361,7 @@ pub struct Niri {
      pub presentation_state: PresentationState,
      pub security_context_state: SecurityContextState,
@@ -18,7 +18,7 @@ index 2d169a1..3c9fc37 100644
      pub color_management_state: ColorManagementState,
      pub activation_state: XdgActivationState,
      pub mutter_x11_interop_state: MutterX11InteropManagerState,
-@@ -2747,6 +2749,7 @@ impl Niri {
+@@ -2801,6 +2803,7 @@ impl Niri {
              GammaControlManagerState::new::<State, _>(&display_handle, move |client| {
                  is_tty && !client.get_data::<ClientState>().unwrap().restricted
              });
@@ -26,7 +26,7 @@ index 2d169a1..3c9fc37 100644
          let color_management_state =
              ColorManagementState::new::<State, _>(&display_handle, |_| true);
          let activation_state = XdgActivationState::new::<State>(&display_handle);
-@@ -2990,6 +2993,7 @@ impl Niri {
+@@ -3044,6 +3047,7 @@ impl Niri {
              presentation_state,
              security_context_state,
              gamma_control_manager_state,
@@ -34,7 +34,7 @@ index 2d169a1..3c9fc37 100644
              color_management_state,
              activation_state,
              mutter_x11_interop_state,
-@@ -3374,6 +3378,7 @@ impl Niri {
+@@ -3428,6 +3432,7 @@ impl Niri {
          self.global_space.unmap_output(output);
          self.reposition_outputs(None);
          self.gamma_control_manager_state.output_removed(output);
@@ -42,7 +42,7 @@ index 2d169a1..3c9fc37 100644
  
          let state = self.output_state.remove(output).unwrap();
  
-@@ -3496,6 +3501,7 @@ impl Niri {
+@@ -3550,6 +3555,7 @@ impl Niri {
  
          self.monitors_active = false;
          backend.set_monitors_active(false);
@@ -50,7 +50,7 @@ index 2d169a1..3c9fc37 100644
      }
  
      pub fn activate_monitors(&mut self, backend: &mut Backend) {
-@@ -3505,6 +3511,7 @@ impl Niri {
+@@ -3559,6 +3565,7 @@ impl Niri {
  
          self.monitors_active = true;
          backend.set_monitors_active(true);
@@ -59,7 +59,7 @@ index 2d169a1..3c9fc37 100644
          self.queue_redraw_all();
      }
 diff --git a/src/protocols/mod.rs b/src/protocols/mod.rs
-index bd1dad5..a9a23a6 100644
+index bd1dad5d..a9a23a6a 100644
 --- a/src/protocols/mod.rs
 +++ b/src/protocols/mod.rs
 @@ -4,6 +4,7 @@ pub mod foreign_toplevel;
@@ -72,7 +72,7 @@ index bd1dad5..a9a23a6 100644
  
 diff --git a/src/protocols/output_power.rs b/src/protocols/output_power.rs
 new file mode 100644
-index 0000000..56d7905
+index 00000000..56d79055
 --- /dev/null
 +++ b/src/protocols/output_power.rs
 @@ -0,0 +1,133 @@

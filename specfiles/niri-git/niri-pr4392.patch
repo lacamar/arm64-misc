@@ -1,5 +1,5 @@
 diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
-index fad654b..805457b 100644
+index fad654b3..805457b0 100644
 --- a/niri-config/src/lib.rs
 +++ b/niri-config/src/lib.rs
 @@ -2405,6 +2405,7 @@ mod tests {
@@ -11,7 +11,7 @@ index fad654b..805457b 100644
                          xray: None,
                          blur: None,
 diff --git a/niri-config/src/window_rule.rs b/niri-config/src/window_rule.rs
-index b3543f9..4f79fc5 100644
+index b3543f92..4f79fc58 100644
 --- a/niri-config/src/window_rule.rs
 +++ b/niri-config/src/window_rule.rs
 @@ -80,6 +80,8 @@ pub struct WindowRule {
@@ -24,7 +24,7 @@ index b3543f9..4f79fc5 100644
      pub background_effect: BackgroundEffectRule,
      #[knuffel(child, default)]
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index 231a914..c924b5c 100644
+index 231a9146..c924b5c7 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
 @@ -1462,6 +1462,84 @@ impl<W: LayoutElement> Layout<W> {
@@ -113,10 +113,10 @@ index 231a914..c924b5c 100644
      ///
      /// We will try to fit popups inside this rect.
 diff --git a/src/niri.rs b/src/niri.rs
-index 750d1d5..e6835e9 100644
+index 3eed11f9..7e7bb7e2 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
-@@ -190,7 +190,7 @@ use crate::utils::vblank_throttle::VBlankThrottle;
+@@ -189,7 +189,7 @@ use crate::utils::vblank_throttle::VBlankThrottle;
  use crate::utils::watcher::Watcher;
  use crate::utils::xwayland::satellite::Satellite;
  use crate::utils::{
@@ -125,7 +125,7 @@ index 750d1d5..e6835e9 100644
      make_screenshot_path, output_matches_name, output_size, panel_orientation,
      send_scale_transform, winit_scale, write_png_rgba8, xwayland,
  };
-@@ -635,6 +635,11 @@ struct SurfaceFrameThrottlingState {
+@@ -634,6 +634,11 @@ struct SurfaceFrameThrottlingState {
      last_sent_at: RefCell<Option<(Output, u32)>>,
  }
  
@@ -137,7 +137,7 @@ index 750d1d5..e6835e9 100644
  pub enum CenterCoords {
      Separately,
      Both,
-@@ -726,6 +731,89 @@ impl Default for SurfaceFrameThrottlingState {
+@@ -725,6 +730,89 @@ impl Default for SurfaceFrameThrottlingState {
          }
      }
  }
@@ -227,7 +227,7 @@ index 750d1d5..e6835e9 100644
  
  impl KeyboardFocus {
      pub fn surface(&self) -> Option<&WlSurface> {
-@@ -5398,6 +5486,7 @@ impl Niri {
+@@ -5459,6 +5547,7 @@ impl Niri {
          let frame_callback_time = get_monotonic_time();
  
          for mapped in self.layout.windows_for_output_mut(output) {
@@ -236,7 +236,7 @@ index 750d1d5..e6835e9 100644
                  output,
                  frame_callback_time,
 diff --git a/src/utils/mod.rs b/src/utils/mod.rs
-index 6d513eb..6f3684c 100644
+index 6d513eb6..6f3684cd 100644
 --- a/src/utils/mod.rs
 +++ b/src/utils/mod.rs
 @@ -165,6 +165,16 @@ pub fn get_monotonic_time() -> Duration {
@@ -257,12 +257,12 @@ index 6d513eb..6f3684c 100644
      rect.loc + rect.size.downscale(2).to_point()
  }
 diff --git a/src/window/mapped.rs b/src/window/mapped.rs
-index 785e408..483fc25 100644
+index f61681d1..e1ed408f 100644
 --- a/src/window/mapped.rs
 +++ b/src/window/mapped.rs
 @@ -611,6 +611,16 @@ impl Mapped {
-     pub fn is_urgent(&self) -> bool {
-         self.is_urgent
+     pub fn capture_bbox(&self, scale: Scale<f64>) -> Rectangle<i32, Physical> {
+         self.window.bbox_with_popups().to_physical_precise_up(scale)
      }
 +
 +    /// The forced rendering frame rate in millihertz if enabled (either due to
@@ -278,7 +278,7 @@ index 785e408..483fc25 100644
  
  impl Drop for Mapped {
 diff --git a/src/window/mod.rs b/src/window/mod.rs
-index c6a24b1..434e806 100644
+index c6a24b1d..434e8069 100644
 --- a/src/window/mod.rs
 +++ b/src/window/mod.rs
 @@ -126,6 +126,9 @@ pub struct ResolvedWindowRules {

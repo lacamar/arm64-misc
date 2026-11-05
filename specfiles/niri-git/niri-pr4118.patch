@@ -1,5 +1,5 @@
 diff --git a/docs/wiki/Configuration:-Window-Rules.md b/docs/wiki/Configuration:-Window-Rules.md
-index 48a5749..e91139e 100644
+index 0d7e820f..4d83b63d 100644
 --- a/docs/wiki/Configuration:-Window-Rules.md
 +++ b/docs/wiki/Configuration:-Window-Rules.md
 @@ -198,13 +198,31 @@ You can find the title and the app ID of a window by running `niri msg pick-wind
@@ -36,10 +36,10 @@ index 48a5749..e91139e 100644
  
  Can be `true` or `false`.
 diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
-index 3a58601..54c364a 100644
+index 195f948f..2c9e40b8 100644
 --- a/niri-config/src/lib.rs
 +++ b/niri-config/src/lib.rs
-@@ -1768,6 +1768,7 @@ mod tests {
+@@ -2255,6 +2255,7 @@ mod tests {
                              is_window_cast_target: None,
                              is_urgent: None,
                              at_startup: None,
@@ -47,7 +47,7 @@ index 3a58601..54c364a 100644
                          },
                      ],
                      excludes: [
-@@ -1787,6 +1788,7 @@ mod tests {
+@@ -2274,6 +2275,7 @@ mod tests {
                              is_window_cast_target: None,
                              is_urgent: None,
                              at_startup: None,
@@ -55,7 +55,7 @@ index 3a58601..54c364a 100644
                          },
                          Match {
                              app_id: None,
-@@ -1802,6 +1804,7 @@ mod tests {
+@@ -2289,6 +2291,7 @@ mod tests {
                              is_window_cast_target: None,
                              is_urgent: None,
                              at_startup: None,
@@ -64,10 +64,10 @@ index 3a58601..54c364a 100644
                      ],
                      default_column_width: None,
 diff --git a/niri-config/src/window_rule.rs b/niri-config/src/window_rule.rs
-index e8e0c2f..f342efc 100644
+index 4f79fc58..eddc0a08 100644
 --- a/niri-config/src/window_rule.rs
 +++ b/niri-config/src/window_rule.rs
-@@ -143,6 +143,8 @@ pub struct Match {
+@@ -154,6 +154,8 @@ pub struct Match {
      pub is_urgent: Option<bool>,
      #[knuffel(property)]
      pub at_startup: Option<bool>,
@@ -77,10 +77,10 @@ index e8e0c2f..f342efc 100644
  
  #[derive(knuffel::Decode, Debug, Clone, Copy, PartialEq)]
 diff --git a/niri-ipc/src/lib.rs b/niri-ipc/src/lib.rs
-index 9c7b992..444ec4b 100644
+index 624fb9ab..d2f5e613 100644
 --- a/niri-ipc/src/lib.rs
 +++ b/niri-ipc/src/lib.rs
-@@ -1391,6 +1391,8 @@ pub struct Window {
+@@ -1412,6 +1412,8 @@ pub struct Window {
      ///
      /// The timestamp comes from the monotonic clock.
      pub focus_timestamp: Option<Timestamp>,
@@ -89,7 +89,7 @@ index 9c7b992..444ec4b 100644
  }
  
  /// A moment in time.
-@@ -1449,6 +1451,16 @@ pub struct WindowLayout {
+@@ -1470,6 +1472,16 @@ pub struct WindowLayout {
      pub window_offset_in_tile: (f64, f64),
  }
  
@@ -107,7 +107,7 @@ index 9c7b992..444ec4b 100644
  #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
  #[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 diff --git a/src/handlers/mod.rs b/src/handlers/mod.rs
-index 2ec8a86..2186450 100644
+index c260f892..8f52bec3 100644
 --- a/src/handlers/mod.rs
 +++ b/src/handlers/mod.rs
 @@ -23,6 +23,7 @@ use smithay::input::tablet::TabletSeatHandler;
@@ -126,7 +126,7 @@ index 2ec8a86..2186450 100644
  
  pub use crate::handlers::xdg_shell::KdeDecorationsModeState;
  use crate::input::click_grab::ClickGrab;
-@@ -833,6 +835,16 @@ impl XdgActivationHandler for State {
+@@ -824,6 +826,16 @@ impl XdgActivationHandler for State {
      }
  }
  
@@ -144,7 +144,7 @@ index 2ec8a86..2186450 100644
  
  impl OutputManagementHandler for State {
 diff --git a/src/ipc/client.rs b/src/ipc/client.rs
-index 8010734..8345170 100644
+index 8010734f..8345170e 100644
 --- a/src/ipc/client.rs
 +++ b/src/ipc/client.rs
 @@ -9,6 +9,7 @@ use niri_ipc::socket::Socket;
@@ -182,7 +182,7 @@ index 8010734..8345170 100644
          "  Is floating: {}",
          if window.is_floating { "yes" } else { "no" }
 diff --git a/src/ipc/server.rs b/src/ipc/server.rs
-index 9a16f9c..fc9a4d5 100644
+index be133ba1..c03dbfda 100644
 --- a/src/ipc/server.rs
 +++ b/src/ipc/server.rs
 @@ -18,7 +18,7 @@ use niri_config::OutputName;
@@ -204,7 +204,7 @@ index 9a16f9c..fc9a4d5 100644
 +use smithay::wayland::xdg_toplevel_tag::XdgToplevelTagSurfaceData;
  
  use crate::backend::IpcOutputMap;
- use crate::handlers::image_copy_capture;
+ use crate::handlers::image_copy_capture::{source_mapped_id, source_output};
 @@ -519,18 +522,38 @@ fn make_ipc_window(
      is_in_scratchpad: bool,
      layout: WindowLayout,
@@ -257,10 +257,10 @@ index 9a16f9c..fc9a4d5 100644
  }
  
 diff --git a/src/niri.rs b/src/niri.rs
-index 4e91545..3d5e621 100644
+index 5dc9f763..381c9d4f 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
-@@ -125,6 +125,7 @@ use smithay::wayland::virtual_keyboard::VirtualKeyboardManagerState;
+@@ -126,6 +126,7 @@ use smithay::wayland::virtual_keyboard::VirtualKeyboardManagerState;
  use smithay::wayland::virtual_pointer::VirtualPointerManagerState;
  use smithay::wayland::xdg_activation::XdgActivationState;
  use smithay::wayland::xdg_foreign::XdgForeignState;
@@ -268,7 +268,7 @@ index 4e91545..3d5e621 100644
  use wayland_server::protocol::wl_output::WlOutput;
  
  #[cfg(feature = "dbus")]
-@@ -357,6 +358,7 @@ pub struct Niri {
+@@ -358,6 +359,7 @@ pub struct Niri {
      pub activation_state: XdgActivationState,
      pub mutter_x11_interop_state: MutterX11InteropManagerState,
      pub session_management_state: SessionManagementState,
@@ -276,7 +276,7 @@ index 4e91545..3d5e621 100644
  
      // This will not work as is outside of tests, so it is gated with #[cfg(test)] for now. In
      // particular, shaders will need to learn about the single pixel buffer. Also, it must be
-@@ -2728,6 +2730,7 @@ impl Niri {
+@@ -2809,6 +2811,7 @@ impl Niri {
  
          let mutter_x11_interop_state =
              MutterX11InteropManagerState::new::<State, _>(&display_handle, move |_| true);
@@ -284,7 +284,7 @@ index 4e91545..3d5e621 100644
  
          let session_management_state = SessionManagementState::new(&display_handle);
          event_loop
-@@ -2946,6 +2949,7 @@ impl Niri {
+@@ -3030,6 +3033,7 @@ impl Niri {
              activation_state,
              mutter_x11_interop_state,
              session_management_state,
@@ -293,7 +293,7 @@ index 4e91545..3d5e621 100644
              single_pixel_buffer_state,
  
 diff --git a/src/window/mod.rs b/src/window/mod.rs
-index b448a3f..a2aea86 100644
+index a140aa5e..8a4bc516 100644
 --- a/src/window/mod.rs
 +++ b/src/window/mod.rs
 @@ -11,11 +11,11 @@ use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;

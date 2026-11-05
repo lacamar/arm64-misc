@@ -1,5 +1,5 @@
 diff --git a/Cargo.lock b/Cargo.lock
-index c37f27d..29ef187 100644
+index c625f59c..e3b52660 100644
 --- a/Cargo.lock
 +++ b/Cargo.lock
 @@ -210,6 +210,15 @@ version = "1.0.1"
@@ -18,7 +18,7 @@ index c37f27d..29ef187 100644
  [[package]]
  name = "async-broadcast"
  version = "0.7.2"
-@@ -3221,6 +3230,12 @@ version = "1.0.1"
+@@ -3083,6 +3092,12 @@ version = "1.0.1"
  source = "registry+https://github.com/rust-lang/crates.io-index"
  checksum = "e1cf6437eb19a8f4a6cc0f7dca544973b0b78843adbfeb3683d1a94a0024a294"
  
@@ -31,7 +31,7 @@ index c37f27d..29ef187 100644
  [[package]]
  name = "sd-notify"
  version = "0.5.0"
-@@ -3399,6 +3414,7 @@ version = "0.7.0"
+@@ -3261,6 +3276,7 @@ version = "0.7.0"
  dependencies = [
   "aliasable",
   "appendlist",
@@ -39,7 +39,7 @@ index c37f27d..29ef187 100644
   "bitflags",
   "calloop",
   "cc",
-@@ -3424,6 +3440,7 @@ dependencies = [
+@@ -3286,6 +3302,7 @@ dependencies = [
   "rand 0.10.2",
   "reis",
   "rustix 1.1.4",
@@ -48,7 +48,7 @@ index c37f27d..29ef187 100644
   "smallvec",
   "tempfile",
 diff --git a/Cargo.toml b/Cargo.toml
-index 9d663b0..e09efb2 100644
+index ba39650e..26daa8f3 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
 @@ -110,6 +110,7 @@ features = [
@@ -60,7 +60,7 @@ index 9d663b0..e09efb2 100644
      "use_system_lib",
      "wayland_frontend",
 diff --git a/niri-config/src/debug.rs b/niri-config/src/debug.rs
-index d63e5cc..81806b0 100644
+index d63e5ccd..81806b0e 100644
 --- a/niri-config/src/debug.rs
 +++ b/niri-config/src/debug.rs
 @@ -13,6 +13,7 @@ pub struct Debug {
@@ -100,7 +100,7 @@ index d63e5cc..81806b0 100644
 +    Vulkan,
 +}
 diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
-index b7bc253..7ecb4b3 100644
+index b7bc253f..7ecb4b31 100644
 --- a/niri-config/src/lib.rs
 +++ b/niri-config/src/lib.rs
 @@ -2911,6 +2911,7 @@ mod tests {
@@ -112,7 +112,7 @@ index b7bc253..7ecb4b3 100644
                      "/dev/dri/renderD128",
                      "/dev/dri/renderD130",
 diff --git a/smithay/Cargo.toml b/smithay/Cargo.toml
-index 270051a..f5df5f6 100644
+index 7a4dbfbe..c8d6eebb 100644
 --- a/smithay/Cargo.toml
 +++ b/smithay/Cargo.toml
 @@ -108,6 +108,7 @@ renderer_gl = ["gl_generator", "backend_egl"]
@@ -125,7 +125,7 @@ index 270051a..f5df5f6 100644
  use_system_lib = ["wayland_frontend", "wayland-backend/server_system", "wayland-sys", "gbm?/import-wayland"]
 diff --git a/smithay/src/backend/renderer/base.rs b/smithay/src/backend/renderer/base.rs
 new file mode 100644
-index 0000000..97860ab
+index 00000000..97860ab6
 --- /dev/null
 +++ b/smithay/src/backend/renderer/base.rs
 @@ -0,0 +1,606 @@
@@ -736,7 +736,7 @@ index 0000000..97860ab
 +    }
 +}
 diff --git a/smithay/src/backend/renderer/gles/mod.rs b/smithay/src/backend/renderer/gles/mod.rs
-index 7518d19..cb6fb3a 100644
+index 913239b6..3351428a 100644
 --- a/smithay/src/backend/renderer/gles/mod.rs
 +++ b/smithay/src/backend/renderer/gles/mod.rs
 @@ -3298,7 +3298,7 @@ impl Drop for GlesFrame<'_, '_> {
@@ -749,7 +749,7 @@ index 7518d19..cb6fb3a 100644
      dest: Rectangle<i32, Physical>,
      texture: Size<i32, BufferCoord>,
 diff --git a/smithay/src/backend/renderer/mod.rs b/smithay/src/backend/renderer/mod.rs
-index 2efa08c..66218b4 100644
+index 2efa08c3..66218b44 100644
 --- a/smithay/src/backend/renderer/mod.rs
 +++ b/smithay/src/backend/renderer/mod.rs
 @@ -27,6 +27,12 @@ use wayland_server::protocol::{wl_buffer, wl_shm};
@@ -767,7 +767,7 @@ index 2efa08c..66218b4 100644
  
 diff --git a/smithay/src/backend/renderer/multigpu/gbm_base.rs b/smithay/src/backend/renderer/multigpu/gbm_base.rs
 new file mode 100644
-index 0000000..766931a
+index 00000000..766931ac
 --- /dev/null
 +++ b/smithay/src/backend/renderer/multigpu/gbm_base.rs
 @@ -0,0 +1,258 @@
@@ -1030,7 +1030,7 @@ index 0000000..766931a
 +        .ok()
 +}
 diff --git a/smithay/src/backend/renderer/multigpu/mod.rs b/smithay/src/backend/renderer/multigpu/mod.rs
-index 8395437..1be47e1 100644
+index 8395437e..1be47e19 100644
 --- a/smithay/src/backend/renderer/multigpu/mod.rs
 +++ b/smithay/src/backend/renderer/multigpu/mod.rs
 @@ -79,6 +79,8 @@ use wayland_server::protocol::{wl_buffer, wl_shm, wl_surface::WlSurface};
@@ -1044,7 +1044,7 @@ index 8395437..1be47e1 100644
  #[derive(Debug)]
 diff --git a/smithay/src/backend/renderer/vulkan/frame.rs b/smithay/src/backend/renderer/vulkan/frame.rs
 new file mode 100644
-index 0000000..9de03f4
+index 00000000..9de03f42
 --- /dev/null
 +++ b/smithay/src/backend/renderer/vulkan/frame.rs
 @@ -0,0 +1,368 @@
@@ -1418,7 +1418,7 @@ index 0000000..9de03f4
 +}
 diff --git a/smithay/src/backend/renderer/vulkan/import.rs b/smithay/src/backend/renderer/vulkan/import.rs
 new file mode 100644
-index 0000000..c1244af
+index 00000000..c1244af0
 --- /dev/null
 +++ b/smithay/src/backend/renderer/vulkan/import.rs
 @@ -0,0 +1,512 @@
@@ -1936,7 +1936,7 @@ index 0000000..c1244af
 +}
 diff --git a/smithay/src/backend/renderer/vulkan/mod.rs b/smithay/src/backend/renderer/vulkan/mod.rs
 new file mode 100644
-index 0000000..17c3dd6
+index 00000000..17c3dd60
 --- /dev/null
 +++ b/smithay/src/backend/renderer/vulkan/mod.rs
 @@ -0,0 +1,1693 @@
@@ -3635,7 +3635,7 @@ index 0000000..17c3dd6
 +}
 diff --git a/smithay/src/backend/renderer/vulkan/shaders.rs b/smithay/src/backend/renderer/vulkan/shaders.rs
 new file mode 100644
-index 0000000..cc4de0e
+index 00000000..cc4de0e2
 --- /dev/null
 +++ b/smithay/src/backend/renderer/vulkan/shaders.rs
 @@ -0,0 +1,283 @@
@@ -3924,7 +3924,7 @@ index 0000000..cc4de0e
 +}
 diff --git a/smithay/src/backend/renderer/vulkan/sync.rs b/smithay/src/backend/renderer/vulkan/sync.rs
 new file mode 100644
-index 0000000..3ffb222
+index 00000000..3ffb2225
 --- /dev/null
 +++ b/smithay/src/backend/renderer/vulkan/sync.rs
 @@ -0,0 +1,73 @@
@@ -4002,7 +4002,7 @@ index 0000000..3ffb222
 +    let _ = unsafe { ioctl(dmabuf, Setter::<IMPORT, _>::new(arg)) };
 +}
 diff --git a/src/backend/headless.rs b/src/backend/headless.rs
-index 53bfe2e..dbd2fc9 100644
+index 53bfe2ee..dbd2fc9f 100644
 --- a/src/backend/headless.rs
 +++ b/src/backend/headless.rs
 @@ -13,6 +13,7 @@ use smithay::backend::drm::DrmNode;
@@ -4041,7 +4041,7 @@ index 53bfe2e..dbd2fc9 100644
          self.renderer.as_mut().map(f)
      }
 diff --git a/src/backend/mod.rs b/src/backend/mod.rs
-index 815aad6..23dbb68 100644
+index 815aad6b..23dbb68f 100644
 --- a/src/backend/mod.rs
 +++ b/src/backend/mod.rs
 @@ -5,7 +5,7 @@ use std::time::Duration;
@@ -4063,7 +4063,7 @@ index 815aad6..23dbb68 100644
          match self {
              Backend::Tty(tty) => tty.with_primary_renderer(f),
 diff --git a/src/backend/tty.rs b/src/backend/tty.rs
-index 77059ac..2a66173 100644
+index 77059aca..2a66173a 100644
 --- a/src/backend/tty.rs
 +++ b/src/backend/tty.rs
 @@ -34,8 +34,8 @@ use smithay::backend::egl::context::ContextPriority;
@@ -4165,7 +4165,7 @@ index 77059ac..2a66173 100644
  
      pub fn primary_render_node(&mut self) -> Option<DrmNode> {
 diff --git a/src/backend/winit.rs b/src/backend/winit.rs
-index 4e6127c..546caa5 100644
+index 4e6127c0..546caa59 100644
 --- a/src/backend/winit.rs
 +++ b/src/backend/winit.rs
 @@ -5,13 +5,17 @@ use std::rc::Rc;
@@ -4496,10 +4496,10 @@ index 4e6127c..546caa5 100644
              Err(err) => {
                  debug!("error importing dmabuf: {err:?}");
 diff --git a/src/handlers/image_copy_capture.rs b/src/handlers/image_copy_capture.rs
-index 793a741..f7c0e76 100644
+index 11682329..1de16b47 100644
 --- a/src/handlers/image_copy_capture.rs
 +++ b/src/handlers/image_copy_capture.rs
-@@ -4,7 +4,7 @@ use smithay::backend::allocator::dmabuf::Dmabuf;
+@@ -3,7 +3,7 @@ use std::time::Duration;
  use smithay::backend::allocator::{Buffer as _, Fourcc, Modifier};
  use smithay::backend::drm::DrmNode;
  use smithay::backend::renderer::damage::OutputDamageTracker;
@@ -4508,7 +4508,7 @@ index 793a741..f7c0e76 100644
  use smithay::backend::renderer::sync::SyncPoint;
  use smithay::output::{Output, WeakOutput};
  use smithay::reexports::calloop::generic::Generic;
-@@ -95,7 +95,7 @@ pub fn source_output(source: &ImageCaptureSource) -> Option<Output> {
+@@ -115,7 +115,7 @@ pub fn source_session_output(niri: &Niri, source: &ImageCaptureSource) -> Option
  /// same GBM device, which the TTY backend does during initialization. See
  /// https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/44351.
  pub fn output_capture_constraints(
@@ -4517,24 +4517,38 @@ index 793a741..f7c0e76 100644
      render_node: Option<DrmNode>,
      output: &Output,
  ) -> Option<BufferConstraints> {
-@@ -104,13 +104,13 @@ pub fn output_capture_constraints(
+@@ -131,7 +131,7 @@ pub fn output_capture_constraints(
  
-     let dma = (|| {
-         let node = render_node?;
--        let egl = renderer.egl_context();
-+        let render_formats = renderer.dmabuf_render_formats();
+ /// Buffer constraints for capturing a window.
+ pub fn window_capture_constraints(
+-    renderer: &GlesRenderer,
++    renderer: &BaseRenderer,
+     render_node: Option<DrmNode>,
+     mapped: &Mapped,
+     output: &Output,
+@@ -147,17 +147,17 @@ pub fn window_capture_constraints(
+ }
  
-         // Offer all formats the renderer can draw into to avoid unnecessary
-         // conversions, preserving the original order (many clients depend on
-         // the order being stable to select the same format when renegotiating).
-         let mut formats: Vec<(Fourcc, Vec<Modifier>)> = Vec::new();
--        for format in egl.dmabuf_render_formats().iter() {
-+        for format in render_formats.iter() {
-             match formats.iter_mut().find(|(code, _)| *code == format.code) {
-                 Some((_, modifiers)) => modifiers.push(format.modifier),
-                 None => formats.push((format.code, vec![format.modifier])),
+ fn capture_dmabuf_constraints(
+-    renderer: &GlesRenderer,
++    renderer: &BaseRenderer,
+     render_node: Option<DrmNode>,
+ ) -> Option<DmabufConstraints> {
+     let node = render_node?;
+-    let egl = renderer.egl_context();
++    let render_formats = renderer.dmabuf_render_formats();
+ 
+     // Offer all formats the renderer can draw into to avoid unnecessary
+     // conversions, preserving the original order (many clients depend on
+     // the order being stable to select the same format when renegotiating).
+     let mut formats: Vec<(Fourcc, Vec<Modifier>)> = Vec::new();
+-    for format in egl.dmabuf_render_formats().iter() {
++    for format in render_formats.iter() {
+         match formats.iter_mut().find(|(code, _)| *code == format.code) {
+             Some((_, modifiers)) => modifiers.push(format.modifier),
+             None => formats.push((format.code, vec![format.modifier])),
 diff --git a/src/layout/closing_window.rs b/src/layout/closing_window.rs
-index ca28f59..97cd8be 100644
+index ca28f598..97cd8be3 100644
 --- a/src/layout/closing_window.rs
 +++ b/src/layout/closing_window.rs
 @@ -9,7 +9,8 @@ use smithay::backend::renderer::element::utils::{
@@ -4588,7 +4602,7 @@ index ca28f59..97cd8be 100644
          scale: Scale<f64>,
      ) -> ClosingWindowRenderElement {
 diff --git a/src/layout/floating.rs b/src/layout/floating.rs
-index c719833..1bf7af1 100644
+index c7198338..1bf7af1d 100644
 --- a/src/layout/floating.rs
 +++ b/src/layout/floating.rs
 @@ -5,7 +5,7 @@ use std::rc::Rc;
@@ -4619,7 +4633,7 @@ index c719833..1bf7af1 100644
          tile_size: Size<f64, Logical>,
          tile_pos: Point<f64, Logical>,
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index 4b588a1..f51de69 100644
+index dff191f7..23285a69 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
 @@ -45,7 +45,7 @@ use niri_config::{
@@ -4649,7 +4663,7 @@ index 4b588a1..f51de69 100644
          _geometry: Rectangle<f64, Logical>,
          _scale: f64,
          _clip_to_geometry: bool,
-@@ -4987,7 +4987,7 @@ impl<W: LayoutElement> Layout<W> {
+@@ -4996,7 +4996,7 @@ impl<W: LayoutElement> Layout<W> {
  
      pub fn store_unmap_snapshot(
          &mut self,
@@ -4658,7 +4672,7 @@ index 4b588a1..f51de69 100644
          xray: Option<&mut Xray>,
          xray_has_blocked_out_layers: bool,
          window: &W::Id,
-@@ -5082,7 +5082,7 @@ impl<W: LayoutElement> Layout<W> {
+@@ -5091,7 +5091,7 @@ impl<W: LayoutElement> Layout<W> {
  
      pub fn start_close_animation_for_window(
          &mut self,
@@ -4668,7 +4682,7 @@ index 4b588a1..f51de69 100644
          blocker: TransactionBlocker,
      ) {
 diff --git a/src/layout/opening_window.rs b/src/layout/opening_window.rs
-index 5ba97a3..4f50a51 100644
+index 5ba97a35..4f50a51e 100644
 --- a/src/layout/opening_window.rs
 +++ b/src/layout/opening_window.rs
 @@ -7,7 +7,8 @@ use smithay::backend::renderer::element::utils::{
@@ -4693,7 +4707,7 @@ index 5ba97a3..4f50a51 100644
          location: Point<f64, Logical>,
          scale: Scale<f64>,
 diff --git a/src/layout/scrolling.rs b/src/layout/scrolling.rs
-index b9356f1..732a182 100644
+index b9356f16..732a182d 100644
 --- a/src/layout/scrolling.rs
 +++ b/src/layout/scrolling.rs
 @@ -7,7 +7,7 @@ use niri_config::utils::MergeWith as _;
@@ -4724,7 +4738,7 @@ index b9356f1..732a182 100644
          tile_size: Size<f64, Logical>,
          tile_pos: Point<f64, Logical>,
 diff --git a/src/layout/tile.rs b/src/layout/tile.rs
-index d98cf81..ee721c5 100644
+index d98cf811..ee721c5b 100644
 --- a/src/layout/tile.rs
 +++ b/src/layout/tile.rs
 @@ -5,7 +5,7 @@ use niri_config::utils::MergeWith as _;
@@ -4764,7 +4778,7 @@ index d98cf81..ee721c5 100644
          xray_has_blocked_out_layers: bool,
          xray_pos: XrayPos,
 diff --git a/src/layout/workspace.rs b/src/layout/workspace.rs
-index 37b1609..5f1d923 100644
+index 37b1609e..5f1d9230 100644
 --- a/src/layout/workspace.rs
 +++ b/src/layout/workspace.rs
 @@ -8,7 +8,7 @@ use niri_config::{
@@ -4804,7 +4818,7 @@ index 37b1609..5f1d923 100644
          tile_size: Size<f64, Logical>,
          tile_pos: Point<f64, Logical>,
 diff --git a/src/niri.rs b/src/niri.rs
-index 48b4334..bacac56 100644
+index 90777846..493a16ee 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -35,7 +35,7 @@ use smithay::backend::renderer::element::{
@@ -4813,10 +4827,10 @@ index 48b4334..bacac56 100644
  };
 -use smithay::backend::renderer::gles::GlesRenderer;
 +use smithay::backend::renderer::base::BaseRenderer;
- use smithay::backend::renderer::sync::SyncPoint;
  use smithay::backend::renderer::Color32F;
  use smithay::desktop::utils::{
-@@ -4910,7 +4910,7 @@ impl Niri {
+     bbox_from_surface_tree, output_update, send_dmabuf_feedback_surface_tree,
+@@ -4970,7 +4970,7 @@ impl Niri {
          push(backdrop);
      }
  
@@ -4825,7 +4839,7 @@ index 48b4334..bacac56 100644
          let _span = tracy_client::span!("Niri::fill_xray_elements");
  
          // Make sure the xrayed elements themselves cannot use xray by mistake.
-@@ -5886,7 +5886,7 @@ impl Niri {
+@@ -5947,7 +5947,7 @@ impl Niri {
  
      pub fn render_for_screencopy_with_damage(
          &mut self,
@@ -4834,7 +4848,7 @@ index 48b4334..bacac56 100644
          output: &Output,
      ) {
          let _span = tracy_client::span!("Niri::render_for_screencopy_with_damage");
-@@ -5961,7 +5961,7 @@ impl Niri {
+@@ -6019,7 +6019,7 @@ impl Niri {
  
      pub fn render_for_screencopy_without_damage(
          &mut self,
@@ -4843,7 +4857,22 @@ index 48b4334..bacac56 100644
          manager: &ZwlrScreencopyManagerV1,
          screencopy: Screencopy,
      ) -> anyhow::Result<()> {
-@@ -6013,7 +6013,7 @@ impl Niri {
+@@ -6071,12 +6071,12 @@ impl Niri {
+     #[allow(clippy::too_many_arguments)]
+     fn capture_image_copy_frame(
+         &self,
+-        renderer: &mut GlesRenderer,
++        renderer: &mut BaseRenderer,
+         s: &mut ImageCopySession,
+         damage: Vec<Rectangle<i32, BufferCoords>>,
+         transform: Transform,
+         buffer_size: Size<i32, BufferCoords>,
+-        elements: &[impl RenderElement<GlesRenderer>],
++        elements: &[impl RenderElement<BaseRenderer>],
+         states: RenderElementStates,
+         target_presentation_time: Duration,
+     ) -> bool {
+@@ -6111,7 +6111,7 @@ impl Niri {
  
      pub fn render_for_image_copy_capture(
          &mut self,
@@ -4852,7 +4881,16 @@ index 48b4334..bacac56 100644
          output: &Output,
          target_presentation_time: Duration,
      ) {
-@@ -6153,7 +6153,7 @@ impl Niri {
+@@ -6203,7 +6203,7 @@ impl Niri {
+ 
+     pub fn render_windows_for_image_copy_capture(
+         &mut self,
+-        renderer: &mut GlesRenderer,
++        renderer: &mut BaseRenderer,
+         output: &Output,
+         target_presentation_time: Duration,
+     ) {
+@@ -6302,7 +6302,7 @@ impl Niri {
  
      pub fn render_for_image_copy_cursor_capture(
          &mut self,
@@ -4861,7 +4899,7 @@ index 48b4334..bacac56 100644
          output: &Output,
          target_presentation_time: Duration,
      ) {
-@@ -6255,9 +6255,9 @@ impl Niri {
+@@ -6386,9 +6386,9 @@ impl Niri {
  
      pub fn render_cursor_for_capture(
          &self,
@@ -4873,19 +4911,7 @@ index 48b4334..bacac56 100644
          let int_scale = output.current_scale().integer_scale();
          let output_scale = Scale::from(output.current_scale().fractional_scale());
  
-@@ -6430,9 +6430,9 @@ impl Niri {
- 
-     #[allow(clippy::type_complexity)]
-     fn render_for_screencopy_internal(
--        renderer: &mut GlesRenderer,
-+        renderer: &mut BaseRenderer,
-         damage_tracker: &mut OutputDamageTracker,
--        elements: &[impl RenderElement<GlesRenderer>],
-+        elements: &[impl RenderElement<BaseRenderer>],
-         states: RenderElementStates,
-         screencopy: &Screencopy,
-     ) -> anyhow::Result<Option<SyncPoint>> {
-@@ -6480,7 +6480,7 @@ impl Niri {
+@@ -6606,7 +6606,7 @@ impl Niri {
  
      pub fn capture_screenshots<'a>(
          &'a self,
@@ -4894,7 +4920,7 @@ index 48b4334..bacac56 100644
      ) -> impl Iterator<Item = (Output, [OutputScreenshot; 3])> + 'a {
          self.global_space.outputs().cloned().filter_map(|output| {
              let size = output.current_mode().unwrap().size;
-@@ -6561,7 +6561,7 @@ impl Niri {
+@@ -6687,7 +6687,7 @@ impl Niri {
  
      pub fn screenshot(
          &mut self,
@@ -4903,7 +4929,7 @@ index 48b4334..bacac56 100644
          output: &Output,
          write_to_disk: bool,
          include_pointer: bool,
-@@ -6598,7 +6598,7 @@ impl Niri {
+@@ -6724,7 +6724,7 @@ impl Niri {
  
      pub fn screenshot_window(
          &self,
@@ -4912,7 +4938,7 @@ index 48b4334..bacac56 100644
          output: &Output,
          mapped: &Mapped,
          write_to_disk: bool,
-@@ -6615,7 +6615,7 @@ impl Niri {
+@@ -6741,7 +6741,7 @@ impl Niri {
                  mapped.rules().opacity.unwrap_or(1.).clamp(0., 1.)
              };
  
@@ -4921,7 +4947,7 @@ index 48b4334..bacac56 100644
  
          // Add pointer if requested and it's over this window.
          if show_pointer {
-@@ -6774,7 +6774,7 @@ impl Niri {
+@@ -6900,7 +6900,7 @@ impl Niri {
      #[cfg(feature = "dbus")]
      pub fn screenshot_all_outputs(
          &mut self,
@@ -4930,7 +4956,7 @@ index 48b4334..bacac56 100644
          include_pointer: bool,
          on_done: impl FnOnce(PathBuf) + Send + 'static,
      ) -> anyhow::Result<()> {
-@@ -7329,7 +7329,7 @@ impl Niri {
+@@ -7455,7 +7455,7 @@ impl Niri {
          }
      }
  
@@ -4940,7 +4966,7 @@ index 48b4334..bacac56 100644
  
          self.update_render_elements(None);
 diff --git a/src/render_helpers/background_effect.rs b/src/render_helpers/background_effect.rs
-index d148b6c..d01f6d1 100644
+index d148b6c1..d01f6d12 100644
 --- a/src/render_helpers/background_effect.rs
 +++ b/src/render_helpers/background_effect.rs
 @@ -1,7 +1,7 @@
@@ -4971,7 +4997,7 @@ index d148b6c..d01f6d1 100644
      geometry: Rectangle<f64, Logical>,
      scale: f64,
 diff --git a/src/render_helpers/blur.rs b/src/render_helpers/blur.rs
-index 9a92b77..6f64b2d 100644
+index 9a92b771..6f64b2d9 100644
 --- a/src/render_helpers/blur.rs
 +++ b/src/render_helpers/blur.rs
 @@ -4,8 +4,10 @@ use std::rc::Rc;
@@ -5195,7 +5221,7 @@ index 9a92b77..6f64b2d 100644
                  let dst_size = dst.size();
                  let w = dst_size.w;
 diff --git a/src/render_helpers/border.rs b/src/render_helpers/border.rs
-index 923066e..9746716 100644
+index 923066ef..97467167 100644
 --- a/src/render_helpers/border.rs
 +++ b/src/render_helpers/border.rs
 @@ -6,7 +6,8 @@ use niri_config::{
@@ -5262,7 +5288,7 @@ index 923066e..9746716 100644
      }
  
 diff --git a/src/render_helpers/clipped_surface.rs b/src/render_helpers/clipped_surface.rs
-index 78f36ef..ae548d3 100644
+index d5c2593e..0a80c3b1 100644
 --- a/src/render_helpers/clipped_surface.rs
 +++ b/src/render_helpers/clipped_surface.rs
 @@ -3,16 +3,16 @@ use niri_config::CornerRadius;
@@ -5374,7 +5400,7 @@ index 78f36ef..ae548d3 100644
      }
  
 diff --git a/src/render_helpers/effect_buffer.rs b/src/render_helpers/effect_buffer.rs
-index 017c2ef..14d66f8 100644
+index 017c2ef1..14d66f85 100644
 --- a/src/render_helpers/effect_buffer.rs
 +++ b/src/render_helpers/effect_buffer.rs
 @@ -4,15 +4,16 @@ use anyhow::{ensure, Context as _};
@@ -5505,7 +5531,7 @@ index 017c2ef..14d66f8 100644
              offscreen.blurred.insert(blurred).clone()
          };
 diff --git a/src/render_helpers/framebuffer_effect.rs b/src/render_helpers/framebuffer_effect.rs
-index 775e400..aa83250 100644
+index 775e400e..aa832504 100644
 --- a/src/render_helpers/framebuffer_effect.rs
 +++ b/src/render_helpers/framebuffer_effect.rs
 @@ -6,18 +6,19 @@ use niri_config::CornerRadius;
@@ -5786,7 +5812,7 @@ index 775e400..aa83250 100644
 +    })?
 +}
 diff --git a/src/render_helpers/gradient_fade_texture.rs b/src/render_helpers/gradient_fade_texture.rs
-index bbdfef4..eb55b0b 100644
+index bbdfef40..eb55b0bd 100644
 --- a/src/render_helpers/gradient_fade_texture.rs
 +++ b/src/render_helpers/gradient_fade_texture.rs
 @@ -1,28 +1,28 @@
@@ -5879,7 +5905,7 @@ index bbdfef4..eb55b0b 100644
              gles_frame,
              src,
 diff --git a/src/render_helpers/hdr_output.rs b/src/render_helpers/hdr_output.rs
-index 4010a38..3ab359a 100644
+index 4010a381..3ab359a5 100644
 --- a/src/render_helpers/hdr_output.rs
 +++ b/src/render_helpers/hdr_output.rs
 @@ -1,7 +1,7 @@
@@ -5935,7 +5961,7 @@ index 4010a38..3ab359a 100644
          frame.render_texture_from_to(
              &self.texture,
 diff --git a/src/render_helpers/mod.rs b/src/render_helpers/mod.rs
-index 2efb07b..416b4ee 100644
+index 8742b68c..e480f701 100644
 --- a/src/render_helpers/mod.rs
 +++ b/src/render_helpers/mod.rs
 @@ -7,9 +7,7 @@ use smithay::backend::allocator::{Buffer, Fourcc};
@@ -5972,7 +5998,7 @@ index 2efb07b..416b4ee 100644
              target: self.target,
              xray: self.xray,
          }
-@@ -128,7 +126,7 @@ impl RenderTarget {
+@@ -136,7 +134,7 @@ impl RenderTarget {
      }
  }
  
@@ -5981,7 +6007,7 @@ index 2efb07b..416b4ee 100644
      type RenderElement = PrimaryGpuTextureRenderElement;
  
      fn to_render_element(
-@@ -175,29 +173,29 @@ pub fn encompassing_geo(
+@@ -183,29 +181,29 @@ pub fn encompassing_geo(
  }
  
  pub fn create_texture(
@@ -6019,7 +6045,7 @@ index 2efb07b..416b4ee 100644
      let geo = encompassing_geo(scale, elements.iter());
      let elements = elements.iter().rev().map(|ele| {
          RelocateRenderElement::from_element(ele, geo.loc.upscale(-1), Relocate::Relative)
-@@ -210,13 +208,13 @@ pub fn render_to_encompassing_texture(
+@@ -218,13 +216,13 @@ pub fn render_to_encompassing_texture(
  }
  
  pub fn render_to_texture(
@@ -6036,7 +6062,7 @@ index 2efb07b..416b4ee 100644
      let _span = tracy_client::span!();
  
      let mut texture = create_texture(renderer, size, fourcc).context("error creating texture")?;
-@@ -233,13 +231,13 @@ pub fn render_to_texture(
+@@ -241,13 +239,13 @@ pub fn render_to_texture(
  }
  
  pub fn render_and_download(
@@ -6053,7 +6079,7 @@ index 2efb07b..416b4ee 100644
      let _span = tracy_client::span!();
  
      let mut texture = create_texture(renderer, size, fourcc).context("error creating texture")?;
-@@ -254,12 +252,12 @@ pub fn render_and_download(
+@@ -262,12 +260,12 @@ pub fn render_and_download(
  }
  
  pub fn render_and_download_with_damage(
@@ -6069,7 +6095,7 @@ index 2efb07b..416b4ee 100644
      let _span = tracy_client::span!();
  
      let (size, _scale, _transform) = damage_tracker.mode().try_into().unwrap();
-@@ -283,12 +281,12 @@ pub fn render_and_download_with_damage(
+@@ -291,12 +289,12 @@ pub fn render_and_download_with_damage(
  }
  
  pub fn render_to_vec(
@@ -6084,7 +6110,7 @@ index 2efb07b..416b4ee 100644
  ) -> anyhow::Result<Vec<u8>> {
      let _span = tracy_client::span!();
  
-@@ -301,10 +299,10 @@ pub fn render_to_vec(
+@@ -309,10 +307,10 @@ pub fn render_to_vec(
  }
  
  pub fn render_to_dmabuf(
@@ -6097,7 +6123,7 @@ index 2efb07b..416b4ee 100644
      states: RenderElementStates,
  ) -> anyhow::Result<SyncPoint> {
      let _span = tracy_client::span!();
-@@ -329,11 +327,11 @@ pub fn render_to_dmabuf(
+@@ -337,10 +335,10 @@ pub fn render_to_dmabuf(
  }
  
  pub fn render_to_shm(
@@ -6105,13 +6131,12 @@ index 2efb07b..416b4ee 100644
 +    renderer: &mut BaseRenderer,
      damage_tracker: &mut OutputDamageTracker,
      buffer: &WlBuffer,
-     format: wl_shm::Format,
 -    elements: &[impl RenderElement<GlesRenderer>],
 +    elements: &[impl RenderElement<BaseRenderer>],
      states: RenderElementStates,
  ) -> anyhow::Result<()> {
      let _span = tracy_client::span!();
-@@ -419,7 +417,7 @@ pub fn render_to_shm(
+@@ -424,7 +422,7 @@ pub fn render_to_shm(
      .context("expected shm buffer, but didn't get one")?
  }
  
@@ -6120,7 +6145,7 @@ index 2efb07b..416b4ee 100644
      let size = dmabuf.size();
      let size = size.to_logical(1, Transform::Normal).to_physical(1);
      let mut target = renderer.bind(&mut dmabuf).context("error binding dmabuf")?;
-@@ -433,12 +431,12 @@ pub fn clear_dmabuf(renderer: &mut GlesRenderer, mut dmabuf: Dmabuf) -> anyhow::
+@@ -438,12 +436,12 @@ pub fn clear_dmabuf(renderer: &mut GlesRenderer, mut dmabuf: Dmabuf) -> anyhow::
  }
  
  fn render_elements(
@@ -6136,8 +6161,20 @@ index 2efb07b..416b4ee 100644
  ) -> anyhow::Result<SyncPoint> {
      let transform = transform.invert();
      let output_rect = Rectangle::from_size(transform.transform_size(size));
+@@ -481,9 +479,9 @@ fn render_elements(
+ impl CaptureBuffer {
+     pub fn render(
+         &self,
+-        renderer: &mut GlesRenderer,
++        renderer: &mut BaseRenderer,
+         damage_tracker: &mut OutputDamageTracker,
+-        elements: &[impl RenderElement<GlesRenderer>],
++        elements: &[impl RenderElement<BaseRenderer>],
+         states: RenderElementStates,
+     ) -> anyhow::Result<SyncPoint> {
+         match self {
 diff --git a/src/render_helpers/offscreen.rs b/src/render_helpers/offscreen.rs
-index 2f624b1..8fd8d99 100644
+index 2f624b17..8fd8d99b 100644
 --- a/src/render_helpers/offscreen.rs
 +++ b/src/render_helpers/offscreen.rs
 @@ -7,7 +7,7 @@ use smithay::backend::renderer::element::utils::{Relocate, RelocateRenderElement
@@ -6252,7 +6289,7 @@ index 2f624b1..8fd8d99 100644
              gles_frame,
              src,
 diff --git a/src/render_helpers/primary_gpu_texture.rs b/src/render_helpers/primary_gpu_texture.rs
-index 4cdec64..d3667e2 100644
+index 4cdec64c..d3667e2c 100644
 --- a/src/render_helpers/primary_gpu_texture.rs
 +++ b/src/render_helpers/primary_gpu_texture.rs
 @@ -1,16 +1,16 @@
@@ -6320,7 +6357,7 @@ index 4cdec64..d3667e2 100644
              gles_frame,
              src,
 diff --git a/src/render_helpers/render_elements.rs b/src/render_helpers/render_elements.rs
-index f423b24..2bf5e7b 100644
+index f423b240..2bf5e7b3 100644
 --- a/src/render_helpers/render_elements.rs
 +++ b/src/render_helpers/render_elements.rs
 @@ -1,4 +1,4 @@
@@ -6380,7 +6417,7 @@ index f423b24..2bf5e7b 100644
                      $($name::$variant(elem) => elem.underlying_storage(renderer)),+
                  }
 diff --git a/src/render_helpers/renderer.rs b/src/render_helpers/renderer.rs
-index 9c42ea3..c269e89 100644
+index 9c42ea3d..c269e890 100644
 --- a/src/render_helpers/renderer.rs
 +++ b/src/render_helpers/renderer.rs
 @@ -1,5 +1,5 @@
@@ -6474,7 +6511,7 @@ index 9c42ea3..c269e89 100644
      }
  }
 diff --git a/src/render_helpers/resize.rs b/src/render_helpers/resize.rs
-index 79b26db..3b6ccb1 100644
+index 79b26dbf..3b6ccb1a 100644
 --- a/src/render_helpers/resize.rs
 +++ b/src/render_helpers/resize.rs
 @@ -4,14 +4,15 @@ use std::rc::Rc;
@@ -6552,7 +6589,7 @@ index 79b26db..3b6ccb1 100644
      }
  
 diff --git a/src/render_helpers/resources.rs b/src/render_helpers/resources.rs
-index 0aa1fed..72e8878 100644
+index 0aa1fed4..72e8878e 100644
 --- a/src/render_helpers/resources.rs
 +++ b/src/render_helpers/resources.rs
 @@ -1,6 +1,7 @@
@@ -6584,7 +6621,7 @@ index 0aa1fed..72e8878 100644
          Ok(resources) => {
              let data = renderer.egl_context().user_data();
 diff --git a/src/render_helpers/shader_element.rs b/src/render_helpers/shader_element.rs
-index f1bf978..3430f33 100644
+index f1bf978b..3430f33d 100644
 --- a/src/render_helpers/shader_element.rs
 +++ b/src/render_helpers/shader_element.rs
 @@ -4,16 +4,17 @@ use std::rc::Rc;
@@ -6870,7 +6907,7 @@ index f1bf978..3430f33 100644
          Ok(())
      }
 diff --git a/src/render_helpers/shaders/mod.rs b/src/render_helpers/shaders/mod.rs
-index ed5e06d..1e3561c 100644
+index ed5e06dc..1e3561c5 100644
 --- a/src/render_helpers/shaders/mod.rs
 +++ b/src/render_helpers/shaders/mod.rs
 @@ -1,10 +1,8 @@
@@ -7015,7 +7052,7 @@ index ed5e06d..1e3561c 100644
          match compile_open_program(renderer, src) {
              Ok(program) => Some(program),
 diff --git a/src/render_helpers/shadow.rs b/src/render_helpers/shadow.rs
-index 0d26201..5413b77 100644
+index 0d26201c..5413b771 100644
 --- a/src/render_helpers/shadow.rs
 +++ b/src/render_helpers/shadow.rs
 @@ -4,7 +4,8 @@ use std::rc::Rc;
@@ -7082,7 +7119,7 @@ index 0d26201..5413b77 100644
      }
  
 diff --git a/src/render_helpers/snapshot.rs b/src/render_helpers/snapshot.rs
-index d0e24fe..65627e4 100644
+index d0e24fea..65627e4e 100644
 --- a/src/render_helpers/snapshot.rs
 +++ b/src/render_helpers/snapshot.rs
 @@ -3,7 +3,7 @@ use std::cell::OnceCell;
@@ -7130,7 +7167,7 @@ index d0e24fe..65627e4 100644
              self.blocked_out_texture.get_or_init(|| {
                  let _span = tracy_client::span!("RenderSnapshot::texture");
 diff --git a/src/render_helpers/surface.rs b/src/render_helpers/surface.rs
-index 946ee3a..9e156bd 100644
+index 946ee3af..9e156bd2 100644
 --- a/src/render_helpers/surface.rs
 +++ b/src/render_helpers/surface.rs
 @@ -1,8 +1,8 @@
@@ -7229,7 +7266,7 @@ index 946ee3a..9e156bd 100644
      let _span = tracy_client::span!("render_snapshot_from_surface_tree");
  
 diff --git a/src/render_helpers/texture.rs b/src/render_helpers/texture.rs
-index 5e52950..4a6a5c6 100644
+index 5e52950a..4a6a5c69 100644
 --- a/src/render_helpers/texture.rs
 +++ b/src/render_helpers/texture.rs
 @@ -1,6 +1,6 @@
@@ -7250,7 +7287,7 @@ index 5e52950..4a6a5c6 100644
          self.texture.is_unique_reference()
      }
 diff --git a/src/render_helpers/xray.rs b/src/render_helpers/xray.rs
-index f4b4f86..c1249f3 100644
+index f4b4f861..c1249f34 100644
 --- a/src/render_helpers/xray.rs
 +++ b/src/render_helpers/xray.rs
 @@ -5,9 +5,9 @@ use std::rc::Rc;
@@ -7325,7 +7362,7 @@ index f4b4f86..c1249f3 100644
              gles_frame,
              src,
 diff --git a/src/screencasting/mod.rs b/src/screencasting/mod.rs
-index 232b584..a722253 100644
+index bcdb09bf..9fae441f 100644
 --- a/src/screencasting/mod.rs
 +++ b/src/screencasting/mod.rs
 @@ -8,7 +8,7 @@ use calloop::LoopHandle;
@@ -7346,7 +7383,7 @@ index 232b584..a722253 100644
              })
              .unwrap_or_default();
  
-@@ -535,7 +535,7 @@ impl Niri {
+@@ -537,7 +537,7 @@ impl Niri {
  
      pub fn render_for_screen_cast(
          &mut self,
@@ -7355,7 +7392,7 @@ index 232b584..a722253 100644
          output: &Output,
          target_presentation_time: Duration,
      ) {
-@@ -623,7 +623,7 @@ impl Niri {
+@@ -625,7 +625,7 @@ impl Niri {
  
      pub fn render_windows_for_screen_cast(
          &mut self,
@@ -7365,7 +7402,7 @@ index 232b584..a722253 100644
          target_presentation_time: Duration,
      ) {
 diff --git a/src/screencasting/pw_utils.rs b/src/screencasting/pw_utils.rs
-index a4d2aa9..77603e8 100644
+index a4d2aa95..77603e8c 100644
 --- a/src/screencasting/pw_utils.rs
 +++ b/src/screencasting/pw_utils.rs
 @@ -39,7 +39,7 @@ use smithay::backend::allocator::Fourcc;
@@ -7426,7 +7463,7 @@ index a4d2aa9..77603e8 100644
  ) -> anyhow::Result<()> {
      let _span = tracy_client::span!();
 diff --git a/src/ui/config_error_notification.rs b/src/ui/config_error_notification.rs
-index 7bd3d14..f4550ca 100644
+index 7bd3d143..f4550cac 100644
 --- a/src/ui/config_error_notification.rs
 +++ b/src/ui/config_error_notification.rs
 @@ -9,7 +9,7 @@ use ordered_float::NotNan;
@@ -7470,7 +7507,7 @@ index 7bd3d14..f4550ca 100644
  
      let padding: i32 = to_physical_precise_round(scale, PADDING);
 diff --git a/src/ui/exit_confirm_dialog.rs b/src/ui/exit_confirm_dialog.rs
-index 221ae05..4d81a43 100644
+index 221ae055..4d81a435 100644
 --- a/src/ui/exit_confirm_dialog.rs
 +++ b/src/ui/exit_confirm_dialog.rs
 @@ -177,7 +177,7 @@ impl ExitConfirmDialog {
@@ -7483,7 +7520,7 @@ index 221ae05..4d81a43 100644
              return;
          };
 diff --git a/src/ui/hotkey_overlay.rs b/src/ui/hotkey_overlay.rs
-index 0b92e47..17808a8 100644
+index 0b92e474..17808a82 100644
 --- a/src/ui/hotkey_overlay.rs
 +++ b/src/ui/hotkey_overlay.rs
 @@ -9,7 +9,7 @@ use niri_config::{Action, Bind, Config, Key, ModKey, Modifiers, Trigger};
@@ -7523,7 +7560,7 @@ index 0b92e47..17808a8 100644
      mod_key: ModKey,
      scale: f64,
 diff --git a/src/ui/mru.rs b/src/ui/mru.rs
-index 5ce7ed0..acd8d0d 100644
+index a43d0946..4e496ab1 100644
 --- a/src/ui/mru.rs
 +++ b/src/ui/mru.rs
 @@ -17,7 +17,7 @@ use smithay::backend::renderer::element::utils::{
@@ -7599,7 +7636,7 @@ index 5ce7ed0..acd8d0d 100644
  
      let mut font = FontDescription::from_string(FONT);
 diff --git a/src/ui/screen_transition.rs b/src/ui/screen_transition.rs
-index 7d26f85..44972b3 100644
+index 7d26f85f..44972b39 100644
 --- a/src/ui/screen_transition.rs
 +++ b/src/ui/screen_transition.rs
 @@ -1,7 +1,7 @@
@@ -7630,7 +7667,7 @@ index 7d26f85..44972b3 100644
          clock: Clock,
      ) -> Self {
 diff --git a/src/ui/screenshot_ui.rs b/src/ui/screenshot_ui.rs
-index da0d992..c68040d 100644
+index da0d9922..c68040d1 100644
 --- a/src/ui/screenshot_ui.rs
 +++ b/src/ui/screenshot_ui.rs
 @@ -15,7 +15,7 @@ use smithay::backend::allocator::Fourcc;
@@ -7702,7 +7739,7 @@ index da0d992..c68040d 100644
  
      let padding: i32 = to_physical_precise_round(scale, PADDING);
 diff --git a/src/window/mapped.rs b/src/window/mapped.rs
-index f3a51e5..3de98f1 100644
+index d111f0ea..4a5e2b27 100644
 --- a/src/window/mapped.rs
 +++ b/src/window/mapped.rs
 @@ -4,7 +4,7 @@ use std::time::Duration;
@@ -7714,7 +7751,7 @@ index f3a51e5..3de98f1 100644
  use smithay::desktop::space::SpaceElement as _;
  use smithay::desktop::{PopupKind, PopupManager, Window};
  use smithay::output::{self, Output};
-@@ -410,7 +410,7 @@ impl Mapped {
+@@ -414,7 +414,7 @@ impl Mapped {
      }
  
      /// Renders a snapshot of the window without popups.
@@ -7723,7 +7760,7 @@ index f3a51e5..3de98f1 100644
          let _span = tracy_client::span!("Mapped::render_snapshot");
  
          let size = self.size().to_f64();
-@@ -456,7 +456,7 @@ impl Mapped {
+@@ -460,7 +460,7 @@ impl Mapped {
          should_animate
      }
  

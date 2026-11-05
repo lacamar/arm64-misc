@@ -24,15 +24,15 @@
 # Convince rust-srpm-macros to use Cargo.lock with the Smithay commit.
 %global __cargo_common_opts %{?_smp_mflags} -Z avoid-dev-deps --locked
 
-%global bumpver 14
+%global bumpver 15
 %global tag 26.04
-%global commit a8562a1126922ed4c1c94d34c1dbb26633491d05
+%global commit bc6d4ec00fa422bce3043ba30faefda694c13024
 %global shortcommit %{sub %{commit} 1 8}
-%global smithay_commit 8a270232f1bfc416c781273c98a3f52a812a0bba
+%global smithay_commit 65aa86fa5236e41775c313408102a5d5c2d1e2ca
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        33%{?dist}
+Release:        34%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -182,6 +182,12 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Thu Nov 05 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^15.git.bc6d4ec0-34
+- Update to commit bc6d4ec00fa422bce3043ba30faefda694c13024
+- Update Smithay to 65aa86fa
+- Add scratchpad ById actions
+- Rebase local-tweaks, pr4392, scratchpad, session-management, wp-protocols, pr4118, vulkan, output-power patches
+
 * Tue Nov 03 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^14.git.a8562a11-33
 - Rebase gestures, vulkan patches for fuzz 0
 
