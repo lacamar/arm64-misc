@@ -1,4 +1,4 @@
-%global commit      627c9c663062bd872182b653113759c9d66b7e13
+%global commit a61cddfb2275187822ad0c3999af747b8c9a4f9a
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 %global snapdate    20261021
 
@@ -46,6 +46,9 @@ rm -f %{buildroot}%{_bindir}/ani*
 %files -n python3-anisette -f %{pyproject_files}
 
 %changelog
+* Thu Nov 05 2026 Lachlan Marie <lchlnm@pm.me> - 1.2.4^20261021gita61cddf-4
+- Update to commit a61cddfb2275187822ad0c3999af747b8c9a4f9a
+
 * Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 1.2.4^20261021git627c9c6-4
 - Keep CLI modules in file list
 
