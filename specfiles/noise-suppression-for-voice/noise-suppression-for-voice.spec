@@ -1,5 +1,5 @@
 Name:           noise-suppression-for-voice
-Version:        1.10
+Version:        1.22
 Release:        1%{?dist}
 Summary:        Real-time rnnoise noise suppression LADSPA plugin
 License:        GPL-3.0-or-later AND BSD-3-Clause
@@ -53,6 +53,9 @@ install -Dpm0644 %{SOURCE1} %{buildroot}%{_datadir}/pipewire/pipewire.conf.d/60-
 %{_datadir}/pipewire/pipewire.conf.d/60-j414-voice-isolation.conf
 
 %changelog
+* Thu Nov 05 2026 Lachlan Marie <lchlnm@pm.me> - 1.22-1
+- Update to 1.22
+
 * Mon Nov 02 2026 Lachlan Marie <lchlnm@pm.me> - 1.10-1
 - Initial package, LADSPA only
 - Add J414 Voice Isolation source
