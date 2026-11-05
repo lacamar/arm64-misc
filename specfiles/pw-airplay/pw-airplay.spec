@@ -1,5 +1,5 @@
 # copr-exclude-chroots: fedora-43-aarch64
-%global commit ff12df8f64fba33e77dacc9e7ed93901e353f928
+%global commit 7f276d3d9bb5d4dc9746c4fd566230934dec7d21
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 %global owntone_version 29.3
 %global engine %{_libexecdir}/pw-airplay
@@ -109,6 +109,9 @@ sed -e 's|/usr/local/sbin/airptpd|%{engine}/sbin/airptpd|' -e '/^After=/a Confli
 %config(noreplace) %{_sysconfdir}/pipewire/pipewire.conf.d/50-pw-airplay-no-raop.conf
 
 %changelog
+* Thu Nov 05 2026 Lachlan Marie <lchlnm@pm.me> - 0^20261017git7f276d3-5
+- Update to commit 7f276d3d9bb5d4dc9746c4fd566230934dec7d21
+
 * Mon Nov 02 2026 Lachlan Marie <lchlnm@pm.me> - 0^20261017gitff12df8-5
 - Skip fedora-43 COPR chroot
 
