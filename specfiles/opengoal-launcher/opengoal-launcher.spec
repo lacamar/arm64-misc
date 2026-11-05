@@ -1,6 +1,6 @@
 %global tag 2.11.2
-%global bumpver 0
-%global commit a32643d9676e0cc4d61df930c27bdf6c83fc14d1
+%global bumpver 1
+%global commit 9e4fc050d98ed452e7e340b62c981e3df00699c0
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 %global debug_package %{nil}
@@ -106,6 +106,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/*.desktop
 %{_datadir}/icons/hicolor/*/apps/*.png
 
 %changelog
+* Thu Nov 05 2026 Lachlan Marie <lchlnm@pm.me> - 2.11.2^1.git.9e4fc05-1
+- Update to commit 9e4fc050d98ed452e7e340b62c981e3df00699c0
+
 * Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 2.11.2^0.git.a32643d-1
 - Update to 2.11.2
 - Drop -O2 from CFLAGS for aws-lc-sys jitterentropy
