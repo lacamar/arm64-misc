@@ -1,4 +1,4 @@
-%global commit      374d83854f657a7fdca45f813387d99d491db0e2
+%global commit d4d2a832baf47d1cf43d989879950ac2aec45f47
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 %global snapdate    20261021
 
@@ -49,6 +49,9 @@ cd macOS-ADI-emulator
 %{_bindir}/macos-adi-emulator
 
 %changelog
+* Thu Nov 05 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.0^20261021gitd4d2a83-2
+- Update to commit d4d2a832baf47d1cf43d989879950ac2aec45f47
+
 * Sun Oct 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.0^20261021git374d838-2
 - Fix license handling
 
