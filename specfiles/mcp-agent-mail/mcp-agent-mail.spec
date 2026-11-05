@@ -1,7 +1,7 @@
 %global debug_package %{nil}
 
 Name:           mcp-agent-mail
-Version:        0.3.39
+Version:        0.3.40
 Release:        1%{?dist}
 Summary:        Mail-like coordination layer for coding agents over MCP
 
@@ -43,6 +43,9 @@ install -Dm644 %{SOURCE1} %{buildroot}%{_userunitdir}/agent-mail.service
 %systemd_user_postun_with_restart agent-mail.service
 
 %changelog
+* Thu Nov 05 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.40-1
+- Update to 0.3.40
+
 * Wed Oct 28 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.39-1
 - Switch to upstream Rust edition, prebuilt aarch64 binaries
 - Drop Python venv build
