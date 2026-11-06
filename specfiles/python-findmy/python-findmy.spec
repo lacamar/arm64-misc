@@ -4,7 +4,7 @@
 
 Name:           python-findmy
 Version:        0.10.2^%{snapdate}git%{shortcommit}
-Release:        6%{?dist}
+Release:        7%{?dist}
 Summary:        Apple Find My library
 
 License:        MIT
@@ -26,6 +26,7 @@ Summary:        %{summary}
 
 %prep
 %autosetup -n FindMy.py-%{commit}
+sed -i 's/^requires-python = .*/requires-python = ">=3.10"/' pyproject.toml
 
 %generate_buildrequires
 %pyproject_buildrequires
@@ -43,6 +44,9 @@ Summary:        %{summary}
 %files -n python3-findmy -f %{pyproject_files}
 
 %changelog
+* Fri Nov 06 2026 Lachlan Marie <lchlnm@pm.me> - 0.10.2^20261021gitf2d24c8-7
+- Drop Python upper bound
+
 * Fri Nov 06 2026 Lachlan Marie <lchlnm@pm.me> - 0.10.2^20261021gitf2d24c8-6
 - Rebuild against bleak 3.0.2-5
 
