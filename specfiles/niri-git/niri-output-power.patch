@@ -1,5 +1,5 @@
 diff --git a/src/niri.rs b/src/niri.rs
-index 493a16ee..8a4411a3 100644
+index 6ec227fb..0cc6800e 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -172,6 +172,7 @@ use crate::protocols::color_management::{self, ColorManagementState};
@@ -18,7 +18,7 @@ index 493a16ee..8a4411a3 100644
      pub color_management_state: ColorManagementState,
      pub activation_state: XdgActivationState,
      pub mutter_x11_interop_state: MutterX11InteropManagerState,
-@@ -2801,6 +2803,7 @@ impl Niri {
+@@ -2800,6 +2802,7 @@ impl Niri {
              GammaControlManagerState::new::<State, _>(&display_handle, move |client| {
                  is_tty && !client.get_data::<ClientState>().unwrap().restricted
              });
@@ -26,7 +26,7 @@ index 493a16ee..8a4411a3 100644
          let color_management_state =
              ColorManagementState::new::<State, _>(&display_handle, |_| true);
          let activation_state = XdgActivationState::new::<State>(&display_handle);
-@@ -3044,6 +3047,7 @@ impl Niri {
+@@ -3043,6 +3046,7 @@ impl Niri {
              presentation_state,
              security_context_state,
              gamma_control_manager_state,
@@ -34,7 +34,7 @@ index 493a16ee..8a4411a3 100644
              color_management_state,
              activation_state,
              mutter_x11_interop_state,
-@@ -3428,6 +3432,7 @@ impl Niri {
+@@ -3427,6 +3431,7 @@ impl Niri {
          self.global_space.unmap_output(output);
          self.reposition_outputs(None);
          self.gamma_control_manager_state.output_removed(output);
@@ -42,7 +42,7 @@ index 493a16ee..8a4411a3 100644
  
          let state = self.output_state.remove(output).unwrap();
  
-@@ -3550,6 +3555,7 @@ impl Niri {
+@@ -3549,6 +3554,7 @@ impl Niri {
  
          self.monitors_active = false;
          backend.set_monitors_active(false);
@@ -50,7 +50,7 @@ index 493a16ee..8a4411a3 100644
      }
  
      pub fn activate_monitors(&mut self, backend: &mut Backend) {
-@@ -3559,6 +3565,7 @@ impl Niri {
+@@ -3558,6 +3564,7 @@ impl Niri {
  
          self.monitors_active = true;
          backend.set_monitors_active(true);

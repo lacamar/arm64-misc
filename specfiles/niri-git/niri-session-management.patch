@@ -727,7 +727,7 @@ index 4b1dfce8..edd3184d 100644
                      None,
                      false,
 diff --git a/src/niri.rs b/src/niri.rs
-index 7e7bb7e2..8301eb2c 100644
+index 6972090e..3352b763 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -162,6 +162,7 @@ use crate::protocols::foreign_toplevel::{self, ForeignToplevelManagerState};
@@ -746,7 +746,7 @@ index 7e7bb7e2..8301eb2c 100644
  
      // This will not work as is outside of tests, so it is gated with #[cfg(test)] for now. In
      // particular, shaders will need to learn about the single pixel buffer. Also, it must be
-@@ -2790,6 +2792,17 @@ impl Niri {
+@@ -2789,6 +2791,17 @@ impl Niri {
          let mutter_x11_interop_state =
              MutterX11InteropManagerState::new::<State, _>(&display_handle, move |_| true);
  
@@ -764,7 +764,7 @@ index 7e7bb7e2..8301eb2c 100644
          #[cfg(test)]
          let single_pixel_buffer_state = SinglePixelBufferState::new::<State>(&display_handle);
  
-@@ -2997,6 +3010,7 @@ impl Niri {
+@@ -2996,6 +3009,7 @@ impl Niri {
              gamma_control_manager_state,
              activation_state,
              mutter_x11_interop_state,

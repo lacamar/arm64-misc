@@ -24,15 +24,15 @@
 # Convince rust-srpm-macros to use Cargo.lock with the Smithay commit.
 %global __cargo_common_opts %{?_smp_mflags} -Z avoid-dev-deps --locked
 
-%global bumpver 15
+%global bumpver 16
 %global tag 26.04
-%global commit bc6d4ec00fa422bce3043ba30faefda694c13024
+%global commit 2c0b311be3004b1376ea8086dc58766f58b709a4
 %global shortcommit %{sub %{commit} 1 8}
 %global smithay_commit 65aa86fa5236e41775c313408102a5d5c2d1e2ca
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        34%{?dist}
+Release:        35%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -182,6 +182,10 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Fri Nov 06 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^16.git.2c0b311b-35
+- Update to commit 2c0b311be3004b1376ea8086dc58766f58b709a4
+- Refresh patch offsets
+
 * Thu Nov 05 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^15.git.bc6d4ec0-34
 - Update to commit bc6d4ec00fa422bce3043ba30faefda694c13024
 - Update Smithay to 65aa86fa

@@ -1,5 +1,5 @@
 diff --git a/niri-config/src/output.rs b/niri-config/src/output.rs
-index 4159a95..4927abe 100644
+index 4159a958..4927abe3 100644
 --- a/niri-config/src/output.rs
 +++ b/niri-config/src/output.rs
 @@ -152,6 +152,9 @@ pub struct Hdr {
@@ -13,10 +13,10 @@ index 4159a95..4927abe 100644
  
  impl FromIterator<Output> for Outputs {
 diff --git a/src/backend/tty.rs b/src/backend/tty.rs
-index aa91a17..4ebbd93 100644
+index 2a66173a..5341bb60 100644
 --- a/src/backend/tty.rs
 +++ b/src/backend/tty.rs
-@@ -1350,10 +1350,16 @@ impl Tty {
+@@ -1358,10 +1358,16 @@ impl Tty {
  
          let single_gpu =
              device.render_node.unwrap_or(self.primary_render_node) == self.primary_render_node;
@@ -33,7 +33,7 @@ index aa91a17..4ebbd93 100644
              } else {
                  Fourcc::Abgr2101010
              };
-@@ -1486,13 +1492,15 @@ impl Tty {
+@@ -1494,13 +1500,15 @@ impl Tty {
              })
              .collect::<FormatSet>();
  
@@ -54,7 +54,7 @@ index aa91a17..4ebbd93 100644
  
          // Create the compositor.
          let res = DrmCompositor::new(
-@@ -3560,22 +3568,24 @@ impl<'a> ConnectorProperties<'a> {
+@@ -3568,22 +3576,24 @@ impl<'a> ConnectorProperties<'a> {
          let property::ValueType::Enum(values) = info.value_type() else {
              bail!("wrong property type")
          };
@@ -84,7 +84,7 @@ index aa91a17..4ebbd93 100644
              max_display_mastering_luminance: hdr.max_luminance.0 as u16,
              min_display_mastering_luminance: 50,
              max_cll: hdr.max_luminance.0 as u16,
-@@ -3685,11 +3695,14 @@ fn wanted_hdr(
+@@ -3693,11 +3703,14 @@ fn wanted_hdr(
      single_gpu: bool,
      format: Fourcc,
  ) -> Option<color::Hdr> {
@@ -102,7 +102,7 @@ index aa91a17..4ebbd93 100644
  
  fn is_vrr_capable(device: &DrmDevice, connector: connector::Handle) -> Option<bool> {
 diff --git a/src/render_helpers/color.rs b/src/render_helpers/color.rs
-index b8098c4..fab2007 100644
+index b8098c48..fab20071 100644
 --- a/src/render_helpers/color.rs
 +++ b/src/render_helpers/color.rs
 @@ -61,10 +61,12 @@ impl ColorDesc {
@@ -146,7 +146,7 @@ index b8098c4..fab2007 100644
          let target = ColorDesc::render_target(false, Some(hdr));
          assert!(conversion(&ColorDesc::SRGB, &target).is_none());
 diff --git a/src/render_helpers/shaders/hdr_output.frag b/src/render_helpers/shaders/hdr_output.frag
-index b2e48a0..7275cac 100644
+index b2e48a0f..7275cac5 100644
 --- a/src/render_helpers/shaders/hdr_output.frag
 +++ b/src/render_helpers/shaders/hdr_output.frag
 @@ -21,13 +21,19 @@ uniform float tint;
@@ -172,7 +172,7 @@ index b2e48a0..7275cac 100644
  #if defined(DEBUG_FLAGS)
      if (tint == 1.0)
 diff --git a/src/render_helpers/shaders/mod.rs b/src/render_helpers/shaders/mod.rs
-index 1e3561c..82b4bd9 100644
+index 1e3561c5..82b4bd98 100644
 --- a/src/render_helpers/shaders/mod.rs
 +++ b/src/render_helpers/shaders/mod.rs
 @@ -174,7 +174,10 @@ impl Shaders {

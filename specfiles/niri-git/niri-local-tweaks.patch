@@ -50,10 +50,10 @@ index 3629a15f..be831b32 100644
  // Smithay should fall back to Xrgb/Xbgr automatically if needed.
  const SUPPORTED_COLOR_FORMATS: [Fourcc; 2] = [Fourcc::Argb8888, Fourcc::Abgr8888];
 diff --git a/src/niri.rs b/src/niri.rs
-index dcb509bc..a78f2bb0 100644
+index 2705d6db..67ea9b46 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
-@@ -1169,9 +1169,7 @@ impl State {
+@@ -1168,9 +1168,7 @@ impl State {
  
          let new_active = self.niri.layout.active_output().cloned();
          if new_active != active_output {

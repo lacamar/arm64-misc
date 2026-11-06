@@ -1,8 +1,8 @@
 diff --git a/niri-config/src/binds.rs b/niri-config/src/binds.rs
-index ae54806..9b6522d 100644
+index 6db036ca..a797f16e 100644
 --- a/niri-config/src/binds.rs
 +++ b/niri-config/src/binds.rs
-@@ -315,6 +315,8 @@ pub enum Action {
+@@ -329,6 +329,8 @@ pub enum Action {
      MoveColumnLeftOrToMonitorLeft,
      MoveColumnRightOrToMonitorRight,
      MoveColumnToIndex(#[knuffel(argument)] usize),
@@ -11,7 +11,7 @@ index ae54806..9b6522d 100644
      MoveWindowDown,
      MoveWindowUp,
      MoveWindowDownOrToWorkspaceDown,
-@@ -602,7 +604,13 @@ impl From<niri_ipc::Action> for Action {
+@@ -617,7 +619,13 @@ impl From<niri_ipc::Action> for Action {
              niri_ipc::Action::MoveColumnRight {} => Self::MoveColumnRight,
              niri_ipc::Action::MoveColumnToFirst {} => Self::MoveColumnToFirst,
              niri_ipc::Action::MoveColumnToLast {} => Self::MoveColumnToLast,
@@ -27,7 +27,7 @@ index ae54806..9b6522d 100644
                  Self::MoveColumnLeftOrToMonitorLeft
              }
 diff --git a/niri-ipc/src/lib.rs b/niri-ipc/src/lib.rs
-index dce9d67..4506a55 100644
+index 0c31c4db..9fec8676 100644
 --- a/niri-ipc/src/lib.rs
 +++ b/niri-ipc/src/lib.rs
 @@ -87,6 +87,8 @@ pub enum Request {
@@ -39,7 +39,7 @@ index dce9d67..4506a55 100644
      /// Change output configuration temporarily.
      ///
      /// The configuration is changed temporarily and not saved into the config file. If the output
-@@ -404,13 +406,20 @@ pub enum Action {
+@@ -410,13 +412,20 @@ pub enum Action {
      MoveColumnLeftOrToMonitorLeft {},
      /// Move the focused column to the right or to the monitor to the right.
      MoveColumnRightOrToMonitorRight {},
@@ -62,7 +62,7 @@ index dce9d67..4506a55 100644
      /// Move the focused window down in a column.
      MoveWindowDown {},
 diff --git a/src/cli.rs b/src/cli.rs
-index df69aa1..a98b918 100644
+index df69aa14..a98b9181 100644
 --- a/src/cli.rs
 +++ b/src/cli.rs
 @@ -84,6 +84,10 @@ pub enum Msg {
@@ -77,10 +77,10 @@ index df69aa1..a98b918 100644
          action: Action,
      },
 diff --git a/src/input/mod.rs b/src/input/mod.rs
-index 8b2005c..ea64529 100644
+index 813f77c6..8d51b355 100644
 --- a/src/input/mod.rs
 +++ b/src/input/mod.rs
-@@ -897,6 +897,14 @@ impl State {
+@@ -892,6 +892,14 @@ impl State {
          }
      }
  
@@ -95,7 +95,7 @@ index 8b2005c..ea64529 100644
      pub fn do_action(&mut self, action: Action, allow_when_locked: bool) {
          if self.niri.is_locked() && !(allow_when_locked || allowed_when_locked(&action)) {
              return;
-@@ -1684,11 +1692,20 @@ impl State {
+@@ -1671,11 +1679,20 @@ impl State {
                  }
              }
              Action::MoveColumnToIndex(idx) => {
@@ -118,7 +118,7 @@ index 8b2005c..ea64529 100644
                  self.niri.layout.switch_workspace_down();
                  self.maybe_warp_cursor_to_focus();
 diff --git a/src/ipc/client.rs b/src/ipc/client.rs
-index 8345170..2c6bad0 100644
+index 972177b1..32fe2dfd 100644
 --- a/src/ipc/client.rs
 +++ b/src/ipc/client.rs
 @@ -23,6 +23,7 @@ pub fn handle_msg(mut msg: Msg, json: bool, print_request: bool) -> anyhow::Resu
@@ -146,7 +146,7 @@ index 8345170..2c6bad0 100644
              output: output.clone(),
              action: action.clone(),
 diff --git a/src/ipc/server.rs b/src/ipc/server.rs
-index fc9a4d5..f59b303 100644
+index 4b83ed8a..e7a1e66f 100644
 --- a/src/ipc/server.rs
 +++ b/src/ipc/server.rs
 @@ -273,6 +273,7 @@ async fn handle_client(ctx: ClientCtx, stream: Async<'static, UnixStream>) -> an
@@ -180,7 +180,7 @@ index fc9a4d5..f59b303 100644
              });
  
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index f51de69..256df02 100644
+index 23285a69..8a9bfab7 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
 @@ -2044,11 +2044,16 @@ impl<W: LayoutElement> Layout<W> {
@@ -204,7 +204,7 @@ index f51de69..256df02 100644
  
      pub fn move_down(&mut self) {
 diff --git a/src/layout/scrolling.rs b/src/layout/scrolling.rs
-index 732a182..2de8e30 100644
+index 732a182d..2de8e30e 100644
 --- a/src/layout/scrolling.rs
 +++ b/src/layout/scrolling.rs
 @@ -1699,49 +1699,88 @@ impl<W: LayoutElement> ScrollingSpace<W> {
@@ -312,7 +312,7 @@ index 732a182..2de8e30 100644
  
      pub fn move_left(&mut self) -> bool {
 diff --git a/src/layout/tests.rs b/src/layout/tests.rs
-index a861a8f..9a2f9f5 100644
+index edd3184d..af08b158 100644
 --- a/src/layout/tests.rs
 +++ b/src/layout/tests.rs
 @@ -493,7 +493,12 @@ enum Op {
@@ -393,7 +393,7 @@ index a861a8f..9a2f9f5 100644
  fn workspace_output_fallback_promotes_preferred_in_reverse_connection_order() {
      // output3 is not a candidate, so it stays the primary monitor throughout; every assertion
 diff --git a/src/layout/workspace.rs b/src/layout/workspace.rs
-index 5f1d923..1085708 100644
+index 5f1d9230..10857089 100644
 --- a/src/layout/workspace.rs
 +++ b/src/layout/workspace.rs
 @@ -1101,11 +1101,15 @@ impl<W: LayoutElement> Workspace<W> {
@@ -416,7 +416,7 @@ index 5f1d923..1085708 100644
  
      pub fn move_down(&mut self) -> bool {
 diff --git a/src/tests/animations.rs b/src/tests/animations.rs
-index 51c57f7..a5044fd 100644
+index 51c57f73..a5044fd2 100644
 --- a/src/tests/animations.rs
 +++ b/src/tests/animations.rs
 @@ -188,3 +188,23 @@ fn egl_clientside_height_change_doesnt_animate() {

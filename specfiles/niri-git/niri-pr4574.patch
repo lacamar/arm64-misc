@@ -1,8 +1,8 @@
 diff --git a/src/handlers/image_copy_capture.rs b/src/handlers/image_copy_capture.rs
-index 81f9fd1..793a741 100644
+index af8aa9bd..11682329 100644
 --- a/src/handlers/image_copy_capture.rs
 +++ b/src/handlers/image_copy_capture.rs
-@@ -442,9 +442,8 @@ impl ImageCopyCaptureHandler for State {
+@@ -487,9 +487,8 @@ impl ImageCopyCaptureHandler for State {
      }
  
      fn cursor_session_destroyed(&mut self, session: CursorSessionRef) {

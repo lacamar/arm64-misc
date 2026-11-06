@@ -1,8 +1,8 @@
 diff --git a/src/backend/tty.rs b/src/backend/tty.rs
-index 8876890..8572718 100644
+index be831b32..f649b3a2 100644
 --- a/src/backend/tty.rs
 +++ b/src/backend/tty.rs
-@@ -886,6 +886,10 @@ impl Tty {
+@@ -894,6 +894,10 @@ impl Tty {
                  );
              assert!(self.dmabuf_global.replace(dmabuf_global).is_none());
  
@@ -13,7 +13,7 @@ index 8876890..8572718 100644
              // Update the dmabuf feedbacks for all surfaces.
              for (node, device) in self.devices.iter_mut() {
                  for surface in device.surfaces.values_mut() {
-@@ -1201,6 +1205,8 @@ impl Tty {
+@@ -1209,6 +1213,8 @@ impl Tty {
  
                  // Disable and destroy the dmabuf global.
                  if let Some(global) = self.dmabuf_global.take() {
@@ -23,7 +23,7 @@ index 8876890..8572718 100644
                          .disable_global::<State>(&niri.display_handle, &global);
                      niri.event_loop
 diff --git a/src/handlers/compositor.rs b/src/handlers/compositor.rs
-index a136ce9..88158cd 100644
+index a136ce9b..88158cdc 100644
 --- a/src/handlers/compositor.rs
 +++ b/src/handlers/compositor.rs
 @@ -3,20 +3,19 @@ use std::collections::hash_map::Entry;
@@ -81,7 +81,7 @@ index a136ce9..88158cd 100644
          let s = surface.clone();
 diff --git a/src/handlers/dmabuf_readiness.rs b/src/handlers/dmabuf_readiness.rs
 new file mode 100644
-index 0000000..f5512f6
+index 00000000..f5512f6c
 --- /dev/null
 +++ b/src/handlers/dmabuf_readiness.rs
 @@ -0,0 +1,103 @@
@@ -189,7 +189,7 @@ index 0000000..f5512f6
 +    true
 +}
 diff --git a/src/handlers/mod.rs b/src/handlers/mod.rs
-index 8ad784e..2ec8a86 100644
+index ec857552..c260f892 100644
 --- a/src/handlers/mod.rs
 +++ b/src/handlers/mod.rs
 @@ -1,5 +1,6 @@
@@ -207,7 +207,7 @@ index 8ad784e..2ec8a86 100644
  use smithay::wayland::fractional_scale::FractionalScaleHandler;
  use smithay::wayland::idle_inhibit::IdleInhibitHandler;
  use smithay::wayland::idle_notify::{IdleNotifierHandler, IdleNotifierState};
-@@ -456,6 +458,12 @@ impl DmabufHandler for State {
+@@ -447,6 +449,12 @@ impl DmabufHandler for State {
      }
  }
  
@@ -221,7 +221,7 @@ index 8ad784e..2ec8a86 100644
      fn lock_state(&mut self) -> &mut SessionLockManagerState {
          &mut self.niri.session_lock_state
 diff --git a/src/handlers/xdg_shell.rs b/src/handlers/xdg_shell.rs
-index 6477d65..68e22ad 100644
+index 6477d65a..68e22ad6 100644
 --- a/src/handlers/xdg_shell.rs
 +++ b/src/handlers/xdg_shell.rs
 @@ -1,6 +1,5 @@
@@ -324,10 +324,10 @@ index 6477d65..68e22ad 100644
          let window = mapped.window.clone();
          if got_unmapped {
 diff --git a/src/niri.rs b/src/niri.rs
-index 4c57767..3591e00 100644
+index 3352b763..157add24 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
-@@ -20,6 +20,7 @@ use niri_config::{
+@@ -22,6 +22,7 @@ use niri_config::{
      WorkspaceReference, Xkb,
  };
  use smithay::backend::allocator::Fourcc;
@@ -335,7 +335,7 @@ index 4c57767..3591e00 100644
  use smithay::backend::input::{InputTime, Keycode};
  use smithay::backend::renderer::damage::OutputDamageTracker;
  use smithay::backend::renderer::element::memory::MemoryRenderBufferRenderElement;
-@@ -80,6 +81,7 @@ use smithay::wayland::compositor::{
+@@ -81,6 +82,7 @@ use smithay::wayland::compositor::{
  };
  use smithay::wayland::cursor_shape::CursorShapeManagerState;
  use smithay::wayland::dmabuf::DmabufState;
@@ -343,7 +343,7 @@ index 4c57767..3591e00 100644
  use smithay::wayland::fractional_scale::FractionalScaleManagerState;
  use smithay::wayland::idle_inhibit::IdleInhibitManagerState;
  use smithay::wayland::idle_notify::IdleNotifierState;
-@@ -323,6 +325,7 @@ pub struct Niri {
+@@ -324,6 +326,7 @@ pub struct Niri {
      pub shm_state: ShmState,
      pub output_manager_state: OutputManagerState,
      pub dmabuf_state: DmabufState,
@@ -351,7 +351,7 @@ index 4c57767..3591e00 100644
      pub fractional_scale_manager_state: FractionalScaleManagerState,
      pub seat_state: SeatState<State>,
      pub tablet_state: TabletManagerState,
-@@ -2903,6 +2906,7 @@ impl Niri {
+@@ -2983,6 +2986,7 @@ impl Niri {
              shm_state,
              output_manager_state,
              dmabuf_state,
@@ -359,7 +359,7 @@ index 4c57767..3591e00 100644
              fractional_scale_manager_state,
              seat_state,
              tablet_state,
-@@ -5324,6 +5328,48 @@ impl Niri {
+@@ -5428,6 +5432,48 @@ impl Niri {
          }
      }
  

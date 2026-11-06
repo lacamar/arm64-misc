@@ -77,7 +77,7 @@ index 4f79fc58..eddc0a08 100644
  
  #[derive(knuffel::Decode, Debug, Clone, Copy, PartialEq)]
 diff --git a/niri-ipc/src/lib.rs b/niri-ipc/src/lib.rs
-index 624fb9ab..d2f5e613 100644
+index 99174208..0c31c4db 100644
 --- a/niri-ipc/src/lib.rs
 +++ b/niri-ipc/src/lib.rs
 @@ -1412,6 +1412,8 @@ pub struct Window {
@@ -144,7 +144,7 @@ index c260f892..8f52bec3 100644
  
  impl OutputManagementHandler for State {
 diff --git a/src/ipc/client.rs b/src/ipc/client.rs
-index 8010734f..8345170e 100644
+index 9c7c493c..972177b1 100644
 --- a/src/ipc/client.rs
 +++ b/src/ipc/client.rs
 @@ -9,6 +9,7 @@ use niri_ipc::socket::Socket;
@@ -182,7 +182,7 @@ index 8010734f..8345170e 100644
          "  Is floating: {}",
          if window.is_floating { "yes" } else { "no" }
 diff --git a/src/ipc/server.rs b/src/ipc/server.rs
-index be133ba1..c03dbfda 100644
+index e713ae12..4b83ed8a 100644
 --- a/src/ipc/server.rs
 +++ b/src/ipc/server.rs
 @@ -18,7 +18,7 @@ use niri_config::OutputName;
@@ -257,7 +257,7 @@ index be133ba1..c03dbfda 100644
  }
  
 diff --git a/src/niri.rs b/src/niri.rs
-index 5dc9f763..381c9d4f 100644
+index 63022652..616b9120 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -126,6 +126,7 @@ use smithay::wayland::virtual_keyboard::VirtualKeyboardManagerState;
@@ -276,7 +276,7 @@ index 5dc9f763..381c9d4f 100644
  
      // This will not work as is outside of tests, so it is gated with #[cfg(test)] for now. In
      // particular, shaders will need to learn about the single pixel buffer. Also, it must be
-@@ -2809,6 +2811,7 @@ impl Niri {
+@@ -2808,6 +2810,7 @@ impl Niri {
  
          let mutter_x11_interop_state =
              MutterX11InteropManagerState::new::<State, _>(&display_handle, move |_| true);
@@ -284,7 +284,7 @@ index 5dc9f763..381c9d4f 100644
  
          let session_management_state = SessionManagementState::new(&display_handle);
          event_loop
-@@ -3030,6 +3033,7 @@ impl Niri {
+@@ -3029,6 +3032,7 @@ impl Niri {
              activation_state,
              mutter_x11_interop_state,
              session_management_state,

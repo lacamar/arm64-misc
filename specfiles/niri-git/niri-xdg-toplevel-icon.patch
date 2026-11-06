@@ -1,5 +1,5 @@
 diff --git a/src/handlers/mod.rs b/src/handlers/mod.rs
-index 6b4f1a5..8882b89 100644
+index b4bc4dfd..ae1eb290 100644
 --- a/src/handlers/mod.rs
 +++ b/src/handlers/mod.rs
 @@ -72,6 +72,7 @@ use smithay::wayland::virtual_pointer::{VirtualPointerBackend, VirtualPointerHan
@@ -10,7 +10,7 @@ index 6b4f1a5..8882b89 100644
  use smithay::wayland::xdg_toplevel_tag::XdgToplevelTagHandler;
  
  pub use crate::handlers::xdg_shell::KdeDecorationsModeState;
-@@ -968,6 +969,8 @@ impl XdgToplevelTagHandler for State {
+@@ -959,6 +960,8 @@ impl XdgToplevelTagHandler for State {
      // no set_description because window rules only match on the tag
  }
  
@@ -20,10 +20,10 @@ index 6b4f1a5..8882b89 100644
  
  impl OutputManagementHandler for State {
 diff --git a/src/niri.rs b/src/niri.rs
-index 5f51f04..b56ddb4 100644
+index b92e9cbe..d7498b33 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
-@@ -126,6 +126,7 @@ use smithay::wayland::virtual_keyboard::VirtualKeyboardManagerState;
+@@ -127,6 +127,7 @@ use smithay::wayland::virtual_keyboard::VirtualKeyboardManagerState;
  use smithay::wayland::virtual_pointer::VirtualPointerManagerState;
  use smithay::wayland::xdg_activation::XdgActivationState;
  use smithay::wayland::xdg_foreign::XdgForeignState;
@@ -31,7 +31,7 @@ index 5f51f04..b56ddb4 100644
  use smithay::wayland::xdg_toplevel_tag::XdgToplevelTagManager;
  use wayland_server::protocol::wl_output::WlOutput;
  
-@@ -2738,6 +2739,7 @@ impl Niri {
+@@ -2818,6 +2819,7 @@ impl Niri {
          CommitTimingManagerState::new::<State>(&display_handle);
          ContentTypeState::new::<State>(&display_handle);
          AlphaModifierState::new::<State>(&display_handle);

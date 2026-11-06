@@ -4818,7 +4818,7 @@ index 37b1609e..5f1d9230 100644
          tile_size: Size<f64, Logical>,
          tile_pos: Point<f64, Logical>,
 diff --git a/src/niri.rs b/src/niri.rs
-index 90777846..493a16ee 100644
+index d7498b33..6ec227fb 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -35,7 +35,7 @@ use smithay::backend::renderer::element::{
@@ -4830,7 +4830,7 @@ index 90777846..493a16ee 100644
  use smithay::backend::renderer::Color32F;
  use smithay::desktop::utils::{
      bbox_from_surface_tree, output_update, send_dmabuf_feedback_surface_tree,
-@@ -4970,7 +4970,7 @@ impl Niri {
+@@ -4969,7 +4969,7 @@ impl Niri {
          push(backdrop);
      }
  
@@ -4839,7 +4839,7 @@ index 90777846..493a16ee 100644
          let _span = tracy_client::span!("Niri::fill_xray_elements");
  
          // Make sure the xrayed elements themselves cannot use xray by mistake.
-@@ -5947,7 +5947,7 @@ impl Niri {
+@@ -5950,7 +5950,7 @@ impl Niri {
  
      pub fn render_for_screencopy_with_damage(
          &mut self,
@@ -4848,7 +4848,7 @@ index 90777846..493a16ee 100644
          output: &Output,
      ) {
          let _span = tracy_client::span!("Niri::render_for_screencopy_with_damage");
-@@ -6019,7 +6019,7 @@ impl Niri {
+@@ -6022,7 +6022,7 @@ impl Niri {
  
      pub fn render_for_screencopy_without_damage(
          &mut self,
@@ -4857,7 +4857,7 @@ index 90777846..493a16ee 100644
          manager: &ZwlrScreencopyManagerV1,
          screencopy: Screencopy,
      ) -> anyhow::Result<()> {
-@@ -6071,12 +6071,12 @@ impl Niri {
+@@ -6074,12 +6074,12 @@ impl Niri {
      #[allow(clippy::too_many_arguments)]
      fn capture_image_copy_frame(
          &self,
@@ -4872,7 +4872,7 @@ index 90777846..493a16ee 100644
          states: RenderElementStates,
          target_presentation_time: Duration,
      ) -> bool {
-@@ -6111,7 +6111,7 @@ impl Niri {
+@@ -6114,7 +6114,7 @@ impl Niri {
  
      pub fn render_for_image_copy_capture(
          &mut self,
@@ -4881,7 +4881,7 @@ index 90777846..493a16ee 100644
          output: &Output,
          target_presentation_time: Duration,
      ) {
-@@ -6203,7 +6203,7 @@ impl Niri {
+@@ -6206,7 +6206,7 @@ impl Niri {
  
      pub fn render_windows_for_image_copy_capture(
          &mut self,
@@ -4890,7 +4890,7 @@ index 90777846..493a16ee 100644
          output: &Output,
          target_presentation_time: Duration,
      ) {
-@@ -6302,7 +6302,7 @@ impl Niri {
+@@ -6305,7 +6305,7 @@ impl Niri {
  
      pub fn render_for_image_copy_cursor_capture(
          &mut self,
@@ -4899,7 +4899,7 @@ index 90777846..493a16ee 100644
          output: &Output,
          target_presentation_time: Duration,
      ) {
-@@ -6386,9 +6386,9 @@ impl Niri {
+@@ -6389,9 +6389,9 @@ impl Niri {
  
      pub fn render_cursor_for_capture(
          &self,
@@ -4911,7 +4911,7 @@ index 90777846..493a16ee 100644
          let int_scale = output.current_scale().integer_scale();
          let output_scale = Scale::from(output.current_scale().fractional_scale());
  
-@@ -6606,7 +6606,7 @@ impl Niri {
+@@ -6634,7 +6634,7 @@ impl Niri {
  
      pub fn capture_screenshots<'a>(
          &'a self,
@@ -4920,7 +4920,7 @@ index 90777846..493a16ee 100644
      ) -> impl Iterator<Item = (Output, [OutputScreenshot; 3])> + 'a {
          self.global_space.outputs().cloned().filter_map(|output| {
              let size = output.current_mode().unwrap().size;
-@@ -6687,7 +6687,7 @@ impl Niri {
+@@ -6715,7 +6715,7 @@ impl Niri {
  
      pub fn screenshot(
          &mut self,
@@ -4929,7 +4929,7 @@ index 90777846..493a16ee 100644
          output: &Output,
          write_to_disk: bool,
          include_pointer: bool,
-@@ -6724,7 +6724,7 @@ impl Niri {
+@@ -6752,7 +6752,7 @@ impl Niri {
  
      pub fn screenshot_window(
          &self,
@@ -4938,7 +4938,7 @@ index 90777846..493a16ee 100644
          output: &Output,
          mapped: &Mapped,
          write_to_disk: bool,
-@@ -6741,7 +6741,7 @@ impl Niri {
+@@ -6769,7 +6769,7 @@ impl Niri {
                  mapped.rules().opacity.unwrap_or(1.).clamp(0., 1.)
              };
  
@@ -4947,7 +4947,7 @@ index 90777846..493a16ee 100644
  
          // Add pointer if requested and it's over this window.
          if show_pointer {
-@@ -6900,7 +6900,7 @@ impl Niri {
+@@ -6928,7 +6928,7 @@ impl Niri {
      #[cfg(feature = "dbus")]
      pub fn screenshot_all_outputs(
          &mut self,
@@ -4956,7 +4956,7 @@ index 90777846..493a16ee 100644
          include_pointer: bool,
          on_done: impl FnOnce(PathBuf) + Send + 'static,
      ) -> anyhow::Result<()> {
-@@ -7455,7 +7455,7 @@ impl Niri {
+@@ -7483,7 +7483,7 @@ impl Niri {
          }
      }
  
@@ -7362,7 +7362,7 @@ index f4b4f861..c1249f34 100644
              gles_frame,
              src,
 diff --git a/src/screencasting/mod.rs b/src/screencasting/mod.rs
-index bcdb09bf..9fae441f 100644
+index 3224d8cc..b8aa0d76 100644
 --- a/src/screencasting/mod.rs
 +++ b/src/screencasting/mod.rs
 @@ -8,7 +8,7 @@ use calloop::LoopHandle;
@@ -7383,7 +7383,7 @@ index bcdb09bf..9fae441f 100644
              })
              .unwrap_or_default();
  
-@@ -537,7 +537,7 @@ impl Niri {
+@@ -523,7 +523,7 @@ impl Niri {
  
      pub fn render_for_screen_cast(
          &mut self,
@@ -7392,7 +7392,7 @@ index bcdb09bf..9fae441f 100644
          output: &Output,
          target_presentation_time: Duration,
      ) {
-@@ -625,7 +625,7 @@ impl Niri {
+@@ -611,7 +611,7 @@ impl Niri {
  
      pub fn render_windows_for_screen_cast(
          &mut self,
