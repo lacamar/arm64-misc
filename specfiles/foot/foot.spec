@@ -4,7 +4,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        36%{?dist}
+Release:        37%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -25,6 +25,7 @@ Patch3:         foot-theme-reload.patch
 Patch4:         foot-session-history.patch
 Patch5:         foot-tab-activity.patch
 Patch6:         foot-tab-tooltips.patch
+Patch7:         foot-sidebar-clip.patch
 
 BuildRequires:  gcc
 BuildRequires:  gpgverify
@@ -160,6 +161,9 @@ desktop-file-validate \
 
 
 %changelog
+* Fri Nov 06 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-37
+- Fix sidebar crash on short windows
+
 * Sat Oct 31 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-36
 - Use Claude Code title state for tab spinner
 

@@ -1,0 +1,21 @@
+diff --git a/render.c b/render.c
+index 38473a7..7b21f6b 100644
+--- a/render.c
++++ b/render.c
+@@ -5532,10 +5532,15 @@ static void
+ sidebar_fill(struct buffer *buf, uint32_t color, uint16_t alpha, bool gamma,
+              int x, int y, int w, int h)
+ {
++    /* pixman's solid SRC fill skips bounds checks when no clip is set */
++    const int x0 = max(x, 0), y0 = max(y, 0);
++    const int x1 = min(x + w, buf->width), y1 = min(y + h, buf->height);
++    if (x1 <= x0 || y1 <= y0)
++        return;
+     pixman_color_t c = color_hex_to_pixman_with_alpha(color, alpha, gamma);
+     pixman_image_fill_rectangles(
+         PIXMAN_OP_SRC, buf->pix[0], &c, 1,
+-        &(pixman_rectangle16_t){x, y, w, h});
++        &(pixman_rectangle16_t){x0, y0, x1 - x0, y1 - y0});
+ }
+ 
+ static void
