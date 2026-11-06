@@ -1,0 +1,96 @@
+diff --git a/tabs.c b/tabs.c
+index 0ce598f..6b31ac0 100644
+--- a/tabs.c
++++ b/tabs.c
+@@ -3170,7 +3170,7 @@ enum {
+     MI_SPLIT_SELECTED, MI_CLOSE_SELECTED, MI_CLEAR_SELECTION, MI_POP,
+     MI_RENAME, MI_PIN, MI_UNPIN, MI_BROADCAST, MI_UNBROADCAST, MI_YES_CLOSE,
+     MI_REOPEN, MI_SORT_NAME, MI_SORT_RECENT, MI_SORT_PROGRAM, MI_SORT_AGE,
+-    MI_SORT_NONE, MI_PREFIX,
++    MI_SORT_NONE, MI_PREFIX, MI_CLOSE_WINDOW, MI_YES_CLOSE_WINDOW,
+ };
+ 
+ static const char *const menu_labels[] = {
+@@ -3198,6 +3198,8 @@ static const char *const menu_labels[] = {
+     [MI_SORT_AGE] = "By opening order",
+     [MI_SORT_NONE] = "Manual order",
+     [MI_PREFIX] = "Set window prefix…",
++    [MI_CLOSE_WINDOW] = "Close window…",
++    [MI_YES_CLOSE_WINDOW] = "Close window",
+ };
+ 
+ static bool
+@@ -3219,13 +3221,21 @@ tab_title32(const struct terminal *t)
+ bool
+ tabs_menu_is_confirm(const struct wl_window *win)
+ {
+-    return win->menu.kind == TAB_MENU_CONFIRM_KILL || win->menu.kind == TAB_MENU_CONFIRM_CLOSE;
++    return win->menu.kind == TAB_MENU_CONFIRM_KILL || win->menu.kind == TAB_MENU_CONFIRM_CLOSE ||
++        win->menu.kind == TAB_MENU_CONFIRM_WINDOW;
+ }
+ 
+ /* Message line under a confirm dialog's title */
+ char32_t *
+ tabs_confirm_message(const struct wl_window *win)
+ {
++    if (win->menu.kind == TAB_MENU_CONFIRM_WINDOW) {
++        const size_t n = tll_length(win->tabs);
++        char *m = xasprintf("%zu tab%s will be closed.", n, n == 1 ? "" : "s");
++        char32_t *r = ambstoc32(m);
++        free(m);
++        return r != NULL ? r : xc32dup(U"");
++    }
+     const struct terminal *t = win->menu.target;
+     char *title = tabs_title(t, false);
+     char *m = xasprintf(win->menu.kind == TAB_MENU_CONFIRM_KILL
+@@ -3248,6 +3258,9 @@ tabs_menu_header(const struct wl_window *win)
+     case TAB_MENU_CONFIRM_CLOSE:
+         h = xstrdup("Close pinned tab?");
+         break;
++    case TAB_MENU_CONFIRM_WINDOW:
++        h = xstrdup("Close this window?");
++        break;
+     case TAB_MENU_RENAME:
+         h = xstrdup("Rename tab (empty: use the program's title)");
+         break;
+@@ -3399,6 +3412,10 @@ menu_open(struct wl_window *win, struct terminal *t, enum tab_menu_kind kind,
+         it[n++] = MI_NO;
+         it[n++] = MI_YES_CLOSE;
+         break;
++    case TAB_MENU_CONFIRM_WINDOW:
++        it[n++] = MI_NO;
++        it[n++] = MI_YES_CLOSE_WINDOW;
++        break;
+     case TAB_MENU_RENAME:
+     case TAB_MENU_PREFIX: {
+         const char *cur = kind == TAB_MENU_PREFIX ? win->prefix : t->tab_label;
+@@ -3423,6 +3440,7 @@ menu_open(struct wl_window *win, struct terminal *t, enum tab_menu_kind kind,
+         it[n++] = MI_SORT_AGE;
+         it[n++] = MI_PREFIX;
+         it[n++] = MI_REOPEN;
++        it[n++] = MI_CLOSE_WINDOW;
+         break;
+     case TAB_MENU_HISTORY:
+         n = (int)session_history_load(win->term->wl->session);
+@@ -3688,6 +3706,8 @@ menu_activate(struct seat *seat, struct wl_window *win, int i)
+     case MI_BROADCAST:
+     case MI_UNBROADCAST: tabs_toggle_broadcast(win); break;
+     case MI_REOPEN:    tabs_reopen(win); break;
++    case MI_CLOSE_WINDOW: menu_open(win, win->term, TAB_MENU_CONFIRM_WINDOW, -1, -1); break;
++    case MI_YES_CLOSE_WINDOW: tabs_close_window(win); break;
+     case MI_SORT_NAME:    tabs_sort(win, SORT_NAME); break;
+     case MI_SORT_RECENT:  tabs_sort(win, SORT_RECENT); break;
+     case MI_SORT_PROGRAM: tabs_sort(win, SORT_PROGRAM); break;
+diff --git a/wayland.h b/wayland.h
+index 76f5767..d6478e7 100644
+--- a/wayland.h
++++ b/wayland.h
+@@ -374,7 +374,7 @@ enum tab_drop { TAB_DROP_NONE, TAB_DROP_SPLIT, TAB_DROP_DETACH };
+ enum tab_menu_kind {
+     TAB_MENU_NONE, TAB_MENU_ACTIONS, TAB_MENU_CONFIRM_KILL, TAB_MENU_SELECTION,
+     TAB_MENU_CONFIRM_CLOSE, TAB_MENU_RENAME, TAB_MENU_SWITCHER, TAB_MENU_SORT,
+-    TAB_MENU_PREFIX, TAB_MENU_HISTORY,
++    TAB_MENU_PREFIX, TAB_MENU_HISTORY, TAB_MENU_CONFIRM_WINDOW,
+ };
+ 
+ enum tab_hover {

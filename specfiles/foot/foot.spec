@@ -4,7 +4,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        37%{?dist}
+Release:        38%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -26,6 +26,7 @@ Patch4:         foot-session-history.patch
 Patch5:         foot-tab-activity.patch
 Patch6:         foot-tab-tooltips.patch
 Patch7:         foot-sidebar-clip.patch
+Patch8:         foot-close-window.patch
 
 BuildRequires:  gcc
 BuildRequires:  gpgverify
@@ -161,6 +162,9 @@ desktop-file-validate \
 
 
 %changelog
+* Fri Nov 06 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-38
+- Add close-window item to sidebar menu
+
 * Fri Nov 06 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-37
 - Fix sidebar crash on short windows
 
