@@ -69,10 +69,10 @@ index 48572f6e..4159a958 100644
      fn from_iter<T: IntoIterator<Item = Output>>(iter: T) -> Self {
          Self(Vec::from_iter(iter))
 diff --git a/src/backend/tty.rs b/src/backend/tty.rs
-index f649b3a2..77059aca 100644
+index 0a3f1086..d1e809bf 100644
 --- a/src/backend/tty.rs
 +++ b/src/backend/tty.rs
-@@ -20,15 +20,20 @@ use niri_ipc::{HSyncPolarity, VSyncPolarity};
+@@ -20,16 +20,21 @@ use niri_ipc::{HSyncPolarity, VSyncPolarity};
  use smithay::backend::allocator::dmabuf::Dmabuf;
  use smithay::backend::allocator::format::FormatSet;
  use smithay::backend::allocator::gbm::{GbmAllocator, GbmBufferFlags, GbmDevice};
@@ -90,12 +90,13 @@ index f649b3a2..77059aca 100644
  };
  use smithay::backend::egl::context::ContextPriority;
  use smithay::backend::egl::{EGLDevice, EGLDisplay};
+ use smithay::backend::input::InputTime;
  use smithay::backend::libinput::{LibinputInputBackend, LibinputSessionInterface};
 +use smithay::backend::renderer::element::RenderElementStates;
  use smithay::backend::renderer::gles::GlesRenderer;
  use smithay::backend::renderer::multigpu::gbm::GbmGlesBackend;
  use smithay::backend::renderer::multigpu::{GpuManager, MultiFrame, MultiRenderer};
-@@ -66,8 +71,9 @@ use crate::backend::OutputId;
+@@ -67,8 +72,9 @@ use crate::backend::OutputId;
  use crate::frame_clock::FrameClock;
  use crate::niri::{Niri, RedrawState, State};
  use crate::render_helpers::debug::draw_damage;
@@ -106,7 +107,7 @@ index f649b3a2..77059aca 100644
  use crate::utils::{get_monotonic_time, is_laptop_panel, logical_output, PanelOrientation};
  
  // When copying from rendering Nvidia dGPU to target iGPU,
-@@ -383,6 +389,8 @@ struct Surface {
+@@ -384,6 +390,8 @@ struct Surface {
      gamma_props: Option<GammaProps>,
      /// Gamma change to apply upon session resume.
      pending_gamma_change: Option<Option<Vec<u16>>>,
@@ -115,7 +116,7 @@ index f649b3a2..77059aca 100644
      /// Tracy frame that goes from vblank to vblank.
      vblank_frame: Option<tracy_client::Frame>,
      /// Frame name for the VBlank frame.
-@@ -433,6 +441,7 @@ struct ConnectorProperties<'a> {
+@@ -434,6 +442,7 @@ struct ConnectorProperties<'a> {
      properties: Vec<(property::Info, property::RawValue)>,
      has_change: bool,
      requests: AtomicModeReq,
@@ -123,7 +124,7 @@ index f649b3a2..77059aca 100644
  }
  
  impl Tty {
-@@ -715,13 +724,17 @@ impl Tty {
+@@ -716,13 +725,17 @@ impl Tty {
                          if let Ok(mut props) =
                              ConnectorProperties::try_new(&device.drm, surface.connector)
                          {
@@ -148,7 +149,7 @@ index f649b3a2..77059aca 100644
                          } else {
                              warn!("failed to get connector properties");
                          }
-@@ -1340,9 +1353,21 @@ impl Tty {
+@@ -1341,9 +1354,21 @@ impl Tty {
  
          debug!("picking mode: {mode:?}");
  
@@ -171,7 +172,7 @@ index f649b3a2..77059aca 100644
  
              match props.get_panel_orientation() {
                  Ok(x) => orientation = Some(x),
-@@ -1525,6 +1550,21 @@ impl Tty {
+@@ -1526,6 +1551,21 @@ impl Tty {
              compositor.set_debug_flags(DebugFlags::TINT);
          }
  
@@ -193,7 +194,7 @@ index f649b3a2..77059aca 100644
          let mut dmabuf_feedback = None;
          if let Ok(primary_renderer) = self.gpu_manager.single_renderer(&self.primary_render_node) {
              let primary_formats = primary_renderer.dmabuf_formats();
-@@ -1573,6 +1613,8 @@ impl Tty {
+@@ -1574,6 +1614,8 @@ impl Tty {
              dmabuf_feedback,
              gamma_props,
              pending_gamma_change: None,
@@ -202,7 +203,7 @@ index f649b3a2..77059aca 100644
              vblank_frame: None,
              vblank_frame_name,
              time_since_presentation_plot_name,
-@@ -1936,6 +1978,11 @@ impl Tty {
+@@ -1937,6 +1979,11 @@ impl Tty {
              target: RenderTarget::Output,
              xray: None,
          };
@@ -214,7 +215,7 @@ index f649b3a2..77059aca 100644
          let mut elements = niri.render_to_vec(ctx, output, true);
  
          // Visualize the damage, if enabled.
-@@ -1977,32 +2024,46 @@ impl Tty {
+@@ -1978,32 +2025,46 @@ impl Tty {
          };
  
          // Hand them over to the DRM.
@@ -283,7 +284,7 @@ index f649b3a2..77059aca 100644
                      let data = (presentation_feedbacks, target_presentation_time);
  
                      match drm_compositor.queue_frame(data) {
-@@ -2040,6 +2101,14 @@ impl Tty {
+@@ -2041,6 +2102,14 @@ impl Tty {
              Err(err) => {
                  // Can fail if we switched to a different TTY.
                  warn!("error rendering frame: {err}");
@@ -298,7 +299,7 @@ index f649b3a2..77059aca 100644
              }
          }
  
-@@ -2481,7 +2550,14 @@ impl Tty {
+@@ -2482,7 +2551,14 @@ impl Tty {
  
                  if let Ok(mut props) = ConnectorProperties::try_new(&device.drm, surface.connector)
                  {
@@ -314,7 +315,7 @@ index f649b3a2..77059aca 100644
                  } else {
                      warn!("failed to get connector properties");
                  }
-@@ -3393,6 +3469,7 @@ impl<'a> ConnectorProperties<'a> {
+@@ -3394,6 +3470,7 @@ impl<'a> ConnectorProperties<'a> {
              properties,
              has_change: false,
              requests: AtomicModeReq::new(),
@@ -322,7 +323,7 @@ index f649b3a2..77059aca 100644
          })
      }
  
-@@ -3482,38 +3559,143 @@ impl<'a> ConnectorProperties<'a> {
+@@ -3483,38 +3560,143 @@ impl<'a> ConnectorProperties<'a> {
          Ok(max_bpc)
      }
  
@@ -548,7 +549,7 @@ index 3f7eb189..41d33b29 100644
          Shadow = ShadowRenderElement,
          BackgroundEffect = BackgroundEffectElement,
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index 36df62aa..dff191f7 100644
+index f79a6231..286eba6b 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
 @@ -36,6 +36,7 @@ use std::mem;
@@ -577,7 +578,7 @@ index 36df62aa..dff191f7 100644
          BackgroundEffect = BackgroundEffectElement,
      }
 diff --git a/src/niri.rs b/src/niri.rs
-index c1e3508b..b92e9cbe 100644
+index 1ca1ec48..74d9da6b 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
@@ -596,7 +597,7 @@ index c1e3508b..b92e9cbe 100644
  use smithay::backend::renderer::element::utils::{
      select_dmabuf_feedback, CropRenderElement, Relocate, RelocateRenderElement,
      RescaleRenderElement,
-@@ -167,6 +167,7 @@ use crate::layout::{
+@@ -169,6 +169,7 @@ use crate::layout::{
      HitType, Layout, LayoutElement as _, LayoutElementRenderElement, MonitorRenderElement,
  };
  use crate::niri_render_elements;
@@ -604,7 +605,7 @@ index c1e3508b..b92e9cbe 100644
  use crate::protocols::ext_workspace::{self, ExtWorkspaceManagerState};
  use crate::protocols::foreign_toplevel::{self, ForeignToplevelManagerState};
  use crate::protocols::gamma_control::GammaControlManagerState;
-@@ -358,6 +359,7 @@ pub struct Niri {
+@@ -360,6 +361,7 @@ pub struct Niri {
      pub presentation_state: PresentationState,
      pub security_context_state: SecurityContextState,
      pub gamma_control_manager_state: GammaControlManagerState,
@@ -612,7 +613,7 @@ index c1e3508b..b92e9cbe 100644
      pub activation_state: XdgActivationState,
      pub mutter_x11_interop_state: MutterX11InteropManagerState,
      pub session_management_state: SessionManagementState,
-@@ -939,6 +941,7 @@ impl State {
+@@ -945,6 +947,7 @@ impl State {
  
          {
              let _span = tracy_client::span!("flush_clients");
@@ -620,7 +621,7 @@ index c1e3508b..b92e9cbe 100644
              self.niri.display_handle.flush_clients().unwrap();
          }
  
-@@ -1002,6 +1005,7 @@ impl State {
+@@ -1008,6 +1011,7 @@ impl State {
          self.ipc_refresh_casts();
  
          self.niri.refresh_window_rules();
@@ -628,7 +629,7 @@ index c1e3508b..b92e9cbe 100644
          self.refresh_ipc_outputs();
          self.ipc_refresh_layout();
          self.ipc_refresh_keyboard_layout_index();
-@@ -2057,6 +2061,7 @@ impl State {
+@@ -2063,6 +2067,7 @@ impl State {
  
          if output_config_changed {
              self.reload_output_config();
@@ -636,7 +637,7 @@ index c1e3508b..b92e9cbe 100644
          }
  
          if window_rules_changed {
-@@ -2794,6 +2799,8 @@ impl Niri {
+@@ -2836,6 +2841,8 @@ impl Niri {
              GammaControlManagerState::new::<State, _>(&display_handle, move |client| {
                  is_tty && !client.get_data::<ClientState>().unwrap().restricted
              });
@@ -645,7 +646,7 @@ index c1e3508b..b92e9cbe 100644
          let activation_state = XdgActivationState::new::<State>(&display_handle);
          event_loop
              .insert_source(
-@@ -3034,6 +3041,7 @@ impl Niri {
+@@ -3079,6 +3086,7 @@ impl Niri {
              presentation_state,
              security_context_state,
              gamma_control_manager_state,
@@ -653,7 +654,7 @@ index c1e3508b..b92e9cbe 100644
              activation_state,
              mutter_x11_interop_state,
              session_management_state,
-@@ -3292,6 +3300,12 @@ impl Niri {
+@@ -3341,6 +3349,12 @@ impl Niri {
          }
      }
  
@@ -666,7 +667,7 @@ index c1e3508b..b92e9cbe 100644
      pub fn add_output(&mut self, output: Output, refresh_interval: Option<Duration>, vrr: bool) {
          let global = output.create_global::<State>(&self.display_handle);
  
-@@ -7730,7 +7744,7 @@ fn scale_relocate_crop<E: Element>(
+@@ -7779,7 +7793,7 @@ fn scale_relocate_crop<E: Element>(
  
  niri_render_elements! {
      PointerRenderElements<R> => {
@@ -675,7 +676,7 @@ index c1e3508b..b92e9cbe 100644
          NamedPointer = MemoryRenderBufferRenderElement<R>,
      }
  }
-@@ -7761,7 +7775,7 @@ niri_render_elements! {
+@@ -7810,7 +7824,7 @@ niri_render_elements! {
              SolidColorRenderElement
          >>>,
          Pointer = PointerRenderElements<R>,

@@ -1,8 +1,8 @@
 diff --git a/src/niri.rs b/src/niri.rs
-index 67ea9b46..2ad8fb1a 100644
+index eb1bb406..1ab348d2 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
-@@ -3255,9 +3255,20 @@ impl Niri {
+@@ -3304,9 +3304,20 @@ impl Niri {
      }
  
      pub fn remove_output(&mut self, output: &Output) {

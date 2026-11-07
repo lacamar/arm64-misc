@@ -25,10 +25,10 @@ index 5fe1d29a..c1935394 100644
      }
  
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index 8575a1af..231a9146 100644
+index 13594c7b..d9984448 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
-@@ -4901,7 +4901,6 @@ impl<W: LayoutElement> Layout<W> {
+@@ -4926,7 +4926,6 @@ impl<W: LayoutElement> Layout<W> {
              win.set_bounds(output_size(&move_.output).to_i32_round());
  
              win.send_pending_configure();
@@ -37,10 +37,10 @@ index 8575a1af..231a9146 100644
              ongoing_scrolling_dnd.get_or_insert(!move_.is_floating);
          } else if let Some(InteractiveMoveState::Starting { window_id, .. }) =
 diff --git a/src/layout/scrolling.rs b/src/layout/scrolling.rs
-index 4f462c65..b207b09b 100644
+index 5363611c..d5e3fff8 100644
 --- a/src/layout/scrolling.rs
 +++ b/src/layout/scrolling.rs
-@@ -3767,8 +3767,6 @@ impl<W: LayoutElement> ScrollingSpace<W> {
+@@ -3794,8 +3794,6 @@ impl<W: LayoutElement> ScrollingSpace<W> {
                  ) {
                      win.send_pending_configure();
                  }
@@ -50,10 +50,10 @@ index 4f462c65..b207b09b 100644
          }
      }
 diff --git a/src/niri.rs b/src/niri.rs
-index 2ad8fb1a..85f06ec2 100644
+index 1ab348d2..8c05df9d 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
-@@ -271,6 +271,9 @@ pub struct Niri {
+@@ -273,6 +273,9 @@ pub struct Niri {
      // Dmabuf readiness pre-commit hook for a surface.
      pub dmabuf_pre_commit_hook: HashMap<WlSurface, HookId>,
  
@@ -63,7 +63,7 @@ index 2ad8fb1a..85f06ec2 100644
      /// Clients to notify about their blockers being cleared.
      pub blocker_cleared_tx: Sender<Client>,
      pub blocker_cleared_rx: Receiver<Client>,
-@@ -2842,6 +2845,7 @@ impl Niri {
+@@ -2887,6 +2890,7 @@ impl Niri {
              mapped_layer_surfaces: HashMap::new(),
              root_surface: HashMap::new(),
              dmabuf_pre_commit_hook: HashMap::new(),
@@ -71,7 +71,7 @@ index 2ad8fb1a..85f06ec2 100644
              blocker_cleared_tx,
              blocker_cleared_rx,
              monitors_active: true,
-@@ -4366,6 +4370,10 @@ impl Niri {
+@@ -4415,6 +4419,10 @@ impl Niri {
          };
  
          self.layout.refresh(layout_is_active);

@@ -1,8 +1,8 @@
 diff --git a/niri-config/src/binds.rs b/niri-config/src/binds.rs
-index fff4817f..6db036ca 100644
+index e4701e52..6bc08e33 100644
 --- a/niri-config/src/binds.rs
 +++ b/niri-config/src/binds.rs
-@@ -480,6 +480,12 @@ pub enum Action {
+@@ -498,6 +498,12 @@ pub enum Action {
      FocusFloating,
      FocusTiling,
      SwitchFocusBetweenFloatingAndTiling,
@@ -15,7 +15,7 @@ index fff4817f..6db036ca 100644
      #[knuffel(skip)]
      MoveFloatingWindowById {
          id: Option<u64>,
-@@ -821,6 +827,12 @@ impl From<niri_ipc::Action> for Action {
+@@ -871,6 +877,12 @@ impl From<niri_ipc::Action> for Action {
              niri_ipc::Action::SwitchFocusBetweenFloatingAndTiling {} => {
                  Self::SwitchFocusBetweenFloatingAndTiling
              }
@@ -92,10 +92,10 @@ index 805457b0..195f948f 100644
              prefer_no_csd: true,
              cursor: Cursor {
 diff --git a/niri-ipc/src/lib.rs b/niri-ipc/src/lib.rs
-index 4b65ab57..624fb9ab 100644
+index 5120c18e..cb8d8beb 100644
 --- a/niri-ipc/src/lib.rs
 +++ b/niri-ipc/src/lib.rs
-@@ -857,6 +857,25 @@ pub enum Action {
+@@ -926,6 +926,25 @@ pub enum Action {
      FocusTiling {},
      /// Toggles the focus between the floating and the tiling layout.
      SwitchFocusBetweenFloatingAndTiling {},
@@ -121,7 +121,7 @@ index 4b65ab57..624fb9ab 100644
      /// Move a floating window on screen.
      #[cfg_attr(feature = "clap", clap(about = "Move the floating window on screen"))]
      MoveFloatingWindow {
-@@ -1381,6 +1400,8 @@ pub struct Window {
+@@ -1450,6 +1469,8 @@ pub struct Window {
      pub is_floating: bool,
      /// Whether this window requests your attention.
      pub is_urgent: bool,
@@ -131,10 +131,10 @@ index 4b65ab57..624fb9ab 100644
      pub layout: WindowLayout,
      /// Timestamp when the window was most recently focused.
 diff --git a/src/input/mod.rs b/src/input/mod.rs
-index b8518e96..bcd50023 100644
+index 93c9e72f..2869e507 100644
 --- a/src/input/mod.rs
 +++ b/src/input/mod.rs
-@@ -2406,6 +2406,40 @@ impl State {
+@@ -2509,6 +2509,40 @@ impl State {
                  // FIXME: granular
                  self.niri.queue_redraw_all();
              }
@@ -176,7 +176,7 @@ index b8518e96..bcd50023 100644
                  let window = if let Some(id) = id {
                      let id = MappedId::specific(id);
 diff --git a/src/ipc/client.rs b/src/ipc/client.rs
-index 878949cb..8010734f 100644
+index 10830c92..9c7c493c 100644
 --- a/src/ipc/client.rs
 +++ b/src/ipc/client.rs
 @@ -709,7 +709,12 @@ fn print_output(output: Output) -> anyhow::Result<()> {
@@ -194,10 +194,10 @@ index 878949cb..8010734f 100644
      if let Some(title) = &window.title {
          println!("  Title: \"{title}\"");
 diff --git a/src/ipc/server.rs b/src/ipc/server.rs
-index cd81b702..be133ba1 100644
+index 0a9d0ea9..0e1bebeb 100644
 --- a/src/ipc/server.rs
 +++ b/src/ipc/server.rs
-@@ -516,6 +516,7 @@ async fn handle_event_stream_client(client: EventStreamClient) -> anyhow::Result
+@@ -519,6 +519,7 @@ async fn handle_event_stream_client(client: EventStreamClient) -> anyhow::Result
  fn make_ipc_window(
      mapped: &Mapped,
      workspace_id: Option<WorkspaceId>,
@@ -205,7 +205,7 @@ index cd81b702..be133ba1 100644
      layout: WindowLayout,
  ) -> niri_ipc::Window {
      with_toplevel_role(mapped.toplevel(), |role| niri_ipc::Window {
-@@ -527,6 +528,7 @@ fn make_ipc_window(
+@@ -530,6 +531,7 @@ fn make_ipc_window(
          is_focused: mapped.is_focused(),
          is_floating: mapped.is_floating(),
          is_urgent: mapped.is_urgent(),
@@ -213,7 +213,7 @@ index cd81b702..be133ba1 100644
          layout,
          focus_timestamp: mapped.get_focus_timestamp().map(Timestamp::from),
      })
-@@ -713,7 +715,12 @@ impl State {
+@@ -716,7 +718,12 @@ impl State {
              }
  
              let Some(ipc_win) = state.windows.get(&id) else {
@@ -227,7 +227,7 @@ index cd81b702..be133ba1 100644
                  events.push(Event::WindowOpenedOrChanged { window });
                  return;
              };
-@@ -727,7 +734,12 @@ impl State {
+@@ -730,7 +737,12 @@ impl State {
              });
  
              if changed {
@@ -242,7 +242,7 @@ index cd81b702..be133ba1 100644
                  return;
              }
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index c924b5c7..a691766e 100644
+index e79a8ffc..328d3ad4 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
 @@ -360,6 +360,8 @@ pub struct Layout<W: LayoutElement> {
@@ -562,7 +562,7 @@ index c924b5c7..a691766e 100644
      pub fn focus_output(&mut self, output: &Output) {
          if let MonitorSet::Normal {
              monitors,
-@@ -4965,6 +5177,40 @@ impl<W: LayoutElement> Layout<W> {
+@@ -4990,6 +5202,40 @@ impl<W: LayoutElement> Layout<W> {
  
          self.is_active = is_active;
  

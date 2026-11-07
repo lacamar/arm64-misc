@@ -31,10 +31,10 @@ index 3146c659..ba39650e 100644
 +smithay = { path = "smithay" }
 +smithay-drm-extras = { path = "smithay/smithay-drm-extras" }
 diff --git a/src/backend/tty.rs b/src/backend/tty.rs
-index 3629a15f..be831b32 100644
+index 6126dc2c..a5c2f710 100644
 --- a/src/backend/tty.rs
 +++ b/src/backend/tty.rs
-@@ -72,8 +72,12 @@ use crate::utils::{get_monotonic_time, is_laptop_panel, logical_output, PanelOri
+@@ -73,8 +73,12 @@ use crate::utils::{get_monotonic_time, is_laptop_panel, logical_output, PanelOri
  
  // When copying from rendering Nvidia dGPU to target iGPU,
  // it only understands X/Abgr and not X/Argb.
@@ -50,10 +50,10 @@ index 3629a15f..be831b32 100644
  // Smithay should fall back to Xrgb/Xbgr automatically if needed.
  const SUPPORTED_COLOR_FORMATS: [Fourcc; 2] = [Fourcc::Argb8888, Fourcc::Abgr8888];
 diff --git a/src/niri.rs b/src/niri.rs
-index 2705d6db..67ea9b46 100644
+index f4d24a2c..eb1bb406 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
-@@ -1168,9 +1168,7 @@ impl State {
+@@ -1174,9 +1174,7 @@ impl State {
  
          let new_active = self.niri.layout.active_output().cloned();
          if new_active != active_output {

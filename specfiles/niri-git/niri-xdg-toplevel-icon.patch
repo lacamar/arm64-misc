@@ -20,7 +20,7 @@ index b4bc4dfd..ae1eb290 100644
  
  impl OutputManagementHandler for State {
 diff --git a/src/niri.rs b/src/niri.rs
-index b92e9cbe..d7498b33 100644
+index 74d9da6b..24b190a4 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -127,6 +127,7 @@ use smithay::wayland::virtual_keyboard::VirtualKeyboardManagerState;
@@ -31,7 +31,7 @@ index b92e9cbe..d7498b33 100644
  use smithay::wayland::xdg_toplevel_tag::XdgToplevelTagManager;
  use wayland_server::protocol::wl_output::WlOutput;
  
-@@ -2818,6 +2819,7 @@ impl Niri {
+@@ -2860,6 +2861,7 @@ impl Niri {
          CommitTimingManagerState::new::<State>(&display_handle);
          ContentTypeState::new::<State>(&display_handle);
          AlphaModifierState::new::<State>(&display_handle);

@@ -665,7 +665,7 @@ index 53f2912f..a136ce9b 100644
                          AddWindowTarget::Output(output)
                      } else {
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index a691766e..f7a12b16 100644
+index 328d3ad4..9a49af85 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
 @@ -529,8 +529,8 @@ pub enum AddWindowTarget<'a, W: LayoutElement> {
@@ -727,10 +727,10 @@ index 4b1dfce8..edd3184d 100644
                      None,
                      false,
 diff --git a/src/niri.rs b/src/niri.rs
-index 6972090e..3352b763 100644
+index 77657fdf..02359230 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
-@@ -162,6 +162,7 @@ use crate::protocols::foreign_toplevel::{self, ForeignToplevelManagerState};
+@@ -164,6 +164,7 @@ use crate::protocols::foreign_toplevel::{self, ForeignToplevelManagerState};
  use crate::protocols::gamma_control::GammaControlManagerState;
  use crate::protocols::mutter_x11_interop::MutterX11InteropManagerState;
  use crate::protocols::output_management::OutputManagementManagerState;
@@ -738,7 +738,7 @@ index 6972090e..3352b763 100644
  use crate::protocols::screencopy::{Screencopy, ScreencopyManagerState};
  use crate::render_helpers::blur::BlurOptions;
  use crate::render_helpers::debug::push_opaque_regions;
-@@ -347,6 +348,7 @@ pub struct Niri {
+@@ -349,6 +350,7 @@ pub struct Niri {
      pub gamma_control_manager_state: GammaControlManagerState,
      pub activation_state: XdgActivationState,
      pub mutter_x11_interop_state: MutterX11InteropManagerState,
@@ -746,7 +746,7 @@ index 6972090e..3352b763 100644
  
      // This will not work as is outside of tests, so it is gated with #[cfg(test)] for now. In
      // particular, shaders will need to learn about the single pixel buffer. Also, it must be
-@@ -2789,6 +2791,17 @@ impl Niri {
+@@ -2831,6 +2833,17 @@ impl Niri {
          let mutter_x11_interop_state =
              MutterX11InteropManagerState::new::<State, _>(&display_handle, move |_| true);
  
@@ -764,7 +764,7 @@ index 6972090e..3352b763 100644
          #[cfg(test)]
          let single_pixel_buffer_state = SinglePixelBufferState::new::<State>(&display_handle);
  
-@@ -2996,6 +3009,7 @@ impl Niri {
+@@ -3041,6 +3054,7 @@ impl Niri {
              gamma_control_manager_state,
              activation_state,
              mutter_x11_interop_state,

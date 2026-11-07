@@ -1,8 +1,8 @@
 diff --git a/src/backend/tty.rs b/src/backend/tty.rs
-index be831b32..f649b3a2 100644
+index a5c2f710..0a3f1086 100644
 --- a/src/backend/tty.rs
 +++ b/src/backend/tty.rs
-@@ -894,6 +894,10 @@ impl Tty {
+@@ -895,6 +895,10 @@ impl Tty {
                  );
              assert!(self.dmabuf_global.replace(dmabuf_global).is_none());
  
@@ -13,7 +13,7 @@ index be831b32..f649b3a2 100644
              // Update the dmabuf feedbacks for all surfaces.
              for (node, device) in self.devices.iter_mut() {
                  for surface in device.surfaces.values_mut() {
-@@ -1209,6 +1213,8 @@ impl Tty {
+@@ -1210,6 +1214,8 @@ impl Tty {
  
                  // Disable and destroy the dmabuf global.
                  if let Some(global) = self.dmabuf_global.take() {
@@ -324,7 +324,7 @@ index 6477d65a..68e22ad6 100644
          let window = mapped.window.clone();
          if got_unmapped {
 diff --git a/src/niri.rs b/src/niri.rs
-index 3352b763..157add24 100644
+index 02359230..3925ccfc 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -22,6 +22,7 @@ use niri_config::{
@@ -343,7 +343,7 @@ index 3352b763..157add24 100644
  use smithay::wayland::fractional_scale::FractionalScaleManagerState;
  use smithay::wayland::idle_inhibit::IdleInhibitManagerState;
  use smithay::wayland::idle_notify::IdleNotifierState;
-@@ -324,6 +326,7 @@ pub struct Niri {
+@@ -326,6 +328,7 @@ pub struct Niri {
      pub shm_state: ShmState,
      pub output_manager_state: OutputManagerState,
      pub dmabuf_state: DmabufState,
@@ -351,7 +351,7 @@ index 3352b763..157add24 100644
      pub fractional_scale_manager_state: FractionalScaleManagerState,
      pub seat_state: SeatState<State>,
      pub tablet_state: TabletManagerState,
-@@ -2983,6 +2986,7 @@ impl Niri {
+@@ -3028,6 +3031,7 @@ impl Niri {
              shm_state,
              output_manager_state,
              dmabuf_state,
@@ -359,7 +359,7 @@ index 3352b763..157add24 100644
              fractional_scale_manager_state,
              seat_state,
              tablet_state,
-@@ -5428,6 +5432,48 @@ impl Niri {
+@@ -5477,6 +5481,48 @@ impl Niri {
          }
      }
  

@@ -1,8 +1,8 @@
 diff --git a/src/niri.rs b/src/niri.rs
-index 6ec227fb..0cc6800e 100644
+index baa520e0..2ab724d9 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
-@@ -172,6 +172,7 @@ use crate::protocols::color_management::{self, ColorManagementState};
+@@ -174,6 +174,7 @@ use crate::protocols::color_management::{self, ColorManagementState};
  use crate::protocols::ext_workspace::{self, ExtWorkspaceManagerState};
  use crate::protocols::foreign_toplevel::{self, ForeignToplevelManagerState};
  use crate::protocols::gamma_control::GammaControlManagerState;
@@ -10,7 +10,7 @@ index 6ec227fb..0cc6800e 100644
  use crate::protocols::mutter_x11_interop::MutterX11InteropManagerState;
  use crate::protocols::output_management::OutputManagementManagerState;
  use crate::protocols::screencopy::{Screencopy, ScreencopyManagerState};
-@@ -360,6 +361,7 @@ pub struct Niri {
+@@ -362,6 +363,7 @@ pub struct Niri {
      pub presentation_state: PresentationState,
      pub security_context_state: SecurityContextState,
      pub gamma_control_manager_state: GammaControlManagerState,
@@ -18,7 +18,7 @@ index 6ec227fb..0cc6800e 100644
      pub color_management_state: ColorManagementState,
      pub activation_state: XdgActivationState,
      pub mutter_x11_interop_state: MutterX11InteropManagerState,
-@@ -2800,6 +2802,7 @@ impl Niri {
+@@ -2842,6 +2844,7 @@ impl Niri {
              GammaControlManagerState::new::<State, _>(&display_handle, move |client| {
                  is_tty && !client.get_data::<ClientState>().unwrap().restricted
              });
@@ -26,7 +26,7 @@ index 6ec227fb..0cc6800e 100644
          let color_management_state =
              ColorManagementState::new::<State, _>(&display_handle, |_| true);
          let activation_state = XdgActivationState::new::<State>(&display_handle);
-@@ -3043,6 +3046,7 @@ impl Niri {
+@@ -3088,6 +3091,7 @@ impl Niri {
              presentation_state,
              security_context_state,
              gamma_control_manager_state,
@@ -34,7 +34,7 @@ index 6ec227fb..0cc6800e 100644
              color_management_state,
              activation_state,
              mutter_x11_interop_state,
-@@ -3427,6 +3431,7 @@ impl Niri {
+@@ -3476,6 +3480,7 @@ impl Niri {
          self.global_space.unmap_output(output);
          self.reposition_outputs(None);
          self.gamma_control_manager_state.output_removed(output);
@@ -42,7 +42,7 @@ index 6ec227fb..0cc6800e 100644
  
          let state = self.output_state.remove(output).unwrap();
  
-@@ -3549,6 +3554,7 @@ impl Niri {
+@@ -3598,6 +3603,7 @@ impl Niri {
  
          self.monitors_active = false;
          backend.set_monitors_active(false);
@@ -50,7 +50,7 @@ index 6ec227fb..0cc6800e 100644
      }
  
      pub fn activate_monitors(&mut self, backend: &mut Backend) {
-@@ -3558,6 +3564,7 @@ impl Niri {
+@@ -3607,6 +3613,7 @@ impl Niri {
  
          self.monitors_active = true;
          backend.set_monitors_active(true);

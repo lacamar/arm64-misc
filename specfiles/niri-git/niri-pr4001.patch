@@ -184,10 +184,10 @@ index 3befce14..4c3991d5 100644
          let ws_size = self.view_size.upscale(zoom);
          let scale = self.scale.fractional_scale();
 diff --git a/src/layout/scrolling.rs b/src/layout/scrolling.rs
-index b207b09b..b9356f16 100644
+index d5e3fff8..5567311d 100644
 --- a/src/layout/scrolling.rs
 +++ b/src/layout/scrolling.rs
-@@ -2604,6 +2604,29 @@ impl<W: LayoutElement> ScrollingSpace<W> {
+@@ -2631,6 +2631,29 @@ impl<W: LayoutElement> ScrollingSpace<W> {
          view.intersection(window_rect)
      }
  
@@ -237,7 +237,7 @@ index 8d2d61e2..37b1609e 100644
          &self,
          window: &W::Id,
 diff --git a/src/niri.rs b/src/niri.rs
-index 616b9120..02f3c303 100644
+index f80bd63a..aba8fd08 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -103,6 +103,7 @@ use smithay::wayland::keyboard_shortcuts_inhibit::{
@@ -248,7 +248,7 @@ index 616b9120..02f3c303 100644
  use smithay::wayland::presentation::PresentationState;
  use smithay::wayland::relative_pointer::RelativePointerManagerState;
  use smithay::wayland::security_context::SecurityContextState;
-@@ -345,6 +346,7 @@ pub struct Niri {
+@@ -347,6 +348,7 @@ pub struct Niri {
      pub pointer_gestures_state: PointerGesturesState,
      pub relative_pointer_state: RelativePointerManagerState,
      pub pointer_constraints_state: PointerConstraintsState,
@@ -256,7 +256,7 @@ index 616b9120..02f3c303 100644
      pub idle_notifier_state: IdleNotifierState<State>,
      pub idle_inhibit_manager_state: IdleInhibitManagerState,
      pub data_device_state: DataDeviceState,
-@@ -2729,6 +2731,7 @@ impl Niri {
+@@ -2771,6 +2773,7 @@ impl Niri {
          let pointer_gestures_state = PointerGesturesState::new::<State>(&display_handle);
          let relative_pointer_state = RelativePointerManagerState::new::<State>(&display_handle);
          let pointer_constraints_state = PointerConstraintsState::new::<State>(&display_handle);
@@ -264,7 +264,7 @@ index 616b9120..02f3c303 100644
          let idle_notifier_state = IdleNotifierState::new(&display_handle, event_loop.clone());
          let idle_inhibit_manager_state = IdleInhibitManagerState::new::<State>(&display_handle);
          let data_device_state = DataDeviceState::new::<State>(&display_handle);
-@@ -3011,6 +3014,7 @@ impl Niri {
+@@ -3056,6 +3059,7 @@ impl Niri {
              pointer_gestures_state,
              relative_pointer_state,
              pointer_constraints_state,

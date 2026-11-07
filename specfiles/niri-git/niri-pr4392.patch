@@ -24,7 +24,7 @@ index b3543f92..4f79fc58 100644
      pub background_effect: BackgroundEffectRule,
      #[knuffel(child, default)]
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index 231a9146..c924b5c7 100644
+index d9984448..e79a8ffc 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
 @@ -1462,6 +1462,84 @@ impl<W: LayoutElement> Layout<W> {
@@ -113,10 +113,10 @@ index 231a9146..c924b5c7 100644
      ///
      /// We will try to fit popups inside this rect.
 diff --git a/src/niri.rs b/src/niri.rs
-index 85f06ec2..6972090e 100644
+index 8c05df9d..77657fdf 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
-@@ -189,7 +189,7 @@ use crate::utils::vblank_throttle::VBlankThrottle;
+@@ -191,7 +191,7 @@ use crate::utils::vblank_throttle::VBlankThrottle;
  use crate::utils::watcher::Watcher;
  use crate::utils::xwayland::satellite::Satellite;
  use crate::utils::{
@@ -125,7 +125,7 @@ index 85f06ec2..6972090e 100644
      make_screenshot_path, output_matches_name, output_size, panel_orientation,
      send_scale_transform, winit_scale, write_png_rgba8, xwayland,
  };
-@@ -634,6 +634,11 @@ struct SurfaceFrameThrottlingState {
+@@ -640,6 +640,11 @@ struct SurfaceFrameThrottlingState {
      last_sent_at: RefCell<Option<(Output, u32)>>,
  }
  
@@ -137,7 +137,7 @@ index 85f06ec2..6972090e 100644
  pub enum CenterCoords {
      Separately,
      Both,
-@@ -725,6 +730,89 @@ impl Default for SurfaceFrameThrottlingState {
+@@ -731,6 +736,89 @@ impl Default for SurfaceFrameThrottlingState {
          }
      }
  }
@@ -227,7 +227,7 @@ index 85f06ec2..6972090e 100644
  
  impl KeyboardFocus {
      pub fn surface(&self) -> Option<&WlSurface> {
-@@ -5462,6 +5550,7 @@ impl Niri {
+@@ -5511,6 +5599,7 @@ impl Niri {
          let frame_callback_time = get_monotonic_time();
  
          for mapped in self.layout.windows_for_output_mut(output) {

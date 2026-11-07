@@ -13,10 +13,10 @@ index 4159a958..4927abe3 100644
  
  impl FromIterator<Output> for Outputs {
 diff --git a/src/backend/tty.rs b/src/backend/tty.rs
-index 2a66173a..5341bb60 100644
+index f13104e7..fac33416 100644
 --- a/src/backend/tty.rs
 +++ b/src/backend/tty.rs
-@@ -1358,10 +1358,16 @@ impl Tty {
+@@ -1359,10 +1359,16 @@ impl Tty {
  
          let single_gpu =
              device.render_node.unwrap_or(self.primary_render_node) == self.primary_render_node;
@@ -33,7 +33,7 @@ index 2a66173a..5341bb60 100644
              } else {
                  Fourcc::Abgr2101010
              };
-@@ -1494,13 +1500,15 @@ impl Tty {
+@@ -1495,13 +1501,15 @@ impl Tty {
              })
              .collect::<FormatSet>();
  
@@ -54,7 +54,7 @@ index 2a66173a..5341bb60 100644
  
          // Create the compositor.
          let res = DrmCompositor::new(
-@@ -3568,22 +3576,24 @@ impl<'a> ConnectorProperties<'a> {
+@@ -3569,22 +3577,24 @@ impl<'a> ConnectorProperties<'a> {
          let property::ValueType::Enum(values) = info.value_type() else {
              bail!("wrong property type")
          };
@@ -84,7 +84,7 @@ index 2a66173a..5341bb60 100644
              max_display_mastering_luminance: hdr.max_luminance.0 as u16,
              min_display_mastering_luminance: 50,
              max_cll: hdr.max_luminance.0 as u16,
-@@ -3693,11 +3703,14 @@ fn wanted_hdr(
+@@ -3694,11 +3704,14 @@ fn wanted_hdr(
      single_gpu: bool,
      format: Fourcc,
  ) -> Option<color::Hdr> {

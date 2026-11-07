@@ -1,8 +1,8 @@
 diff --git a/niri-config/src/binds.rs b/niri-config/src/binds.rs
-index 6db036ca..a797f16e 100644
+index 6bc08e33..bce305be 100644
 --- a/niri-config/src/binds.rs
 +++ b/niri-config/src/binds.rs
-@@ -329,6 +329,8 @@ pub enum Action {
+@@ -347,6 +347,8 @@ pub enum Action {
      MoveColumnLeftOrToMonitorLeft,
      MoveColumnRightOrToMonitorRight,
      MoveColumnToIndex(#[knuffel(argument)] usize),
@@ -11,7 +11,7 @@ index 6db036ca..a797f16e 100644
      MoveWindowDown,
      MoveWindowUp,
      MoveWindowDownOrToWorkspaceDown,
-@@ -617,7 +619,13 @@ impl From<niri_ipc::Action> for Action {
+@@ -667,7 +669,13 @@ impl From<niri_ipc::Action> for Action {
              niri_ipc::Action::MoveColumnRight {} => Self::MoveColumnRight,
              niri_ipc::Action::MoveColumnToFirst {} => Self::MoveColumnToFirst,
              niri_ipc::Action::MoveColumnToLast {} => Self::MoveColumnToLast,
@@ -27,7 +27,7 @@ index 6db036ca..a797f16e 100644
                  Self::MoveColumnLeftOrToMonitorLeft
              }
 diff --git a/niri-ipc/src/lib.rs b/niri-ipc/src/lib.rs
-index 0c31c4db..9fec8676 100644
+index 87bc662f..a211647c 100644
 --- a/niri-ipc/src/lib.rs
 +++ b/niri-ipc/src/lib.rs
 @@ -87,6 +87,8 @@ pub enum Request {
@@ -39,7 +39,7 @@ index 0c31c4db..9fec8676 100644
      /// Change output configuration temporarily.
      ///
      /// The configuration is changed temporarily and not saved into the config file. If the output
-@@ -410,13 +412,20 @@ pub enum Action {
+@@ -479,13 +481,20 @@ pub enum Action {
      MoveColumnLeftOrToMonitorLeft {},
      /// Move the focused column to the right or to the monitor to the right.
      MoveColumnRightOrToMonitorRight {},
@@ -77,25 +77,25 @@ index df69aa14..a98b9181 100644
          action: Action,
      },
 diff --git a/src/input/mod.rs b/src/input/mod.rs
-index 813f77c6..8d51b355 100644
+index 5ee8272f..73fc965e 100644
 --- a/src/input/mod.rs
 +++ b/src/input/mod.rs
-@@ -892,6 +892,14 @@ impl State {
+@@ -899,6 +899,14 @@ impl State {
          }
      }
  
-+    pub fn do_action_instantly(&mut self, action: Action) {
++    pub fn do_action_instantly(&mut self, action: Action, time: InputTime) {
 +        let was_instant = self.niri.clock.should_complete_instantly();
 +        self.niri.clock.set_complete_instantly(true);
-+        self.do_action(action, false);
++        self.do_action(action, false, time);
 +        self.niri.advance_animations();
 +        self.niri.clock.set_complete_instantly(was_instant);
 +    }
 +
-     pub fn do_action(&mut self, action: Action, allow_when_locked: bool) {
+     pub fn do_action(&mut self, action: Action, allow_when_locked: bool, time: InputTime) {
          if self.niri.is_locked() && !(allow_when_locked || allowed_when_locked(&action)) {
              return;
-@@ -1671,11 +1679,20 @@ impl State {
+@@ -1774,11 +1782,20 @@ impl State {
                  }
              }
              Action::MoveColumnToIndex(idx) => {
@@ -146,10 +146,10 @@ index 972177b1..32fe2dfd 100644
              output: output.clone(),
              action: action.clone(),
 diff --git a/src/ipc/server.rs b/src/ipc/server.rs
-index 4b83ed8a..e7a1e66f 100644
+index 2c5fb3c3..f4e09a7c 100644
 --- a/src/ipc/server.rs
 +++ b/src/ipc/server.rs
-@@ -273,6 +273,7 @@ async fn handle_client(ctx: ClientCtx, stream: Async<'static, UnixStream>) -> an
+@@ -274,6 +274,7 @@ async fn handle_client(ctx: ClientCtx, stream: Async<'static, UnixStream>) -> an
  }
  
  async fn process(ctx: &ClientCtx, request: Request) -> Reply {
@@ -157,7 +157,7 @@ index 4b83ed8a..e7a1e66f 100644
      let response = match request {
          Request::ReturnError => return Err(String::from("example compositor error")),
          Request::Version => Response::Version(version()),
-@@ -382,7 +383,7 @@ async fn process(ctx: &ClientCtx, request: Request) -> Reply {
+@@ -383,7 +384,7 @@ async fn process(ctx: &ClientCtx, request: Request) -> Reply {
              let color = result.map_err(|_| String::from("error getting picked color"))?;
              Response::PickedColor(color)
          }
@@ -166,21 +166,21 @@ index 4b83ed8a..e7a1e66f 100644
              validate_action(&action)?;
  
              let (tx, rx) = async_channel::bounded(1);
-@@ -392,7 +393,11 @@ async fn process(ctx: &ClientCtx, request: Request) -> Reply {
-                 // Make sure some logic like workspace clean-up has a chance to run before doing
-                 // actions.
+@@ -395,7 +396,11 @@ async fn process(ctx: &ClientCtx, request: Request) -> Reply {
                  state.niri.advance_animations();
--                state.do_action(action, false);
+                 // This action didn't come from an input, so just use the current time.
+                 let time = InputTime::now();
+-                state.do_action(action, false, time);
 +                if instant {
-+                    state.do_action_instantly(action);
++                    state.do_action_instantly(action, time);
 +                } else {
-+                    state.do_action(action, false);
++                    state.do_action(action, false, time);
 +                }
                  let _ = tx.send_blocking(());
              });
  
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index 23285a69..8a9bfab7 100644
+index da52dce1..62be9b38 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
 @@ -2044,11 +2044,16 @@ impl<W: LayoutElement> Layout<W> {
@@ -204,7 +204,7 @@ index 23285a69..8a9bfab7 100644
  
      pub fn move_down(&mut self) {
 diff --git a/src/layout/scrolling.rs b/src/layout/scrolling.rs
-index 732a182d..2de8e30e 100644
+index 6a6aa5f8..21684617 100644
 --- a/src/layout/scrolling.rs
 +++ b/src/layout/scrolling.rs
 @@ -1699,49 +1699,88 @@ impl<W: LayoutElement> ScrollingSpace<W> {
@@ -416,10 +416,10 @@ index 5f1d9230..10857089 100644
  
      pub fn move_down(&mut self) -> bool {
 diff --git a/src/tests/animations.rs b/src/tests/animations.rs
-index 51c57f73..a5044fd2 100644
+index 51c57f73..2dcd7988 100644
 --- a/src/tests/animations.rs
 +++ b/src/tests/animations.rs
-@@ -188,3 +188,23 @@ fn egl_clientside_height_change_doesnt_animate() {
+@@ -188,3 +188,27 @@ fn egl_clientside_height_change_doesnt_animate() {
      200 × 200 at x:  0 y: 50
      ");
  }
@@ -434,7 +434,11 @@ index 51c57f73..a5044fd2 100644
 +    f.niri_complete_animations();
 +
 +    let state = f.niri_state();
-+    state.do_action(Action::FocusWorkspaceDown, false);
++    state.do_action(
++        Action::FocusWorkspaceDown,
++        false,
++        smithay::backend::input::InputTime::now(),
++    );
 +    assert!(state.niri.layout.are_animations_ongoing(None));
 +
 +    f.niri_complete_animations();

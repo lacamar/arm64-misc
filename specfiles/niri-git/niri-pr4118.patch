@@ -77,10 +77,10 @@ index 4f79fc58..eddc0a08 100644
  
  #[derive(knuffel::Decode, Debug, Clone, Copy, PartialEq)]
 diff --git a/niri-ipc/src/lib.rs b/niri-ipc/src/lib.rs
-index 99174208..0c31c4db 100644
+index cb8d8beb..87bc662f 100644
 --- a/niri-ipc/src/lib.rs
 +++ b/niri-ipc/src/lib.rs
-@@ -1412,6 +1412,8 @@ pub struct Window {
+@@ -1481,6 +1481,8 @@ pub struct Window {
      ///
      /// The timestamp comes from the monotonic clock.
      pub focus_timestamp: Option<Timestamp>,
@@ -89,7 +89,7 @@ index 99174208..0c31c4db 100644
  }
  
  /// A moment in time.
-@@ -1470,6 +1472,16 @@ pub struct WindowLayout {
+@@ -1539,6 +1541,16 @@ pub struct WindowLayout {
      pub window_offset_in_tile: (f64, f64),
  }
  
@@ -182,7 +182,7 @@ index 9c7c493c..972177b1 100644
          "  Is floating: {}",
          if window.is_floating { "yes" } else { "no" }
 diff --git a/src/ipc/server.rs b/src/ipc/server.rs
-index e713ae12..4b83ed8a 100644
+index 0e1bebeb..2c5fb3c3 100644
 --- a/src/ipc/server.rs
 +++ b/src/ipc/server.rs
 @@ -18,7 +18,7 @@ use niri_config::OutputName;
@@ -192,9 +192,9 @@ index e713ae12..4b83ed8a 100644
 -    Timestamp, WindowLayout, Workspace,
 +    Timestamp, WindowLayout, Workspace, XdgToplevelTag,
  };
+ use smithay::backend::input::InputTime;
  use smithay::desktop::layer_map_for_output;
- use smithay::input::pointer::{
-@@ -28,7 +28,10 @@ use smithay::reexports::calloop::generic::Generic;
+@@ -29,7 +29,10 @@ use smithay::reexports::calloop::generic::Generic;
  use smithay::reexports::calloop::{Interest, LoopHandle, Mode, PostAction};
  use smithay::reexports::rustix::fs::unlink;
  use smithay::utils::SERIAL_COUNTER;
@@ -205,7 +205,7 @@ index e713ae12..4b83ed8a 100644
  
  use crate::backend::IpcOutputMap;
  use crate::handlers::image_copy_capture::{source_mapped_id, source_output};
-@@ -519,18 +522,38 @@ fn make_ipc_window(
+@@ -522,18 +525,38 @@ fn make_ipc_window(
      is_in_scratchpad: bool,
      layout: WindowLayout,
  ) -> niri_ipc::Window {
@@ -257,7 +257,7 @@ index e713ae12..4b83ed8a 100644
  }
  
 diff --git a/src/niri.rs b/src/niri.rs
-index 63022652..616b9120 100644
+index c6bdb2c6..f80bd63a 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -126,6 +126,7 @@ use smithay::wayland::virtual_keyboard::VirtualKeyboardManagerState;
@@ -268,7 +268,7 @@ index 63022652..616b9120 100644
  use wayland_server::protocol::wl_output::WlOutput;
  
  #[cfg(feature = "dbus")]
-@@ -358,6 +359,7 @@ pub struct Niri {
+@@ -360,6 +361,7 @@ pub struct Niri {
      pub activation_state: XdgActivationState,
      pub mutter_x11_interop_state: MutterX11InteropManagerState,
      pub session_management_state: SessionManagementState,
@@ -276,7 +276,7 @@ index 63022652..616b9120 100644
  
      // This will not work as is outside of tests, so it is gated with #[cfg(test)] for now. In
      // particular, shaders will need to learn about the single pixel buffer. Also, it must be
-@@ -2808,6 +2810,7 @@ impl Niri {
+@@ -2850,6 +2852,7 @@ impl Niri {
  
          let mutter_x11_interop_state =
              MutterX11InteropManagerState::new::<State, _>(&display_handle, move |_| true);
@@ -284,7 +284,7 @@ index 63022652..616b9120 100644
  
          let session_management_state = SessionManagementState::new(&display_handle);
          event_loop
-@@ -3029,6 +3032,7 @@ impl Niri {
+@@ -3074,6 +3077,7 @@ impl Niri {
              activation_state,
              mutter_x11_interop_state,
              session_management_state,

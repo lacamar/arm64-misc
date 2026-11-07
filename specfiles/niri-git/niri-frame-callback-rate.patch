@@ -49,10 +49,10 @@ index 9fa3c05f..5dc6781d 100644
                  disable_primary: true,
              },
 diff --git a/src/niri.rs b/src/niri.rs
-index 96e0d67c..c1e3508b 100644
+index caae82fa..1ca1ec48 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
-@@ -556,6 +556,7 @@ pub struct OutputState {
+@@ -562,6 +562,7 @@ pub struct OutputState {
      ///    would occur, based on the last presentation time and output refresh interval. Sequence
      ///    is incremented in that timer, before attempting a redraw or sending frame callbacks.
      pub frame_callback_sequence: u32,
@@ -60,7 +60,7 @@ index 96e0d67c..c1e3508b 100644
      /// Solid color buffer for the backdrop that we use instead of clearing to avoid damage
      /// tracking issues and make screenshots easier.
      pub backdrop_buffer: SolidColorBuffer,
-@@ -3360,6 +3361,7 @@ impl Niri {
+@@ -3409,6 +3410,7 @@ impl Niri {
              last_drm_sequence: None,
              vblank_throttle: VBlankThrottle::new(self.event_loop.clone(), name.connector.clone()),
              frame_callback_sequence: 0,
@@ -68,7 +68,7 @@ index 96e0d67c..c1e3508b 100644
              backdrop_buffer: SolidColorBuffer::new(size, backdrop_color),
              xray: Xray::new(),
              lock_render_state,
-@@ -5650,7 +5652,21 @@ impl Niri {
+@@ -5699,7 +5701,21 @@ impl Niri {
  
          let frame_callback_time = get_monotonic_time();
  
@@ -90,7 +90,7 @@ index 96e0d67c..c1e3508b 100644
              setup_force_render(&mut self.event_loop, mapped);
              mapped.send_frame(
                  output,
-@@ -5698,6 +5714,23 @@ impl Niri {
+@@ -5747,6 +5763,23 @@ impl Niri {
                  should_send,
              );
          }
