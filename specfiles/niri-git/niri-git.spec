@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        36%{?dist}
+Release:        37%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -78,6 +78,8 @@ Patch:          niri-edr.patch
 Patch:          niri-move-column-by-id.patch
 # wlr-output-power-management-v1
 Patch:          niri-output-power.patch
+# scratchpad windows as tray items
+Patch:          niri-scratchpad-tray.patch
 
 BuildRequires:  cargo-rpm-macros >= 26
 BuildRequires:  pkgconfig(udev)
@@ -182,6 +184,10 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Sun Nov 08 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^17.git.da0ab810-37
+- Add scratchpad tray items
+- Fix do_action_instantly test call
+
 * Sun Nov 08 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^17.git.da0ab810-36
 - Update to commit da0ab810d463d26da2fa6d9cf9f7abdb1928f9a8
 - Rebase pr4118, color-management, vulkan, move-column-by-id patches

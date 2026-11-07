@@ -1,0 +1,428 @@
+diff --git a/src/dbus/mod.rs b/src/dbus/mod.rs
+index 71cac01..e41b834 100644
+--- a/src/dbus/mod.rs
++++ b/src/dbus/mod.rs
+@@ -17,6 +17,7 @@ pub mod gnome_shell_introspect;
+ pub mod gnome_shell_screenshot;
+ pub mod mutter_display_config;
+ pub mod mutter_service_channel;
++pub mod scratchpad_tray;
+ 
+ #[cfg(feature = "xdp-gnome-screencast")]
+ pub mod mutter_screen_cast;
+@@ -69,6 +70,19 @@ impl DBusServers {
+                 })
+                 .unwrap();
+             dbus.conn_service_channel = try_start(service_channel, false);
++
++            let (to_niri, from_tray) = calloop::channel::channel();
++            niri.event_loop
++                .insert_source(from_tray, move |event, _, state| match event {
++                    calloop::channel::Event::Msg(id) => state.do_action(
++                        niri_config::Action::ToggleScratchpadById(id),
++                        false,
++                        smithay::backend::input::InputTime::now(),
++                    ),
++                    calloop::channel::Event::Closed => (),
++                })
++                .unwrap();
++            niri.scratchpad_tray = Some(scratchpad_tray::ScratchpadTray::new(to_niri));
+         }
+ 
+         if is_session_instance || config.debug.dbus_interfaces_in_non_session_instances {
+diff --git a/src/dbus/scratchpad_tray.rs b/src/dbus/scratchpad_tray.rs
+new file mode 100644
+index 0000000..04279b2
+--- /dev/null
++++ b/src/dbus/scratchpad_tray.rs
+@@ -0,0 +1,283 @@
++//! A StatusNotifierItem per scratchpad window; activating one toggles that window.
++
++use std::collections::HashMap;
++use std::path::PathBuf;
++use std::sync::{Arc, Mutex};
++
++use futures_util::StreamExt as _;
++use zbus::blocking::Connection;
++use zbus::object_server::SignalEmitter;
++use zbus::zvariant::OwnedObjectPath;
++use zbus::{fdo, interface};
++
++const WATCHER: &str = "org.kde.StatusNotifierWatcher";
++const PATH: &str = "/StatusNotifierItem";
++
++/// (icon name, icon pixmaps, title, description)
++type ToolTip = (String, Vec<(i32, i32, Vec<u8>)>, String, String);
++
++struct Item {
++    id: u64,
++    title: String,
++    icon: String,
++    to_niri: calloop::channel::Sender<u64>,
++}
++
++#[interface(name = "org.kde.StatusNotifierItem")]
++impl Item {
++    #[zbus(property)]
++    fn category(&self) -> &str {
++        "ApplicationStatus"
++    }
++
++    #[zbus(property)]
++    fn id(&self) -> String {
++        format!("niri-scratchpad-{}", self.id)
++    }
++
++    #[zbus(property)]
++    fn title(&self) -> &str {
++        &self.title
++    }
++
++    #[zbus(property)]
++    fn status(&self) -> &str {
++        "Active"
++    }
++
++    #[zbus(property)]
++    fn icon_name(&self) -> &str {
++        &self.icon
++    }
++
++    #[zbus(property)]
++    fn tool_tip(&self) -> ToolTip {
++        (self.icon.clone(), vec![], self.title.clone(), String::new())
++    }
++
++    #[zbus(property)]
++    fn item_is_menu(&self) -> bool {
++        false
++    }
++
++    #[zbus(property)]
++    fn menu(&self) -> OwnedObjectPath {
++        OwnedObjectPath::try_from("/NO_DBUSMENU").unwrap()
++    }
++
++    fn activate(&self, _x: i32, _y: i32) {
++        let _ = self.to_niri.send(self.id);
++    }
++
++    fn secondary_activate(&self, _x: i32, _y: i32) {
++        let _ = self.to_niri.send(self.id);
++    }
++
++    fn context_menu(&self, _x: i32, _y: i32) {}
++
++    fn scroll(&self, _delta: i32, _orientation: &str) {}
++
++    #[zbus(signal)]
++    async fn new_title(emitter: &SignalEmitter<'_>) -> zbus::Result<()>;
++}
++
++pub struct ScratchpadTray {
++    to_niri: calloop::channel::Sender<u64>,
++    items: HashMap<u64, (Connection, String)>,
++    names: Arc<Mutex<Vec<String>>>,
++    icons: HashMap<String, String>,
++    _monitor: Option<Connection>,
++}
++
++impl ScratchpadTray {
++    pub fn new(to_niri: calloop::channel::Sender<u64>) -> Self {
++        let names = Arc::new(Mutex::new(Vec::new()));
++        let monitor = watch_watcher(names.clone())
++            .inspect_err(|err| warn!("error watching {WATCHER}: {err:?}"))
++            .ok();
++        Self {
++            to_niri,
++            items: HashMap::new(),
++            names,
++            icons: HashMap::new(),
++            _monitor: monitor,
++        }
++    }
++
++    /// `windows`: (id, app id, title) of every scratchpad window, hidden or shown.
++    pub fn sync(&mut self, windows: &[(u64, String, String)]) {
++        self.items
++            .retain(|id, _| windows.iter().any(|(w, _, _)| w == id));
++        let mut names = self.names.lock().unwrap();
++        names.retain(|n| self.items.keys().any(|id| *n == name(*id)));
++        drop(names);
++
++        for (id, app_id, title) in windows {
++            if let Some((conn, old)) = self.items.get_mut(id) {
++                if old != title {
++                    *old = title.clone();
++                    set_title(conn, title);
++                }
++                continue;
++            }
++            let icon = self
++                .icons
++                .entry(app_id.clone())
++                .or_insert_with(|| desktop_icon(app_id).unwrap_or_else(|| app_id.clone()))
++                .clone();
++            let item = Item {
++                id: *id,
++                title: title.clone(),
++                icon,
++                to_niri: self.to_niri.clone(),
++            };
++            match publish(*id, item) {
++                Ok(conn) => {
++                    self.names.lock().unwrap().push(name(*id));
++                    self.items.insert(*id, (conn, title.clone()));
++                }
++                Err(err) => warn!("error publishing scratchpad tray item: {err:?}"),
++            }
++        }
++    }
++}
++
++fn name(id: u64) -> String {
++    format!("org.kde.StatusNotifierItem-{}-{id}", std::process::id())
++}
++
++fn publish(id: u64, item: Item) -> anyhow::Result<Connection> {
++    let name = name(id);
++    let conn = zbus::blocking::connection::Builder::session()?
++        .name(name.clone())?
++        .serve_at(PATH, item)?
++        .build()?;
++    // no watcher yet is fine: the monitor registers us when one appears
++    let _ = register(&conn, &name);
++    Ok(conn)
++}
++
++fn register(conn: &Connection, name: &str) -> zbus::Result<()> {
++    conn.call_method(
++        Some(WATCHER),
++        "/StatusNotifierWatcher",
++        Some(WATCHER),
++        "RegisterStatusNotifierItem",
++        &name,
++    )
++    .map(drop)
++}
++
++fn set_title(conn: &Connection, title: &str) {
++    let Ok(iface) = conn.object_server().interface::<_, Item>(PATH) else {
++        return;
++    };
++    iface.get_mut().title = title.to_owned();
++    let emitter = iface.signal_emitter().clone();
++    async_io::block_on(async {
++        let _ = Item::new_title(&emitter).await;
++        let _ = iface.get_mut().title_changed(&emitter).await;
++    });
++}
++
++/// Re-registers every item when a tray host (re)starts.
++fn watch_watcher(names: Arc<Mutex<Vec<String>>>) -> anyhow::Result<Connection> {
++    let conn = Connection::session()?;
++    let inner = conn.inner().clone();
++    let task = async_io::block_on(async {
++        let proxy = fdo::DBusProxy::new(&inner).await?;
++        let mut stream = proxy
++            .receive_name_owner_changed_with_args(&[(0, WATCHER)])
++            .await?;
++        let inner = inner.clone();
++        anyhow::Ok(async move {
++            while let Some(signal) = stream.next().await {
++                if signal.args().is_ok_and(|a| a.new_owner().is_some()) {
++                    let names = names.lock().unwrap().clone();
++                    for name in names {
++                        let _ = inner
++                            .call_method(
++                                Some(WATCHER),
++                                "/StatusNotifierWatcher",
++                                Some(WATCHER),
++                                "RegisterStatusNotifierItem",
++                                &name,
++                            )
++                            .await;
++                    }
++                }
++            }
++        })
++    })?;
++    conn.inner()
++        .executor()
++        .spawn(task, "scratchpad tray watcher")
++        .detach();
++    Ok(conn)
++}
++
++fn data_dirs() -> Vec<PathBuf> {
++    let home = std::env::var_os("XDG_DATA_HOME")
++        .filter(|v| !v.is_empty())
++        .map(PathBuf::from)
++        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share")));
++    let dirs = std::env::var("XDG_DATA_DIRS")
++        .ok()
++        .filter(|v| !v.is_empty())
++        .unwrap_or_else(|| String::from("/usr/local/share:/usr/share"));
++    home.into_iter()
++        .chain(dirs.split(':').map(PathBuf::from))
++        .map(|d| d.join("applications"))
++        .collect()
++}
++
++/// The `Icon=` of the app's desktop file: named after the app id, or claiming it as
++/// `StartupWMClass`.
++fn desktop_icon(app_id: &str) -> Option<String> {
++    let dirs = data_dirs();
++    let direct = [app_id.to_owned(), app_id.to_lowercase()]
++        .into_iter()
++        .flat_map(|n| dirs.iter().map(move |d| d.join(format!("{n}.desktop"))))
++        .find_map(|p| std::fs::read_to_string(p).ok());
++    let text = direct.or_else(|| {
++        dirs.iter()
++            .filter_map(|d| std::fs::read_dir(d).ok())
++            .flatten()
++            .flatten()
++            .filter(|e| e.path().extension().is_some_and(|x| x == "desktop"))
++            .filter_map(|e| std::fs::read_to_string(e.path()).ok())
++            .find(|t| entry(t, "StartupWMClass").is_some_and(|c| c.eq_ignore_ascii_case(app_id)))
++    })?;
++    entry(&text, "Icon").map(str::to_owned)
++}
++
++fn entry<'a>(text: &'a str, key: &str) -> Option<&'a str> {
++    let mut main = false;
++    for line in text.lines() {
++        let line = line.trim();
++        if line.starts_with('[') {
++            main = line == "[Desktop Entry]";
++        } else if main {
++            if let Some((k, v)) = line.split_once('=') {
++                if k.trim() == key {
++                    return Some(v.trim());
++                }
++            }
++        }
++    }
++    None
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn entry_reads_only_the_main_group() {
++        let t = "[Desktop Entry]\nName=Foot\nIcon=foot\n[Desktop Action new]\nIcon=other\n";
++        assert_eq!(entry(t, "Icon"), Some("foot"));
++        let t = "[Desktop Action x]\nIcon=other\n[Desktop Entry]\nStartupWMClass = Zen\n";
++        assert_eq!(entry(t, "Icon"), None);
++        assert_eq!(entry(t, "StartupWMClass"), Some("Zen"));
++    }
++}
+diff --git a/src/layout/mod.rs b/src/layout/mod.rs
+index 62be9b3..5430773 100644
+--- a/src/layout/mod.rs
++++ b/src/layout/mod.rs
+@@ -3477,6 +3477,16 @@ impl<W: LayoutElement> Layout<W> {
+             .position(|r| r.tile.window().id() == window)
+     }
+ 
++    /// Hidden scratchpad windows, oldest first, then shown ones.
++    pub fn scratchpad_windows(&self) -> impl Iterator<Item = &W> {
++        let shown = self.workspaces().flat_map(|(_, _, ws)| {
++            ws.tiles()
++                .filter(|tile| tile.is_scratchpad && ws.is_floating(tile.window().id()))
++                .map(|tile| tile.window())
++        });
++        self.scratchpad.iter().map(|r| r.tile.window()).chain(shown)
++    }
++
+     pub fn is_in_scratchpad(&self, window: &W::Id) -> bool {
+         self.scratchpad_idx(window).is_some()
+     }
+diff --git a/src/layout/tests.rs b/src/layout/tests.rs
+index af08b15..b13c879 100644
+--- a/src/layout/tests.rs
++++ b/src/layout/tests.rs
+@@ -3313,6 +3313,21 @@ fn scratchpad_shows_one_at_a_time() {
+     layout.toggle_scratchpad(Some(&3));
+     assert!(layout.has_window(&3));
+     assert!(layout.is_in_scratchpad(&2));
++
++    // showing one on another workspace hides the first
++    layout.switch_workspace_down();
++    layout.refresh(true);
++    layout.toggle_scratchpad(Some(&2));
++    assert!(layout.has_window(&2));
++    assert!(layout.is_in_scratchpad(&3));
++    let mut all: Vec<_> = layout.scratchpad_windows().map(|w| *w.id()).collect();
++    all.sort_unstable();
++    assert_eq!(all, [2, 3]);
++    let shown = layout
++        .scratchpad_windows()
++        .filter(|w| !layout.is_in_scratchpad(w.id()))
++        .count();
++    assert_eq!(shown, 1);
+     layout.verify_invariants();
+ }
+ 
+diff --git a/src/niri.rs b/src/niri.rs
+index 2ab724d..290d063 100644
+--- a/src/niri.rs
++++ b/src/niri.rs
+@@ -494,6 +494,8 @@ pub struct Niri {
+     pub inhibit_power_key_fd: Option<zbus::zvariant::OwnedFd>,
+     #[cfg(feature = "dbus")]
+     pub gnome_shell: Option<crate::dbus::gnome_shell::Shell>,
++    #[cfg(feature = "dbus")]
++    pub scratchpad_tray: Option<crate::dbus::scratchpad_tray::ScratchpadTray>,
+ 
+     pub ipc_server: Option<IpcServer>,
+     pub ipc_outputs_changed: bool,
+@@ -1017,6 +1019,8 @@ impl State {
+         color_management::refresh_feedbacks(self);
+         self.refresh_ipc_outputs();
+         self.ipc_refresh_layout();
++        #[cfg(feature = "dbus")]
++        self.refresh_scratchpad_tray();
+         self.ipc_refresh_keyboard_layout_index();
+         self.ipc_refresh_touchpad();
+ 
+@@ -2574,6 +2578,28 @@ impl State {
+         }
+     }
+ 
++    #[cfg(feature = "dbus")]
++    fn refresh_scratchpad_tray(&mut self) {
++        let Some(tray) = &mut self.niri.scratchpad_tray else {
++            return;
++        };
++        let windows: Vec<_> = self
++            .niri
++            .layout
++            .scratchpad_windows()
++            .map(|mapped| {
++                crate::utils::with_toplevel_role(mapped.toplevel(), |role| {
++                    (
++                        mapped.id().get(),
++                        role.app_id.clone().unwrap_or_default(),
++                        role.title.clone().unwrap_or_default(),
++                    )
++                })
++            })
++            .collect();
++        tray.sync(&windows);
++    }
++
+     #[cfg(feature = "dbus")]
+     pub fn on_gnome_shell_msg(&mut self, msg: ShellToNiri) {
+         match msg {
+@@ -3166,6 +3192,8 @@ impl Niri {
+             inhibit_power_key_fd: None,
+             #[cfg(feature = "dbus")]
+             gnome_shell: None,
++            #[cfg(feature = "dbus")]
++            scratchpad_tray: None,
+ 
+             ipc_server,
+             ipc_outputs_changed: false,

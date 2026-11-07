@@ -1,5 +1,5 @@
 diff --git a/niri-config/src/binds.rs b/niri-config/src/binds.rs
-index 6bc08e33..bce305be 100644
+index 6bc08e3..bce305b 100644
 --- a/niri-config/src/binds.rs
 +++ b/niri-config/src/binds.rs
 @@ -347,6 +347,8 @@ pub enum Action {
@@ -27,7 +27,7 @@ index 6bc08e33..bce305be 100644
                  Self::MoveColumnLeftOrToMonitorLeft
              }
 diff --git a/niri-ipc/src/lib.rs b/niri-ipc/src/lib.rs
-index 87bc662f..a211647c 100644
+index 87bc662..a211647 100644
 --- a/niri-ipc/src/lib.rs
 +++ b/niri-ipc/src/lib.rs
 @@ -87,6 +87,8 @@ pub enum Request {
@@ -62,7 +62,7 @@ index 87bc662f..a211647c 100644
      /// Move the focused window down in a column.
      MoveWindowDown {},
 diff --git a/src/cli.rs b/src/cli.rs
-index df69aa14..a98b9181 100644
+index df69aa1..a98b918 100644
 --- a/src/cli.rs
 +++ b/src/cli.rs
 @@ -84,6 +84,10 @@ pub enum Msg {
@@ -77,7 +77,7 @@ index df69aa14..a98b9181 100644
          action: Action,
      },
 diff --git a/src/input/mod.rs b/src/input/mod.rs
-index 5ee8272f..73fc965e 100644
+index 5ee8272..73fc965 100644
 --- a/src/input/mod.rs
 +++ b/src/input/mod.rs
 @@ -899,6 +899,14 @@ impl State {
@@ -118,7 +118,7 @@ index 5ee8272f..73fc965e 100644
                  self.niri.layout.switch_workspace_down();
                  self.maybe_warp_cursor_to_focus();
 diff --git a/src/ipc/client.rs b/src/ipc/client.rs
-index 972177b1..32fe2dfd 100644
+index 972177b..32fe2df 100644
 --- a/src/ipc/client.rs
 +++ b/src/ipc/client.rs
 @@ -23,6 +23,7 @@ pub fn handle_msg(mut msg: Msg, json: bool, print_request: bool) -> anyhow::Resu
@@ -146,7 +146,7 @@ index 972177b1..32fe2dfd 100644
              output: output.clone(),
              action: action.clone(),
 diff --git a/src/ipc/server.rs b/src/ipc/server.rs
-index 2c5fb3c3..f4e09a7c 100644
+index 2c5fb3c..f4e09a7 100644
 --- a/src/ipc/server.rs
 +++ b/src/ipc/server.rs
 @@ -274,6 +274,7 @@ async fn handle_client(ctx: ClientCtx, stream: Async<'static, UnixStream>) -> an
@@ -180,7 +180,7 @@ index 2c5fb3c3..f4e09a7c 100644
              });
  
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index da52dce1..62be9b38 100644
+index da52dce..62be9b3 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
 @@ -2044,11 +2044,16 @@ impl<W: LayoutElement> Layout<W> {
@@ -204,7 +204,7 @@ index da52dce1..62be9b38 100644
  
      pub fn move_down(&mut self) {
 diff --git a/src/layout/scrolling.rs b/src/layout/scrolling.rs
-index 6a6aa5f8..21684617 100644
+index 6a6aa5f..2168461 100644
 --- a/src/layout/scrolling.rs
 +++ b/src/layout/scrolling.rs
 @@ -1699,49 +1699,88 @@ impl<W: LayoutElement> ScrollingSpace<W> {
@@ -312,7 +312,7 @@ index 6a6aa5f8..21684617 100644
  
      pub fn move_left(&mut self) -> bool {
 diff --git a/src/layout/tests.rs b/src/layout/tests.rs
-index edd3184d..af08b158 100644
+index edd3184..af08b15 100644
 --- a/src/layout/tests.rs
 +++ b/src/layout/tests.rs
 @@ -493,7 +493,12 @@ enum Op {
@@ -393,7 +393,7 @@ index edd3184d..af08b158 100644
  fn workspace_output_fallback_promotes_preferred_in_reverse_connection_order() {
      // output3 is not a candidate, so it stays the primary monitor throughout; every assertion
 diff --git a/src/layout/workspace.rs b/src/layout/workspace.rs
-index 5f1d9230..10857089 100644
+index 5f1d923..1085708 100644
 --- a/src/layout/workspace.rs
 +++ b/src/layout/workspace.rs
 @@ -1101,11 +1101,15 @@ impl<W: LayoutElement> Workspace<W> {
@@ -416,10 +416,18 @@ index 5f1d9230..10857089 100644
  
      pub fn move_down(&mut self) -> bool {
 diff --git a/src/tests/animations.rs b/src/tests/animations.rs
-index 51c57f73..2dcd7988 100644
+index 51c57f7..52617a2 100644
 --- a/src/tests/animations.rs
 +++ b/src/tests/animations.rs
-@@ -188,3 +188,27 @@ fn egl_clientside_height_change_doesnt_animate() {
+@@ -5,6 +5,7 @@ use insta::assert_snapshot;
+ use niri_config::animations::{Curve, EasingParams, Kind};
+ use niri_config::Config;
+ use niri_ipc::SizeChange;
++use smithay::backend::input::InputTime;
+ use smithay::utils::{Point, Size};
+ use wayland_client::protocol::wl_surface::WlSurface;
+ 
+@@ -188,3 +189,27 @@ fn egl_clientside_height_change_doesnt_animate() {
      200 × 200 at x:  0 y: 50
      ");
  }
@@ -443,7 +451,7 @@ index 51c57f73..2dcd7988 100644
 +
 +    f.niri_complete_animations();
 +    let state = f.niri_state();
-+    state.do_action_instantly(Action::FocusWorkspaceUp);
++    state.do_action_instantly(Action::FocusWorkspaceUp, InputTime::now());
 +    assert!(!state.niri.layout.are_animations_ongoing(None));
 +    assert!(!state.niri.clock.should_complete_instantly());
 +}
