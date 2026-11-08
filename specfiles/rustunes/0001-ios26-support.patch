@@ -1,7 +1,7 @@
 From ae673b8639161454ed41474fa8fdc09f0084c864 Mon Sep 17 00:00:00 2001
 From: lacamar <lchlnm@pm.me>
 Date: Mon, 2 Nov 2026 18:28:20 +0100
-Subject: [PATCH 1/8] Support iOS 26 and iTunes-era libraries
+Subject: [PATCH 1/9] Support iOS 26 and iTunes-era libraries
 
 - Accept iOS 26 Music database (2350000)
 - Tolerate orphan companion rows, absent anchor, no album artist
@@ -638,7 +638,7 @@ index c4ab851..7c9fc88 100644
 From 8ed71f9f2d74b9f7f5b57db40b8d790772c1364e Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Mon, 2 Nov 2026 22:28:37 +0100
-Subject: [PATCH 2/8] Add playlist push, list and remove
+Subject: [PATCH 2/9] Add playlist push, list and remove
 
 - playlist push: M3U/M3U8 to an ordinary playlist
 - Replace changed managed playlists by delete + insert
@@ -1888,7 +1888,7 @@ index c34c2d8..e7a952c 100644
 From fe2cef92d4484452b1e11c415ea72dd3f5be062e Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Mon, 2 Nov 2026 22:33:09 +0100
-Subject: [PATCH 3/8] Update changed playlists in place
+Subject: [PATCH 3/9] Update changed playlists in place
 
 - Send update_playlist for a changed managed playlist
 - Fall back to delete + insert when it does not apply
@@ -2099,7 +2099,7 @@ index e7a952c..3aeef2a 100644
 From 0207d72a3b1021db139a4ad2eb9d06278eb603f8 Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Mon, 2 Nov 2026 22:37:04 +0100
-Subject: [PATCH 4/8] Add playlist folders
+Subject: [PATCH 4/9] Add playlist folders
 
 - playlist push/remove --folder
 - Create managed folder on first use, drop it with its last playlist
@@ -2249,7 +2249,7 @@ index 3aeef2a..731f63a 100644
 From 56af6536c3f86458cfb3d869e91d99f7531a76b2 Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Mon, 2 Nov 2026 22:48:38 +0100
-Subject: [PATCH 5/8] Document audio replacement and clearing experiments
+Subject: [PATCH 5/9] Document audio replacement and clearing experiments
 
 - Bare update_track asks for no audio
 - location updates ask for no audio
@@ -2303,7 +2303,7 @@ index 731f63a..292af65 100644
 From 5c3d72179dc38fdc4fb401fe8a0d4b18e98f3f02 Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Mon, 2 Nov 2026 22:48:48 +0100
-Subject: [PATCH 6/8] Pick a cover when no picture is the front cover
+Subject: [PATCH 6/9] Pick a cover when no picture is the front cover
 
 - First picture that is not a back cover
 - Several front covers still go without
@@ -2435,7 +2435,7 @@ index f2e0ff0..10788d5 100644
 From b14027cb54c0fd4e04176fbffae42bf1b0eff1a7 Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Mon, 2 Nov 2026 22:54:25 +0100
-Subject: [PATCH 7/8] Handle iOS 26 composer edits
+Subject: [PATCH 7/9] Handle iOS 26 composer edits
 
 - Route composer changes to replacement on catalogue 2350000
 - Verify a sent composer edit against its search-key-only effect
@@ -2709,7 +2709,7 @@ index 67adf37..187d945 100644
 From 5c0d78231f33cf230d8dcebf210053aaa178b838 Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Wed, 4 Nov 2026 15:06:01 +0100
-Subject: [PATCH 8/8] Cache inspections of every format but ALAC
+Subject: [PATCH 8/9] Cache inspections of every format but ALAC
 
 - Persist mpeg::read results by file identity
 - Route planning re-reads through the cache
@@ -3507,6 +3507,89 @@ index c485790..386aad9 100644
                  original_source.context("original MPEG source required")?,
              )?;
              ensure!(
+-- 
+2.56.0
+
+
+From e426f2b5af16085607cd554b7e84479b7b4d01a5 Mon Sep 17 00:00:00 2001
+From: Lachlan Marie <lchlnm@pm.me>
+Date: Sun, 8 Nov 2026 10:53:53 +0100
+Subject: [PATCH 9/9] Ignore phone artwork tokens left for removed items
+
+- Skip non-300 tokens whose item is gone
+- Keep failing for missing source-300 joins
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01F3FjoJj4RV14hgXJuf9gh7
+---
+ crates/music-protocol/src/catalogue/sqlite.rs | 19 +++++++++++++++----
+ .../src/catalogue/sqlite/tests.rs             | 12 +++++++++++-
+ 2 files changed, 26 insertions(+), 5 deletions(-)
+
+diff --git a/crates/music-protocol/src/catalogue/sqlite.rs b/crates/music-protocol/src/catalogue/sqlite.rs
+index 765cacb..6e2571a 100644
+--- a/crates/music-protocol/src/catalogue/sqlite.rs
++++ b/crates/music-protocol/src/catalogue/sqlite.rs
+@@ -2165,10 +2165,14 @@ fn parse_artwork(
+         if row.get_ref("entity_type")? == ValueRef::Integer(0) {
+             let entity = integer(row, "entity_pid")?;
+             if !unsynced_items.contains(&entity) {
+-                let sync_id = *track_ids
+-                    .get(&entity)
+-                    .context("track artwork registration join absent")?;
+-                inventory.tracks_with_artwork_registration.insert(sync_id);
++                match track_ids.get(&entity) {
++                    Some(&sync_id) => {
++                        inventory.tracks_with_artwork_registration.insert(sync_id);
++                    }
++                    // The phone leaves its own (non-300) tokens behind for items it removed.
++                    None if source != 300 && entity > 0 && !item_exists(connection, entity)? => {}
++                    None => bail!("track artwork registration join absent"),
++                }
+             }
+         }
+         if source != 300 {
+@@ -2308,3 +2312,10 @@ mod current_storage_profile_tests {
+         fs::remove_dir(path).unwrap();
+     }
+ }
++
++fn item_exists(connection: &Connection, pid: i64) -> Result<bool> {
++    Ok(connection
++        .query_row("SELECT 1 FROM item WHERE item_pid=?1", [pid], |_| Ok(()))
++        .optional()?
++        .is_some())
++}
+diff --git a/crates/music-protocol/src/catalogue/sqlite/tests.rs b/crates/music-protocol/src/catalogue/sqlite/tests.rs
+index 3262a67..a76ec5c 100644
+--- a/crates/music-protocol/src/catalogue/sqlite/tests.rs
++++ b/crates/music-protocol/src/catalogue/sqlite/tests.rs
+@@ -1168,7 +1168,7 @@ fn artwork_presence_covers_foreign_and_unknown_track_shapes_without_token_interp
+ 
+ #[test]
+ fn artwork_presence_refuses_unresolved_declared_track_registrations() {
+-    for entity in ["NULL", "0", "999", "'invalid'"] {
++    for entity in ["NULL", "0", "'invalid'"] {
+         let fixture = Fixture::new(false);
+         fixture
+             .connection
+@@ -1279,6 +1279,16 @@ fn duplicate_known_artwork_relationships_and_missing_joins_fail() {
+     }
+ }
+ 
++#[test]
++fn a_phone_token_left_for_a_removed_item_is_ignored() {
++    let fixture = Fixture::new(false);
++    fixture
++        .connection
++        .execute_batch("INSERT INTO artwork_token VALUES(999,'0',500,1,0,0)")
++        .unwrap();
++    assert!(fixture.read(false).is_ok());
++}
++
+ #[test]
+ fn artwork_schema_and_row_bounds_are_checked_before_token_decoding() {
+     for sql in [
 -- 
 2.56.0
 
