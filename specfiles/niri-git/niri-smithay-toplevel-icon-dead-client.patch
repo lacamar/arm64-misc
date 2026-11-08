@@ -1,0 +1,13 @@
+--- a/smithay/src/wayland/xdg_toplevel_icon.rs
++++ b/smithay/src/wayland/xdg_toplevel_icon.rs
+@@ -389,6 +389,10 @@
+                 self.register_buffer_destruction_hook(buffer.clone(), shm, {
+                     let icon = icon.clone();
+                     move || {
++                        // Client teardown destroys the buffer first; posting then aborts.
++                        if icon.client().is_none() {
++                            return;
++                        }
+                         icon.post_error(
+                             xdg_toplevel_icon_v1::Error::NoBuffer,
+                             "The provided buffer has been destroyed before the toplevel icon",

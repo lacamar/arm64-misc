@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        37%{?dist}
+Release:        38%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -71,6 +71,7 @@ Patch:          niri-gestures.patch
 Patch:          niri-frame-callback-rate.patch
 Patch:          niri-color-management.patch
 Patch:          niri-xdg-toplevel-icon.patch
+Patch:          niri-smithay-toplevel-icon-dead-client.patch
 Patch:          niri-vulkan.patch
 # HDR on Apple internal panels via extended-range FP16 (EDR)
 Patch:          niri-edr.patch
@@ -184,6 +185,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Sun Nov 08 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^17.git.da0ab810-38
+- Fix abort when client with toplevel icon dies
+
 * Sun Nov 08 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^17.git.da0ab810-37
 - Add scratchpad tray items
 - Fix do_action_instantly test call
