@@ -9,7 +9,7 @@
 
 Name:           zen-control
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:        20%{?dist}
+Release:        21%{?dist}
 Summary:        MCP bridge and WebExtension to drive the Zen browser from Claude Code
 
 License:        LicenseRef-Not-specified
@@ -78,6 +78,10 @@ cat > %{buildroot}%{_sysconfdir}/zen/policies/policies.json <<'EOS'
       "webhid@k4zoku.dev": {
         "installation_mode": "normal_installed",
         "install_url": "file://%{_datadir}/webhid/webhid.xpi"
+      },
+      "zen-snapchat-ua@local": {
+        "installation_mode": "normal_installed",
+        "install_url": "file://%{_datadir}/zen-snapchat-ua/zen-snapchat-ua.xpi"
       }
     }
   }
@@ -100,6 +104,9 @@ chmod 0755 %{buildroot}%{_bindir}/%{name}
 %config(noreplace) %{_sysconfdir}/zen/policies/policies.json
 
 %changelog
+* Mon Nov 09 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-21
+- Install Snapchat UA extension via policy
+
 * Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-20
 - Bump extension version so Zen reinstalls it
 
