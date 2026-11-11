@@ -665,7 +665,7 @@ index 0efe765..7fd23fa 100644
  #include "../util/Settings.hpp"
  #include "Config.hpp"
  
-@@ -23,6 +43,1420 @@ namespace wil::ui
+@@ -23,6 +43,1453 @@ namespace wil::ui
          constexpr auto const WHATSAPP_WEB_URI = "https://web.whatsapp.com";
          constexpr auto const USER_AGENT       = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
  
@@ -1622,6 +1622,39 @@ index 0efe765..7fd23fa 100644
 +            return state.model;
 +        }
 +
++        // Whisper loops can alternate sentences, so drop any repeated sentence of 4+ words.
++        std::string dropRepeatedSentences(std::string const& text)
++        {
++            std::string           out;
++            std::set<std::string> seen;
++            for (std::size_t start = 0; start < text.size();)
++            {
++                auto end = text.find_first_of(".!?", start);
++                while (end != std::string::npos && end + 1 < text.size() && text[end + 1] != ' ')
++                {
++                    end = text.find_first_of(".!?", end + 1);
++                }
++                end = end == std::string::npos ? text.size() : end + 1;
++
++                auto const  sentence = text.substr(start, end - start);
++                std::string key;
++                for (unsigned char const c : sentence)
++                {
++                    if (std::isalnum(c) || c >= 0x80)
++                    {
++                        key += static_cast<char>(std::tolower(c));
++                    }
++                }
++                if (std::count(sentence.begin(), sentence.end(), ' ') < 3 || seen.insert(key).second)
++                {
++                    out += (out.empty() ? "" : " ") + sentence;
++                }
++
++                start = text.find_first_not_of(' ', end);
++            }
++            return out;
++        }
++
 +        TranscriptionResult transcribe(TranscriptionJob const& job, int threads)
 +        {
 +            auto result = TranscriptionResult{job.id, std::nullopt, {}};
@@ -1679,7 +1712,7 @@ index 0efe765..7fd23fa 100644
 +                transcript += (transcript.empty() ? "" : " ") + segment;
 +            }
 +
-+            result.transcript = transcript;
++            result.transcript = dropRepeatedSentences(transcript);
 +            return result;
 +        }
 +
@@ -2086,7 +2119,7 @@ index 0efe765..7fd23fa 100644
          std::optional<std::string> getSystemLanguage()
          {
              try
-@@ -262,6 +1696,10 @@ namespace wil::ui
+@@ -262,6 +1729,10 @@ namespace wil::ui
          g_signal_connect(*this, "permission-request", G_CALLBACK(permissionRequest), nullptr);
          g_signal_connect(*this, "decide-policy", G_CALLBACK(decidePolicy), nullptr);
          g_signal_connect(*this, "show-notification", G_CALLBACK(showNotification), this);

@@ -1,7 +1,7 @@
 %global tag 1.7.0
 Name: wasistlos
 Version: %{tag}
-Release: 16%{?dist}
+Release: 17%{?dist}
 Summary: An unofficial WhatsApp desktop application for Linux.
 
 License: GNU GPL v3
@@ -59,6 +59,9 @@ An unofficial WhatsApp desktop application for Linux.
 
 
 %changelog
+* Wed Nov 11 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-17
+- Drop repeated sentences from voice note transcripts
+
 * Tue Oct 27 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-16
 - Disable V4L2 stateless video decoders in WebKit
 - Stop restoring muted stream volume onto voice notes
