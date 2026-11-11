@@ -1,0 +1,129 @@
+--- a/src/xdp-app-info-registry.c	2026-11-11 13:52:58.339683930 +0100
++++ b/src/xdp-app-info-registry.c	2026-11-11 13:52:58.346707140 +0100
+@@ -151,11 +151,17 @@
+       g_autoptr(QueueData) data = NULL;
+       g_autoptr(DexFuture) future = NULL;
+ 
++      /* Decide to shut down under the lock: otherwise queue_work can send into
++       * the receive we abandon and its promise never resolves. */
++      g_mutex_lock (&registry->channels_lock);
+       future = dex_channel_receive (channel);
+-
+-      /* if we have to wait, the queue is empty and we shut down the channel */
+       if (dex_future_is_pending (future))
+-        break;
++        {
++          g_hash_table_remove (registry->channels, sender);
++          g_mutex_unlock (&registry->channels_lock);
++          break;
++        }
++      g_mutex_unlock (&registry->channels_lock);
+ 
+       /* also shut down if the other side closed */
+       data = dex_await_boxed (g_steal_pointer (&future), NULL);
+@@ -166,28 +172,34 @@
+         {
+         case QUEUE_DATA_KIND_ENSURE:
+           {
+-            XdpAppInfo *app_info;
++            g_autoptr(XdpAppInfo) app_info = NULL;
+ 
++            g_mutex_lock (&registry->channels_lock);
+             app_info = g_hash_table_lookup (registry->app_infos, sender);
++            if (app_info)
++              g_object_ref (app_info);
++            g_mutex_unlock (&registry->channels_lock);
++
+             if (!app_info)
+               {
+-                g_autoptr(XdpAppInfo) app_info_owned = NULL;
+                 g_autoptr(GError) error = NULL;
+ 
+                 /* FIXME convert to future */
+-                app_info_owned = app_info =
++                app_info =
+                   xdp_app_info_new_for_invocation_sync (data->invocation,
+                                                         NULL,
+                                                         &error);
+-                if (!app_info_owned)
++                if (!app_info)
+                   {
+                     dex_promise_reject (data->promise, g_steal_pointer (&error));
+                     break;
+                   }
+ 
++                g_mutex_lock (&registry->channels_lock);
+                 g_hash_table_insert (registry->app_infos,
+                                      g_strdup (sender),
+-                                     g_steal_pointer (&app_info_owned));
++                                     g_object_ref (app_info));
++                g_mutex_unlock (&registry->channels_lock);
+               }
+ 
+             dex_promise_resolve_object (data->promise, g_object_ref (app_info));
+@@ -198,7 +210,13 @@
+             g_autoptr(GError) error = NULL;
+             g_autoptr(XdpAppInfo) app_info = NULL;
+ 
+-            if (g_hash_table_contains (registry->app_infos, sender))
++            gboolean exists;
++
++            g_mutex_lock (&registry->channels_lock);
++            exists = g_hash_table_contains (registry->app_infos, sender);
++            g_mutex_unlock (&registry->channels_lock);
++
++            if (exists)
+               {
+                 dex_promise_resolve_boolean (data->promise, FALSE);
+                 break;
+@@ -216,17 +234,22 @@
+ 
+             g_debug ("Inserted app info %s for sender %s",
+                      xdp_app_info_get_id (app_info), sender);
++            g_mutex_lock (&registry->channels_lock);
+             g_hash_table_insert (registry->app_infos,
+                                  g_strdup (sender),
+                                  g_steal_pointer (&app_info));
++            g_mutex_unlock (&registry->channels_lock);
+             dex_promise_resolve_boolean (data->promise, TRUE);
+           }
+           break;
+         case QUEUE_DATA_KIND_DELETE:
+           {
+-            dex_promise_resolve_boolean (data->promise,
+-                                         g_hash_table_remove (registry->app_infos,
+-                                                              sender));
++            gboolean removed;
++
++            g_mutex_lock (&registry->channels_lock);
++            removed = g_hash_table_remove (registry->app_infos, sender);
++            g_mutex_unlock (&registry->channels_lock);
++            dex_promise_resolve_boolean (data->promise, removed);
+           }
+           break;
+         default:
+@@ -234,10 +257,6 @@
+         }
+     }
+ 
+-  g_mutex_lock (&registry->channels_lock);
+-  g_hash_table_remove (registry->channels, sender);
+-  g_mutex_unlock (&registry->channels_lock);
+-
+   return dex_future_new_true ();
+ }
+ 
+@@ -334,10 +353,12 @@
+ {
+   g_autoptr(QueueData) data = NULL;
+   const char *sender = g_dbus_method_invocation_get_sender (invocation);
+-  XdpAppInfo *existing = g_hash_table_lookup (registry->app_infos, sender);
++  XdpAppInfo *existing;
+ 
+   G_MUTEX_AUTO_LOCK (&registry->channels_lock, locker);
+ 
++  existing = g_hash_table_lookup (registry->app_infos, sender);
++
+   /* Shortcut if we have no active channel (i.e. no in-flight changes) */
+   if (existing && !g_hash_table_contains (registry->channels, sender))
+     return dex_future_new_take_object (g_object_ref (existing));
