@@ -1,7 +1,7 @@
 %global debug_package %{nil}
 
 Name:           proton-bridge
-Version:        3.27.0
+Version:        3.27.1
 Release:        1%{?dist}
 Summary:        IMAP/SMTP bridge for Proton Mail, with GUI
 
@@ -133,6 +133,9 @@ sed -i \
 %{_datadir}/applications/proton-bridge.desktop
 
 %changelog
+* Thu Nov 12 2026 Lachlan Marie <lchlnm@pm.me> - 3.27.1-1
+- Update to 3.27.1
+
 * Wed Sep 09 2026 Lachlan Marie <lchlnm@pm.me> - 3.27.0-1
 - Update to 3.27.0.
 
