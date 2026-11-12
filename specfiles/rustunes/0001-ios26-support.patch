@@ -1,7 +1,7 @@
 From ae673b8639161454ed41474fa8fdc09f0084c864 Mon Sep 17 00:00:00 2001
 From: lacamar <lchlnm@pm.me>
 Date: Mon, 2 Nov 2026 18:28:20 +0100
-Subject: [PATCH 1/9] Support iOS 26 and iTunes-era libraries
+Subject: [PATCH 01/11] Support iOS 26 and iTunes-era libraries
 
 - Accept iOS 26 Music database (2350000)
 - Tolerate orphan companion rows, absent anchor, no album artist
@@ -638,7 +638,7 @@ index c4ab851..7c9fc88 100644
 From 8ed71f9f2d74b9f7f5b57db40b8d790772c1364e Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Mon, 2 Nov 2026 22:28:37 +0100
-Subject: [PATCH 2/9] Add playlist push, list and remove
+Subject: [PATCH 02/11] Add playlist push, list and remove
 
 - playlist push: M3U/M3U8 to an ordinary playlist
 - Replace changed managed playlists by delete + insert
@@ -1888,7 +1888,7 @@ index c34c2d8..e7a952c 100644
 From fe2cef92d4484452b1e11c415ea72dd3f5be062e Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Mon, 2 Nov 2026 22:33:09 +0100
-Subject: [PATCH 3/9] Update changed playlists in place
+Subject: [PATCH 03/11] Update changed playlists in place
 
 - Send update_playlist for a changed managed playlist
 - Fall back to delete + insert when it does not apply
@@ -2099,7 +2099,7 @@ index e7a952c..3aeef2a 100644
 From 0207d72a3b1021db139a4ad2eb9d06278eb603f8 Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Mon, 2 Nov 2026 22:37:04 +0100
-Subject: [PATCH 4/9] Add playlist folders
+Subject: [PATCH 04/11] Add playlist folders
 
 - playlist push/remove --folder
 - Create managed folder on first use, drop it with its last playlist
@@ -2249,7 +2249,7 @@ index 3aeef2a..731f63a 100644
 From 56af6536c3f86458cfb3d869e91d99f7531a76b2 Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Mon, 2 Nov 2026 22:48:38 +0100
-Subject: [PATCH 5/9] Document audio replacement and clearing experiments
+Subject: [PATCH 05/11] Document audio replacement and clearing experiments
 
 - Bare update_track asks for no audio
 - location updates ask for no audio
@@ -2303,7 +2303,7 @@ index 731f63a..292af65 100644
 From 5c3d72179dc38fdc4fb401fe8a0d4b18e98f3f02 Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Mon, 2 Nov 2026 22:48:48 +0100
-Subject: [PATCH 6/9] Pick a cover when no picture is the front cover
+Subject: [PATCH 06/11] Pick a cover when no picture is the front cover
 
 - First picture that is not a back cover
 - Several front covers still go without
@@ -2435,7 +2435,7 @@ index f2e0ff0..10788d5 100644
 From b14027cb54c0fd4e04176fbffae42bf1b0eff1a7 Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Mon, 2 Nov 2026 22:54:25 +0100
-Subject: [PATCH 7/9] Handle iOS 26 composer edits
+Subject: [PATCH 07/11] Handle iOS 26 composer edits
 
 - Route composer changes to replacement on catalogue 2350000
 - Verify a sent composer edit against its search-key-only effect
@@ -2709,7 +2709,7 @@ index 67adf37..187d945 100644
 From 5c0d78231f33cf230d8dcebf210053aaa178b838 Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Wed, 4 Nov 2026 15:06:01 +0100
-Subject: [PATCH 8/9] Cache inspections of every format but ALAC
+Subject: [PATCH 08/11] Cache inspections of every format but ALAC
 
 - Persist mpeg::read results by file identity
 - Route planning re-reads through the cache
@@ -3514,7 +3514,7 @@ index c485790..386aad9 100644
 From e426f2b5af16085607cd554b7e84479b7b4d01a5 Mon Sep 17 00:00:00 2001
 From: Lachlan Marie <lchlnm@pm.me>
 Date: Sun, 8 Nov 2026 10:53:53 +0100
-Subject: [PATCH 9/9] Ignore phone artwork tokens left for removed items
+Subject: [PATCH 09/11] Ignore phone artwork tokens left for removed items
 
 - Skip non-300 tokens whose item is gone
 - Keep failing for missing source-300 joins
@@ -3590,6 +3590,700 @@ index 3262a67..a76ec5c 100644
  #[test]
  fn artwork_schema_and_row_bounds_are_checked_before_token_decoding() {
      for sql in [
+-- 
+2.56.0
+
+
+From 42a9dccb0b33e131747a50ec314ef48541ddb5eb Mon Sep 17 00:00:00 2001
+From: Lachlan Marie <lchlnm@pm.me>
+Date: Thu, 12 Nov 2026 07:00:50 +0100
+Subject: [PATCH 10/11] Show dates and local sources in library list
+
+- Read date_added and date_downloaded from item
+- Report played, skipped, added and downloaded dates
+- Report the journal's source file per track
+- Same fields in library show
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01F3FjoJj4RV14hgXJuf9gh7
+---
+ crates/music-protocol/src/catalogue/sqlite.rs | 48 ++++++++++++
+ .../src/catalogue/sqlite/without.rs           |  6 ++
+ crates/rustunes/src/cli.rs                    | 77 +++++++++++++++++--
+ crates/rustunes/src/cli/cache_view.rs         |  2 +-
+ crates/rustunes/src/cli/library_view.rs       | 52 +++++++++++--
+ crates/rustunes/src/engine/state/journal.rs   |  8 ++
+ 6 files changed, 182 insertions(+), 11 deletions(-)
+
+diff --git a/crates/music-protocol/src/catalogue/sqlite.rs b/crates/music-protocol/src/catalogue/sqlite.rs
+index 6e2571a..133a376 100644
+--- a/crates/music-protocol/src/catalogue/sqlite.rs
++++ b/crates/music-protocol/src/catalogue/sqlite.rs
+@@ -73,6 +73,7 @@ pub struct Catalog {
+     stats_except_recent_play_and_skip: BTreeMap<u64, [u8; 32]>,
+     stats_except_playback: BTreeMap<u64, [u8; 32]>,
+     playback_dates: BTreeMap<u64, PlaybackDates>,
++    item_dates: BTreeMap<u64, ItemDates>,
+     represented_sync_ids: BTreeSet<u64>,
+     music_folders: BTreeSet<String>,
+     artwork: ArtworkInventory,
+@@ -197,6 +198,9 @@ impl Catalog {
+     pub fn playback_dates(&self) -> &BTreeMap<u64, PlaybackDates> {
+         &self.playback_dates
+     }
++    pub fn item_dates(&self) -> &BTreeMap<u64, ItemDates> {
++        &self.item_dates
++    }
+ 
+     /// Resolve one exact or ASCII-case-equivalent lookup; never choose among
+     /// duplicate rows or infer Unicode/grouping-key equivalence.
+@@ -400,6 +404,14 @@ pub struct PlaybackDates {
+     pub skipped: f64,
+ }
+ 
++/// A track's `date_added` and `date_downloaded` from `item`, in seconds since
++/// 2001 like [`PlaybackDates`]; zero when null, absent or not a number.
++#[derive(Clone, Copy, Debug, Default, PartialEq)]
++pub struct ItemDates {
++    pub added: f64,
++    pub downloaded: f64,
++}
++
+ /// Exact item_stats values from the same read-only catalog snapshot.
+ /// User and recent counters remain separate; neither is recomputed from dates.
+ /// Fractional playback dates, bookmarks and other statistics are not exposed.
+@@ -1879,6 +1891,7 @@ fn parse_catalog(
+         stats_preservation_profile(connection, &seen, true, control)?;
+     let (stats_except_playback, playback_dates) =
+         stats_except_playback(connection, &seen, control)?;
++    let item_dates = item_dates(connection, control)?;
+     check_control(control)?;
+     connection.execute_batch("ROLLBACK")?;
+     check_control(control)?;
+@@ -1903,6 +1916,7 @@ fn parse_catalog(
+         stats_except_recent_play_and_skip,
+         stats_except_playback,
+         playback_dates,
++        item_dates,
+         represented_sync_ids,
+         music_folders,
+         artwork,
+@@ -1937,6 +1951,40 @@ fn stats_preservation_profile(
+     Ok(stats_fingerprints(connection, expected_ids, domain, excluded, control)?.0)
+ }
+ 
++/// Each track's `item` dates, by column name so a schema without them reads
++/// as zero.
++fn item_dates(
++    connection: &Connection,
++    control: Option<&ReadControl>,
++) -> Result<BTreeMap<u64, ItemDates>> {
++    check_control(control)?;
++    let mut query = connection.prepare(
++        "SELECT s.sync_id AS __wire_id,i.* FROM item i JOIN item_store s USING(item_pid) WHERE s.sync_id<>0",
++    )?;
++    let column = |name: &str| query.column_index(name).ok();
++    let (added, downloaded) = (column("date_added"), column("date_downloaded"));
++    let mut rows = query.query([])?;
++    let mut dates = BTreeMap::new();
++    let seconds = |row: &Row<'_>, index: Option<usize>| -> Result<f64> {
++        Ok(match index.map(|i| row.get_ref(i)).transpose()? {
++            Some(ValueRef::Integer(value)) => value as f64,
++            Some(ValueRef::Real(value)) => value,
++            _ => 0.0,
++        })
++    };
++    while let Some(row) = next_row(&mut rows, control)? {
++        ensure!(dates.len() < MAX_ROWS, "item date row bound exceeded");
++        dates.insert(
++            wire_id(row, "__wire_id")?,
++            ItemDates {
++                added: seconds(row, added)?,
++                downloaded: seconds(row, downloaded)?,
++            },
++        );
++    }
++    Ok(dates)
++}
++
+ fn stats_except_playback(
+     connection: &Connection,
+     expected_ids: &BTreeSet<u64>,
+diff --git a/crates/music-protocol/src/catalogue/sqlite/without.rs b/crates/music-protocol/src/catalogue/sqlite/without.rs
+index ed63c06..5456352 100644
+--- a/crates/music-protocol/src/catalogue/sqlite/without.rs
++++ b/crates/music-protocol/src/catalogue/sqlite/without.rs
+@@ -210,6 +210,12 @@ impl Catalog {
+                 .filter(|(id, _)| kept(id))
+                 .map(|(id, d)| (*id, *d))
+                 .collect(),
++            item_dates: self
++                .item_dates
++                .iter()
++                .filter(|(id, _)| kept(id))
++                .map(|(id, d)| (*id, *d))
++                .collect(),
+             represented_sync_ids: self
+                 .represented_sync_ids
+                 .iter()
+diff --git a/crates/rustunes/src/cli.rs b/crates/rustunes/src/cli.rs
+index 060de99..9b49c0f 100644
+--- a/crates/rustunes/src/cli.rs
++++ b/crates/rustunes/src/cli.rs
+@@ -1504,27 +1504,38 @@ async fn dispatch(cli: Cli, engine: &engine::Engine) -> Result<ExitCode> {
+                 LibraryCommand::Show { id } => library_view::View::Show(id),
+                 LibraryCommand::Stats => library_view::View::Stats,
+             };
+-            let catalog = if let Some(directory) = snapshot {
++            let (catalog, device) = if let Some(directory) = snapshot {
+                 let line = "Reading saved snapshot; no live device check";
+                 if machine::enabled() {
+                     machine::phase("read_snapshot", Some(line.into()))?;
+                 } else {
+                     eprintln!("{line}");
+                 }
+-                crate::engine::state::snapshot::open(&directory)?.catalog
++                let saved = crate::engine::state::snapshot::open(&directory)?;
++                (saved.catalog, Some(saved.identity.device_identifier_sha256))
+             } else {
+-                catalogue_capture::read(trace_dir.as_deref(), device::provider).await?
++                let udid = std::sync::Mutex::new(None);
++                let catalog = catalogue_capture::read(trace_dir.as_deref(), || async {
++                    let provider = device::provider().await?;
++                    *udid.lock().unwrap_or_else(|e| e.into_inner()) = Some(provider.udid.clone());
++                    Ok(provider)
++                })
++                .await?;
++                let udid = udid.into_inner().unwrap_or_else(|e| e.into_inner());
++                let device = udid.and_then(|u| crate::engine::state::journal::device_binding(&u).ok());
++                (catalog, device)
+             };
++            let sources = device.map(library_sources).unwrap_or_default();
+             let kind = match view {
+                 library_view::View::List(_) => "library_list",
+                 library_view::View::Show(_) => "library_track",
+                 library_view::View::Stats => "library_stats",
+             };
+             if machine::enabled() {
+-                machine::report_from(kind, |out| library_view::write(&catalog, &view, true, out))?;
++                machine::report_from(kind, |out| library_view::write(&catalog, &sources, &view, true, out))?;
+             } else {
+                 let mut output = std::io::stdout().lock();
+-                library_view::write(&catalog, &view, json, &mut output)?;
++                library_view::write(&catalog, &sources, &view, json, &mut output)?;
+                 output.flush()?;
+             }
+         }
+@@ -2489,6 +2500,62 @@ mod metadata_intent_tests;
+ #[cfg(test)]
+ mod tests;
+ 
++/// The source each journal binding records, for the one library this host
++/// keeps a journal of for `device`; none when there are several or none.
++fn library_sources(device: [u8; 32]) -> library_view::Sources {
++    let found = || -> Option<library_view::Sources> {
++        let directory = default_state_directory()
++            .ok()?
++            .join("devices")
++            .join(crate::engine::state::current::hex(&device));
++        let mut libraries = std::fs::read_dir(directory)
++            .ok()?
++            .filter_map(|e| e.ok())
++            .filter(|e| e.path().join("journal").join("journal.sqlite").is_file());
++        let library = libraries.next()?;
++        if libraries.next().is_some() {
++            return None;
++        }
++        let digest = library.file_name().to_str().and_then(unhex)?;
++        let identity =
++            crate::engine::state::journal::Identity::from_directory_digests(device, digest).ok()?;
++        let recorded = crate::engine::state::journal::Journal::open_read_only(
++            &library.path().join("journal"),
++            &identity,
++        )
++        .ok()?
++        .recorded_sources()
++        .ok()?;
++        let root = config::library().ok();
++        Some(
++            recorded
++                .into_iter()
++                .map(|(track, path)| (track, shown_source(&path, root.as_deref())))
++                .collect(),
++        )
++    };
++    found().unwrap_or_default()
++}
++
++/// A source path relative to the library directory, or absolute outside it.
++fn shown_source(path: &std::path::Path, root: Option<&std::path::Path>) -> String {
++    root.and_then(|r| path.strip_prefix(r).ok())
++        .unwrap_or(path)
++        .to_string_lossy()
++        .into_owned()
++}
++
++fn unhex(text: &str) -> Option<[u8; 32]> {
++    let mut out = [0; 32];
++    if text.len() != 64 {
++        return None;
++    }
++    for (i, b) in out.iter_mut().enumerate() {
++        *b = u8::from_str_radix(text.get(i * 2..i * 2 + 2)?, 16).ok()?;
++    }
++    Some(out)
++}
++
+ fn default_state_directory() -> Result<PathBuf> {
+     if let Some(path) = std::env::var_os("XDG_STATE_HOME").filter(|v| !v.is_empty()) {
+         let path = PathBuf::from(path);
+diff --git a/crates/rustunes/src/cli/cache_view.rs b/crates/rustunes/src/cli/cache_view.rs
+index 507e082..04e03fe 100644
+--- a/crates/rustunes/src/cli/cache_view.rs
++++ b/crates/rustunes/src/cli/cache_view.rs
+@@ -79,7 +79,7 @@ pub fn prune(
+ }
+ 
+ /// UTC calendar date of a Unix time, without a date library.
+-fn date(unix: i64) -> String {
++pub(super) fn date(unix: i64) -> String {
+     let days = unix.div_euclid(86_400);
+     // Howard Hinnant's civil_from_days.
+     let z = days + 719_468;
+diff --git a/crates/rustunes/src/cli/library_view.rs b/crates/rustunes/src/cli/library_view.rs
+index 76d180f..4bf3e4e 100644
+--- a/crates/rustunes/src/cli/library_view.rs
++++ b/crates/rustunes/src/cli/library_view.rs
+@@ -31,8 +31,12 @@ pub fn parse_id(text: &str) -> Result<u64> {
+     Ok(id)
+ }
+ 
++/// Library-relative (or absolute) source path by track, from this host's journal.
++pub type Sources = std::collections::BTreeMap<u64, String>;
++
+ pub fn write(
+     catalog: &Catalog,
++    sources: &Sources,
+     view: &View,
+     json_output: bool,
+     out: &mut impl Write,
+@@ -43,7 +47,7 @@ pub fn write(
+             let Some(track) = catalog.tracks().iter().find(|t| t.sync_id == *id) else {
+                 bail!("track {id:016x} is absent from the current catalogue");
+             };
+-            json!({"track": track_json(catalog, track)})
++            json!({"track": track_json(catalog, sources, track)})
+         }
+         View::List(filter) => {
+             let mut tracks: Vec<_> = catalog
+@@ -70,7 +74,7 @@ pub fn write(
+                     ))
+             });
+             json!({"matched_tracks":tracks.len(), "total_tracks":catalog.tracks().len(),
+-                "tracks":tracks.into_iter().map(|t|track_json(catalog,t)).collect::<Vec<_>>()})
++                "tracks":tracks.into_iter().map(|t|track_json(catalog,sources,t)).collect::<Vec<_>>()})
+         }
+     };
+     if json_output {
+@@ -127,6 +131,11 @@ pub fn write(
+                     ("Recent play count", "play_count_recent"),
+                     ("Skip count", "skip_count_user"),
+                     ("Recent skip count", "skip_count_recent"),
++                    ("Added", "date_added"),
++                    ("Last played", "date_played"),
++                    ("Last skipped", "date_skipped"),
++                    ("Downloaded", "date_downloaded"),
++                    ("Source", "source"),
+                 ] {
+                     let value = &t[key];
+                     let text = value.as_str().map(display).unwrap_or_else(|| {
+@@ -177,8 +186,10 @@ fn matches(track: &Track, filter: &Filter) -> bool {
+         })
+ }
+ 
+-fn track_json(catalog: &Catalog, track: &Track) -> Value {
++fn track_json(catalog: &Catalog, sources: &Sources, track: &Track) -> Value {
+     let m = &track.metadata;
++    let played = catalog.playback_dates().get(&track.sync_id).copied().unwrap_or_default();
++    let item = catalog.item_dates().get(&track.sync_id).copied().unwrap_or_default();
+     json!({"id":format!("{:016x}",track.sync_id),"album_id":format!("{:016x}",track.album_sync_id),
+         "artist_id":format!("{:016x}",track.artist_sync_id),"title":m.title,
+         "sort_title":catalog.title_sort(track.sync_id),"artist":m.artist,"album":m.album,
+@@ -192,6 +203,9 @@ fn track_json(catalog: &Catalog, track: &Track) -> Value {
+         "has_been_played":track.playback.has_been_played,"user_rating":track.playback.user_rating,
+         "user_rating_is_derived":track.playback.user_rating_is_derived,"liked_state":track.playback.liked_state,
+         "artwork_cache_id":catalog.artwork().track_cache_ids().get(&track.sync_id),
++        "date_added":utc(item.added),"date_downloaded":utc(item.downloaded),
++        "date_played":utc(played.played),"date_skipped":utc(played.skipped),
++        "source":sources.get(&track.sync_id),
+         "availability":{"placeholder":track.availability.is_placeholder,"library_added":track.availability.is_library_added,
+         "non_purgeable_asset":track.availability.has_non_purgeable_asset,"supported_type":track.availability.is_supported_type}})
+ }
+@@ -207,6 +221,23 @@ fn stats(catalog: &Catalog) -> Result<Value> {
+         "duration_ms":catalog.tracks().iter().map(|t|u64::from(t.metadata.total_time_ms)).sum::<u64>(),
+         "tracks_with_artwork_registration":catalog.artwork().track_cache_ids().len()}))
+ }
++/// Seconds since 2001-01-01 UTC (Apple's reference date) as ISO 8601; zero,
++/// negative or non-finite is no date.
++pub(super) fn utc(seconds: f64) -> Option<String> {
++    if !seconds.is_finite() || seconds <= 0.0 {
++        return None;
++    }
++    let unix = seconds as i64 + 978_307_200;
++    let of_day = unix.rem_euclid(86_400);
++    Some(format!(
++        "{}T{:02}:{:02}:{:02}Z",
++        super::cache_view::date(unix),
++        of_day / 3600,
++        of_day / 60 % 60,
++        of_day % 60
++    ))
++}
++
+ fn display(text: &str) -> String {
+     text.chars()
+         .flat_map(|c| {
+@@ -238,13 +269,24 @@ mod tests {
+             assert!(parse_id(text).is_err());
+         }
+         assert_eq!(display("name\x1b[31m\n"), "name\\u{1b}[31m\\n");
++        assert_eq!(utc(816_074_325.957).as_deref(), Some("2026-11-11T07:18:45Z"));
++        assert_eq!(utc(0.0), None);
++        assert_eq!(utc(f64::NAN), None);
+     }
+     #[test]
+     fn json_filters_and_missing_id_are_explicit() {
+         let catalog = music_protocol::test_support::catalogue::collection_catalog(13);
+         let mut out = Vec::new();
++        let id = catalog.tracks()[0].sync_id;
++        let sources = Sources::from([(id, "Artist/Album/01 Song.m4a".to_owned())]);
++        let mut shown = Vec::new();
++        write(&catalog, &sources, &View::Show(id), true, &mut shown).unwrap();
++        let shown: Value = serde_json::from_slice(&shown).unwrap();
++        assert_eq!(shown["data"]["track"]["source"], "Artist/Album/01 Song.m4a");
++        assert!(shown["data"]["track"].get("date_added").is_some());
+         write(
+             &catalog,
++            &Sources::new(),
+             &View::List(Filter {
+                 artist: Some("absent".into()),
+                 ..Filter::default()
+@@ -257,7 +299,7 @@ mod tests {
+         assert_eq!(json["data"]["matched_tracks"], 0);
+         assert_eq!(json["data"]["total_tracks"], 1);
+         assert_eq!(json["media_anchor"], 13);
+-        assert!(write(&catalog, &View::Show(42), false, &mut Vec::new()).is_err());
+-        write(&catalog, &View::Stats, true, &mut Vec::new()).unwrap();
++        assert!(write(&catalog, &Sources::new(), &View::Show(42), false, &mut Vec::new()).is_err());
++        write(&catalog, &Sources::new(), &View::Stats, true, &mut Vec::new()).unwrap();
+     }
+ }
+diff --git a/crates/rustunes/src/engine/state/journal.rs b/crates/rustunes/src/engine/state/journal.rs
+index aa51287..c873023 100644
+--- a/crates/rustunes/src/engine/state/journal.rs
++++ b/crates/rustunes/src/engine/state/journal.rs
+@@ -112,6 +112,14 @@ impl Identity {
+         })
+     }
+ 
++    /// Scope for a journal found by its directory names, for views that read
++    /// it and make no transition.
++    pub(crate) fn from_directory_digests(device: [u8; 32], library: [u8; 32]) -> Result<Self> {
++        nonzero_hash(&device)?;
++        nonzero_hash(&library)?;
++        Ok(Self { device, library })
++    }
++
+     pub fn device_digest(&self) -> [u8; 32] {
+         self.device
+     }
+-- 
+2.56.0
+
+
+From 3dcad75d75ce8fecf81e12e41e33eed20909ab3d Mon Sep 17 00:00:00 2001
+From: Lachlan Marie <lchlnm@pm.me>
+Date: Thu, 12 Nov 2026 07:00:50 +0100
+Subject: [PATCH 11/11] Adopt playlists and list member sources
+
+- Add playlist push --adopt
+- Add member_sources and date_modified to playlist list
+- Document new fields
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01F3FjoJj4RV14hgXJuf9gh7
+---
+ README.md                                     | 15 ++--
+ crates/rustunes/src/cli/playlist.rs           | 26 ++++++-
+ .../rustunes/src/engine/execution/playlist.rs | 70 ++++++++++++++++++-
+ 3 files changed, 102 insertions(+), 9 deletions(-)
+
+diff --git a/README.md b/README.md
+index 6899a1e..f5d42e1 100644
+--- a/README.md
++++ b/README.md
+@@ -435,6 +435,7 @@ All three take these options:
+ ```
+ rustunes playlist push ~/Music/Mix.m3u8     # create, or replace when changed
+ rustunes playlist push Mix.m3u --folder Trips
++rustunes playlist push Mix.m3u --adopt      # take over a same-named one made elsewhere
+ rustunes playlist list                      # (rustunes) marks the ones it made
+ rustunes playlist remove Mix
+ ```
+@@ -445,8 +446,11 @@ pulled; the others are left out with a notice. A playlist is named after its
+ file unless `--name` says otherwise. `--folder NAME` puts it in a playlist
+ folder rustunes creates, and removes once its last playlist is removed. Only playlists rustunes created (recorded
+ in `playlists.json` next to the journal) are ever replaced or removed: one with
+-the same name made elsewhere stays, and the pushed one is added beside it. A changed playlist is updated in place, so
+-it keeps its identity on the phone.
++the same name made elsewhere stays, and the pushed one is added beside it, unless `--adopt`
++deletes that one (exactly one ordinary playlist, never phone-made, smart or folder) and puts the pushed one in its
++place, from then on managed. A changed playlist is updated in place, so
++it keeps its identity on the phone. `playlist list --json` gives each playlist's `member_sources` (the local file
++behind each member, in order, or null) and `date_modified`.
+ 
+ ### Editing tracks on the phone
+ 
+@@ -508,12 +512,15 @@ rustunes catalog --output ~/rustunes-checks/catalog.csv
+ | `device list` | List connected phones by identifier. With `--wifi`, the paired phones answering on this network. | `--json` |
+ | `device info` | Show the phone's model and iOS version. | `--json`; `--domain DOMAIN` prints every value of this Lockdown domain as an XML plist instead (for example `com.apple.mobile.iTunes`, which lists the audio codecs the phone accepts) |
+ | `library list` | List the tracks on the phone, with their IDs. | `--query TEXT` (case-insensitive search in title, artist and album), `--artist NAME` (exact artist or album artist), `--album NAME` (exact album) |
+-| `library show ID` | Show a track's metadata and its location on the phone. | |
++| `library show ID` | Show a track's metadata, play and skip counts and dates, its location on the phone and its local source file. | |
+ | `library stats` | Count tracks, albums, artists, size and covers. | |
+ | `catalog` | Export the phone's whole Music catalogue as CSV. | `--output FILE` (a new file; default: stdout), `--trace-dir DIR` |
+ 
+ All `library` commands also take `--json`, `--snapshot DIR` (read a saved
+-snapshot offline instead of the phone) and `--trace-dir DIR`.
++snapshot offline instead of the phone) and `--trace-dir DIR`. In JSON each track
++has `date_added`, `date_played`, `date_skipped` and `date_downloaded` (ISO 8601
++UTC or null) and `source`, the file this host's journal binds to it, relative to
++the library directory (or null).
+ 
+ ### Checking and recovering
+ 
+diff --git a/crates/rustunes/src/cli/playlist.rs b/crates/rustunes/src/cli/playlist.rs
+index 7fae5a6..8c6ec42 100644
+--- a/crates/rustunes/src/cli/playlist.rs
++++ b/crates/rustunes/src/cli/playlist.rs
+@@ -21,6 +21,9 @@ pub(super) enum PlaylistCommand {
+         /// Show what would change without sending it.
+         #[arg(long)]
+         dry_run: bool,
++        /// Take over the one ordinary playlist of this name made elsewhere: delete it and create this one in its place.
++        #[arg(long)]
++        adopt: bool,
+         #[command(flatten)]
+         common: Common,
+     },
+@@ -75,6 +78,7 @@ pub(super) async fn run(command: PlaylistCommand, engine: &crate::engine::Engine
+             name,
+             folder,
+             dry_run,
++            adopt,
+             common,
+         } => {
+             let state = state(&common)?;
+@@ -88,6 +92,7 @@ pub(super) async fn run(command: PlaylistCommand, engine: &crate::engine::Engine
+                         state: &state,
+                         host_name: &common.host_name,
+                         dry_run,
++                        adopt,
+                         connection: &connection,
+                     },
+                     || engine.control(common.seconds),
+@@ -110,6 +115,8 @@ pub(super) async fn run(command: PlaylistCommand, engine: &crate::engine::Engine
+                     ("unchanged", _) => "Unchanged",
+                     ("created", false) => "Created",
+                     ("created", true) => "Would create",
++                    ("adopted", false) => "Adopted",
++                    ("adopted", true) => "Would adopt",
+                     (_, false) => "Replaced",
+                     (_, true) => "Would replace",
+                 };
+@@ -126,10 +133,25 @@ pub(super) async fn run(command: PlaylistCommand, engine: &crate::engine::Engine
+             let listed = engine
+                 .scope(playlist::list(&state, || engine.control(common.seconds)))
+                 .await?;
++            let root = super::config::library().ok();
++            let shown = listed
++                .iter()
++                .map(|p| {
++                    let mut value = serde_json::to_value(p)?;
++                    value["member_sources"] = json!(p
++                        .member_sources
++                        .iter()
++                        .map(|s| s.as_deref().map(|s| super::shown_source(s, root.as_deref())))
++                        .collect::<Vec<_>>());
++                    value["date_modified"] =
++                        json!(p.playlist.modified.and_then(|s| super::library_view::utc(s as f64)));
++                    Ok(value)
++                })
++                .collect::<Result<Vec<_>>>()?;
+             if machine::enabled() {
+-                machine::report("playlists", &listed)?;
++                machine::report("playlists", &shown)?;
+             } else if json {
+-                println!("{}", serde_json::to_string_pretty(&json!({"playlists": listed}))?);
++                println!("{}", serde_json::to_string_pretty(&json!({"playlists": shown}))?);
+             } else {
+                 for p in &listed {
+                     println!(
+diff --git a/crates/rustunes/src/engine/execution/playlist.rs b/crates/rustunes/src/engine/execution/playlist.rs
+index 40c1f0b..89ae9ff 100644
+--- a/crates/rustunes/src/engine/execution/playlist.rs
++++ b/crates/rustunes/src/engine/execution/playlist.rs
+@@ -103,6 +103,9 @@ pub struct PhonePlaylist {
+     #[serde(skip_serializing_if = "is_zero")]
+     pub parent: u64,
+     pub members: Vec<u64>,
++    /// `date_modified`, seconds since 2001.
++    #[serde(skip)]
++    pub modified: Option<i64>,
+ }
+ 
+ fn is_zero(value: &u64) -> bool {
+@@ -167,6 +170,11 @@ pub(crate) fn phone_playlists(tables: &Tables) -> Result<Vec<PhonePlaylist>> {
+             kind,
+             parent: int("parent_pid")? as u64,
+             members: list.into_iter().map(|(_, m)| m).collect(),
++            modified: match containers.at(row, "date_modified").ok() {
++                Some(Cell::Integer(seconds)) => Some(*seconds),
++                Some(Cell::Real(bits)) => Some(f64::from_bits(*bits) as i64),
++                _ => None,
++            },
+         });
+     }
+     Ok(playlists)
+@@ -258,6 +266,22 @@ pub(crate) fn decide(present: &[&PhonePlaylist], name: &str, members: &[u64], pa
+     }
+ }
+ 
++/// The one ordinary playlist named `name` that this host did not create, if
++/// any; several are refused, as the one to take over would be a guess.
++pub(crate) fn adoptable(playlists: &[PhonePlaylist], managed: &BTreeSet<u64>, name: &str) -> Result<Option<u64>> {
++    let found: Vec<u64> = playlists
++        .iter()
++        .filter(|p| p.kind == "ordinary" && p.name == name && !managed.contains(&p.pid))
++        .map(|p| p.pid)
++        .collect();
++    ensure!(
++        found.len() <= 1,
++        "{} playlists made elsewhere are named {name:?}; adopt takes over only one",
++        found.len()
++    );
++    Ok(found.first().copied())
++}
++
+ pub struct PushOptions<'a> {
+     pub playlist: &'a Path,
+     pub name: Option<String>,
+@@ -265,6 +289,7 @@ pub struct PushOptions<'a> {
+     pub state: &'a Path,
+     pub host_name: &'a str,
+     pub dry_run: bool,
++    pub adopt: bool,
+     pub connection: &'a str,
+ }
+ 
+@@ -522,15 +547,19 @@ pub async fn push(
+         action,
+         folder: o.folder.clone(),
+     };
++    let adopted = match decision {
++        Decision::Create if o.adopt => adoptable(&opened.playlists, &opened.managed.all(), &name)?,
++        _ => None,
++    };
+     let replaced = match decision {
+         Decision::Unchanged(pid) => return Ok(outcome(pid, "unchanged")),
+         Decision::Replace(old) => old,
+-        Decision::Create => Vec::new(),
++        Decision::Create => adopted.into_iter().collect(),
+     };
+     // update_playlist keeps the pid, so the phone keeps the playlist's
+     // identity; a move between folders is untested and goes delete + insert.
+     let update = match replaced.as_slice() {
+-        [one] => existing.iter().any(|p| p.pid == *one && p.parent == parent),
++        [one] if adopted.is_none() => existing.iter().any(|p| p.pid == *one && p.parent == parent),
+         _ => false,
+     };
+     let pid = if update {
+@@ -538,7 +567,11 @@ pub async fn push(
+     } else {
+         fresh_pid(&opened.before, &taken)?
+     };
+-    let action = if replaced.is_empty() { "created" } else { "replaced" };
++    let action = match (adopted, replaced.is_empty()) {
++        (Some(_), _) => "adopted",
++        (None, true) => "created",
++        (None, false) => "replaced",
++    };
+     if o.dry_run {
+         return Ok(outcome(pid, action));
+     }
+@@ -677,17 +710,27 @@ pub struct ListedPlaylist {
+     #[serde(flatten)]
+     pub playlist: PhonePlaylist,
+     pub managed: bool,
++    /// The source the journal binds to each member, in member order.
++    #[serde(skip)]
++    pub member_sources: Vec<Option<PathBuf>>,
+ }
+ 
+ pub async fn list(state: &Path, control: impl Fn() -> Control) -> Result<Vec<ListedPlaylist>> {
+     let run = layout::new_run(state)?;
+     let opened = open(state, &run.join("list"), &control()).await?;
+     let managed = opened.managed.all();
++    let journal = opened.journal.join("journal.sqlite");
++    let sources = if journal.try_exists()? {
++        Journal::open_read_only(&opened.journal, &opened.identity)?.recorded_sources()?
++    } else {
++        BTreeMap::new()
++    };
+     Ok(opened
+         .playlists
+         .into_iter()
+         .map(|playlist| ListedPlaylist {
+             managed: managed.contains(&playlist.pid),
++            member_sources: playlist.members.iter().map(|m| sources.get(m).cloned()).collect(),
+             playlist,
+         })
+         .collect())
+@@ -722,6 +765,26 @@ mod tests {
+         assert_ne!(folded(Path::new("/m/a/1.m4a")), folded(Path::new("/m/a/2.m4a")));
+     }
+ 
++    #[test]
++    fn adopt_takes_over_exactly_one_ordinary_playlist_made_elsewhere() {
++        let list = |kind: &'static str, pid: u64| PhonePlaylist {
++            pid,
++            name: "Mix".into(),
++            kind,
++            parent: 0,
++            members: vec![1],
++            modified: None,
++        };
++        let managed = BTreeSet::from([9]);
++        assert_eq!(adoptable(&[list("ordinary", 5)], &managed, "Mix").unwrap(), Some(5));
++        assert_eq!(adoptable(&[list("ordinary", 5)], &managed, "Other").unwrap(), None);
++        assert_eq!(adoptable(&[list("ordinary", 9)], &managed, "Mix").unwrap(), None);
++        for kind in ["smart", "folder", "phone-made"] {
++            assert_eq!(adoptable(&[list(kind, 5)], &managed, "Mix").unwrap(), None);
++        }
++        assert!(adoptable(&[list("ordinary", 5), list("ordinary", 6)], &managed, "Mix").is_err());
++    }
++
+     #[test]
+     fn push_replaces_only_on_a_difference() {
+         let list = |pid, members: Vec<u64>| PhonePlaylist {
+@@ -730,6 +793,7 @@ mod tests {
+             kind: "ordinary",
+             parent: 0,
+             members,
++            modified: None,
+         };
+         let a = list(7, vec![1, 2]);
+         assert_eq!(decide(&[], "Mix", &[1, 2], 0), Decision::Create);
 -- 
 2.56.0
 

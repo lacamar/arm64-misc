@@ -4,7 +4,7 @@
 
 Name:           rustunes
 Version:        0.1.0
-Release:        4.%{commitdate}git%{shortcommit}%{?dist}
+Release:        5.%{commitdate}git%{shortcommit}%{?dist}
 Summary:        Sync a music library into the iPhone Music app
 
 License:        MIT
@@ -46,6 +46,11 @@ target/rpm/%{name} completions bash > %{buildroot}%{bash_completions_dir}/%{name
 %{bash_completions_dir}/%{name}
 
 %changelog
+* Wed Nov 11 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.0-5.20261031git057ee8f
+- Track dates and local sources in library list
+- Add playlist push --adopt
+- Member sources and dates in playlist list
+
 * Sun Nov 08 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.0-4.20261031git057ee8f
 - Ignore phone artwork tokens of removed items
 
