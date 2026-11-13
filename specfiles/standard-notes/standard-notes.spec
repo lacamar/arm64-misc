@@ -6,7 +6,7 @@
 
 Name:           standard-notes
 Version:        3.202.10
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        End-to-end encrypted notes app
 
 License:        AGPL-3.0-only
@@ -58,6 +58,9 @@ find %{buildroot}%{appdir} -path '*/prebuilds/*' ! -path '*/linux-arm64/*' -type
 find %{buildroot}%{appdir} -name '*musl*.node' -delete
 find %{buildroot}%{appdir} -type d -empty -delete
 rm -rf %{buildroot}%{appdir}/node_modules/sqlite3/build-tmp-napi-v6
+# Electron 45 dropped Buffer from sandboxed preloads
+sed -i '1s|^|if(typeof Buffer>"u")globalThis.Buffer=class extends Uint8Array{static from(b,o,l){return new Uint8Array(b,o,l)}};|' \
+  %{buildroot}%{appdir}/dist/javascripts/renderer/preload.js
 
 install -d %{buildroot}%{_bindir}
 cat > %{buildroot}%{_bindir}/%{name} <<'SH'
@@ -97,5 +100,8 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/512x512/apps/%{name}.png
 
 %changelog
+* Fri Nov 13 2026 lacamar <lchlnm@pm.me> - 3.202.10-2
+- Shim Buffer in preload for Electron 45
+
 * Sun Oct 18 2026 lacamar <lchlnm@pm.me> - 3.202.10-1
 - Initial package
