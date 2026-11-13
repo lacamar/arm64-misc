@@ -2,16 +2,11 @@
 
 Name:           proton-bridge
 Version:        3.27.1
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        IMAP/SMTP bridge for Proton Mail, with GUI
 
 License:        GPL-3.0-or-later AND MIT
 URL:            https://github.com/ProtonMail/proton-bridge
-
-# Build vendor tarball with:
-#   git archive <ref> | tar -x -C proton-bridge-VERSION
-#   cd proton-bridge-VERSION && go mod vendor
-#   tar czf proton-bridge-VERSION.tar.gz proton-bridge-VERSION
 
 Source0:        proton-bridge-%{version}.tar.gz
 Source1:        proton-bridge.service
@@ -47,7 +42,6 @@ BuildRequires:  grpc-plugins
 BuildRequires:  protobuf-devel
 BuildRequires:  protobuf-compiler
 BuildRequires:  systemd-rpm-macros
-
 
 Recommends:     gnupg2
 Recommends:     pass
@@ -133,6 +127,9 @@ sed -i \
 %{_datadir}/applications/proton-bridge.desktop
 
 %changelog
+* Fri Nov 13 2026 Lachlan Marie <lchlnm@pm.me> - 3.27.1-2
+- Add vendor-tarballer.sh for mx-rpm -U
+
 * Thu Nov 12 2026 Lachlan Marie <lchlnm@pm.me> - 3.27.1-1
 - Update to 3.27.1
 

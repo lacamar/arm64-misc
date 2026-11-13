@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-version=$1
-pnpm_version=$2
-ec_commit=$3
-src=$HOME/.local/rpm/sources/element-desktop
+version=$(rpmspec -q --srpm --qf '%{version}' "$1")
+pnpm_version=$(awk '$1=="%global" && $2=="pnpm_version" {print $3}' "$1")
+ec_commit=$(awk '$1=="%global" && $2=="ec_commit" {print $3}' "$1")
+src=$2
 work=${XDG_CACHE_HOME:-$HOME/.cache}/mx-rpm-tarballer/element-desktop
 export npm_config_manage_package_manager_versions=false
 rm -rf "$work"; mkdir -p "$work"; cd "$work"

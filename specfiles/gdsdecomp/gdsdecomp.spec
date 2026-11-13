@@ -12,12 +12,12 @@
 
 Name:           gdsdecomp
 Version:        2.7.4
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Godot reverse engineering tools (GDRE Tools)
 License:        MIT AND AML-glslang AND Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND CC0-1.0 AND CC-BY-4.0 AND MPL-2.0 AND OFL-1.1 AND Unlicense AND X11 AND Zlib
 URL:            https://github.com/GDRETools/gdsdecomp
-Source0:        https://github.com/nikitalita/godot/archive/%{godot_commit}/godot-%{godot_commit}.tar.gz
-Source1:        %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
+Source0:        %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
+Source1:        https://github.com/nikitalita/godot/archive/%{godot_commit}/godot-%{godot_commit}.tar.gz
 
 ExclusiveArch:  aarch64 x86_64
 
@@ -72,7 +72,7 @@ Reverse engineering tools for Godot Engine games: PCK/APK extraction,
 GDScript decompilation, resource conversion and full project recovery.
 
 %prep
-%setup -q -n godot-%{godot_commit} -a1
+%setup -q -T -n godot-%{godot_commit} -b1 -a0
 mv %{name}-%{version} modules/gdsdecomp
 patch -p1 < modules/gdsdecomp/patches/main-cli-parse-inject.patch
 sed -i 's/version_info = "unknown"/version_info = "%{version}"/' modules/gdsdecomp/build/versioning.py
@@ -129,5 +129,8 @@ desktop-file-install --dir=%{buildroot}%{_datadir}/applications gdre_tools.deskt
 %{_datadir}/icons/hicolor/scalable/apps/gdre_tools.svg
 
 %changelog
+* Fri Nov 13 2026 Lachlan Marie <lchlnm@pm.me> - 2.7.4-2
+- Track gdsdecomp as Source0 for mx-rpm -U
+
 * Thu Oct 29 2026 Lachlan Marie <lchlnm@pm.me> - 2.7.4-1
 - Initial package

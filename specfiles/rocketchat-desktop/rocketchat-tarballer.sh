@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-version=$1
-src=$HOME/.local/rpm/sources/rocketchat-desktop
+version=$(rpmspec -q --srpm --qf '%{version}' "$1")
+src=$2
 work=${XDG_CACHE_HOME:-$HOME/.cache}/mx-rpm-tarballer/rocketchat-desktop
 rm -rf "$work"; mkdir -p "$work"; cd "$work"
 tar xzf "$src/rocketchat-desktop-$version.tar.gz"
