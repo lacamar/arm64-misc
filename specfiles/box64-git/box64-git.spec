@@ -1,8 +1,8 @@
-%global bumpver 49
+%global bumpver 51
 %global _name box64
 %global tag 0.4.5.1
 
-%global commit 52db1d07ac8f198fd0bbef7e28f677116a688f3f
+%global commit 6441fcfaeb69487039b0fd8cfb948c9e3f18c3d6
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 Name:           %{_name}-git
@@ -158,6 +158,12 @@ fi
 %{_binfmtdir}/box64.conf
 
 %changelog
+* Fri Nov 13 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.5.1^51.git.6441fcf-1
+- Update to commit 6441fcfaeb69487039b0fd8cfb948c9e3f18c3d6
+
+* Fri Nov 13 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.5.1^50.git.43c0465-1
+- Update to commit 43c0465059171536225399df6fee40f0dbc259bb
+
 * Fri Nov 13 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.5.1^49.git.52db1d0-1
 - Update to commit 52db1d07ac8f198fd0bbef7e28f677116a688f3f
 
