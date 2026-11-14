@@ -2,7 +2,7 @@
 # doesn't include submodule content, so they're pulled in as separate
 # sources pinned to the exact commit iDescriptor v%{version} points at
 # (see .gitmodules and `git ls-tree v%{version} -- lib`).
-%global idevice_commit ef0c66073e79f513a9e5a541d5fa3682b45d8c5f
+%global idevice_commit b3263ba99bbd5eb750cfa9ce20557c0986e38e37
 %global uxplay_commit  eaca2458946d8a283df3b872f25c6b7cc98be411
 
 Name:           idescriptor
@@ -108,6 +108,9 @@ udevadm control --reload-rules >/dev/null 2>&1 || :
 %{_udevrulesdir}/99-idevice.rules
 
 %changelog
+* Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 0.6.2-3
+- Update idevice to b3263ba99bbd5eb750cfa9ce20557c0986e38e37
+
 * Fri Nov 06 2026 Lachlan Marie <lchlnm@pm.me> - 0.6.2-3
 - Rebuild for ffmpeg 9
 
