@@ -1,5 +1,5 @@
 Name:           steam-box64
-Version:        0
+Version:        5.6.3.1
 Release:        1%{?dist}
 Summary:        Steam wrapper running x86 Steam via box64 on Fedora Asahi Remix
 
@@ -72,6 +72,9 @@ install -Dpm0644 -t %{buildroot}%{_datadir}/icons/hicolor/scalable/apps %{SOURCE
 %{_datadir}/icons/hicolor/scalable/apps/steam-box64.svg
 
 %changelog
+* Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 5.6.3.1-1
+- Update to 5.6.3.1
+
 * Mon Oct 26 2026 Lachlan Marie <lchlnm@pm.me> - 0-1
 - Initial package, based on @asahi/steam 0-14
 - Run x86 Steam on the host via box64 instead of muvm/FEX
