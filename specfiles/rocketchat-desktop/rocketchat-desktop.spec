@@ -5,7 +5,7 @@
 %global appdir %{_libexecdir}/%{name}
 
 Name:           rocketchat-desktop
-Version:        4.18.3
+Version:        4.19.3
 Release:        3%{?dist}
 Summary:        Desktop client for Rocket.Chat
 
@@ -102,6 +102,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/*/apps/%{name}.png
 
 %changelog
+* Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 4.19.3-3
+- Update to 4.19.3
+
 * Sun Oct 18 2026 lacamar <lchlnm@pm.me> - 4.18.3-3
 - Fix StartupWMClass
 
