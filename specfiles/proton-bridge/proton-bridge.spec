@@ -1,7 +1,7 @@
 %global debug_package %{nil}
 
 Name:           proton-bridge
-Version:        3.27.1
+Version:        3.27.2
 Release:        2%{?dist}
 Summary:        IMAP/SMTP bridge for Proton Mail, with GUI
 
@@ -127,6 +127,9 @@ sed -i \
 %{_datadir}/applications/proton-bridge.desktop
 
 %changelog
+* Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 3.27.2-2
+- Update to 3.27.2
+
 * Fri Nov 13 2026 Lachlan Marie <lchlnm@pm.me> - 3.27.1-2
 - Add vendor-tarballer.sh for mx-rpm -U
 
