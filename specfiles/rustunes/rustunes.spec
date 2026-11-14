@@ -1,9 +1,9 @@
-%global commit 057ee8fc9c9da65795a6f14497fc408c2fe23c76
+%global commit 4511f49aed021152f579568f116fd7d329dcdef6
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 %global commitdate 20261031
 
 Name:           rustunes
-Version:        0.1.0
+Version:        0.1.1
 Release:        5.%{commitdate}git%{shortcommit}%{?dist}
 Summary:        Sync a music library into the iPhone Music app
 
@@ -46,6 +46,9 @@ target/rpm/%{name} completions bash > %{buildroot}%{bash_completions_dir}/%{name
 %{bash_completions_dir}/%{name}
 
 %changelog
+* Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.1-5.20261031git4511f49
+- Update to 0.1.1
+
 * Wed Nov 11 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.0-5.20261031git057ee8f
 - Track dates and local sources in library list
 - Add playlist push --adopt
