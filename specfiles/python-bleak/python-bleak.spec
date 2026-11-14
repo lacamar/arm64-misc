@@ -1,5 +1,5 @@
 Name:           python-bleak
-Version:        3.0.2
+Version:        3.1.0
 Release:        5%{?dist}
 Summary:        Cross-platform Bluetooth Low Energy client
 
@@ -40,6 +40,9 @@ sed -i 's/"uv_build>=[^"]*"/"uv_build>=0.10.9"/' pyproject.toml
 %files -n python3-bleak -f %{pyproject_files}
 
 %changelog
+* Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 3.1.0-5
+- Update to 3.1.0
+
 * Fri Nov 06 2026 Lachlan Marie <lchlnm@pm.me> - 3.0.2-5
 - Keep build-backend intact
 
