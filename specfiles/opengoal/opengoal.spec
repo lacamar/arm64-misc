@@ -1,6 +1,6 @@
 %global tag 0.3.9
-%global bumpver 1
-%global commit f1b3de907ceec6f79a81ceaf349633b3466039f6
+%global bumpver 2
+%global commit 4cd2a71fa15ae214a03925beafa59c7228ec81d3
 %{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
 
 %global toolchain clang
@@ -72,6 +72,9 @@ echo v%{tag} > %{buildroot}%{_libdir}/%{name}/VERSION
 %{_libdir}/%{name}
 
 %changelog
+* Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.9^2.git.4cd2a71-1
+- Update to commit 4cd2a71fa15ae214a03925beafa59c7228ec81d3
+
 * Thu Nov 05 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.9^1.git.f1b3de9-1
 - Update to commit f1b3de907ceec6f79a81ceaf349633b3466039f6
 
