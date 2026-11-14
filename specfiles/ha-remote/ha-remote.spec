@@ -1,4 +1,4 @@
-%global tag 0.3.4
+%global tag 0.4.1
 
 Name:     ha-remote
 Version:  %{tag}
@@ -87,6 +87,9 @@ fi
 %{_datadir}/%{name}
 
 %changelog
+* Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.1-1
+- Update to 0.4.1
+
 * Thu Nov 05 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.4-1
 - Update to 0.3.4
 
