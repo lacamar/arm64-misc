@@ -92,9 +92,9 @@
 
 Name:           mesa
 Summary:        Mesa graphics libraries
-%global commit 335d5698dca1d1b9d11ef18cf5f523cc0f7f58fb
+%global commit 13baeb70c066a9f82d2bcfb29f06e4865212affa
 %global shortcommit %{sub %{commit} 1 8}
-%global bumpver 1
+%global bumpver 2
 %global ver 27.0.0
 Version:        %{ver}~%{bumpver}.git.%{shortcommit}
 Release:        1%{?dist}
@@ -114,7 +114,6 @@ Patch2:         hk-placed-map.patch
 Patch3:         hk-vs-attrib-limit.patch
 Patch4:         asahi-shadow-flush-wb.patch
 Patch5:         agx-query-nowait.patch
-Patch6:         hk-shader-destroy-uaf.patch
 
 # In CentOS/RHEL, Rust crates required to build NVK are vendored.
 # The minimum target versions are obtained from the .wrap files
@@ -768,6 +767,9 @@ ln -s libGLX_mesa.so.0 %{buildroot}%{_libdir}/libGLX_system.so.0
 %endif
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 27.0.0~2.git.13baeb70-1
+- Update to commit 13baeb70c066a9f82d2bcfb29f06e4865212affa
+
 * Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 27.0.0~1.git.335d5698-1
 - Replace date snapshot with bumpver
 
