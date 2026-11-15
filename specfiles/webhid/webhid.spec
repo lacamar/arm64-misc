@@ -2,8 +2,8 @@
 %global extid webhid@k4zoku.dev
 
 Name:           webhid
-Version:        3.2.0
-Release:        5%{?dist}
+Version:        3.3.4
+Release:        1%{?dist}
 Summary:        WebHID for Firefox via a native-messaging bridge and hidraw daemon
 
 License:        MIT
@@ -65,6 +65,9 @@ udevadm trigger --subsystem-match=hidraw >/dev/null 2>&1 || :
 %{_datadir}/webhid/
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 3.3.4-1
+- Update to 3.3.4
+
 * Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 3.2.0-5
 - Fetch signed xpi from GitHub release by version
 
