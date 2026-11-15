@@ -1,7 +1,7 @@
 diff --git a/CONFIG.md b/CONFIG.md
 --- a/CONFIG.md
 +++ b/CONFIG.md
-@@ -466,6 +466,7 @@
+@@ -483,6 +483,7 @@ Since 5.5.
  * `"alpha"`: Lexicographic sort: 1,10,2,20,a,b,c
  * `"numeric"`: Numeric sort: 1,2,3,10,100,a,b,c
  * `"mtime"`: Modification time sort
@@ -23,7 +23,7 @@ diff --git a/extra/swayimg.lua b/extra/swayimg.lua
 diff --git a/src/image.hpp b/src/image.hpp
 --- a/src/image.hpp
 +++ b/src/image.hpp
-@@ -18,6 +18,7 @@
+@@ -18,6 +18,7 @@ struct ImageEntry {
      size_t index = std::numeric_limits<size_t>::max(); ///< Index in image list
      std::filesystem::path path; ///< Path to the image file
      std::time_t mtime = 0;      ///< File modification time
@@ -61,7 +61,7 @@ diff --git a/src/imagelist.cpp b/src/imagelist.cpp
  namespace {
  
  /**
-@@ -78,6 +88,56 @@
+@@ -78,6 +88,56 @@ int compare_strings(const std::string& l, const std::string& r,
      return cmp;
  }
  
@@ -118,7 +118,7 @@ diff --git a/src/imagelist.cpp b/src/imagelist.cpp
  /**
   * Comparison of two paths.
   * @param l,r paths to compare
-@@ -128,6 +188,10 @@
+@@ -128,6 +188,10 @@ bool compare_entries(const ImageEntry& l, const ImageEntry& r,
          case ImageList::Order::Mtime:
              return l.mtime == r.mtime ? compare_paths(l.path, r.path, false) < 0
                                        : l.mtime < r.mtime;
@@ -129,9 +129,9 @@ diff --git a/src/imagelist.cpp b/src/imagelist.cpp
          case ImageList::Order::Size:
              return l.size == r.size ? compare_paths(l.path, r.path, false) < 0
                                      : l.size < r.size;
-@@ -539,11 +603,24 @@
- 
-     const size_t size = std::filesystem::file_size(path);
+@@ -589,11 +653,24 @@ ImageEntryPtr ImageList::add_file(const std::filesystem::path& path)
+         return nullptr;
+     }
  
 -    return add_entry(path, mtime, size);
 +    std::time_t exif_time = 0;
@@ -156,7 +156,7 @@ diff --git a/src/imagelist.cpp b/src/imagelist.cpp
  {
      ImageEntryPtr entry = nullptr;
  
-@@ -552,6 +629,7 @@
+@@ -602,6 +679,7 @@ ImageEntryPtr ImageList::add_entry(const std::filesystem::path& path,
          entry->path = path;
          entry->mtime = mtime;
          entry->size = size;
@@ -167,7 +167,7 @@ diff --git a/src/imagelist.cpp b/src/imagelist.cpp
 diff --git a/src/imagelist.hpp b/src/imagelist.hpp
 --- a/src/imagelist.hpp
 +++ b/src/imagelist.hpp
-@@ -20,6 +20,7 @@
+@@ -21,6 +21,7 @@ public:
          Alpha,   ///< Lexicographic sort
          Numeric, ///< Numeric sort
          Mtime,   ///< Modification time sort
@@ -175,7 +175,7 @@ diff --git a/src/imagelist.hpp b/src/imagelist.hpp
          Size,    ///< Size sort
          Random,  ///< Random order
      };
-@@ -181,10 +182,12 @@
+@@ -199,10 +200,12 @@ private:
       * @param path path to the image file
       * @param mtime file modification time
       * @param size size of the file
@@ -192,7 +192,7 @@ diff --git a/src/imagelist.hpp b/src/imagelist.hpp
 diff --git a/src/luaengine.cpp b/src/luaengine.cpp
 --- a/src/luaengine.cpp
 +++ b/src/luaengine.cpp
-@@ -51,6 +51,7 @@
+@@ -51,6 +51,7 @@ static constexpr std::array ilorders =
          { ImageList::Order::Alpha,   "alpha"   },
          { ImageList::Order::Numeric, "numeric" },
          { ImageList::Order::Mtime,   "mtime"   },
