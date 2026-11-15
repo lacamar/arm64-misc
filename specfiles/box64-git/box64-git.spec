@@ -1,8 +1,8 @@
-%global bumpver 52
+%global bumpver 53
 %global _name box64
 %global tag 0.4.5.1
 
-%global commit 7174c12d2b5f136fa52dfc323169d506a1687300
+%global commit 35c098362930aeff9f374a15505517df19ebdba4
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 
 Name:           %{_name}-git
@@ -157,6 +157,9 @@ fi
 %{_binfmtdir}/box64.conf
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.5.1^53.git.35c0983-2
+- Update to commit 35c098362930aeff9f374a15505517df19ebdba4
+
 * Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.5.1^52.git.7174c12-2
 - Normalize spec for mx-rpm -U
 
