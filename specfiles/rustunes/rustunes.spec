@@ -1,15 +1,11 @@
-%global commit 4511f49aed021152f579568f116fd7d329dcdef6
-%global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global commitdate 20261031
-
 Name:           rustunes
 Version:        0.1.1
-Release:        5.%{commitdate}git%{shortcommit}%{?dist}
+Release:        6%{?dist}
 Summary:        Sync a music library into the iPhone Music app
 
 License:        MIT
 URL:            https://github.com/fbiba/rustunes
-Source0:        %{url}/archive/%{commit}/%{name}-%{shortcommit}.tar.gz
+Source0:        %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
 Patch0:         0001-ios26-support.patch
 
 BuildRequires:  cargo
@@ -25,7 +21,7 @@ Syncs a local music library into the stock Music app on an iPhone over USB
 or Wi-Fi, through Apple's own sync service.
 
 %prep
-%autosetup -n %{name}-%{commit} -p1
+%autosetup -p1
 
 %build
 %cargo_prep_online
@@ -46,6 +42,9 @@ target/rpm/%{name} completions bash > %{buildroot}%{bash_completions_dir}/%{name
 %{bash_completions_dir}/%{name}
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.1-6
+- Build from v0.1.1 tag; drop snapshot release
+
 * Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.1-5.20261031git4511f49
 - Update to 0.1.1
 
