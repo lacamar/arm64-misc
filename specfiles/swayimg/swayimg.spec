@@ -1,8 +1,8 @@
 %bcond  tests   1
 
 Name:           swayimg
-Version:        5.6
-Release:        7%{?dist}
+Version:        5.7
+Release:        1%{?dist}
 Summary:        Lightweight image viewer for Wayland display servers
 
 License:        MIT
@@ -114,6 +114,9 @@ export LANG=en_US.UTF-8 # ImageListTest.SortAlphaUnicode fails with LANG=C
 
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 5.7-1
+- Update to 5.7
+
 * Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 5.6-7
 - Rebase patches onto 5.7
 - Drop tiff orientation patch (upstream)
