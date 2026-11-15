@@ -1553,7 +1553,7 @@ new file mode 100644
 index 0000000..5d4183c
 --- /dev/null
 +++ b/src/core/cpu/cpu.cpp
-@@ -0,0 +1,260 @@
+@@ -0,0 +1,292 @@
 +// SPDX-FileCopyrightText: Copyright 2026 shadPS4 Emulator Project
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
@@ -1562,7 +1562,10 @@ index 0000000..5d4183c
 +#include <fmt/format.h>
 +#include "common/assert.h"
 +#include "common/logging/log.h"
++#include "common/native_clock.h"
 +#include "core/cpu/cpu.h"
++#include "core/cpu_patches.h"
++#include "core/libraries/kernel/time.h"
 +#include "core/memory.h"
 +
 +#ifdef ARCH_ARM64
@@ -1814,6 +1817,35 @@ index 0000000..5d4183c
 +#endif
 +
 +} // namespace Core::Cpu
++
++namespace Core {
++
++#ifdef ARCH_ARM64
++static u64 s_guest_tsc_multiplier = u64{1} << GuestTscMultiplierShift;
++
++void UpdateGuestTscMultiplier() {
++    const u64 guest_freq = Libraries::Kernel::sceKernelGetTscFrequency();
++    const u64 host_freq = Common::NativeClock{}.GetTscFrequency();
++    if (host_freq != 0 && guest_freq != 0) {
++        const auto scaled = static_cast<unsigned __int128>(guest_freq) << GuestTscMultiplierShift;
++        s_guest_tsc_multiplier = static_cast<u64>(scaled / host_freq);
++    } else {
++        s_guest_tsc_multiplier = u64{1} << GuestTscMultiplierShift;
++    }
++}
++
++const u64* GetGuestTscMultiplierPtr() {
++    static std::once_flag flag;
++    std::call_once(flag, [] { UpdateGuestTscMultiplier(); });
++    return &s_guest_tsc_multiplier;
++}
++
++u64 GetGuestTscMultiplier() {
++    return *GetGuestTscMultiplierPtr();
++}
++#endif
++
++} // namespace Core
 diff --git a/src/core/cpu/cpu.h b/src/core/cpu/cpu.h
 new file mode 100644
 index 0000000..06b511f

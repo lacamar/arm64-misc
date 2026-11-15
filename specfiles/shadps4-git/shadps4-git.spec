@@ -13,7 +13,7 @@
 Name:           %{_name}-git
 Epoch:          1
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        PlayStation 4 emulator (native aarch64 port using box64 dynarec)
 License:        GPL-2.0-or-later
 URL:            https://github.com/shadps4-emu/shadPS4
@@ -169,6 +169,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/net.shadps4.shadPS4.d
 %{_datadir}/icons/hicolor/512x512/apps/net.shadps4.shadPS4.png
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 0.21.0^4.git.f3687cc-2
+- Define guest TSC multiplier in aarch64 patch
+
 * Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.21.0^4.git.f3687cc-1
 - Update to commit f3687cc400d77736b2a7ef1904a1302e17f9441b
 
