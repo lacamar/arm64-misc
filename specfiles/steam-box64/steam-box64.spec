@@ -1,6 +1,6 @@
 Name:           steam-box64
-Version:        12381.1
-Release:        1%{?dist}
+Version:        0
+Release:        2%{?dist}
 Summary:        Steam wrapper running x86 Steam via box64 on Fedora Asahi Remix
 
 License:        MIT
@@ -25,7 +25,7 @@ BuildRequires:  desktop-file-utils
 Requires:       bash
 Requires:       binfmt-dispatcher
 # needs box64 d58d619 or later; plain box64 1:0.4.5.1 predates it
-Requires:       box64-asahi > 1:0.4.5.1
+Requires:       box64-asahi > 0.4.5.1
 Requires:       bubblewrap
 Requires:       curl
 Requires:       hicolor-icon-theme
@@ -72,6 +72,10 @@ install -Dpm0644 -t %{buildroot}%{_datadir}/icons/hicolor/scalable/apps %{SOURCE
 %{_datadir}/icons/hicolor/scalable/apps/steam-box64.svg
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0-2
+- Revert bogus versions picked from packaging-repo tags
+- Require box64-asahi without Epoch
+
 * Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 12381.1-1
 - Update to 12381.1
 

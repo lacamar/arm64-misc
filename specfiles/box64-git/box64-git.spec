@@ -7,10 +7,9 @@
 
 Name:           %{_name}-git
 Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Epoch:          1
-Release:        1%{?dist}
+Release:        2%{?dist}
 Conflicts:      %{_name}
-Provides:       %{_name} = %{epoch}:%{version}-%{release}
+Provides:       %{_name} = %{version}-%{release}
 Summary:        Linux userspace x86_64 emulator with a twist, targeted at ARM64
 
 %global common_description %{expand:
@@ -34,15 +33,15 @@ ExclusiveArch:  aarch64
 %global __provides_exclude_from ^%{_bindir}/box64-bash$
 
 Requires:       alternatives
-Requires:       %{_name}-data = %{epoch}:%{version}-%{release}
-Recommends:     %{name}-binfmts = %{epoch}:%{version}-%{release}
+Requires:       %{_name}-data = %{version}-%{release}
+Recommends:     %{name}-binfmts = %{version}-%{release}
 Requires(post): %{_sbindir}/update-alternatives
 Requires(postun): %{_sbindir}/update-alternatives
 
 %description    %{common_description}
 
 %package        data
-Provides:       box64-data = %{epoch}:%{version}-%{release}
+Provides:       box64-data = %{version}-%{release}
 Summary:        Common files for %{_name}
 BuildArch:      noarch
 %description    data %{common_description}
@@ -51,7 +50,7 @@ This package provides common data files for box64.
 
 %package        binfmts
 Conflicts:      box64-binfmts
-Provides:       box64-binfmts = %{epoch}:%{version}-%{release}
+Provides:       box64-binfmts = %{version}-%{release}
 Summary:        binfmt_misc handler configurations for box64
 
 %description    binfmts %{common_description}
@@ -61,10 +60,10 @@ execute x86_64 binaries.
 
 %package        asahi
 Conflicts:      box64-asahi
-Provides:       box64-asahi = %{epoch}:%{version}-%{release}
+Provides:       box64-asahi = %{version}-%{release}
 Summary:        Apple Silicon version of box64
 
-Requires:       %{_name}-data = %{epoch}:%{version}-%{release}
+Requires:       %{_name}-data = %{version}-%{release}
 Requires(post): %{_sbindir}/update-alternatives
 Requires(postun): %{_sbindir}/update-alternatives
 
@@ -158,6 +157,9 @@ fi
 %{_binfmtdir}/box64.conf
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.5.1^52.git.7174c12-2
+- Drop Epoch
+
 * Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.5.1^52.git.7174c12-1
 - Update to commit 7174c12d2b5f136fa52dfc323169d506a1687300
 
