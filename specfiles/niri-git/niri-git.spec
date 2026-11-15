@@ -24,11 +24,11 @@
 # Convince rust-srpm-macros to use Cargo.lock with the Smithay commit.
 %global __cargo_common_opts %{?_smp_mflags} -Z avoid-dev-deps --locked
 
-%global bumpver 17
+%global bumpver 18
 %global tag 26.04
-%global commit da0ab810d463d26da2fa6d9cf9f7abdb1928f9a8
+%global commit 689c1e914a5af782a476e433b79c15554bf5a312
 %global shortcommit %{sub %{commit} 1 8}
-%global smithay_commit 65aa86fa5236e41775c313408102a5d5c2d1e2ca
+%global smithay_commit fd8e3f50f9556aa6c0485989d1d49ff2c5eefae1
 
 Name:           niri
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
@@ -185,6 +185,10 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^18.git.689c1e91-38
+- Update to commit 689c1e914a5af782a476e433b79c15554bf5a312
+- Update smithay to fd8e3f50f9556aa6c0485989d1d49ff2c5eefae1
+
 * Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^17.git.da0ab810-38
 - Normalize spec for mx-rpm -U
 
