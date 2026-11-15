@@ -1,30 +1,17 @@
-diff --git a/src/asahi/vulkan/hk_cmd_draw.c b/src/asahi/vulkan/hk_cmd_draw.c
-index b29bcbc..00d2e63 100644
---- a/src/asahi/vulkan/hk_cmd_draw.c
-+++ b/src/asahi/vulkan/hk_cmd_draw.c
-@@ -39,6 +39,7 @@
- #include "util/format/u_formats.h"
- #include "util/macros.h"
- #include "util/ralloc.h"
-+#include "util/u_debug.h"
- #include "util/u_prim.h"
- #include "vulkan/vulkan_core.h"
- #include "layout.h"
-@@ -1012,7 +1013,8 @@ hk_init_heap(const void *data)
+--- a/src/asahi/vulkan/hk_drirc_gen.py
++++ b/src/asahi/vulkan/hk_drirc_gen.py
+@@ -19,7 +19,7 @@
+     I = drirc_gen.DrircInt
  
-    perf_debug(cmd, "Allocating heap");
- 
--   size_t size = 128 * 1024 * 1024;
-+   size_t size =
-+      CLAMP(debug_get_num_option("HK_HEAP_MB", 512), 16, 2048) * 1024 * 1024;
-    dev->heap = agx_bo_create(&dev->dev, size, 0, 0, "Geometry heap");
- 
-    /* The geometry state buffer is initialized here and then is treated by
-diff --git a/src/poly/geometry.h b/src/poly/geometry.h
-index 2d4e596..9ad8144 100644
+     misc_options = [
+-        I("hk_geometry_heap_size_mb", 128, 16, 1024,
++        I("hk_geometry_heap_size_mb", 512, 16, 1024,
+           "Size in MiB of the tessellation/geometry-shader scratch heap",
+           c_name="geometry_heap_size_mb"),
+         B("hk_disable_border_emulation", False,
 --- a/src/poly/geometry.h
 +++ b/src/poly/geometry.h
-@@ -125,13 +125,12 @@ poly_heap_alloc_offs(global struct poly_heap *heap, uint size_B, uint align_B)
+@@ -125,13 +125,12 @@
                                  size_B + align_B);
     offs = align(offs, align_B);
  
