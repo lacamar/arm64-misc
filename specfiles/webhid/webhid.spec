@@ -3,13 +3,13 @@
 
 Name:           webhid
 Version:        3.2.0
-Release:        4%{?dist}
+Release:        5%{?dist}
 Summary:        WebHID for Firefox via a native-messaging bridge and hidraw daemon
 
 License:        MIT
 URL:            https://github.com/OpenPolyfill/WebHID
 Source0:        %{url}/archive/v%{version}/WebHID-%{version}.tar.gz
-Source1:        https://addons.mozilla.org/firefox/downloads/file/4981792/webhid-%{version}.xpi
+Source1:        %{url}/releases/download/v%{version}/webhid-addon-v%{version}.xpi
 Patch0:         webhid-allow-same-uid.patch
 
 BuildRequires:  cargo
@@ -65,6 +65,9 @@ udevadm trigger --subsystem-match=hidraw >/dev/null 2>&1 || :
 %{_datadir}/webhid/
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 3.2.0-5
+- Fetch signed xpi from GitHub release by version
+
 * Mon Oct 19 2026 Lachlan Marie <lchlnm@pm.me> - 3.2.0-4
 - Move NM manifests to /usr/lib/mozilla
 
