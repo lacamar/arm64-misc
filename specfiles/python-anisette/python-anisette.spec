@@ -5,7 +5,7 @@
 
 Name:           python-anisette
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Apple anisette data provider
 
 License:        MIT
@@ -27,7 +27,7 @@ Summary:        %{summary}
 
 %prep
 %autosetup -n Anisette.py-%{commit}
-sed -i -e '/"typer>=/d;/"rich>=/d;/"fastapi>=/d;/"granian>=/d' \
+sed -i -e '/"fs>=/d;/"typer>=/d;/"rich>=/d;/"fastapi>=/d;/"granian>=/d' \
     -e 's|"websockets>=16[^"]*"|"websockets>=15"|;s|"macOS-ADI-emulator @ git+[^"]*"|"macos-adi-emulator"|' pyproject.toml
 
 %generate_buildrequires
@@ -47,6 +47,9 @@ rm -f %{buildroot}%{_bindir}/ani*
 %files -n python3-anisette -f %{pyproject_files}
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 1.2.4^1.git.a61cddf-2
+- Drop unused fs dependency
+
 * Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 1.2.4^1.git.a61cddf-1
 - Replace date snapshot with bumpver
 
