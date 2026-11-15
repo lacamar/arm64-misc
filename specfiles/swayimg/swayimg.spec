@@ -2,7 +2,7 @@
 
 Name:           swayimg
 Version:        5.6
-Release:        6%{?dist}
+Release:        7%{?dist}
 Summary:        Lightweight image viewer for Wayland display servers
 
 License:        MIT
@@ -13,19 +13,6 @@ Source:         %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
 # (DateTimeOriginal/DateTimeDigitized/DateTime, via exiv2), falling back to
 # path order when unavailable. Not upstream.
 Patch1:          0001-imagelist-add-exif-capture-time-sort-order.patch
-# Fixes upside-down/sideways display of portrait DNGs (confirmed live with
-# an iPhone 17 Pro Max ProRAW DNG) whose raw SubIFD uses a codec libraw
-# can't decode (JPEG XL), so format detection falls back to the "tiff"
-# handler. That handler asked libtiff's TIFFReadRGBAImageOriented() to
-# normalize to ORIENTATION_TOPLEFT itself, but TIFFRGBAImage(3tiff) can only
-# mirror an image, never rotate it -- orientations 5-8 come back wrong
-# regardless of what's requested -- and its partial correction then got
-# double-applied on top of the generic EXIF-driven fix_orientation() every
-# other format relies on for this, which the tiff handler didn't opt out of
-# the way raw.cpp does. Now requests the file's own stored orientation (a
-# no-op for libtiff) and leaves 100% of the correction to that generic pass.
-# Not upstream.
-Patch2:          0002-tiff-fix-dng-orientation-double-apply.patch
 # Color managed OpenGL ES renderer: ICC/CICP, wide gamut, HDR (PQ output
 # via wp_color_management_v1), software fallback. Not upstream.
 Patch3:          0003-render-color-managed-gpu-hdr.patch
@@ -127,6 +114,10 @@ export LANG=en_US.UTF-8 # ImageListTest.SortAlphaUnicode fails with LANG=C
 
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 5.6-7
+- Rebase patches onto 5.7
+- Drop tiff orientation patch (upstream)
+
 * Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 5.6-6
 - Normalize spec for mx-rpm -U
 
