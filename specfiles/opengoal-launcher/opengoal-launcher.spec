@@ -1,6 +1,6 @@
 %global tag 2.11.2
-%global bumpver 1
-%global commit 9e4fc050d98ed452e7e340b62c981e3df00699c0
+%global bumpver 2
+%global commit e5d3e97a99dcdcd7d103ebd5987f75a6935d95a9
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 
 %global debug_package %{nil}
@@ -106,6 +106,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/*.desktop
 %{_datadir}/icons/hicolor/*/apps/*.png
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 2.11.2^2.git.e5d3e97-1
+- Update to commit e5d3e97a99dcdcd7d103ebd5987f75a6935d95a9
+
 * Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 2.11.2^1.git.9e4fc05-1
 - Normalize spec for mx-rpm -U
 
