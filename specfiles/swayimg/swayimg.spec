@@ -1,8 +1,7 @@
 %bcond  tests   1
-%global tag 5.6
 
 Name:           swayimg
-Version:        %{tag}
+Version:        5.6
 Release:        6%{?dist}
 Summary:        Lightweight image viewer for Wayland display servers
 
@@ -128,6 +127,9 @@ export LANG=en_US.UTF-8 # ImageListTest.SortAlphaUnicode fails with LANG=C
 
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 5.6-6
+- Normalize spec for mx-rpm -U
+
 * Wed Sep 30 2026 Lachlan Marie <lchlnm@pm.me> - 5.6-6
  - Decode 16-bit and float TIFF in high precision
 

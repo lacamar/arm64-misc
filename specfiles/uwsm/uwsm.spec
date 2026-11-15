@@ -1,6 +1,5 @@
-%global tag 0.27.2
 Name:           uwsm
-Version:        %{tag}
+Version:        0.27.2
 Release:        %autorelease -b3
 Summary:        Universal Wayland Session Manager
 
@@ -83,6 +82,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/*.desktop
 %{_libexecdir}/uwsm/signal-handler.sh
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.27.2-3
+- Normalize spec for mx-rpm -U
+
 * Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 0.27.2-3
 - Update to 0.27.2
 

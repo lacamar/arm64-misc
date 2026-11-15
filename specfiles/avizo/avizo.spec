@@ -1,7 +1,5 @@
-%global tag 1.3
-
 Name:     avizo
-Version:  %{tag}
+Version:  1.3
 Release:  1%{?dist}
 Summary:  A neat notification daemon
 
@@ -47,6 +45,9 @@ Avizo is a simple notification daemon, mainly intended to be used for multimedia
 
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 1.3-1
+- Normalize spec for mx-rpm -U
+
 * Thu Apr 09 2026 Lachlan Marie <lchlnm@pm.me> - 1.3-1
  - Update to 1.3
 

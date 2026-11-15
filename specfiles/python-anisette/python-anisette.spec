@@ -1,10 +1,11 @@
 %global commit a61cddfb2275187822ad0c3999af747b8c9a4f9a
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    20261021
+%global tag 1.2.4
+%global bumpver 1
 
 Name:           python-anisette
-Version:        1.2.4^%{snapdate}git%{shortcommit}
-Release:        4%{?dist}
+Version:        %{tag}^%{bumpver}.git.%{shortcommit}
+Release:        1%{?dist}
 Summary:        Apple anisette data provider
 
 License:        MIT
@@ -46,6 +47,9 @@ rm -f %{buildroot}%{_bindir}/ani*
 %files -n python3-anisette -f %{pyproject_files}
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 1.2.4^1.git.a61cddf-1
+- Replace date snapshot with bumpver
+
 * Thu Nov 05 2026 Lachlan Marie <lchlnm@pm.me> - 1.2.4^20261021gita61cddf-4
 - Update to commit a61cddfb2275187822ad0c3999af747b8c9a4f9a
 

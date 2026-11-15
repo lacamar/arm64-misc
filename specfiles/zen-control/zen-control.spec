@@ -5,10 +5,10 @@
 %global tag 0.1.2
 %global bumpver 0
 %global commit 4de1d80837c5cbd4ca30e6225b6b99608b969030
-%{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
+%global shortcommit %(c=%{commit}; echo ${c:0:7})
 
 Name:           zen-control
-Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
+Version:        %{tag}^%{bumpver}.git.%{shortcommit}
 Release:        21%{?dist}
 Summary:        MCP bridge and WebExtension to drive the Zen browser from Claude Code
 
@@ -104,6 +104,9 @@ chmod 0755 %{buildroot}%{_bindir}/%{name}
 %config(noreplace) %{_sysconfdir}/zen/policies/policies.json
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-21
+- Normalize spec for mx-rpm -U
+
 * Mon Nov 09 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-21
 - Install Snapchat UA extension via policy
 

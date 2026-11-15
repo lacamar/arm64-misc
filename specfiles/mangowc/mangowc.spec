@@ -1,7 +1,6 @@
-%global tag 0.18.5
 Name:           mangowc
-Version:        %{tag}
-Release:        1%?dist
+Version:        0.18.5
+Release:        1%{?dist}
 Summary:        Lightweight Wayland compositor without compromises
 License:        GPL-3.0
 URL:            https://github.com/DreamMaoMao/mangowc
@@ -30,7 +29,7 @@ BuildRequires:  systemd-rpm-macros
 MangoWC is a lightweight, high-performance Wayland compositor built on dwl, designed for speed, flexibility, and a modern, customizable desktop experience.
 
 %prep
-%autosetup -n mango-%{tag}
+%autosetup -n mango-%{version}
 
 %build
 %meson
@@ -54,6 +53,9 @@ MangoWC is a lightweight, high-performance Wayland compositor built on dwl, desi
 %{_mandir}/man1/mangonag.1.gz
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.5-1
+- Normalize spec for mx-rpm -U
+
 * Thu Nov 05 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.5-1
 - Update to 0.18.5
 

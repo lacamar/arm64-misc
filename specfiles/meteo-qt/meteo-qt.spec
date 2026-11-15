@@ -1,7 +1,5 @@
-%global tag 4.3
-
 Name:           meteo-qt
-Version:        %{tag}
+Version:        4.3
 Release:        2%{?dist}
 Summary:        Weather status system tray application
 License:        GPLv3
@@ -61,6 +59,9 @@ rm -rf %{buildroot}%{python3_sitelib}/usr
 
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 4.3-2
+- Normalize spec for mx-rpm -U
+
 * Fri Nov 06 2026 Lachlan Marie <lchlnm@pm.me> - 4.3-2
 - Rebuild for Python 3.15
 

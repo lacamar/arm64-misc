@@ -3,10 +3,10 @@
 %global tag 0.4.5.1
 
 %global commit 7174c12d2b5f136fa52dfc323169d506a1687300
-%{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
+%global shortcommit %(c=%{commit}; echo ${c:0:7})
 
 Name:           %{_name}-git
-Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
+Version:        %{tag}^%{bumpver}.git.%{shortcommit}
 Release:        2%{?dist}
 Conflicts:      %{_name}
 Provides:       %{_name} = %{version}-%{release}
@@ -157,6 +157,9 @@ fi
 %{_binfmtdir}/box64.conf
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.5.1^52.git.7174c12-2
+- Normalize spec for mx-rpm -U
+
 * Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.5.1^52.git.7174c12-2
 - Drop Epoch
 

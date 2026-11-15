@@ -1,6 +1,5 @@
-%global tag 6.12.1
 Name:           better-control
-Version:        %{tag}
+Version:        6.12.1
 Release:        2%{?dist}
 Summary:        A simple control panel for linux based on the GTK framework
 
@@ -45,6 +44,9 @@ make install DESTDIR=%{buildroot}
 
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 6.12.1-2
+- Normalize spec for mx-rpm -U
+
 * Sat Oct 03 2026 Lachlan Marie <lchlnm@pm.me> - 6.12.1-2
  - Build as noarch
 

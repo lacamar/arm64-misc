@@ -1,14 +1,14 @@
 %global tag 0.3.9
 %global bumpver 2
 %global commit 4cd2a71fa15ae214a03925beafa59c7228ec81d3
-%{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
+%global shortcommit %(c=%{commit}; echo ${c:0:7})
 
 %global toolchain clang
 %global debug_package %{nil}
 %undefine _auto_set_build_flags
 
 Name:           opengoal
-Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
+Version:        %{tag}^%{bumpver}.git.%{shortcommit}
 Release:        1%{?dist}
 Summary:        Native PC port of the Jak and Daxter trilogy (GOAL compiler, runtime, decompiler)
 License:        ISC
@@ -72,6 +72,9 @@ echo v%{tag} > %{buildroot}%{_libdir}/%{name}/VERSION
 %{_libdir}/%{name}
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.9^2.git.4cd2a71-1
+- Normalize spec for mx-rpm -U
+
 * Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.9^2.git.4cd2a71-1
 - Update to commit 4cd2a71fa15ae214a03925beafa59c7228ec81d3
 

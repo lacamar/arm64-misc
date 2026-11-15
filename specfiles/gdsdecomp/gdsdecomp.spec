@@ -3,7 +3,7 @@
 %global debug_package %{nil}
 
 %global godot_ref gdre-wb-f964fa714f5
-%global godot_commit 850c331d6f9f379c2c69a77f22701918271a6fe6
+%global godot_commit 30caae98b79ec7e75e5f893290a51b4048eaa141
 %ifarch aarch64
 %global godot_arch arm64
 %else
@@ -129,6 +129,9 @@ desktop-file-install --dir=%{buildroot}%{_datadir}/applications gdre_tools.deskt
 %{_datadir}/icons/hicolor/scalable/apps/gdre_tools.svg
 
 %changelog
+* Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 2.7.4-2
+- Update godot to 30caae98b79ec7e75e5f893290a51b4048eaa141
+
 * Fri Nov 13 2026 Lachlan Marie <lchlnm@pm.me> - 2.7.4-2
 - Track gdsdecomp as Source0 for mx-rpm -U
 

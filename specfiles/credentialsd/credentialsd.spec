@@ -1,9 +1,9 @@
 # copr-exclude-chroots: fedora-43-aarch64
-%global lwa_commit efa374d6303eb1ebeff373878fa76736f3d2c308
+%global lwa_commit e5f01db3445a8854479786aae66b94844974020d
 %global portalconfdir %{_sysconfdir}/xdg/xdg-desktop-portal
 
 Name:           credentialsd
-Version:        0.3.1
+Version:        0.4.0
 Release:        4%{?dist}
 Summary:        xdg-desktop-portal backend for WebAuthn credentials
 
@@ -128,6 +128,10 @@ install -Dpm0644 %{SOURCE3} %{buildroot}%{portalconfdir}/portals.conf
 %{_datadir}/credentialsd/
 
 %changelog
+* Fri Nov 13 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0-4
+- Update to 0.4.0
+- Update lwa to e5f01db3445a8854479786aae66b94844974020d
+
 * Thu Oct 22 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.1-4
 - Skip fedora-43 COPR chroot
 

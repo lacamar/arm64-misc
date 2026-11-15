@@ -1,9 +1,8 @@
 %global __requires_exclude_from ^%{_datadir}/anki/.*$
 %global __provides_exclude_from ^%{_datadir}/anki/.*$
-%global tag 26.09.4
 
 Name:           anki
-Version:        %{tag}
+Version:        26.09.4
 Release:        3%{?dist}
 Summary:        Anki - a powerful flashcard program
 License:        Gnu Affero Public License
@@ -90,6 +89,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/anki.desktop
 %{_datadir}/pixmaps/anki.png
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 26.09.4-3
+- Normalize spec for mx-rpm -U
+
 * Thu Nov 05 2026 Lachlan Marie <lchlnm@pm.me> - 26.09.4-3
 - Update to 26.09.4
 

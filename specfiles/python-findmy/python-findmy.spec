@@ -1,10 +1,11 @@
 %global commit      f2d24c86c3357f93cc19dd605fa9dc34d6d1b1c6
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    20261021
+%global tag 0.10.2
+%global bumpver 1
 
 Name:           python-findmy
-Version:        0.10.2^%{snapdate}git%{shortcommit}
-Release:        7%{?dist}
+Version:        %{tag}^%{bumpver}.git.%{shortcommit}
+Release:        1%{?dist}
 Summary:        Apple Find My library
 
 License:        MIT
@@ -44,6 +45,9 @@ sed -i 's/^requires-python = .*/requires-python = ">=3.10"/' pyproject.toml
 %files -n python3-findmy -f %{pyproject_files}
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.10.2^1.git.f2d24c8-1
+- Replace date snapshot with bumpver
+
 * Fri Nov 06 2026 Lachlan Marie <lchlnm@pm.me> - 0.10.2^20261021gitf2d24c8-7
 - Drop Python upper bound
 

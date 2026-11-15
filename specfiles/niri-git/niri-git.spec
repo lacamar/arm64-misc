@@ -31,7 +31,7 @@
 %global smithay_commit 65aa86fa5236e41775c313408102a5d5c2d1e2ca
 
 Name:           niri
-Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
+Version:        %{tag}^%{bumpver}.git.%{shortcommit}
 Release:        38%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
@@ -185,6 +185,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^17.git.da0ab810-38
+- Normalize spec for mx-rpm -U
+
 * Sun Nov 08 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^17.git.da0ab810-38
 - Fix abort when client with toplevel icon dies
 

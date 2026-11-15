@@ -1,7 +1,5 @@
-%global tag 0.18.5.4
-
 Name: monero-gui
-Version: %{tag}
+Version: 0.18.5.4
 Release: 1%{?dist}
 Summary: Monero: the secure, private, untraceable cryptocurrency
 
@@ -114,6 +112,9 @@ install -Dpm0644 -t %{buildroot}%{_datadir}/applications share/org.getmonero.Mon
 
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.5.4-1
+- Normalize spec for mx-rpm -U
+
 * Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.5.4-1
 - Update to 0.18.5.4
 - Bump bundled monero, RandomX

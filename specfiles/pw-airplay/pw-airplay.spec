@@ -1,12 +1,14 @@
 # copr-exclude-chroots: fedora-43-aarch64
 %global commit 37e3e0df6ae7ed6a9425d819984b10c554e7a214
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
+%global tag 0
+%global bumpver 1
 %global owntone_version 29.3
 %global engine %{_libexecdir}/pw-airplay
 
 Name:           pw-airplay
-Version:        0^20261017git%{shortcommit}
-Release:        5%{?dist}
+Version:        %{tag}^%{bumpver}.git.%{shortcommit}
+Release:        1%{?dist}
 Summary:        AirPlay 2 output for PipeWire
 License:        GPL-2.0-or-later
 URL:            https://github.com/superlemon57/pw-airplay
@@ -109,6 +111,9 @@ sed -e 's|/usr/local/sbin/airptpd|%{engine}/sbin/airptpd|' -e '/^After=/a Confli
 %config(noreplace) %{_sysconfdir}/pipewire/pipewire.conf.d/50-pw-airplay-no-raop.conf
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0^1.git.37e3e0d-1
+- Normalize spec for mx-rpm -U
+
 * Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 0^20261017git37e3e0d-5
 - Update to commit 37e3e0df6ae7ed6a9425d819984b10c554e7a214
 

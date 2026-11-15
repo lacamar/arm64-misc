@@ -3,7 +3,7 @@
 %global tag 0.21.0
 # Upstream shadps4-emu/shadPS4 commit the aarch64 patch series is based on
 %global commit b97bafa353d868fe189955491ed38776b3518ed5
-%{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
+%global shortcommit %(c=%{commit}; echo ${c:0:7})
 # Prebuilt FFmpeg release matching externals/ffmpeg-core
 %global ffmpeg_sha 94dde08
 
@@ -12,7 +12,7 @@
 
 Name:           %{_name}-git
 Epoch:          1
-Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
+Version:        %{tag}^%{bumpver}.git.%{shortcommit}
 Release:        1%{?dist}
 Summary:        PlayStation 4 emulator (native aarch64 port using box64 dynarec)
 License:        GPL-2.0-or-later
@@ -169,6 +169,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/net.shadps4.shadPS4.d
 %{_datadir}/icons/hicolor/512x512/apps/net.shadps4.shadPS4.png
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 1:0.21.0^2.git.b97bafa-1
+- Normalize spec for mx-rpm -U
+
 * Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 0.21.0^2.git.b97bafa-1
 - Update to commit b97bafa353d868fe189955491ed38776b3518ed5
 

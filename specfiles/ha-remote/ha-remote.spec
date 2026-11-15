@@ -1,7 +1,5 @@
-%global tag 0.4.1
-
 Name:     ha-remote
-Version:  %{tag}
+Version:  0.4.1
 Release:  1%{?dist}
 Summary:  Control a niri laptop from Home Assistant and Apple Home
 
@@ -87,6 +85,9 @@ fi
 %{_datadir}/%{name}
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.1-1
+- Normalize spec for mx-rpm -U
+
 * Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.1-1
 - Update to 0.4.1
 

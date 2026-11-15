@@ -1,11 +1,11 @@
-%global bumpver 1
-%global tag 0.3.0
 %global commit 1156b3503a04780bbdcb6a781cce87281b8bf87d
-%{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
+%global shortcommit %(c=%{commit}; echo ${c:0:7})
+%global tag 0.3.0
+%global bumpver 1
 
 Name:           wldash
-Version:        %{tag}
-Release:        4%{?dist}
+Version:        %{tag}^%{bumpver}.git.%{shortcommit}
+Release:        1%{?dist}
 Summary:        Dashboard, launcher and control panel for Wayland
 
 License:        GNU GPL v3
@@ -43,6 +43,9 @@ mv %{name}-%{shortcommit}-vendor/vendor vendor
 %define debug_package %{nil}
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.0^1.git.1156b35-1
+- Normalize spec for mx-rpm -U
+
 * Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.0-3
  - Update to 0.3.0
 

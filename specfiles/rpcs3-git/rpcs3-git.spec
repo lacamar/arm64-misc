@@ -2,11 +2,11 @@
 
 %global tag 0.0.43
 %global commit 05a9d96058229ebb82b3e1d2be762dc6ab6e4a50
-%{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
+%global shortcommit %(c=%{commit}; echo ${c:0:7})
 
 Name:       rpcs3-git
-Version:    %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
-Release:    1%{dist}
+Version:    %{tag}^%{bumpver}.git.%{shortcommit}
+Release:    1%{?dist}
 Summary:    PlayStation 3 emulator and debugger
 
 Conflicts:      rpcs3
@@ -163,6 +163,9 @@ cmake -B build -G Ninja \
 
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.43^23.git.05a9d96-1
+- Normalize spec for mx-rpm -U
+
 * Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.43^23.git.05a9d96-1
 - Update to commit 05a9d96058229ebb82b3e1d2be762dc6ab6e4a50
 

@@ -1,7 +1,6 @@
-%global tag 0.0.43
 
 Name:           rpcs3
-Version:        %{tag}
+Version:        0.0.43
 Release:        1%{?dist}
 Summary:        PlayStation 3 emulator and debugger
 
@@ -156,6 +155,9 @@ cmake -B build -G Ninja \
 
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.43-1
+- Normalize spec for mx-rpm -U
+
 * Thu Oct 08 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.43-1
  - Update to 0.0.43
 

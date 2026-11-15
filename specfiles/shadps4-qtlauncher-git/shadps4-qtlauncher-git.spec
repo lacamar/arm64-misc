@@ -2,12 +2,12 @@
 %global _name shadps4-qtlauncher
 %global tag 2026.11.06
 %global commit ecc85072dae45c05628934fdb6b3aa036e9f1d4b
-%{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
+%global shortcommit %(c=%{commit}; echo ${c:0:7})
 
 %global _lto_cflags %{nil}
 
 Name:           %{_name}-git
-Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
+Version:        %{tag}^%{bumpver}.git.%{shortcommit}
 Release:        1%{?dist}
 Summary:        Qt launcher and game library front-end for shadPS4
 License:        GPL-2.0-or-later
@@ -116,6 +116,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/net.shadps4.shadps4-q
 %{_datadir}/icons/hicolor/scalable/apps/net.shadps4.shadPS4.svg
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 2026.11.06^0.git.ecc8507-1
+- Normalize spec for mx-rpm -U
+
 * Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 2026.11.06^0.git.ecc8507-1
 - Fix version mangled from tag commit hash
 

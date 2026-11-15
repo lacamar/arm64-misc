@@ -1,8 +1,7 @@
 %global udevdir %(pkg-config --variable=udevdir udev)
-%global tag 1.32.0
 
 Name:           libinput
-Version:        %{tag}
+Version:        1.32.0
 Release:        6%{?dist}
 Summary:        Input device library
 
@@ -103,6 +102,9 @@ rm %{buildroot}{%{_libexecdir}/libinput/libinput-test,%{_mandir}/man1/libinput-t
 
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 1.32.0-6
+- Normalize spec for mx-rpm -U
+
 * Mon Nov 02 2026 Lachlan Marie <lchlnm@pm.me> - 1.32.0-6
 - Force click threshold 270
 

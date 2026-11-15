@@ -3,10 +3,10 @@
 %global bumpver 4
 
 %global commit 38e68a5aa7457d07ce415b6007cf70003ae37ff8
-%{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
+%global shortcommit %(c=%{commit}; echo ${c:0:7})
 
 Name:           %{_name}-git
-Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
+Version:        %{tag}^%{bumpver}.git.%{shortcommit}
 Release:        7%{?dist}
 Conflicts:      %{_name}
 Provides:       %{_name} = %{version}-%{release}
@@ -108,6 +108,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/swayimg.desktop
 
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 5.6^4.git.38e68a5-7
+- Normalize spec for mx-rpm -U
+
 * Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 5.6^4.git.38e68a5-7
 - Update to commit 38e68a5aa7457d07ce415b6007cf70003ae37ff8
 - Rebase color-managed GPU HDR patch

@@ -1,9 +1,10 @@
 %global commit d4d2a832baf47d1cf43d989879950ac2aec45f47
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
-%global snapdate    20261021
+%global tag 0.1.0
+%global bumpver 1
 
 Name:           macos-adi-emulator
-Version:        0.1.0^%{snapdate}git%{shortcommit}
+Version:        %{tag}^%{bumpver}.git.%{shortcommit}
 Release:        2%{?dist}
 Summary:        Unicorn emulator for Apple's macOS ADI library
 
@@ -49,6 +50,9 @@ cd macOS-ADI-emulator
 %{_bindir}/macos-adi-emulator
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.0^1.git.d4d2a83-2
+- Replace date snapshot with bumpver
+
 * Thu Nov 05 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.0^20261021gitd4d2a83-2
 - Update to commit d4d2a832baf47d1cf43d989879950ac2aec45f47
 

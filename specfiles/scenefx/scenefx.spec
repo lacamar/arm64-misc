@@ -1,13 +1,12 @@
-%define apiver  0.5
-%global tag 0.5
+%global apiver  0.5
 
 Name:           scenefx
-Version:        %{tag}
-Release:        2
+Version:        0.5
+Release:        2%{?dist}
 Summary:        A drop-in wlroots replacement that allows eye-candy effects
 License:        MIT
 URL:            https://github.com/wlrfx/scenefx
-Source0:        %{url}/archive/refs/tags/%{tag}.tar.gz#/%{name}-%{tag}.tar.gz
+Source0:        %{url}/archive/refs/tags/%{version}.tar.gz#/%{name}-%{version}.tar.gz
 BuildRequires:  gcc-c++
 BuildRequires:  libevdev-devel
 BuildRequires:  pixman-devel
@@ -38,7 +37,7 @@ Requires:       %{name}%{?_isa} = %{version}-%{release}
 This package provides all the necessary files for development with %{name}
 
 %prep
-%autosetup -p1 -n %{name}-%{tag}
+%autosetup -p1 -n %{name}-%{version}
 
 %build
 %meson
@@ -57,6 +56,9 @@ This package provides all the necessary files for development with %{name}
 %{_libdir}/pkgconfig/scenefx-%{apiver}.pc
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.5-2
+- Normalize spec for mx-rpm -U
+
 * Sat Oct 03 2026 Lachlan Marie <lchlnm@pm.me> - 0.5-2
  - Merge libscenefx5 into main package
 

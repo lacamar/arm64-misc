@@ -1,6 +1,5 @@
-%global tag 1.7.0
 Name: wasistlos
-Version: %{tag}
+Version: 1.7.0
 Release: 17%{?dist}
 Summary: An unofficial WhatsApp desktop application for Linux.
 
@@ -59,6 +58,9 @@ An unofficial WhatsApp desktop application for Linux.
 
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-17
+- Normalize spec for mx-rpm -U
+
 * Wed Nov 11 2026 Lachlan Marie <lchlnm@pm.me> - 1.7.0-17
 - Drop repeated sentences from voice note transcripts
 

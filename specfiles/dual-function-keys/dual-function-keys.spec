@@ -1,7 +1,5 @@
-%global tag 1.5.0
-
 Name: dual-function-keys
-Version:        %{tag}
+Version:        1.5.0
 Release:        1%{?dist}
 Summary:        Interception - dual function keys
 
@@ -40,6 +38,9 @@ Tap for one key, hold for another. Great for modifier keys like: hold for ctrl, 
 %{_mandir}/man1/dual-function-keys.1.gz
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 1.5.0-1
+- Normalize spec for mx-rpm -U
+
 * Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.5.0-1
  - Update to 1.5.0
 

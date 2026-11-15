@@ -1,7 +1,5 @@
-%global tag 1.2.9
-
 Name:           nqptp
-Version:        %{tag}
+Version:        1.2.9
 Release:        1%{?dist}
 Summary:        Not Quite PTP
 License:        GPL-2.0-only
@@ -56,6 +54,9 @@ install -D -m 0644 %{SOURCE1} %{buildroot}%{_sysusersdir}/nqptp.conf
 %{_mandir}/man8/nqptp.8.gz
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 1.2.9-1
+- Normalize spec for mx-rpm -U
+
 * Fri Oct 16 2026 Lachlan Marie <lchlnm@pm.me> - 1.2.9-1
  - Update to 1.2.9
 

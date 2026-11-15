@@ -1,6 +1,5 @@
-%global tag 1.9.5
 Name:    whisper-cpp
-Version: %{tag}
+Version: 1.9.5
 Release: 4%{?dist}
 Summary: Port of OpenAI's Whisper model in C/C++
 
@@ -92,6 +91,9 @@ install -Dm755 %{SOURCE1} %{buildroot}%{_bindir}/whisper-dictate
 
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 1.9.5-4
+- Normalize spec for mx-rpm -U
+
 * Tue Oct 27 2026 Lachlan Marie <lchlnm@pm.me> - 1.9.5-4
 - whisper-stream: flush on 0.5 s pause or full buffer
 - whisper-stream: --silence-thold, skip silent chunks

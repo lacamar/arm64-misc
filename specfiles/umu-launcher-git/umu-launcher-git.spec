@@ -3,12 +3,12 @@
 %global _name umu-launcher
 
 %global commit e2b203a1fdd2af9f35166f5713cb3f85d72587e2
-%{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
+%global shortcommit %(c=%{commit}; echo ${c:0:7})
 
 Name:        umu-launcher-git
 Conflicts:   umu-launcher
 Provides:    umu-launcher
-Version:     %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
+Version:     %{tag}^%{bumpver}.git.%{shortcommit}
 Release:     1%{?dist}
 Summary:     A tool for launching non-steam games with proton
 
@@ -70,6 +70,9 @@ make DESTDIR=%{buildroot} PYTHONDIR=%{python3_sitelib} install
 %{python3_sitelib}/umu*
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 1.4.4^0.git.e2b203a-1
+- Normalize spec for mx-rpm -U
+
 * Thu Aug 06 2026 Lachlan Marie <lchlnm@pm.me> - 1.4.4^0.git.e2b203a-1
  - Update to 1.4.4
 

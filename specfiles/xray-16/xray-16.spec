@@ -1,11 +1,12 @@
 %global bumpver 44
 
 %global commit ddb78a5cfbe6719f4b5abe371e3fdeed0f3481fc
-%{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
+%global shortcommit %(c=%{commit}; echo ${c:0:7})
 
 Name:       xray-16
-Version:        2921.2025.1
-Release:    3%{?dist}
+%global tag 2921.2025.1
+Version:        %{tag}^%{bumpver}.git.%{shortcommit}
+Release:        1%{?dist}
 Summary:    Open Source XRay engine for S.T.A.L.K.E.R.
 
 License:    MIT License
@@ -92,6 +93,9 @@ export CXXFLAGS="%{build_cxxflags} -Wno-error=overloaded-virtual"
 %{_datadir}/openxray/*
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 2921.2025.1^44.git.ddb78a5-1
+- Normalize spec for mx-rpm -U
+
 * Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 2921.2025.1-3
 - Update to commit ddb78a5cfbe6719f4b5abe371e3fdeed0f3481fc
 

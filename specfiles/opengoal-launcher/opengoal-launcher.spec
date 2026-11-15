@@ -1,7 +1,7 @@
 %global tag 2.11.2
 %global bumpver 1
 %global commit 9e4fc050d98ed452e7e340b62c981e3df00699c0
-%{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
+%global shortcommit %(c=%{commit}; echo ${c:0:7})
 
 %global debug_package %{nil}
 %global appid OpenGOAL-Launcher
@@ -9,7 +9,7 @@
 %global jakraw https://raw.githubusercontent.com/open-goal/jak-project/%{jakcommit}/game/assets
 
 Name:           opengoal-launcher
-Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
+Version:        %{tag}^%{bumpver}.git.%{shortcommit}
 Release:        1%{?dist}
 Summary:        Launcher for OpenGOAL (Jak and Daxter trilogy PC port)
 License:        ISC
@@ -106,6 +106,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/*.desktop
 %{_datadir}/icons/hicolor/*/apps/*.png
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 2.11.2^1.git.9e4fc05-1
+- Normalize spec for mx-rpm -U
+
 * Thu Nov 05 2026 Lachlan Marie <lchlnm@pm.me> - 2.11.2^1.git.9e4fc05-1
 - Update to commit 9e4fc050d98ed452e7e340b62c981e3df00699c0
 

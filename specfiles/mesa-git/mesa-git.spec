@@ -94,10 +94,10 @@ Name:           mesa
 Summary:        Mesa graphics libraries
 %global commit 335d5698dca1d1b9d11ef18cf5f523cc0f7f58fb
 %global shortcommit %{sub %{commit} 1 8}
-%global commitdate 20261017
+%global bumpver 1
 %global ver 27.0.0
-Version:        %{ver}~git%{commitdate}.%{shortcommit}
-Release:        4%{?dist}
+Version:        %{ver}~%{bumpver}.git.%{shortcommit}
+Release:        1%{?dist}
 License:        MIT AND BSD-3-Clause AND SGI-B-2.0
 URL:            https://mesa3d.org
 
@@ -768,6 +768,9 @@ ln -s libGLX_mesa.so.0 %{buildroot}%{_libdir}/libGLX_system.so.0
 %endif
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 27.0.0~1.git.335d5698-1
+- Replace date snapshot with bumpver
+
 * Tue Oct 20 2026 lacamar <lchlnm@pm.me> - 27.0.0~git20261017.335d5698-4
 - hk: fix use-after-free in shader destroy
 

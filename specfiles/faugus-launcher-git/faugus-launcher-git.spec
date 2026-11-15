@@ -4,12 +4,12 @@
 %global tag 2.5.7
 
 %global commit 0a77667d438c8b127613815149803f8e42564023
-%{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
+%global shortcommit %(c=%{commit}; echo ${c:0:7})
 
 Name:           faugus-launcher-git
 Conflicts:      faugus-launcher
 Provides:       faugus-launcher
-Version:        %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
+Version:        %{tag}^%{bumpver}.git.%{shortcommit}
 Release:        1%{?dist}
 Summary:        A simple and lightweight app for running Windows games using UMU-Launcher
 
@@ -67,6 +67,9 @@ A simple and lightweight app for running Windows games using UMU-Launcher/UMU-Pr
 %{_datadir}/licenses/faugus-launcher/LICENSE
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 2.5.7^1.git.0a77667-1
+- Normalize spec for mx-rpm -U
+
 * Fri Nov 13 2026 Lachlan Marie <lchlnm@pm.me> - 2.5.7^1.git.0a77667-1
 - Update to commit 0a77667d438c8b127613815149803f8e42564023
 

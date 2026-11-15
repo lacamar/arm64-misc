@@ -4,10 +4,10 @@
 %global _name yazi
 %global tag 26.9.1
 %global commit d5e4beb6b5212c28d1026d8e7d4ae985dcf174cb
-%{?commit:%global shortcommit %(c=%{commit}; echo ${c:0:7})}
+%global shortcommit %(c=%{commit}; echo ${c:0:7})
 
 Name: %{_name}-git
-Version: %{tag}%{?bumpver:^%{bumpver}.git.%{shortcommit}}
+Version: %{tag}^%{bumpver}.git.%{shortcommit}
 Release: 2%{?dist}
 Conflicts: %{_name}
 Provides: %{_name} = %{version}-%{release}
@@ -56,6 +56,9 @@ install -Dm644 assets/yazi.desktop \
 
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 26.9.1^11.git.d5e4beb-2
+- Normalize spec for mx-rpm -U
+
 * Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 26.9.1^11.git.d5e4beb-2
 - Update to commit d5e4beb6b5212c28d1026d8e7d4ae985dcf174cb
 

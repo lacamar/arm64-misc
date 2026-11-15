@@ -1,6 +1,5 @@
-%global tag 0.6.8
 Name: interception-tools
-Version:        %{tag}
+Version:        0.6.8
 Release:        2%{?dist}
 Summary:        Interception Tools - A minimal composable infrastructure on top of libudev and libevdev.
 
@@ -42,6 +41,9 @@ install -Dm0755 udevmon.service %{buildroot}/%{_unitdir}/udevmon.service
 %define debug_package %{nil}
 
 %changelog
+* Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.6.8-2
+- Normalize spec for mx-rpm -U
+
 * Mon Mar 23 2026 Lachlan Marie <lchlnm@pm.me> - 0.6.8-1
  - Update to 0.6.8
 
