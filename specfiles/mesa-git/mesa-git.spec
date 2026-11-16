@@ -97,7 +97,7 @@ Summary:        Mesa graphics libraries
 %global bumpver 3
 %global ver 27.0.0
 Version:        %{ver}~%{bumpver}.git.%{shortcommit}
-Release:        3%{?dist}
+Release:        4%{?dist}
 License:        MIT AND BSD-3-Clause AND SGI-B-2.0
 URL:            https://mesa3d.org
 
@@ -107,6 +107,8 @@ Source0:        https://gitlab.freedesktop.org/mesa/mesa/-/archive/%{commit}/mes
 # Fedora opts to ignore the optional part of clause 2 and treat that code as 2 clause BSD.
 Source1:        Mesa-MLAA-License-Clarification-Email.txt
 Source2:        https://gitlab.freedesktop.org/virgl/venus-protocol/-/archive/v1.1.3/venus-protocol-v1.1.3.tar.gz
+# f43 ships wayland-protocols 1.49, mesa needs >= 1.50
+Source3:        https://gitlab.freedesktop.org/wayland/wayland-protocols/-/releases/1.50/downloads/wayland-protocols-1.50.tar.xz
 
 Patch0:         hk-heap-overflow.patch
 Patch1:         hk-zls-load-op-none.patch
@@ -372,6 +374,9 @@ The drivers with support for the Vulkan API.
 cp %{SOURCE1} docs/
 mkdir subprojects/venus-protocol-1.1.3
 tar -xf %{SOURCE2} -C subprojects/venus-protocol-1.1.3 --strip-components=1
+%if 0%{?fedora} && 0%{?fedora} < 44
+tar -xf %{SOURCE3} -C subprojects
+%endif
 
 # Extract Rust crates meson cache directory
 %if 0%{?vendor_nvk_crates}
@@ -777,6 +782,9 @@ ln -s libGLX_mesa.so.0 %{buildroot}%{_libdir}/libGLX_system.so.0
 %endif
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 27.0.0~3.git.6c09d07c-4
+- Bundle wayland-protocols 1.50 on f43
+
 * Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 27.0.0~3.git.6c09d07c-3
 - Update to commit 6c09d07c567eb8c9624b4026e49d09fd83166ae0
 
