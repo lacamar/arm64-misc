@@ -8,7 +8,7 @@
 
 Name: %{_name}-git
 Version: %{tag}^%{bumpver}.git.%{shortcommit}
-Release: 2%{?dist}
+Release: 3%{?dist}
 Conflicts: %{_name}
 Provides: %{_name} = %{version}-%{release}
 
@@ -32,6 +32,8 @@ Yazi (means "duck") is a terminal file manager written in Rust, based on non-blo
 
 %build
 export VERGEN_GIT_SHA=%{shortcommit}
+# fat LTO with codegen-units=1 exceeds COPR's 5h timeout
+export CARGO_PROFILE_RPM_LTO=thin CARGO_PROFILE_RPM_CODEGEN_UNITS=16
 %cargo_build
 
 %install
@@ -56,6 +58,9 @@ install -Dm644 assets/yazi.desktop \
 
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 26.9.1^11.git.d5e4beb-3
+- Use thin LTO to fit COPR timeout
+
 * Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 26.9.1^11.git.d5e4beb-2
 - Normalize spec for mx-rpm -U
 
