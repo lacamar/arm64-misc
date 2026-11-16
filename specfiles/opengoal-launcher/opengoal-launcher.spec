@@ -10,7 +10,7 @@
 
 Name:           opengoal-launcher
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Launcher for OpenGOAL (Jak and Daxter trilogy PC port)
 License:        ISC
 URL:            https://github.com/open-goal/launcher
@@ -49,6 +49,8 @@ tooling version.
 
 %prep
 %autosetup -n launcher-%{commit} -p1
+# Fedora rust lags upstream MSRV
+sed -i '/^rust-version/d' src-tauri/Cargo.toml
 
 %build
 npm install --no-save --prefix .yarnbin yarn@1
@@ -106,6 +108,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/*.desktop
 %{_datadir}/icons/hicolor/*/apps/*.png
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 2.11.2^2.git.e5d3e97-2
+- Relax MSRV to packaged rust
+
 * Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 2.11.2^2.git.e5d3e97-1
 - Update to commit e5d3e97a99dcdcd7d103ebd5987f75a6935d95a9
 
