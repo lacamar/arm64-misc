@@ -10,7 +10,7 @@
 
 Name:           opengoal-launcher
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Launcher for OpenGOAL (Jak and Daxter trilogy PC port)
 License:        ISC
 URL:            https://github.com/open-goal/launcher
@@ -51,6 +51,7 @@ tooling version.
 %autosetup -n launcher-%{commit} -p1
 # Fedora rust lags upstream MSRV
 sed -i '/^rust-version/d' src-tauri/Cargo.toml
+grep -rlZE 'trim_(prefix|suffix)\(' src-tauri/src | xargs -0r sed -i 's/\.trim_prefix(/.trim_start_matches(/; s/\.trim_suffix(/.trim_end_matches(/'
 
 %build
 npm install --no-save --prefix .yarnbin yarn@1
@@ -108,6 +109,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/*.desktop
 %{_datadir}/icons/hicolor/*/apps/*.png
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 2.11.2^2.git.e5d3e97-3
+- Avoid trim_prefix/trim_suffix (rust 1.100)
+
 * Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 2.11.2^2.git.e5d3e97-2
 - Relax MSRV to packaged rust
 
