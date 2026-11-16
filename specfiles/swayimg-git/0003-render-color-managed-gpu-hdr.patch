@@ -1,54 +1,15 @@
-From 4cf057d6ae74cd97bddb4eb88593028d7ea93fd0 Mon Sep 17 00:00:00 2001
-From: Lachlan Marie <lchlnm@pm.me>
-Date: Sat, 26 Sep 2026 13:35:23 +0200
-Subject: [PATCH] render: color managed GPU renderer with HDR output
-
----
- meson.build           |  20 +-
- meson.options         |   8 +
- src/colorspace.cpp    | 514 ++++++++++++++++++++++++
- src/colorspace.hpp    | 121 ++++++
- src/formatfactory.cpp |  11 +-
- src/formats/avif.cpp  |  57 ++-
- src/formats/exr.cpp   |  47 ++-
- src/formats/heif.cpp  |  85 +++-
- src/formats/jpeg.cpp  |  70 +++-
- src/formats/jxl.cpp   | 133 +++++-
- src/formats/png.cpp   | 118 +++++-
- src/formats/raw.cpp   |  25 +-
- src/formats/svg.cpp   |  17 +
- src/formats/tiff.cpp  | 162 ++++++++
- src/formats/webp.cpp  |  10 +
- src/gpu.hpp           |  25 ++
- src/gpu_gles.cpp      | 911 ++++++++++++++++++++++++++++++++++++++++++
- src/gpu_gles.hpp      | 107 +++++
- src/imageformat.cpp   |   4 +
- src/pixmap.cpp        | 131 ++++--
- src/pixmap.hpp        |  20 +-
- src/render.cpp        |  28 ++
- src/ui_wayland.cpp    | 306 +++++++++++++-
- src/ui_wayland.hpp    |  36 ++
- src/viewer.cpp        |   2 +-
- 25 files changed, 2842 insertions(+), 126 deletions(-)
- create mode 100644 src/colorspace.cpp
- create mode 100644 src/colorspace.hpp
- create mode 100644 src/gpu.hpp
- create mode 100644 src/gpu_gles.cpp
- create mode 100644 src/gpu_gles.hpp
-
 diff --git a/meson.build b/meson.build
-index c26054b..caa0dfa 100644
 --- a/meson.build
 +++ b/meson.build
-@@ -33,6 +33,7 @@ endif
+@@ -38,6 +38,7 @@ endif
  # mandatory dependencies
  xkb = dependency('xkbcommon')
  fontconfig = dependency('fontconfig')
 +lcms = dependency('lcms2')
- freetype = dependency('freetype2')
+ freetype = dependency('freetype2', version: '>=2.13.1')
  threads = dependency('threads')
  lua = dependency(get_option('liblua'))
-@@ -41,7 +42,7 @@ lua = dependency(get_option('liblua'))
+@@ -46,7 +47,7 @@ lua = dependency(get_option('liblua'))
  wl_protocols = []
  wlcln = dependency('wayland-client', required: get_option('wayland'))
  if wlcln.found()
@@ -57,7 +18,7 @@ index c26054b..caa0dfa 100644
      wlproto_dir = wlproto.get_variable(pkgconfig: 'pkgdatadir')
      wlscan = dependency('wayland-scanner', required: false, native: true)
      if wlscan.found()
-@@ -57,6 +58,7 @@ if wlcln.found()
+@@ -62,6 +63,7 @@ if wlcln.found()
          wlproto_dir / 'stable/xdg-shell/xdg-shell.xml',
          wlproto_dir / 'stable/tablet/tablet-v2.xml',
          wlproto_dir / 'stable/viewporter/viewporter.xml',
@@ -65,7 +26,7 @@ index c26054b..caa0dfa 100644
          wlproto_dir / 'staging/content-type/content-type-v1.xml',
          wlproto_dir / 'staging/cursor-shape/cursor-shape-v1.xml',
          wlproto_dir / 'staging/ext-idle-notify/ext-idle-notify-v1.xml',
-@@ -81,6 +83,13 @@ if wlcln.found()
+@@ -86,6 +88,13 @@ if wlcln.found()
      endforeach
  endif
  
@@ -79,7 +40,7 @@ index c26054b..caa0dfa 100644
  # DRM support
  drm = dependency('libdrm', required: get_option('drm'))
  
-@@ -160,6 +169,7 @@ conf = configuration_data()
+@@ -169,6 +178,7 @@ conf = configuration_data()
  conf.set('HAVE_COMPOSITOR', wlcln.found() and get_option('compositor').allowed())
  conf.set('HAVE_WAYLAND', wlcln.found())
  conf.set('HAVE_DRM', drm.found())
@@ -87,7 +48,7 @@ index c26054b..caa0dfa 100644
  conf.set('HAVE_INOTIFY', cc.has_header('sys/inotify.h', dependencies: inotify))
  conf.set('HAVE_LIBEXIV2', exiv.found())
  conf.set('HAVE_LIBEXR', exr.found())
-@@ -306,6 +316,7 @@ endif
+@@ -315,6 +325,7 @@ endif
  sources = [
      'src/application.cpp',
      'src/appmode.cpp',
@@ -95,7 +56,7 @@ index c26054b..caa0dfa 100644
      'src/defaults.cpp',
      'src/fdevent.cpp',
      'src/font.cpp',
-@@ -342,6 +353,9 @@ sources = [
+@@ -352,6 +363,9 @@ sources = [
  if wlcln.found()
      sources += 'src/ui_wayland.cpp'
  endif
@@ -105,7 +66,7 @@ index c26054b..caa0dfa 100644
  if drm.found()
      sources += 'src/ui_drm.cpp'
  endif
-@@ -400,11 +414,15 @@ dependencies = [
+@@ -410,11 +424,15 @@ dependencies = [
      epoll,
      fontconfig,
      freetype,
@@ -122,7 +83,6 @@ index c26054b..caa0dfa 100644
      # image support
      avif,
 diff --git a/meson.options b/meson.options
-index a3f9ae5..4f2938d 100644
 --- a/meson.options
 +++ b/meson.options
 @@ -114,6 +114,14 @@ option(
@@ -142,7 +102,6 @@ index a3f9ae5..4f2938d 100644
      'drm',
 diff --git a/src/colorspace.cpp b/src/colorspace.cpp
 new file mode 100644
-index 0000000..54a744a
 --- /dev/null
 +++ b/src/colorspace.cpp
 @@ -0,0 +1,514 @@
@@ -662,7 +621,6 @@ index 0000000..54a744a
 +}
 diff --git a/src/colorspace.hpp b/src/colorspace.hpp
 new file mode 100644
-index 0000000..34b988a
 --- /dev/null
 +++ b/src/colorspace.hpp
 @@ -0,0 +1,121 @@
@@ -788,7 +746,6 @@ index 0000000..34b988a
 +    return sign | static_cast<uint16_t>(h);
 +}
 diff --git a/src/formatfactory.cpp b/src/formatfactory.cpp
-index 5bccaa2..ded68ec 100644
 --- a/src/formatfactory.cpp
 +++ b/src/formatfactory.cpp
 @@ -269,6 +269,14 @@ ImagePtr FormatFactory::load(const ImageEntryPtr& entry) const
@@ -817,7 +774,6 @@ index 5bccaa2..ded68ec 100644
          Log::error("Unable to export pixmap, PNG encode failed");
          return false;
 diff --git a/src/formats/avif.cpp b/src/formats/avif.cpp
-index 1a39d3d..d26f0e4 100644
 --- a/src/formats/avif.cpp
 +++ b/src/formats/avif.cpp
 @@ -6,6 +6,7 @@
@@ -901,7 +857,6 @@ index 1a39d3d..d26f0e4 100644
  
  // register format in factory
 diff --git a/src/formats/exr.cpp b/src/formats/exr.cpp
-index bc0fba0..52abaab 100644
 --- a/src/formats/exr.cpp
 +++ b/src/formats/exr.cpp
 @@ -10,9 +10,13 @@
@@ -983,7 +938,6 @@ index bc0fba0..52abaab 100644
      static constexpr int MAX_SIZE = 10000000;
  
 diff --git a/src/formats/heif.cpp b/src/formats/heif.cpp
-index 3179b66..59d2932 100644
 --- a/src/formats/heif.cpp
 +++ b/src/formats/heif.cpp
 @@ -9,7 +9,7 @@
@@ -1104,7 +1058,6 @@ index 3179b66..59d2932 100644
      using HeifContext =
          std::unique_ptr<heif_context, decltype(&heif_context_free)>;
 diff --git a/src/formats/jpeg.cpp b/src/formats/jpeg.cpp
-index 5a0b171..cee8887 100644
 --- a/src/formats/jpeg.cpp
 +++ b/src/formats/jpeg.cpp
 @@ -6,9 +6,13 @@
@@ -1218,7 +1171,6 @@ index 5a0b171..cee8887 100644
      struct Error {
          jpeg_error_mgr manager;
 diff --git a/src/formats/jxl.cpp b/src/formats/jxl.cpp
-index 0250715..275b664 100644
 --- a/src/formats/jxl.cpp
 +++ b/src/formats/jxl.cpp
 @@ -8,7 +8,9 @@
@@ -1428,7 +1380,6 @@ index 0250715..275b664 100644
          }
  
 diff --git a/src/formats/png.cpp b/src/formats/png.cpp
-index 7a9f870..c9e903c 100644
 --- a/src/formats/png.cpp
 +++ b/src/formats/png.cpp
 @@ -6,6 +6,8 @@
@@ -1598,7 +1549,6 @@ index 7a9f870..c9e903c 100644
  
      // PNG writer callback, see `png_rw_ptr` in png.h
 diff --git a/src/formats/raw.cpp b/src/formats/raw.cpp
-index 4015a40..b345d2a 100644
 --- a/src/formats/raw.cpp
 +++ b/src/formats/raw.cpp
 @@ -37,7 +37,10 @@ public:
@@ -1652,7 +1602,6 @@ index 4015a40..b345d2a 100644
          image->format = "RAW";
  
 diff --git a/src/formats/svg.cpp b/src/formats/svg.cpp
-index 4ef91ea..86f9f20 100644
 --- a/src/formats/svg.cpp
 +++ b/src/formats/svg.cpp
 @@ -3,6 +3,7 @@
@@ -1687,7 +1636,6 @@ index 4ef91ea..86f9f20 100644
              const RsvgRectangle viewbox = {
                  .x = x + scale * svg_offset_x,
 diff --git a/src/formats/tiff.cpp b/src/formats/tiff.cpp
-index 2e6ae43..4e8bdbb 100644
 --- a/src/formats/tiff.cpp
 +++ b/src/formats/tiff.cpp
 @@ -55,6 +55,37 @@ public:
@@ -1874,7 +1822,6 @@ index 2e6ae43..4e8bdbb 100644
      using TiffImage = std::unique_ptr<TIFF, decltype(&TIFFClose)>;
  
 diff --git a/src/formats/webp.cpp b/src/formats/webp.cpp
-index 3761ad0..cdddd04 100644
 --- a/src/formats/webp.cpp
 +++ b/src/formats/webp.cpp
 @@ -87,6 +87,16 @@ public:
@@ -1896,7 +1843,6 @@ index 3761ad0..cdddd04 100644
          if (webp_prop.format == 1) {
 diff --git a/src/gpu.hpp b/src/gpu.hpp
 new file mode 100644
-index 0000000..2a76f84
 --- /dev/null
 +++ b/src/gpu.hpp
 @@ -0,0 +1,25 @@
@@ -1927,7 +1873,6 @@ index 0000000..2a76f84
 +};
 diff --git a/src/gpu_gles.cpp b/src/gpu_gles.cpp
 new file mode 100644
-index 0000000..0ac1994
 --- /dev/null
 +++ b/src/gpu_gles.cpp
 @@ -0,0 +1,911 @@
@@ -2844,7 +2789,6 @@ index 0000000..0ac1994
 +}
 diff --git a/src/gpu_gles.hpp b/src/gpu_gles.hpp
 new file mode 100644
-index 0000000..c00d65d
 --- /dev/null
 +++ b/src/gpu_gles.hpp
 @@ -0,0 +1,107 @@
@@ -2956,7 +2900,6 @@ index 0000000..c00d65d
 +    uint64_t frame = 0;
 +};
 diff --git a/src/imageformat.cpp b/src/imageformat.cpp
-index 2b62ce8..e4ee4e1 100644
 --- a/src/imageformat.cpp
 +++ b/src/imageformat.cpp
 @@ -43,6 +43,10 @@ Pixmap ImageFormat::preview(const Data& data, const size_t sz,
@@ -2971,7 +2914,6 @@ index 2b62ce8..e4ee4e1 100644
      const double scale_w = static_cast<double>(sz) / pm.width();
      const double scale_h = static_cast<double>(sz) / pm.height();
 diff --git a/src/pixmap.cpp b/src/pixmap.cpp
-index 537ba07..4f0e9cf 100644
 --- a/src/pixmap.cpp
 +++ b/src/pixmap.cpp
 @@ -4,6 +4,8 @@
@@ -3170,7 +3112,7 @@ index 537ba07..4f0e9cf 100644
      assert(format() == Format::RGB || format() == Format::ARGB);
  
      const Rectangle visible = rect.intersect({ 0, 0, pm_width, pm_height });
-@@ -184,6 +213,10 @@ void Pixmap::fill(const Rectangle& rect, const argb_t& color)
+@@ -187,6 +216,10 @@ void Pixmap::fill(const Rectangle& rect, const argb_t& color)
  
  void Pixmap::fill_blend(const Rectangle& rect, const argb_t& color)
  {
@@ -3181,7 +3123,7 @@ index 537ba07..4f0e9cf 100644
      assert(format() == Format::ARGB);
  
      const Rectangle visible = rect.intersect({ 0, 0, pm_width, pm_height });
-@@ -223,6 +256,10 @@ void Pixmap::fill_blend(const Rectangle& rect, const argb_t& color)
+@@ -226,6 +259,10 @@ void Pixmap::fill_blend(const Rectangle& rect, const argb_t& color)
  void Pixmap::grid(const Rectangle& rect, const size_t size, const argb_t& clr0,
                    const argb_t& clr1)
  {
@@ -3192,7 +3134,7 @@ index 537ba07..4f0e9cf 100644
      assert(format() == Format::ARGB);
  
      const Rectangle visible = rect.intersect({ 0, 0, pm_width, pm_height });
-@@ -283,6 +320,10 @@ void Pixmap::rectangle(const Rectangle& rect, const argb_t& color,
+@@ -288,6 +325,10 @@ void Pixmap::rectangle(const Rectangle& rect, const argb_t& color,
  
  void Pixmap::mask(const Pixmap& pm, const Point& pos, const argb_t& color)
  {
@@ -3203,7 +3145,7 @@ index 537ba07..4f0e9cf 100644
      assert(format() == Format::RGB || format() == Format::ARGB);
      assert(pm.format() == Format::GS);
  
-@@ -315,6 +356,10 @@ void Pixmap::mask(const Pixmap& pm, const Point& pos, const argb_t& color)
+@@ -320,6 +361,10 @@ void Pixmap::mask(const Pixmap& pm, const Point& pos, const argb_t& color)
  
  void Pixmap::copy(const Pixmap& pm, const Point& pos)
  {
@@ -3214,7 +3156,7 @@ index 537ba07..4f0e9cf 100644
      assert(format() == Format::RGB || format() == Format::ARGB);
      assert(pm.format() == Format::RGB || pm.format() == Format::ARGB);
  
-@@ -337,6 +382,10 @@ void Pixmap::copy(const Pixmap& pm, const Point& pos)
+@@ -342,6 +387,10 @@ void Pixmap::copy(const Pixmap& pm, const Point& pos)
  
  void Pixmap::blend(const Pixmap& pm, const Point& pos)
  {
@@ -3226,7 +3168,6 @@ index 537ba07..4f0e9cf 100644
      assert(pm.format() == Format::RGB || pm.format() == Format::ARGB);
      assert(format() == Format::ARGB || pm.format() == Format::ARGB);
 diff --git a/src/pixmap.hpp b/src/pixmap.hpp
-index f9376b0..3dca018 100644
 --- a/src/pixmap.hpp
 +++ b/src/pixmap.hpp
 @@ -5,7 +5,9 @@
@@ -3281,7 +3222,7 @@ index f9376b0..3dca018 100644
          const size_t offset = y * pm_stride + x * pm_bpp;
          return pm_ext ? &pm_ext[offset] : &pm_data[offset];
      }
-@@ -247,4 +261,8 @@ private:
+@@ -250,4 +264,8 @@ private:
      size_t pm_stride = 0;         ///< Row size in bytes
      std::vector<uint8_t> pm_data; ///< Pixel data (owned)
      uint8_t* pm_ext = nullptr;    ///< Pixel data (attached)
@@ -3291,7 +3232,6 @@ index f9376b0..3dca018 100644
 +    ColorSpace::Ptr pm_color;
  };
 diff --git a/src/render.cpp b/src/render.cpp
-index d64c31b..e46209f 100644
 --- a/src/render.cpp
 +++ b/src/render.cpp
 @@ -979,6 +979,15 @@ Render::Render()
@@ -3351,7 +3291,6 @@ index d64c31b..e46209f 100644
  
      // calculate areas to fill
 diff --git a/src/ui_wayland.cpp b/src/ui_wayland.cpp
-index cec163e..25169ac 100644
 --- a/src/ui_wayland.cpp
 +++ b/src/ui_wayland.cpp
 @@ -712,6 +712,187 @@ public:
@@ -3717,7 +3656,6 @@ index cec163e..25169ac 100644
      wnd_buffer.unlock();
  }
 diff --git a/src/ui_wayland.hpp b/src/ui_wayland.hpp
-index 1d4fbe7..3038482 100644
 --- a/src/ui_wayland.hpp
 +++ b/src/ui_wayland.hpp
 @@ -4,6 +4,7 @@
@@ -3787,10 +3725,9 @@ index 1d4fbe7..3038482 100644
  
      uint32_t scale = FRACTION_SCALE_DEN; ///< Window scale factor (WL format)
 diff --git a/src/viewer.cpp b/src/viewer.cpp
-index b9b8e31..5a93a03 100644
 --- a/src/viewer.cpp
 +++ b/src/viewer.cpp
-@@ -514,7 +514,7 @@ void Viewer::window_redraw(Pixmap& wnd)
+@@ -518,7 +518,7 @@ void Viewer::window_redraw(Pixmap& wnd)
      const Rectangle imgr = { position, static_cast<Size>(pm) * scale };
  
      // clear image background
@@ -3799,6 +3736,3 @@ index b9b8e31..5a93a03 100644
          if (tr_chessboard) {
              wnd.grid(imgr, tr_cbsize, tr_cbcolor[0], tr_cbcolor[1]);
          } else {
--- 
-2.55.0
-

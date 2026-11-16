@@ -7,7 +7,7 @@
 
 Name:           %{_name}-git
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        7%{?dist}
+Release:        8%{?dist}
 Conflicts:      %{_name}
 Provides:       %{_name} = %{version}-%{release}
 Summary:        Lightweight image viewer for Wayland display servers
@@ -108,6 +108,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/swayimg.desktop
 
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 5.6^4.git.38e68a5-8
+- Rebase patches onto master (luabinding split)
+
 * Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 5.6^4.git.38e68a5-7
 - Normalize spec for mx-rpm -U
 
