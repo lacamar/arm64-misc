@@ -1,6 +1,7 @@
+# copr-exclude-chroots: fedora-43-aarch64 fedora-44-aarch64
 Name:           python-bleak
 Version:        3.1.0
-Release:        5%{?dist}
+Release:        6%{?dist}
 Summary:        Cross-platform Bluetooth Low Energy client
 
 License:        MIT
@@ -35,11 +36,15 @@ sed -i 's/"uv_build>=[^"]*"/"uv_build>=0.10.9"/' pyproject.toml
 %pyproject_save_files -l bleak
 
 %check
-%pyproject_check_import -e 'bleak.backends.winrt*' -e 'bleak.backends.p4android*' -e 'bleak.backends.corebluetooth*'
+%pyproject_check_import -e 'bleak.backends.winrt*' -e 'bleak.backends.p4android*' -e 'bleak.backends.android*' -e 'bleak.backends.corebluetooth*'
 
 %files -n python3-bleak -f %{pyproject_files}
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 3.1.0-6
+- Skip android backend import check
+- Exclude f43/f44 COPR chroots (no dbus-fast >= 4)
+
 * Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 3.1.0-5
 - Update to 3.1.0
 
