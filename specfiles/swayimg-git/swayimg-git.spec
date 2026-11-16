@@ -1,13 +1,13 @@
 %global _name swayimg
-%global tag 5.6
-%global bumpver 4
+%global tag 5.7
+%global bumpver 0
 
-%global commit 38e68a5aa7457d07ce415b6007cf70003ae37ff8
+%global commit 543209aa76112cf18d764f81627d39251add1594
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 
 Name:           %{_name}-git
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        8%{?dist}
+Release:        1%{?dist}
 Conflicts:      %{_name}
 Provides:       %{_name} = %{version}-%{release}
 Summary:        Lightweight image viewer for Wayland display servers
@@ -108,6 +108,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/swayimg.desktop
 
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 5.7^0.git.543209a-1
+- Update to 5.7
+
 * Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 5.6^4.git.38e68a5-8
 - Rebase patches onto master (luabinding split)
 
