@@ -50,7 +50,9 @@
 %ifarch aarch64 x86_64 %{ix86}
 %if !0%{?rhel}
 %global with_asahi     1
+%if 0%{?fedora} >= 44
 %global with_d3d12     1
+%endif
 %global with_etnaviv   1
 %global with_lima      1
 %global with_tegra     1
@@ -91,7 +93,7 @@
 Name:           mesa
 Summary:        Mesa graphics libraries
 Version:        26.2.3
-Release:        1%{?dist}.hk1
+Release:        2%{?dist}.hk1
 License:        MIT AND BSD-3-Clause AND SGI-B-2.0
 URL:            https://mesa3d.org
 
@@ -756,6 +758,9 @@ ln -s libGLX_mesa.so.0 %{buildroot}%{_libdir}/libGLX_system.so.0
 %endif
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 26.2.3-2.hk1
+- Gate d3d12 to f44+ (DirectX-Headers too old on f43)
+
 * Sat Oct 03 2026 lacamar <lchlnm@pm.me> - 26.2.3-1.hk1
 - Honeykrisp: 512 MiB geometry heap (HK_HEAP_MB)
 - Honeykrisp: wrap on heap overflow, no GPU abort
