@@ -64,3 +64,15 @@ index f4d24a2c..eb1bb406 100644
          } else {
              self.maybe_warp_cursor_to_focus();
          }
+diff --git a/src/handlers/xdg_shell.rs b/src/handlers/xdg_shell.rs
+--- a/src/handlers/xdg_shell.rs
++++ b/src/handlers/xdg_shell.rs
+@@ -983,6 +983,8 @@
+ }
+ 
+ impl XdgDecorationHandler for State {
++    fn decoration_destroyed(&mut self, _toplevel: ToplevelSurface) {}
++
+     fn new_decoration(&mut self, toplevel: ToplevelSurface) {
+         // If we want CSD, we hide this global altogether.
+         toplevel.with_pending_state(|state| {
