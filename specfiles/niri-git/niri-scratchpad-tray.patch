@@ -32,10 +32,10 @@ index 71cac01..e41b834 100644
          if is_session_instance || config.debug.dbus_interfaces_in_non_session_instances {
 diff --git a/src/dbus/scratchpad_tray.rs b/src/dbus/scratchpad_tray.rs
 new file mode 100644
-index 0000000..04279b2
+index 0000000..8884762
 --- /dev/null
 +++ b/src/dbus/scratchpad_tray.rs
-@@ -0,0 +1,283 @@
+@@ -0,0 +1,290 @@
 +//! A StatusNotifierItem per scratchpad window; activating one toggles that window.
 +
 +use std::collections::HashMap;
@@ -49,7 +49,6 @@ index 0000000..04279b2
 +use zbus::{fdo, interface};
 +
 +const WATCHER: &str = "org.kde.StatusNotifierWatcher";
-+const PATH: &str = "/StatusNotifierItem";
 +
 +/// (icon name, icon pixmaps, title, description)
 +type ToolTip = (String, Vec<(i32, i32, Vec<u8>)>, String, String);
@@ -122,21 +121,21 @@ index 0000000..04279b2
 +pub struct ScratchpadTray {
 +    to_niri: calloop::channel::Sender<u64>,
 +    items: HashMap<u64, (Connection, String)>,
-+    names: Arc<Mutex<Vec<String>>>,
++    services: Arc<Mutex<Vec<String>>>,
 +    icons: HashMap<String, String>,
 +    _monitor: Option<Connection>,
 +}
 +
 +impl ScratchpadTray {
 +    pub fn new(to_niri: calloop::channel::Sender<u64>) -> Self {
-+        let names = Arc::new(Mutex::new(Vec::new()));
-+        let monitor = watch_watcher(names.clone())
++        let services = Arc::new(Mutex::new(Vec::new()));
++        let monitor = watch_watcher(services.clone())
 +            .inspect_err(|err| warn!("error watching {WATCHER}: {err:?}"))
 +            .ok();
 +        Self {
 +            to_niri,
 +            items: HashMap::new(),
-+            names,
++            services,
 +            icons: HashMap::new(),
 +            _monitor: monitor,
 +        }
@@ -146,15 +145,15 @@ index 0000000..04279b2
 +    pub fn sync(&mut self, windows: &[(u64, String, String)]) {
 +        self.items
 +            .retain(|id, _| windows.iter().any(|(w, _, _)| w == id));
-+        let mut names = self.names.lock().unwrap();
-+        names.retain(|n| self.items.keys().any(|id| *n == name(*id)));
-+        drop(names);
++        let mut services = self.services.lock().unwrap();
++        services.retain(|n| self.items.keys().any(|id| *n == service(*id)));
++        drop(services);
 +
 +        for (id, app_id, title) in windows {
 +            if let Some((conn, old)) = self.items.get_mut(id) {
 +                if old != title {
 +                    *old = title.clone();
-+                    set_title(conn, title);
++                    set_title(conn, *id, title);
 +                }
 +                continue;
 +            }
@@ -171,7 +170,7 @@ index 0000000..04279b2
 +            };
 +            match publish(*id, item) {
 +                Ok(conn) => {
-+                    self.names.lock().unwrap().push(name(*id));
++                    self.services.lock().unwrap().push(service(*id));
 +                    self.items.insert(*id, (conn, title.clone()));
 +                }
 +                Err(err) => warn!("error publishing scratchpad tray item: {err:?}"),
@@ -184,30 +183,38 @@ index 0000000..04279b2
 +    format!("org.kde.StatusNotifierItem-{}-{id}", std::process::id())
 +}
 +
++// hosts such as noctalia drop a second item from the same process at the same path
++fn path(id: u64) -> String {
++    format!("/StatusNotifierItem/{id}")
++}
++
++fn service(id: u64) -> String {
++    format!("{}{}", name(id), path(id))
++}
++
 +fn publish(id: u64, item: Item) -> anyhow::Result<Connection> {
-+    let name = name(id);
 +    let conn = zbus::blocking::connection::Builder::session()?
-+        .name(name.clone())?
-+        .serve_at(PATH, item)?
++        .name(name(id))?
++        .serve_at(path(id), item)?
 +        .build()?;
 +    // no watcher yet is fine: the monitor registers us when one appears
-+    let _ = register(&conn, &name);
++    let _ = register(&conn, &service(id));
 +    Ok(conn)
 +}
 +
-+fn register(conn: &Connection, name: &str) -> zbus::Result<()> {
++fn register(conn: &Connection, service: &str) -> zbus::Result<()> {
 +    conn.call_method(
 +        Some(WATCHER),
 +        "/StatusNotifierWatcher",
 +        Some(WATCHER),
 +        "RegisterStatusNotifierItem",
-+        &name,
++        &service,
 +    )
 +    .map(drop)
 +}
 +
-+fn set_title(conn: &Connection, title: &str) {
-+    let Ok(iface) = conn.object_server().interface::<_, Item>(PATH) else {
++fn set_title(conn: &Connection, id: u64, title: &str) {
++    let Ok(iface) = conn.object_server().interface::<_, Item>(path(id)) else {
 +        return;
 +    };
 +    iface.get_mut().title = title.to_owned();
@@ -219,7 +226,7 @@ index 0000000..04279b2
 +}
 +
 +/// Re-registers every item when a tray host (re)starts.
-+fn watch_watcher(names: Arc<Mutex<Vec<String>>>) -> anyhow::Result<Connection> {
++fn watch_watcher(services: Arc<Mutex<Vec<String>>>) -> anyhow::Result<Connection> {
 +    let conn = Connection::session()?;
 +    let inner = conn.inner().clone();
 +    let task = async_io::block_on(async {
@@ -231,15 +238,15 @@ index 0000000..04279b2
 +        anyhow::Ok(async move {
 +            while let Some(signal) = stream.next().await {
 +                if signal.args().is_ok_and(|a| a.new_owner().is_some()) {
-+                    let names = names.lock().unwrap().clone();
-+                    for name in names {
++                    let services = services.lock().unwrap().clone();
++                    for service in services {
 +                        let _ = inner
 +                            .call_method(
 +                                Some(WATCHER),
 +                                "/StatusNotifierWatcher",
 +                                Some(WATCHER),
 +                                "RegisterStatusNotifierItem",
-+                                &name,
++                                &service,
 +                            )
 +                            .await;
 +                    }
@@ -367,10 +374,10 @@ index af08b15..b13c879 100644
  }
  
 diff --git a/src/niri.rs b/src/niri.rs
-index 2ab724d..290d063 100644
+index 5fff676..fabcc1f 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
-@@ -494,6 +494,8 @@ pub struct Niri {
+@@ -497,6 +497,8 @@ pub struct Niri {
      pub inhibit_power_key_fd: Option<zbus::zvariant::OwnedFd>,
      #[cfg(feature = "dbus")]
      pub gnome_shell: Option<crate::dbus::gnome_shell::Shell>,
@@ -379,7 +386,7 @@ index 2ab724d..290d063 100644
  
      pub ipc_server: Option<IpcServer>,
      pub ipc_outputs_changed: bool,
-@@ -1017,6 +1019,8 @@ impl State {
+@@ -1020,6 +1022,8 @@ impl State {
          color_management::refresh_feedbacks(self);
          self.refresh_ipc_outputs();
          self.ipc_refresh_layout();
@@ -388,7 +395,7 @@ index 2ab724d..290d063 100644
          self.ipc_refresh_keyboard_layout_index();
          self.ipc_refresh_touchpad();
  
-@@ -2574,6 +2578,28 @@ impl State {
+@@ -2573,6 +2577,28 @@ impl State {
          }
      }
  

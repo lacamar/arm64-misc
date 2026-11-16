@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        38%{?dist}
+Release:        39%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -185,6 +185,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^18.git.689c1e91-39
+- Scratchpad tray: one object path per item
+
 * Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^18.git.689c1e91-38
 - Update to commit 689c1e914a5af782a476e433b79c15554bf5a312
 - Update smithay to fd8e3f50f9556aa6c0485989d1d49ff2c5eefae1
