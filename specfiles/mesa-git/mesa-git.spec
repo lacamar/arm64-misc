@@ -92,9 +92,9 @@
 
 Name:           mesa
 Summary:        Mesa graphics libraries
-%global commit 13baeb70c066a9f82d2bcfb29f06e4865212affa
+%global commit 6c09d07c567eb8c9624b4026e49d09fd83166ae0
 %global shortcommit %{sub %{commit} 1 8}
-%global bumpver 2
+%global bumpver 3
 %global ver 27.0.0
 Version:        %{ver}~%{bumpver}.git.%{shortcommit}
 Release:        3%{?dist}
@@ -777,6 +777,9 @@ ln -s libGLX_mesa.so.0 %{buildroot}%{_libdir}/libGLX_system.so.0
 %endif
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 27.0.0~3.git.6c09d07c-3
+- Update to commit 6c09d07c567eb8c9624b4026e49d09fd83166ae0
+
 * Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 27.0.0~2.git.13baeb70-3
 - Add xml crate for panfrost kraid
 
