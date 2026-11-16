@@ -6,6 +6,7 @@ ec_commit=$(awk '$1=="%global" && $2=="ec_commit" {print $3}' "$1")
 src=$2
 work=${XDG_CACHE_HOME:-$HOME/.cache}/mx-rpm-tarballer/element-desktop
 export npm_config_manage_package_manager_versions=false
+export npm_config_fetch_timeout=600000 npm_config_fetch_retries=5
 rm -rf "$work"; mkdir -p "$work"; cd "$work"
 tar xzf "$src/pnpm-$pnpm_version.tgz"
 tar xzf "$src/element-desktop-$version.tar.gz"
