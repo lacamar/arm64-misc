@@ -4,7 +4,7 @@
 
 Name:           credentialsd
 Version:        0.4.0
-Release:        4%{?dist}
+Release:        5%{?dist}
 Summary:        xdg-desktop-portal backend for WebAuthn credentials
 
 License:        LGPL-3.0-only
@@ -71,7 +71,7 @@ libwebauthn = { path = "libwebauthn-%{lwa_commit}/libwebauthn" }
 EOF
 
 %build
-%meson
+%meson -Dfeature_demo_client=disabled
 %meson_build
 
 %install
@@ -128,6 +128,9 @@ install -Dpm0644 %{SOURCE3} %{buildroot}%{portalconfdir}/portals.conf
 %{_datadir}/credentialsd/
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0-5
+- Disable demo client (needs libadwaita)
+
 * Fri Nov 13 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0-4
 - Update to 0.4.0
 - Update lwa to e5f01db3445a8854479786aae66b94844974020d
