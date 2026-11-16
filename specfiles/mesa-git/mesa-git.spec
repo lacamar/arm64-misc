@@ -97,7 +97,7 @@ Summary:        Mesa graphics libraries
 %global bumpver 3
 %global ver 27.0.0
 Version:        %{ver}~%{bumpver}.git.%{shortcommit}
-Release:        4%{?dist}
+Release:        5%{?dist}
 License:        MIT AND BSD-3-Clause AND SGI-B-2.0
 URL:            https://mesa3d.org
 
@@ -517,6 +517,8 @@ rewrite_wrap_file xml
 
 %install
 %meson_install
+# bundled wayland-protocols subproject (f43) is build-time only
+rm -rf %{buildroot}%{_includedir}/wayland-protocols %{buildroot}%{_datadir}/wayland-protocols %{buildroot}%{_datadir}/pkgconfig/wayland-protocols.pc
 
 # likewise glvnd
 rm -vf %{buildroot}%{_libdir}/libGLX_mesa.so
@@ -782,6 +784,9 @@ ln -s libGLX_mesa.so.0 %{buildroot}%{_libdir}/libGLX_system.so.0
 %endif
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 27.0.0~3.git.6c09d07c-5
+- Drop bundled wayland-protocols files from buildroot
+
 * Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 27.0.0~3.git.6c09d07c-4
 - Bundle wayland-protocols 1.50 on f43
 
