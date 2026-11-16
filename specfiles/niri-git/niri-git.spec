@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        39%{?dist}
+Release:        40%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -81,6 +81,7 @@ Patch:          niri-move-column-by-id.patch
 Patch:          niri-output-power.patch
 # scratchpad windows as tray items
 Patch:          niri-scratchpad-tray.patch
+Patch:          niri-scratchpad-backdrop.patch
 
 BuildRequires:  cargo-rpm-macros >= 26
 BuildRequires:  pkgconfig(udev)
@@ -185,6 +186,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Tue Nov 17 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^18.git.689c1e91-40
+- Add scratchpad backdrop-dim, backdrop-blur, hide-on-click-outside
+
 * Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^18.git.689c1e91-39
 - Scratchpad tray: one object path per item
 
