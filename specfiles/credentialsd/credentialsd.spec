@@ -1,10 +1,10 @@
 # copr-exclude-chroots: fedora-43-aarch64
-%global lwa_commit e5f01db3445a8854479786aae66b94844974020d
+%global lwa_commit 9d7d92f7263fe9c3fbbe7c751c83a03538297130
 %global portalconfdir %{_sysconfdir}/xdg/xdg-desktop-portal
 
 Name:           credentialsd
 Version:        0.4.0
-Release:        5%{?dist}
+Release:        6%{?dist}
 Summary:        xdg-desktop-portal backend for WebAuthn credentials
 
 License:        LGPL-3.0-only
@@ -128,6 +128,9 @@ install -Dpm0644 %{SOURCE3} %{buildroot}%{portalconfdir}/portals.conf
 %{_datadir}/credentialsd/
 
 %changelog
+* Tue Nov 17 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0-6
+- Update lwa to 9d7d92f7263fe9c3fbbe7c751c83a03538297130
+
 * Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0-5
 - Disable demo client (needs libadwaita)
 
