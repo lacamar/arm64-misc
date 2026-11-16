@@ -1,0 +1,48 @@
+diff --git a/tabs.c b/tabs.c
+index 6b31ac0..a179c50 100644
+--- a/tabs.c
++++ b/tabs.c
+@@ -24,7 +24,6 @@
+ #include "char32.h"
+ #include "fdm.h"
+ #include "input.h"
+-#include "notify.h"
+ #include "render.h"
+ #include "search.h"
+ #include "selection.h"
+@@ -2925,7 +2924,7 @@ tabs_bg_leave(struct wl_window *win)
+     win->pane_drag.hover = -1;
+ }
+ 
+-/* A prompt after a long command: mark the tab, and notify if its window isn't focused */
++/* A prompt after a long command in a hidden tab: mark the tab */
+ 
+ #define DONE_MIN_MS 10000
+ 
+@@ -2937,26 +2936,10 @@ tabs_prompt(struct terminal *t)
+     if (started == 0 || t->window == NULL || tabs_now_ms() - started < DONE_MIN_MS)
+         return;
+ 
+-    bool focused = false;
+-    tll_foreach(t->wl->seats, it)
+-        focused |= it->item.kbd_focus != NULL && it->item.kbd_focus->window == t->window;
+-
+-    if (focused && tabs_is_visible(t))
+-        return;
+-
+     if (!tabs_is_visible(t)) {
+         t->tab_done = true;
+         render_refresh_sidebar(t->window);
+     }
+-    if (!focused) {
+-        char *title = tabs_title(t, true);
+-        notify_notify(t, &(struct notification){
+-            .title = xstrdup("Command finished"),
+-            .body = title,
+-            .expire_time = -1,
+-            .focus = true,
+-        });
+-    }
+ }
+ 
+ /* Focus a tab by the PID of its shell, or of any process below it */
