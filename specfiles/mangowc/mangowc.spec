@@ -1,6 +1,7 @@
+# copr-exclude-chroots: fedora-43-aarch64
 Name:           mangowc
 Version:        0.18.5
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Lightweight Wayland compositor without compromises
 License:        GPL-3.0
 URL:            https://github.com/DreamMaoMao/mangowc
@@ -53,6 +54,9 @@ MangoWC is a lightweight, high-performance Wayland compositor built on dwl, desi
 %{_mandir}/man1/mangonag.1.gz
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.5-2
+- Exclude f43 COPR chroot (deps unavailable)
+
 * Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.18.5-1
 - Normalize spec for mx-rpm -U
 

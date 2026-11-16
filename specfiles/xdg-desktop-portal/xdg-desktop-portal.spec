@@ -1,6 +1,7 @@
+# copr-exclude-chroots: fedora-43-aarch64
 Name:           xdg-desktop-portal
 Version:        1.22.1
-Release:        19%{?dist}
+Release:        20%{?dist}
 Summary:        Portal frontend service for Flatpak
 
 License:        LGPL-2.1-or-later
@@ -98,6 +99,9 @@ install -Dm644 %{SOURCE1} %{buildroot}%{_userunitdir}/%{name}.service.d/10-crede
 %{_datadir}/pkgconfig/%{name}.pc
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 1.22.1-20
+- Exclude f43 COPR chroot (deps unavailable)
+
 * Wed Nov 11 2026 Lachlan Marie <lchlnm@pm.me> - 1.22.1-19
 - Import from home:MSirringhaus:webauthn_devel 1.22.1-18.1
 - Fix app-info-registry race leaking stuck authorize threads

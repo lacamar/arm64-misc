@@ -1,8 +1,9 @@
+# copr-exclude-chroots: fedora-43-aarch64
 %global apiver  0.5
 
 Name:           scenefx
 Version:        0.5
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        A drop-in wlroots replacement that allows eye-candy effects
 License:        MIT
 URL:            https://github.com/wlrfx/scenefx
@@ -56,6 +57,9 @@ This package provides all the necessary files for development with %{name}
 %{_libdir}/pkgconfig/scenefx-%{apiver}.pc
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 0.5-3
+- Exclude f43 COPR chroot (deps unavailable)
+
 * Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.5-2
 - Normalize spec for mx-rpm -U
 
