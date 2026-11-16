@@ -97,7 +97,7 @@ Summary:        Mesa graphics libraries
 %global bumpver 2
 %global ver 27.0.0
 Version:        %{ver}~%{bumpver}.git.%{shortcommit}
-Release:        1%{?dist}
+Release:        2%{?dist}
 License:        MIT AND BSD-3-Clause AND SGI-B-2.0
 URL:            https://mesa3d.org
 
@@ -125,12 +125,14 @@ Patch5:         agx-query-nowait.patch
 %global rust_syn_ver 2.0.115
 %global rust_unicode_ident_ver 1.0.23
 %global rustc_hash_ver 2.1.1
+%global rust_bitflags_ver 2.9.1
 Source10:       https://crates.io/api/v1/crates/paste/%{rust_paste_ver}/download#/paste-%{rust_paste_ver}.tar.gz
 Source11:       https://crates.io/api/v1/crates/proc-macro2/%{rust_proc_macro2_ver}/download#/proc-macro2-%{rust_proc_macro2_ver}.tar.gz
 Source12:       https://crates.io/api/v1/crates/quote/%{rust_quote_ver}/download#/quote-%{rust_quote_ver}.tar.gz
 Source13:       https://crates.io/api/v1/crates/syn/%{rust_syn_ver}/download#/syn-%{rust_syn_ver}.tar.gz
 Source14:       https://crates.io/api/v1/crates/unicode-ident/%{rust_unicode_ident_ver}/download#/unicode-ident-%{rust_unicode_ident_ver}.tar.gz
 Source15:       https://crates.io/api/v1/crates/rustc-hash/%{rustc_hash_ver}/download#/rustc-hash-%{rustc_hash_ver}.tar.gz
+Source16:       https://crates.io/api/v1/crates/bitflags/%{rust_bitflags_ver}/download#/bitflags-%{rust_bitflags_ver}.tar.gz
 
 BuildRequires:  meson >= 1.4.0
 BuildRequires:  gcc
@@ -378,6 +380,7 @@ tar -xvf %{SOURCE12} -C subprojects/packagecache/
 tar -xvf %{SOURCE13} -C subprojects/packagecache/
 tar -xvf %{SOURCE14} -C subprojects/packagecache/
 tar -xvf %{SOURCE15} -C subprojects/packagecache/
+tar -xvf %{SOURCE16} -C subprojects/packagecache/
 for d in subprojects/packagecache/*-*; do
     echo '{"files":{}}' > $d/.cargo-checksum.json
 done
@@ -398,6 +401,7 @@ path = "src/nouveau/nil/lib.rs"
 paste = "$(grep ^directory subprojects/paste*.wrap | sed 's|.*-||')"
 syn = { version = "$(grep ^directory subprojects/syn*.wrap | sed 's|.*-||')", features = ["clone-impls"] }
 rustc-hash = "$(grep ^directory subprojects/rustc-hash*.wrap | sed 's|.*-||')"
+bitflags = "$(grep ^directory subprojects/bitflags*.wrap | sed 's|.*-||')"
 _EOF
 %if 0%{?vendor_nvk_crates}
 %cargo_prep -v subprojects/packagecache
@@ -448,6 +452,7 @@ rewrite_wrap_file syn
 rewrite_wrap_file unicode-ident
 rewrite_wrap_file paste
 rewrite_wrap_file rustc-hash
+rewrite_wrap_file bitflags
 %endif
 
 %meson \
@@ -767,6 +772,11 @@ ln -s libGLX_mesa.so.0 %{buildroot}%{_libdir}/libGLX_system.so.0
 %endif
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 27.0.0~2.git.13baeb70-2
+- Add bitflags crate for panfrost kraid
+- Drop hk-shader-destroy-uaf (fixed upstream)
+- Rebase hk-heap-overflow onto drirc heap size
+
 * Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 27.0.0~2.git.13baeb70-1
 - Update to commit 13baeb70c066a9f82d2bcfb29f06e4865212affa
 
