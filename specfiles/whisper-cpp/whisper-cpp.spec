@@ -1,6 +1,6 @@
 Name:    whisper-cpp
 Version: 1.9.5
-Release: 4%{?dist}
+Release: 5%{?dist}
 Summary: Port of OpenAI's Whisper model in C/C++
 
 License: MIT
@@ -91,6 +91,9 @@ install -Dm755 %{SOURCE1} %{buildroot}%{_bindir}/whisper-dictate
 
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 1.9.5-5
+- Rebuild for libggml.so.1
+
 * Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 1.9.5-4
 - Normalize spec for mx-rpm -U
 
