@@ -2,7 +2,7 @@
 
 Name:           swayimg
 Version:        5.7
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Lightweight image viewer for Wayland display servers
 
 License:        MIT
@@ -55,6 +55,7 @@ BuildRequires:  pkgconfig(libwebp)
 BuildRequires:  pkgconfig(libwebpdemux)
 BuildRequires:  pkgconfig(luajit)
 BuildRequires:  pkgconfig(wayland-client)
+BuildRequires:  pkgconfig(minizip-ng)
 BuildRequires:  pkgconfig(wayland-egl)
 BuildRequires:  pkgconfig(wayland-protocols) >= 1.45
 BuildRequires:  pkgconfig(wayland-scanner)
@@ -114,6 +115,9 @@ export LANG=en_US.UTF-8 # ImageListTest.SortAlphaUnicode fails with LANG=C
 
 
 %changelog
+* Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 5.7-2
+- Add minizip-ng BuildRequires
+
 * Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 5.7-1
 - Update to 5.7
 
