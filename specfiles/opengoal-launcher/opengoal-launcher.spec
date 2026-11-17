@@ -1,6 +1,6 @@
 %global tag 2.11.2
-%global bumpver 2
-%global commit e5d3e97a99dcdcd7d103ebd5987f75a6935d95a9
+%global bumpver 3
+%global commit 96da540c191f43d93a21c6ed63763c562a4e5502
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 
 %global debug_package %{nil}
@@ -109,6 +109,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/*.desktop
 %{_datadir}/icons/hicolor/*/apps/*.png
 
 %changelog
+* Tue Nov 17 2026 Lachlan Marie <lchlnm@pm.me> - 2.11.2^3.git.96da540-3
+- Update to commit 96da540c191f43d93a21c6ed63763c562a4e5502
+
 * Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 2.11.2^2.git.e5d3e97-3
 - Avoid trim_prefix/trim_suffix (rust 1.100)
 
