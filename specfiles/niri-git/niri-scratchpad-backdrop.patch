@@ -32,7 +32,7 @@ index 09d4036..e5247c9 100644
              },
              prefer_no_csd: true,
 diff --git a/src/input/mod.rs b/src/input/mod.rs
-index db1d9e4..2872d1c 100644
+index db1d9e4..c22247d 100644
 --- a/src/input/mod.rs
 +++ b/src/input/mod.rs
 @@ -3290,6 +3290,21 @@ impl State {
@@ -45,8 +45,8 @@ index db1d9e4..2872d1c 100644
 +                && !self.niri.screenshot_ui.is_open()
 +                && !self.niri.exit_confirm_dialog.is_open()
 +            {
-+                let under = self.niri.window_under_cursor();
-+                if let Some(id) = self.niri.layout.scratchpad_hidden_by_click(under) {
++                let under = self.niri.window_under_cursor().map(|m| &m.window);
++                if let Some(id) = self.niri.layout.scratchpad_outside(under) {
 +                    self.niri.layout.toggle_scratchpad(Some(&id));
 +                    self.niri.suppressed_buttons.insert(button_code);
 +                    self.niri.queue_redraw_all();
@@ -58,7 +58,7 @@ index db1d9e4..2872d1c 100644
                  if let Some((output, ws)) = self.niri.workspace_under_cursor(true) {
                      let ws_id = ws.id();
 diff --git a/src/layout/floating.rs b/src/layout/floating.rs
-index 1baa972..b0e6c91 100644
+index 1baa972..848a663 100644
 --- a/src/layout/floating.rs
 +++ b/src/layout/floating.rs
 @@ -3,9 +3,10 @@ use std::iter::zip;
@@ -142,7 +142,7 @@ index 1baa972..b0e6c91 100644
                  push(elem.into())
              });
 +
-+            if focus_ring && tile.is_scratchpad && layer.is_normal() {
++            if tile.is_scratchpad && layer.is_normal() {
 +                let elem = SolidColorRenderElement::from_buffer(
 +                    &self.scratchpad_dim,
 +                    view_rect.loc,
@@ -166,23 +166,31 @@ index 1baa972..b0e6c91 100644
      }
  
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index 5430773..53cc250 100644
+index 5430773..8d755d0 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
-@@ -3522,6 +3522,21 @@ impl<W: LayoutElement> Layout<W> {
+@@ -3522,6 +3522,29 @@ impl<W: LayoutElement> Layout<W> {
              .collect()
      }
  
-+    pub fn scratchpad_hidden_by_click(&self, clicked: Option<&W>) -> Option<W::Id> {
-+        let ws = self.active_workspace()?;
-+        if !ws.options.layout.scratchpad.hide_on_click_outside {
++    pub fn scratchpad_outside(&self, target: Option<&W::Id>) -> Option<W::Id> {
++        let MonitorSet::Normal { monitors, .. } = &self.monitor_set else {
 +            return None;
-+        }
-+        let sp = self.focus()?;
-+        if !ws.tiles().any(|t| t.is_scratchpad && t.window().id() == sp.id())
-+            || !ws.is_floating(sp.id())
-+            || clicked.is_some_and(|w| w.id() == sp.id() || w.is_child_of(sp))
-+        {
++        };
++        let sp = monitors
++            .iter()
++            .map(|mon| mon.active_workspace_ref())
++            .filter(|ws| {
++                ws.is_floating_visible() && ws.options.layout.scratchpad.hide_on_click_outside
++            })
++            .flat_map(|ws| {
++                ws.tiles()
++                    .filter(move |t| t.is_scratchpad && ws.is_floating(t.window().id()))
++            })
++            .map(Tile::window)
++            .next()?;
++        let target = target.and_then(|id| self.windows().find(|(_, w)| w.id() == id));
++        if target.is_some_and(|(_, w)| w.id() == sp.id() || w.is_child_of(sp)) {
 +            return None;
 +        }
 +        Some(sp.id().clone())
@@ -192,10 +200,10 @@ index 5430773..53cc250 100644
          let Some(active_ws) = self.active_workspace() else {
              return;
 diff --git a/src/layout/tests.rs b/src/layout/tests.rs
-index b13c879..35871e2 100644
+index b13c879..92a6b5b 100644
 --- a/src/layout/tests.rs
 +++ b/src/layout/tests.rs
-@@ -3331,6 +3331,32 @@ fn scratchpad_shows_one_at_a_time() {
+@@ -3331,6 +3331,33 @@ fn scratchpad_shows_one_at_a_time() {
      layout.verify_invariants();
  }
  
@@ -213,18 +221,35 @@ index b13c879..35871e2 100644
 +    ];
 +    let mut layout = check_ops(ops);
 +    layout.toggle_scratchpad(None);
-+    assert_eq!(layout.scratchpad_hidden_by_click(None), None);
++    assert_eq!(layout.scratchpad_outside(None), None);
 +
 +    let mut options = Options::default();
 +    options.layout.scratchpad.hide_on_click_outside = true;
 +    layout.update_options(options);
-+    let sp = layout.focus().unwrap().clone();
-+    let other = layout.windows().find(|(_, w)| w.id() == &1).unwrap().1.clone();
-+    assert_eq!(layout.scratchpad_hidden_by_click(Some(&sp)), None);
-+    assert_eq!(layout.scratchpad_hidden_by_click(Some(&other)), Some(2));
-+    assert_eq!(layout.scratchpad_hidden_by_click(None), Some(2));
++    assert_eq!(layout.scratchpad_outside(Some(&2)), None);
++    assert_eq!(layout.scratchpad_outside(Some(&1)), Some(2));
++    assert_eq!(layout.scratchpad_outside(None), Some(2));
++
++    layout.activate_window(&1);
++    assert_eq!(layout.scratchpad_outside(Some(&1)), Some(2));
 +}
 +
  #[test]
  fn scratchpad_hide_on_workspace_switch() {
      let ops = [
+diff --git a/src/niri.rs b/src/niri.rs
+index fabcc1f..7d9ab77 100644
+--- a/src/niri.rs
++++ b/src/niri.rs
+@@ -7561,6 +7561,11 @@ impl Niri {
+             return;
+         }
+ 
++        let target = new_focus.window.as_ref().map(|(w, _)| w);
++        if self.layout.scratchpad_outside(target).is_some() {
++            return;
++        }
++
+         // Recompute the current pointer focus because we don't update it during animations.
+         let current_focus = self.contents_under(pointer.current_location());
+ 

@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        40%{?dist}
+Release:        41%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -186,6 +186,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Tue Nov 17 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^19.git.689c1e91-41
+- Scratchpad backdrop and click-outside work with focus-follows-mouse
+
 * Tue Nov 17 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^19.git.689c1e91-40
 - Update smithay to 33323a917af13676875c27fb7748ffdaea5f4c2f
 
