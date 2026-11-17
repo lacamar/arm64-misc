@@ -24,11 +24,11 @@
 # Convince rust-srpm-macros to use Cargo.lock with the Smithay commit.
 %global __cargo_common_opts %{?_smp_mflags} -Z avoid-dev-deps --locked
 
-%global bumpver 18
+%global bumpver 19
 %global tag 26.04
 %global commit 689c1e914a5af782a476e433b79c15554bf5a312
 %global shortcommit %{sub %{commit} 1 8}
-%global smithay_commit fd8e3f50f9556aa6c0485989d1d49ff2c5eefae1
+%global smithay_commit 33323a917af13676875c27fb7748ffdaea5f4c2f
 
 Name:           niri
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
@@ -186,6 +186,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Tue Nov 17 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^19.git.689c1e91-40
+- Update smithay to 33323a917af13676875c27fb7748ffdaea5f4c2f
+
 * Tue Nov 17 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^18.git.689c1e91-40
 - Add scratchpad backdrop-dim, backdrop-blur, hide-on-click-outside
 
