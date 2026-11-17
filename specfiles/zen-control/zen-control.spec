@@ -9,12 +9,13 @@
 
 Name:           zen-control
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        21%{?dist}
+Release:        22%{?dist}
 Summary:        MCP bridge and WebExtension to drive the Zen browser from Claude Code
 
 License:        LicenseRef-Not-specified
 URL:            https://github.com/zjones2142/zen-control
 Source0:        %{url}/archive/%{commit}/%{name}-%{shortcommit}.tar.gz
+Source1:        zen-control.service
 
 Patch0:         0001-chrome-parity-tools.patch
 Patch1:         0002-controlled-tab-marker.patch
@@ -31,10 +32,12 @@ Patch11:        0012-screenshot-annotate-fullpage.patch
 Patch12:        0013-screenshot-path-wait-gone.patch
 Patch13:        0014-network-bodies.patch
 Patch14:        0015-background-tabs-stay-visible.patch
+Patch15:        0016-daemon-bridge.patch
 
 BuildArch:      noarch
 
 BuildRequires:  nodejs-npm
+BuildRequires:  systemd-rpm-macros
 Requires:       nodejs >= 18
 Requires:       zen-browser
 
@@ -93,17 +96,24 @@ cat > %{buildroot}%{_bindir}/%{name} <<'EOS'
 exec /usr/bin/node %{_prefix}/lib/%{name}/server/index.js "$@"
 EOS
 chmod 0755 %{buildroot}%{_bindir}/%{name}
+install -Dpm0644 %{SOURCE1} %{buildroot}%{_userunitdir}/%{name}.service
 
 %files
 %doc README.md
 %{_bindir}/%{name}
 %{_prefix}/lib/%{name}
+%{_userunitdir}/%{name}.service
 %{_datadir}/%{name}
 %dir %{_sysconfdir}/zen
 %dir %{_sysconfdir}/zen/policies
 %config(noreplace) %{_sysconfdir}/zen/policies/policies.json
 
 %changelog
+* Tue Nov 17 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-22
+- Run bridge as a systemd --user daemon; MCP sessions only proxy
+- Fix re-election deadlock when a wedged owner keeps the port
+- Daemon reclaims the port on restart; relay backpressure guard
+
 * Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-21
 - Normalize spec for mx-rpm -U
 

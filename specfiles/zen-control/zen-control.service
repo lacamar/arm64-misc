@@ -1,0 +1,13 @@
+[Unit]
+Description=Zen Control bridge daemon (owns ws://127.0.0.1:17373 for Claude Code)
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node /usr/lib/zen-control/server/index.js --daemon
+Restart=always
+RestartSec=1
+MemoryMax=1G
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,110 @@
+--- a/server/index.js
++++ b/server/index.js
+@@ -14,6 +14,7 @@
+ import { fileURLToPath } from "node:url";
+ import { homedir } from "node:os";
+ import { basename, extname, resolve } from "node:path";
++import { execFile } from "node:child_process";
+ 
+ const PORT = Number(process.env.ZEN_CONTROL_PORT || 17373);
+ const HOST = "127.0.0.1";
+@@ -24,6 +25,11 @@
+ const FOLDER = `Claude · ${basename(process.cwd()) || "/"}`;
+ const SELF = fileURLToPath(import.meta.url), BUILT = statSync(SELF).mtimeMs;
+ 
++const DAEMON = process.argv.includes("--daemon");
++// A systemd --user daemon owns the port when the unit is installed; MCP processes then only ever proxy.
++const MANAGED = (() => { try { return statSync("/usr/lib/systemd/user/zen-control.service").isFile(); } catch { return false; } })();
++const MAX_BUFFER = 64 * 1024 * 1024; // drop a stuck relay peer rather than buffer a heavy page forever
++
+ /* ---------- transport to the extension (owner or proxy) ---------- */
+ 
+ let ext = null;          // extension socket (when we own the port)
+@@ -57,12 +63,21 @@
+   });
+ }
+ 
++function relay(sock, data) {
++  if (!sock || sock.readyState !== WebSocket.OPEN) return;
++  if (sock.bufferedAmount > MAX_BUFFER) { sock.close(); return; } // stuck peer: drop it, it reconnects
++  sock.send(data);
++}
++
+ function startOwner() {
+   const wss = new WebSocketServer({ host: HOST, port: PORT });
+   wss.on("listening", () => { mode = "owner"; log(`listening on ws://${HOST}:${PORT}`); });
+   wss.on("error", (e) => {
+-    if (e.code === "EADDRINUSE") { wss.close(); startProxy(); }
+-    else log("ws server error", e);
++    if (e.code !== "EADDRINUSE") return log("ws server error", e);
++    wss.close();
++    // A stale owner (e.g. a wedged session) may still hold the port; as the daemon we wait and reclaim it.
++    if (DAEMON) return void setTimeout(startOwner, 1000);
++    startProxy();
+   });
+   wss.on("connection", (sock, req) => {
+     const path = (req.url || "/").split("?")[0];
+@@ -75,7 +90,7 @@
+         if (msg.type !== "result") return;
+         // route: our own request, or one from a ctl client (id prefixed with its pid)
+         if (pending.has(msg.id)) return settle(msg);
+-        for (const c of ctlClients) if (c.ids.has(msg.id)) { c.ids.delete(msg.id); c.sock.send(JSON.stringify(msg)); return; }
++        for (const c of ctlClients) if (c.ids.has(msg.id)) { c.ids.delete(msg.id); relay(c.sock, JSON.stringify(msg)); return; }
+       });
+       sock.on("close", () => { if (ext === sock) { ext = null; log("extension disconnected"); } for (const p of pending.values()) { clearTimeout(p.timer); p.reject(new Error("Extension disconnected")); } pending.clear(); });
+     } else if (path === "/ctl") {
+@@ -86,7 +101,7 @@
+         if (msg.type !== "cmd") return;
+         if (!ext || ext.readyState !== WebSocket.OPEN) return sock.send(JSON.stringify({ type: "result", id: msg.id, ok: false, error: "The Zen Control extension is not connected. Make sure Zen is running with the extension installed." }));
+         c.ids.add(msg.id);
+-        ext.send(JSON.stringify(msg));
++        relay(ext, JSON.stringify(msg));
+       });
+       sock.on("close", () => ctlClients.delete(c));
+     } else {
+@@ -97,20 +112,25 @@
+ 
+ function startProxy() {
+   mode = "proxy";
+-  const sock = new WebSocket(`ws://${HOST}:${PORT}/ctl`);
+-  sock.on("open", () => { upstream = sock; log("proxying through existing bridge"); });
++  // handshakeTimeout: a wedged owner holds the port but never accepts; fail fast instead of hanging forever.
++  const sock = new WebSocket(`ws://${HOST}:${PORT}/ctl`, { handshakeTimeout: 4000 });
++  sock.on("open", () => { upstream = sock; log("proxying through bridge"); });
+   sock.on("message", (data) => { let msg; try { msg = JSON.parse(data); } catch { return; } if (msg.type === "result") settle(msg); });
+   const retry = () => {
+     if (upstream === sock) upstream = null;
+     for (const p of pending.values()) { clearTimeout(p.timer); p.reject(new Error("Bridge connection lost")); }
+     pending.clear();
+-    setTimeout(startOwner, 500); // owner may have exited: try to take over the port
++    setTimeout(connectBridge, 500);
+   };
+   sock.on("close", retry);
+   sock.on("error", () => { /* close follows */ });
+ }
+ 
+-startOwner();
++function connectBridge() {
++  // With the systemd daemon installed, always proxy to it and start it on demand; never own the port.
++  if (MANAGED) execFile("systemctl", ["--user", "start", "zen-control.service"], () => startProxy());
++  else startOwner(); // legacy in-process election when no daemon is installed
++}
+ 
+ /* ---------- helpers ---------- */
+ 
+@@ -267,6 +287,12 @@
+   catch (e) { return text({ connected: false, mode, error: e.message }); }
+ });
+ 
+-const transport = new StdioServerTransport();
+-await server.connect(transport);
+-log("MCP server ready");
++if (DAEMON) {
++  startOwner();
++  log(`daemon owning ws://${HOST}:${PORT}`);
++} else {
++  connectBridge();
++  const transport = new StdioServerTransport();
++  await server.connect(transport);
++  log("MCP server ready");
++}
