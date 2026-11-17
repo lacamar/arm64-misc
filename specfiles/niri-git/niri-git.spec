@@ -24,11 +24,11 @@
 # Convince rust-srpm-macros to use Cargo.lock with the Smithay commit.
 %global __cargo_common_opts %{?_smp_mflags} -Z avoid-dev-deps --locked
 
-%global bumpver 19
+%global bumpver 20
 %global tag 26.04
 %global commit 689c1e914a5af782a476e433b79c15554bf5a312
 %global shortcommit %{sub %{commit} 1 8}
-%global smithay_commit 33323a917af13676875c27fb7748ffdaea5f4c2f
+%global smithay_commit 7ff0ede4df2af1ce3500da9ef1ee190d48b49103
 
 Name:           niri
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
@@ -186,6 +186,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Wed Nov 18 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^20.git.689c1e91-41
+- Update smithay to 7ff0ede4df2af1ce3500da9ef1ee190d48b49103
+
 * Tue Nov 17 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^19.git.689c1e91-41
 - Scratchpad backdrop and click-outside work with focus-follows-mouse
 
