@@ -1,7 +1,7 @@
-%global bumpver 25
+%global bumpver 26
 
 %global tag 0.0.43
-%global commit fb6737b1c8306ceeccb53b7fa051acfc9e641cd7
+%global commit 0ebb63697666a54b44a4de69ef222c4ecee0001a
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 
 Name:       rpcs3-git
@@ -18,7 +18,7 @@ Source0:  https://github.com/RPCS3/rpcs3/archive/%{commit}/rpcs3-%{shortcommit}.
 
 %{lua:
 local externals = {
- { name="7zip", ref="b88c6bc", owner="ip7z", path="7zip/7zip", version="26.02",  license="GNU-LGPL" },
+ { name="7zip", ref="d3296e3", owner="ip7z", path="7zip/7zip", version="26.02",  license="GNU-LGPL" },
  { name="FAudio", ref="0c42375", owner="FNA-XNA", path="FAudio", version="26.08",  license="zlib" },
  { name="VulkanMemoryAllocator", ref="0f1a757", owner="GPUOpen-LibrariesAndSDKs", path="GPUOpen/VulkanMemoryAllocator", version="3.3.0",  license="MIT" },
  { name="openal-soft", ref="96c394c", owner="kcat", path="OpenAL/openal-soft", version="1.25.2",  license="PFFFT" },
@@ -163,6 +163,9 @@ cmake -B build -G Ninja \
 
 
 %changelog
+* Wed Nov 18 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.43^26.git.0ebb636-1
+- Update to commit 0ebb63697666a54b44a4de69ef222c4ecee0001a
+
 * Tue Nov 17 2026 Lachlan Marie <lchlnm@pm.me> - 0.0.43^25.git.fb6737b-1
 - Update to commit fb6737b1c8306ceeccb53b7fa051acfc9e641cd7
 
