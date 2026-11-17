@@ -1,6 +1,6 @@
 %global tag 0.3.9
-%global bumpver 2
-%global commit 4cd2a71fa15ae214a03925beafa59c7228ec81d3
+%global bumpver 3
+%global commit 4172dfe7ab66cefb22218cc0da92b23c0342fa98
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 
 %global toolchain clang
@@ -72,6 +72,9 @@ echo v%{tag} > %{buildroot}%{_libdir}/%{name}/VERSION
 %{_libdir}/%{name}
 
 %changelog
+* Tue Nov 17 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.9^3.git.4172dfe-1
+- Update to commit 4172dfe7ab66cefb22218cc0da92b23c0342fa98
+
 * Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.9^2.git.4cd2a71-1
 - Normalize spec for mx-rpm -U
 
