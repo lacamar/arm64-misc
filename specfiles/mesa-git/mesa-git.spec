@@ -92,9 +92,9 @@
 
 Name:           mesa
 Summary:        Mesa graphics libraries
-%global commit 6c09d07c567eb8c9624b4026e49d09fd83166ae0
+%global commit 93f80e5145775753ed2589379add4eeb48b377fe
 %global shortcommit %{sub %{commit} 1 8}
-%global bumpver 3
+%global bumpver 4
 %global ver 27.0.0
 Version:        %{ver}~%{bumpver}.git.%{shortcommit}
 Release:        5%{?dist}
@@ -784,6 +784,9 @@ ln -s libGLX_mesa.so.0 %{buildroot}%{_libdir}/libGLX_system.so.0
 %endif
 
 %changelog
+* Tue Nov 17 2026 Lachlan Marie <lchlnm@pm.me> - 27.0.0~4.git.93f80e51-5
+- Update to commit 93f80e5145775753ed2589379add4eeb48b377fe
+
 * Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 27.0.0~3.git.6c09d07c-5
 - Drop bundled wayland-protocols files from buildroot
 
