@@ -2,12 +2,12 @@
 # doesn't include submodule content, so they're pulled in as separate
 # sources pinned to the exact commit iDescriptor v%{version} points at
 # (see .gitmodules and `git ls-tree v%{version} -- lib`).
-%global idevice_commit b3263ba99bbd5eb750cfa9ce20557c0986e38e37
+%global idevice_commit 20f2a0676cf63bd6449404c769c4841ece16c110
 %global uxplay_commit  eaca2458946d8a283df3b872f25c6b7cc98be411
 
 Name:           idescriptor
 Version:        0.6.2
-Release:        3%{?dist}
+Release:        4%{?dist}
 Summary:        Cross-platform tool for managing iDevices (iPhone, iPad, iPod)
 
 License:        AGPL-3.0-or-later
@@ -108,6 +108,9 @@ udevadm control --reload-rules >/dev/null 2>&1 || :
 %{_udevrulesdir}/99-idevice.rules
 
 %changelog
+* Wed Nov 18 2026 Lachlan Marie <lchlnm@pm.me> - 0.6.2-4
+- Update idevice to 20f2a0676cf63bd6449404c769c4841ece16c110
+
 * Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 0.6.2-3
 - Update idevice to b3263ba99bbd5eb750cfa9ce20557c0986e38e37
 
