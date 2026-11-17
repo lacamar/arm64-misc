@@ -4,8 +4,9 @@
 %global bumpver 1
 
 Name:           python-findmy
+Epoch:          1
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Apple Find My library
 
 License:        MIT
@@ -28,6 +29,7 @@ Summary:        %{summary}
 %prep
 %autosetup -n FindMy.py-%{commit}
 sed -i 's/^requires-python = .*/requires-python = ">=3.10"/' pyproject.toml
+sed -i 's/"bleak>=3.0.2,<3.1.0"/"bleak>=3.0.2"/' pyproject.toml
 
 %generate_buildrequires
 %pyproject_buildrequires
@@ -45,6 +47,10 @@ sed -i 's/^requires-python = .*/requires-python = ">=3.10"/' pyproject.toml
 %files -n python3-findmy -f %{pyproject_files}
 
 %changelog
+* Tue Nov 17 2026 Lachlan Marie <lchlnm@pm.me> - 1:0.10.2^1.git.f2d24c8-2
+- Drop bleak upper bound
+- Add Epoch to supersede date snapshots
+
 * Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0.10.2^1.git.f2d24c8-1
 - Replace date snapshot with bumpver
 
