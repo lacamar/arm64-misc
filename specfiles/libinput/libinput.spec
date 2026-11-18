@@ -2,7 +2,7 @@
 
 Name:           libinput
 Version:        1.32.0
-Release:        6%{?dist}
+Release:        7%{?dist}
 Summary:        Input device library
 
 # SPDX
@@ -12,6 +12,7 @@ Source0:        https://gitlab.freedesktop.org/libinput/libinput/-/archive/%{ver
 
 Patch0:         enable_apple_edge_palm_detection.patch
 Patch1:         libinput-force-click.patch
+Patch2:         libinput-tap-pressure.patch
 
 BuildRequires:  git-core
 BuildRequires:  gcc
@@ -102,6 +103,10 @@ rm %{buildroot}{%{_libexecdir}/libinput/libinput-test,%{_mandir}/man1/libinput-t
 
 
 %changelog
+* Wed Nov 18 2026 Lachlan Marie <lchlnm@pm.me> - 1.32.0-7
+- Tap needs minimum touch pressure (AttrTapPressureThreshold)
+- Apple MTP tap pressure threshold 50
+
 * Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 1.32.0-6
 - Normalize spec for mx-rpm -U
 

@@ -1,0 +1,164 @@
+diff --git doc/user/device-quirks.rst doc/user/device-quirks.rst
+index b026ad3..e1b1eea 100644
+--- doc/user/device-quirks.rst
++++ doc/user/device-quirks.rst
+@@ -186,6 +186,8 @@ AttrPressureRange=N:M, AttrPalmPressureThreshold=O, AttrThumbPressureThreshold=P
+ AttrForceClickPressureThreshold=N
+     Pressure at which a physical click on a pressure-reporting touchpad also
+     sends a BTN_TASK press; released below 75% of N or on button release.
++AttrTapPressureThreshold=N
++    Minimum peak ABS_MT_PRESSURE of a touch for it to count as a tap.
+ AttrLidSwitchReliability=reliable|unreliable|write_open
+     Indicates the reliability of the lid switch. This is a string enum.
+     Very few devices need this, if in doubt do not set. See :ref:`switches_lid`
+diff --git quirks/50-system-apple.quirks quirks/50-system-apple.quirks
+index 5142c59..a244119 100644
+--- quirks/50-system-apple.quirks
++++ quirks/50-system-apple.quirks
+@@ -141,6 +141,7 @@ AttrTouchSizeRange=150:130
+ AttrPalmSizeThreshold=1600
+ AttrPalmPressureThreshold=0
+ AttrForceClickPressureThreshold=270
++AttrTapPressureThreshold=50
+ 
+ [Apple Laptop Keyboard (MTP)]
+ MatchUdevType=keyboard
+diff --git src/evdev-mt-touchpad-tap.c src/evdev-mt-touchpad-tap.c
+index 565f291..20348ad 100644
+--- src/evdev-mt-touchpad-tap.c
++++ src/evdev-mt-touchpad-tap.c
+@@ -1216,6 +1216,21 @@ tp_tap_enabled(struct tp_dispatch *tp)
+ 	return tp->tap.enabled && !tp->tap.suspended;
+ }
+ 
++static void
++tp_tap_cancel_touches(struct tp_dispatch *tp, struct tp_touch *t, usec_t time)
++{
++	struct tp_touch *tmp;
++
++	/* Any touch exceeding the threshold turns all
++	 * touches into DEAD */
++	tp_for_each_touch(tp, tmp) {
++		if (tmp->tap.state == TAP_TOUCH_STATE_TOUCH)
++			tmp->tap.state = TAP_TOUCH_STATE_DEAD;
++	}
++
++	tp_tap_handle_event(tp, t, TAP_EVENT_MOTION, time);
++}
++
+ int
+ tp_tap_handle_state(struct tp_dispatch *tp, usec_t time)
+ {
+@@ -1256,6 +1271,10 @@ tp_tap_handle_state(struct tp_dispatch *tp, usec_t time)
+ 		if (t->state == TOUCH_HOVERING)
+ 			continue;
+ 
++		if (t->state == TOUCH_BEGIN)
++			t->tap.max_pressure = 0;
++		t->tap.max_pressure = max(t->tap.max_pressure, t->pressure);
++
+ 		if (t->palm.state != PALM_NONE) {
+ 			assert(!t->tap.is_palm);
+ 			t->tap.is_palm = true;
+@@ -1280,6 +1299,11 @@ tp_tap_handle_state(struct tp_dispatch *tp, usec_t time)
+ 			tp_tap_handle_event(tp, t, TAP_EVENT_TOUCH, time);
+ 		} else if (t->state == TOUCH_END) {
+ 			if (t->was_down) {
++				/* too light to be a tap: cancel it like motion */
++				if (tp->tap.state != TAP_STATE_IDLE &&
++				    t->tap.state == TAP_TOUCH_STATE_TOUCH &&
++				    t->tap.max_pressure < (int)tp->tap.pressure_threshold)
++					tp_tap_cancel_touches(tp, t, time);
+ 				assert(tp->tap.nfingers_down >= 1);
+ 				tp->tap.nfingers_down--;
+ 				tp_tap_handle_event(tp, t, TAP_EVENT_RELEASE, time);
+@@ -1289,16 +1313,7 @@ tp_tap_handle_state(struct tp_dispatch *tp, usec_t time)
+ 			tp_tap_handle_event(tp, t, TAP_EVENT_THUMB, time);
+ 		} else if (tp->tap.state != TAP_STATE_IDLE &&
+ 			   tp_tap_exceeds_motion_threshold(tp, t)) {
+-			struct tp_touch *tmp;
+-
+-			/* Any touch exceeding the threshold turns all
+-			 * touches into DEAD */
+-			tp_for_each_touch(tp, tmp) {
+-				if (tmp->tap.state == TAP_TOUCH_STATE_TOUCH)
+-					tmp->tap.state = TAP_TOUCH_STATE_DEAD;
+-			}
+-
+-			tp_tap_handle_event(tp, t, TAP_EVENT_MOTION, time);
++			tp_tap_cancel_touches(tp, t, time);
+ 		}
+ 	}
+ 
+@@ -1591,6 +1606,12 @@ tp_init_tap(struct tp_dispatch *tp)
+ 
+ 	struct evdev_device *device = tp->device;
+ 
++	_unref_(quirks) *q = libinput_device_get_quirks(&device->base);
++	if (q && libevdev_has_event_code(device->evdev, EV_ABS, ABS_MT_PRESSURE))
++		quirks_get_uint32(q,
++				  QUIRK_ATTR_TAP_PRESSURE_THRESHOLD,
++				  &tp->tap.pressure_threshold);
++
+ 	const struct input_absinfo *absx = device->abs.absinfo_x;
+ 	const struct input_absinfo *absy = device->abs.absinfo_y;
+ 	assert(absx && absy);
+diff --git src/evdev-mt-touchpad.h src/evdev-mt-touchpad.h
+index fdd9795..7810cd5 100644
+--- src/evdev-mt-touchpad.h
++++ src/evdev-mt-touchpad.h
+@@ -262,6 +262,7 @@ struct tp_touch {
+ 		struct device_coords initial;
+ 		bool is_thumb;
+ 		bool is_palm;
++		int max_pressure;
+ 	} tap;
+ 
+ 	struct {
+@@ -467,6 +468,7 @@ struct tp_dispatch {
+ 	struct {
+ 		struct libinput_device_config_tap config;
+ 		bool enabled;
++		uint32_t pressure_threshold;
+ 		bool suspended;
+ 		struct libinput_timer timer;
+ 		enum tp_tap_state state;
+diff --git src/quirks.c src/quirks.c
+index 4f9f90f..d23056d 100644
+--- src/quirks.c
++++ src/quirks.c
+@@ -319,6 +319,8 @@ quirk_get_name(enum quirk q)
+ 		return "AttrPalmPressureThreshold";
+ 	case QUIRK_ATTR_FORCE_CLICK_PRESSURE_THRESHOLD:
+ 		return "AttrForceClickPressureThreshold";
++	case QUIRK_ATTR_TAP_PRESSURE_THRESHOLD:
++		return "AttrTapPressureThreshold";
+ 	case QUIRK_ATTR_RESOLUTION_HINT:
+ 		return "AttrResolutionHint";
+ 	case QUIRK_ATTR_TRACKPOINT_MULTIPLIER:
+@@ -864,6 +866,13 @@ parse_attr(struct quirks_context *ctx,
+ 		p->type = PT_UINT;
+ 		p->value.u = v;
+ 		rc = true;
++	} else if (streq(key, quirk_get_name(QUIRK_ATTR_TAP_PRESSURE_THRESHOLD))) {
++		p->id = QUIRK_ATTR_TAP_PRESSURE_THRESHOLD;
++		if (!safe_atou(value, &v))
++			goto out;
++		p->type = PT_UINT;
++		p->value.u = v;
++		rc = true;
+ 	} else if (streq(key, quirk_get_name(QUIRK_ATTR_RESOLUTION_HINT))) {
+ 		p->id = QUIRK_ATTR_RESOLUTION_HINT;
+ 		if (!parse_dimension_property(value, &dim.x, &dim.y))
+diff --git src/quirks.h src/quirks.h
+index fb2dd90..3ebce8c 100644
+--- src/quirks.h
++++ src/quirks.h
+@@ -101,6 +101,7 @@ enum quirk {
+ 	QUIRK_ATTR_SIZE_HINT = 300,
+ 	QUIRK_ATTR_EVENT_CODE,
+ 	QUIRK_ATTR_FORCE_CLICK_PRESSURE_THRESHOLD,
++	QUIRK_ATTR_TAP_PRESSURE_THRESHOLD,
+ 	QUIRK_ATTR_INPUT_PROP,
+ 	QUIRK_ATTR_IS_VIRTUAL,
+ 	QUIRK_ATTR_KEYBOARD_INTEGRATION,
