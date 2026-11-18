@@ -16,7 +16,7 @@ Name:           llama-cpp
 # This is the main license
 
 License:        MIT AND Apache-2.0 AND LicenseRef-Fedora-Public-Domain
-Version:        b12452
+Version:        b12491
 Release:        %autorelease
 
 URL:            https://github.com/ggerganov/llama.cpp
@@ -169,6 +169,9 @@ rm -f %{buildroot}/usr/lib64/libllama-*-impl.so-*.debug
 %{_libdir}/pkgconfig/llama.pc
 
 %changelog
+* Wed Nov 18 2026 Lachlan Marie <lchlnm@pm.me> - b12491-1
+- Update to b12491
+
 * Tue Nov 17 2026 Lachlan Marie <lchlnm@pm.me> - b12452-1
 - Update to b12452
 
