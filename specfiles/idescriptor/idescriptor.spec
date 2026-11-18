@@ -1,20 +1,22 @@
-# lib/idevice-rs and lib/uxplay are git submodules; GitHub's tag archive
-# doesn't include submodule content, so they're pulled in as separate
-# sources pinned to the exact commit iDescriptor v%{version} points at
-# (see .gitmodules and `git ls-tree v%{version} -- lib`).
-%global idevice_commit 20f2a0676cf63bd6449404c769c4841ece16c110
-%global uxplay_commit  eaca2458946d8a283df3b872f25c6b7cc98be411
+# lib/idevice-rs and lib/uxplay are git submodules missing from GitHub's tag
+# archive; mx-rpm -U re-pins these refs to the gitlinks of the new tag.
+%{lua:
+for _, s in ipairs({
+  { name="idevice", ref="ef0c66073e79f513a9e5a541d5fa3682b45d8c5f", owner="uncor3" },
+  { name="uxplay", ref="eaca2458946d8a283df3b872f25c6b7cc98be411", owner="iDescriptor" },
+}) do rpm.define(s.name .. "_ref " .. s.ref) end
+}
 
 Name:           idescriptor
 Version:        0.6.2
-Release:        4%{?dist}
+Release:        5%{?dist}
 Summary:        Cross-platform tool for managing iDevices (iPhone, iPad, iPod)
 
 License:        AGPL-3.0-or-later
 URL:            https://github.com/iDescriptor/iDescriptor
 Source0:        %{url}/archive/refs/tags/v%{version}/iDescriptor-%{version}.tar.gz
-Source1:        https://github.com/uncor3/idevice/archive/%{idevice_commit}/idevice-rs-%{idevice_commit}.tar.gz
-Source2:        https://github.com/iDescriptor/uxplay/archive/%{uxplay_commit}/uxplay-%{uxplay_commit}.tar.gz
+Source1:        https://github.com/uncor3/idevice/archive/%{idevice_ref}/idevice-rs-%{idevice_ref}.tar.gz
+Source2:        https://github.com/iDescriptor/uxplay/archive/%{uxplay_ref}/uxplay-%{uxplay_ref}.tar.gz
 
 BuildRequires:  cargo
 BuildRequires:  anda-srpm-macros
@@ -108,6 +110,10 @@ udevadm control --reload-rules >/dev/null 2>&1 || :
 %{_udevrulesdir}/99-idevice.rules
 
 %changelog
+* Wed Nov 18 2026 Lachlan Marie <lchlnm@pm.me> - 0.6.2-5
+- Pin idevice to v0.6.2 gitlink ef0c660
+- Submodule pins follow tag, not HEAD
+
 * Wed Nov 18 2026 Lachlan Marie <lchlnm@pm.me> - 0.6.2-4
 - Update idevice to 20f2a0676cf63bd6449404c769c4841ece16c110
 
