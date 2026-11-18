@@ -2,7 +2,7 @@
 
 Name:           libinput
 Version:        1.32.0
-Release:        7%{?dist}
+Release:        8%{?dist}
 Summary:        Input device library
 
 # SPDX
@@ -103,6 +103,9 @@ rm %{buildroot}{%{_libexecdir}/libinput/libinput-test,%{_mandir}/man1/libinput-t
 
 
 %changelog
+* Wed Nov 18 2026 Lachlan Marie <lchlnm@pm.me> - 1.32.0-8
+- Apple MTP tap pressure threshold 12 (light taps peak 17)
+
 * Wed Nov 18 2026 Lachlan Marie <lchlnm@pm.me> - 1.32.0-7
 - Tap needs minimum touch pressure (AttrTapPressureThreshold)
 - Apple MTP tap pressure threshold 50

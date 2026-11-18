@@ -19,7 +19,7 @@ index 5142c59..a244119 100644
  AttrPalmSizeThreshold=1600
  AttrPalmPressureThreshold=0
  AttrForceClickPressureThreshold=270
-+AttrTapPressureThreshold=50
++AttrTapPressureThreshold=12
  
  [Apple Laptop Keyboard (MTP)]
  MatchUdevType=keyboard
