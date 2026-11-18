@@ -1,0 +1,133 @@
+]2;footdiff --git a/src/input/mod.rs b/src/input/mod.rs
+index c22247d..cb5330a 100644
+--- a/src/input/mod.rs
++++ b/src/input/mod.rs
+@@ -2546,7 +2546,7 @@ impl State {
+                 self.niri.queue_redraw_all();
+             }
+             Action::MoveWindowToScratchpad => {
+-                self.niri.layout.move_window_to_scratchpad(None);
++                self.with_scratchpad_hide_animation(|l| l.move_window_to_scratchpad(None));
+                 self.maybe_warp_cursor_to_focus();
+                 // FIXME: granular
+                 self.niri.queue_redraw_all();
+@@ -2555,13 +2555,15 @@ impl State {
+                 let window = self.niri.layout.windows().find(|(_, m)| m.id().get() == id);
+                 let window = window.map(|(_, m)| m.window.clone());
+                 if let Some(window) = window {
+-                    self.niri.layout.move_window_to_scratchpad(Some(&window));
++                    self.with_scratchpad_hide_animation(|l| {
++                        l.move_window_to_scratchpad(Some(&window))
++                    });
+                     // FIXME: granular
+                     self.niri.queue_redraw_all();
+                 }
+             }
+             Action::ToggleScratchpad => {
+-                self.niri.layout.toggle_scratchpad(None);
++                self.with_scratchpad_hide_animation(|l| l.toggle_scratchpad(None));
+                 self.maybe_warp_cursor_to_focus();
+                 // FIXME: granular
+                 self.niri.queue_redraw_all();
+@@ -2573,7 +2575,7 @@ impl State {
+                     .find_window_and_output_by(|m, _| m.id().get() == id)
+                     .map(|(m, _)| m.window.clone());
+                 if let Some(window) = window {
+-                    self.niri.layout.toggle_scratchpad(Some(&window));
++                    self.with_scratchpad_hide_animation(|l| l.toggle_scratchpad(Some(&window)));
+                     self.maybe_warp_cursor_to_focus();
+                     // FIXME: granular
+                     self.niri.queue_redraw_all();
+@@ -3298,7 +3300,7 @@ impl State {
+             {
+                 let under = self.niri.window_under_cursor().map(|m| &m.window);
+                 if let Some(id) = self.niri.layout.scratchpad_outside(under) {
+-                    self.niri.layout.toggle_scratchpad(Some(&id));
++                    self.with_scratchpad_hide_animation(|l| l.toggle_scratchpad(Some(&id)));
+                     self.niri.suppressed_buttons.insert(button_code);
+                     self.niri.queue_redraw_all();
+                     return;
+diff --git a/src/layout/mod.rs b/src/layout/mod.rs
+index 8d755d0..faa8fdd 100644
+--- a/src/layout/mod.rs
++++ b/src/layout/mod.rs
+@@ -3545,6 +3545,50 @@ impl<W: LayoutElement> Layout<W> {
+         Some(sp.id().clone())
+     }
+ 
++    pub fn scratchpads_on_screen(
++        &self,
++    ) -> Vec<(Option<Output>, WorkspaceId, W::Id, Point<f64, Logical>)> {
++        self.workspaces()
++            .filter(|(_, _, ws)| ws.is_floating_visible())
++            .flat_map(|(mon, _, ws)| {
++                let output = mon.map(|mon| mon.output().clone());
++                ws.tiles_with_render_positions()
++                    .filter(|(tile, _, _)| {
++                        tile.is_scratchpad && ws.is_floating(tile.window().id())
++                    })
++                    .map(move |(tile, pos, _)| {
++                        (output.clone(), ws.id(), tile.window().id().clone(), pos)
++                    })
++            })
++            .collect()
++    }
++
++    pub fn start_scratchpad_hide_animation(
++        &mut self,
++        renderer: &mut BaseRenderer,
++        ws_id: WorkspaceId,
++        window: &W::Id,
++        tile_pos: Point<f64, Logical>,
++    ) {
++        let Some(idx) = self.scratchpad_idx(window) else {
++            return;
++        };
++        let tile = &mut self.scratchpad[idx].tile;
++        let Some(snapshot) = tile.take_unmap_snapshot() else {
++            return;
++        };
++        let tile_size = tile.tile_size();
++        if let Some(ws) = self.workspaces_mut().find(|ws| ws.id() == ws_id) {
++            ws.start_close_animation_for_tile(
++                renderer,
++                snapshot,
++                tile_size,
++                tile_pos,
++                TransactionBlocker::completed(),
++            );
++        }
++    }
++
+     pub fn toggle_scratchpad(&mut self, window: Option<&W::Id>) {
+         let Some(active_ws) = self.active_workspace() else {
+             return;
+diff --git a/src/niri.rs b/src/niri.rs
+index 7d9ab77..14db8d6 100644
+--- a/src/niri.rs
++++ b/src/niri.rs
+@@ -2517,6 +2517,25 @@ impl State {
+         });
+     }
+ 
++    pub fn with_scratchpad_hide_animation(&mut self, f: impl FnOnce(&mut Layout<Mapped>)) {
++        let shown = self.niri.layout.scratchpads_on_screen();
++        for (output, _, window, _) in &shown {
++            self.store_unmap_snapshot(window, output.as_ref());
++        }
++        f(&mut self.niri.layout);
++        for (_, ws_id, window, pos) in shown {
++            if self.niri.layout.is_in_scratchpad(&window) {
++                self.backend.with_primary_renderer(|renderer| {
++                    self.niri
++                        .layout
++                        .start_scratchpad_hide_animation(renderer, ws_id, &window, pos);
++                });
++            } else {
++                self.niri.layout.clear_unmap_snapshot(&window);
++            }
++        }
++    }
++
+     #[cfg(not(feature = "xdp-gnome-screencast"))]
+     pub fn set_dynamic_cast_target(&mut self, _target: CastTarget) {}
