@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        42%{?dist}
+Release:        43%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -187,6 +187,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Thu Nov 19 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^20.git.689c1e91-43
+- Fix truncated scratchpad-hide-anim patch
+
 * Thu Nov 19 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^20.git.689c1e91-42
 - Animate scratchpad hide with window-close animation
 
