@@ -717,13 +717,13 @@ diff --git a/src/layout/tests.rs b/src/layout/tests.rs
 index 4b1dfce8..edd3184d 100644
 --- a/src/layout/tests.rs
 +++ b/src/layout/tests.rs
-@@ -1069,7 +1069,7 @@ impl Op {
+@@ -1115,7 +1115,7 @@ impl Op {
                  let win = TestWindow::new(params);
                  layout.add_window(
                      win,
 -                    AddWindowTarget::Workspace(ws_id),
 +                    AddWindowTarget::Workspace(ws_id, None),
-                     None,
+                     width,
                      None,
                      false,
 diff --git a/src/niri.rs b/src/niri.rs
