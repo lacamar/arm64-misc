@@ -1,7 +1,7 @@
 %global bumpver 0
 %global _name shadps4-qtlauncher
-%global tag 2026.11.06
-%global commit ecc85072dae45c05628934fdb6b3aa036e9f1d4b
+%global tag 2026.11.19
+%global commit 1c35b9b147a8e67474fba6500bdfc309bef6f8e1
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 
 %global _lto_cflags %{nil}
@@ -116,6 +116,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/net.shadps4.shadps4-q
 %{_datadir}/icons/hicolor/scalable/apps/net.shadps4.shadPS4.svg
 
 %changelog
+* Fri Nov 20 2026 Lachlan Marie <lchlnm@pm.me> - 2026.11.19^0.git.1c35b9b-1
+- Update to 2026.11.19
+
 * Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 2026.11.06^0.git.ecc8507-1
 - Normalize spec for mx-rpm -U
 
