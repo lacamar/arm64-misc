@@ -24,11 +24,11 @@
 # Convince rust-srpm-macros to use Cargo.lock with the Smithay commit.
 %global __cargo_common_opts %{?_smp_mflags} -Z avoid-dev-deps --locked
 
-%global bumpver 21
+%global bumpver 22
 %global tag 26.04
-%global commit f73c14563ba3bb29e9d6dd407116ac3df0245577
+%global commit a855fd519f7341d378577da6a7b2763baeb70f79
 %global shortcommit %{sub %{commit} 1 8}
-%global smithay_commit 7ff0ede4df2af1ce3500da9ef1ee190d48b49103
+%global smithay_commit a38bb709a0400759b6a4fab6129e0f1dd72808c3
 
 Name:           niri
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
@@ -187,6 +187,10 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Fri Nov 20 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^22.git.a855fd51-45
+- Update to commit a855fd519f7341d378577da6a7b2763baeb70f79
+- Update smithay to a38bb709a0400759b6a4fab6129e0f1dd72808c3
+
 * Fri Nov 20 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^21.git.f73c1456-45
 - Rebase move-column-by-id onto upstream focus flag
 
