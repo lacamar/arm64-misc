@@ -2,7 +2,7 @@
 %global goipath github.com/Dicklesworthstone/ntm
 
 Name:           ntm
-Version:        1.38.0
+Version:        1.38.1
 Release:        1%{?dist}
 Summary:        Named Tmux Manager for orchestrating AI coding agents
 
@@ -43,6 +43,9 @@ install -Dpm0755 %{name} %{buildroot}%{_bindir}/%{name}
 %{fish_completions_dir}/ntm.fish
 
 %changelog
+* Sat Nov 21 2026 Lachlan Marie <lchlnm@pm.me> - 1.38.1-1
+- Update to 1.38.1
+
 * Thu Nov 05 2026 Lachlan Marie <lchlnm@pm.me> - 1.38.0-1
 - Update to 1.38.0
 
