@@ -4,7 +4,7 @@
 
 Name:           ledger-live
 Version:        4.10.1
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Ledger Wallet desktop app
 
 License:        MIT
@@ -96,5 +96,8 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_udevrulesdir}/20-hw1.rules
 
 %changelog
+* Fri Nov 20 2026 lacamar <lchlnm@pm.me> - 4.10.1-2
+- Fix tarballer args (spec, source dir)
+
 * Sun Oct 18 2026 lacamar <lchlnm@pm.me> - 4.10.1-1
 - Initial package
