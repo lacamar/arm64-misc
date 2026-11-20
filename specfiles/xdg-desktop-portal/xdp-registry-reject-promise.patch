@@ -1,0 +1,13 @@
+--- a/src/registry.c	2026-11-20 17:08:37.318602558 +0100
++++ b/src/registry.c	2026-11-20 17:08:37.333220980 +0100
+@@ -128,6 +128,10 @@
+     {
+       g_debug ("Can't create registered app for %s: %s",
+                sender, error->message);
++      dex_promise_reject (app_info_promise,
++                          g_error_new_literal (G_IO_ERROR,
++                                               G_IO_ERROR_PERMISSION_DENIED,
++                                               "Failed to create app info"));
+       g_dbus_method_invocation_return_error (invocation,
+                                              XDG_DESKTOP_PORTAL_ERROR,
+                                              XDG_DESKTOP_PORTAL_ERROR_FAILED,

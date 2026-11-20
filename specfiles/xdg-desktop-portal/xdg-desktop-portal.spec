@@ -1,7 +1,7 @@
 # copr-exclude-chroots: fedora-43-aarch64
 Name:           xdg-desktop-portal
 Version:        1.22.1
-Release:        20%{?dist}
+Release:        21%{?dist}
 Summary:        Portal frontend service for Flatpak
 
 License:        LGPL-2.1-or-later
@@ -12,6 +12,7 @@ Patch0:         pr-1938.patch
 Patch1:         pr-2036.patch
 Patch2:         pr-1889.patch
 Patch3:         xdp-app-info-registry-race.patch
+Patch4:         xdp-registry-reject-promise.patch
 
 BuildRequires:  gcc
 BuildRequires:  meson >= 0.58
@@ -99,6 +100,9 @@ install -Dm644 %{SOURCE1} %{buildroot}%{_userunitdir}/%{name}.service.d/10-crede
 %{_datadir}/pkgconfig/%{name}.pc
 
 %changelog
+* Fri Nov 20 2026 Lachlan Marie <lchlnm@pm.me> - 1.22.1-21
+- Reject app info promise on failed Register (stuck authorize threads)
+
 * Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 1.22.1-20
 - Exclude f43 COPR chroot (deps unavailable)
 
