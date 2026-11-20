@@ -1,10 +1,11 @@
 %global debug_package %{nil}
 %global srcdir ledger-live--ledgerhq-live-desktop-%{version}
 %global appdir %{_libexecdir}/%{name}
+%global pnpm_version 11.23.0
 
 Name:           ledger-live
 Version:        4.10.1
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Ledger Wallet desktop app
 
 License:        MIT
@@ -13,11 +14,11 @@ Source0:        https://github.com/LedgerHQ/ledger-live/archive/refs/tags/@ledge
 Source1:        %{name}-%{version}-pnpm-store.tar.zst
 Source2:        pnpm-store-tarballer.sh
 Source3:        20-hw1.rules
+Source4:        https://registry.npmjs.org/pnpm/-/pnpm-%{pnpm_version}.tgz
 
 ExclusiveArch:  aarch64
 
 BuildRequires:  nodejs24
-BuildRequires:  pnpm
 BuildRequires:  zstd
 BuildRequires:  desktop-file-utils
 BuildRequires:  systemd-rpm-macros
@@ -29,7 +30,11 @@ Desktop companion app for Ledger hardware wallets.
 
 %prep
 %autosetup -n %{srcdir} -N -a 1
-node -e 'const p=require("./package.json");delete p.pnpm.supportedArchitectures;require("fs").writeFileSync("package.json",JSON.stringify(p,null,2)+"\n")'
+node -e 'const p=require("./package.json");if(!p.pnpm?.supportedArchitectures)process.exit();delete p.pnpm.supportedArchitectures;require("fs").writeFileSync("package.json",JSON.stringify(p,null,2)+"\n")'
+sed -i 's/"packageManager": "pnpm@[^"]*"/"packageManager": "pnpm@%{pnpm_version}"/' package.json
+sed -i '/^minimumReleaseAge:/d' pnpm-workspace.yaml
+echo "minimumReleaseAge: 0" >> pnpm-workspace.yaml
+tar xzf %{SOURCE4}
 echo '[]' > apps/ledger-live-desktop/release-notes.json
 
 %build
@@ -39,6 +44,10 @@ export NX_DAEMON=false
 export NX_NO_CLOUD=true
 export NODE_ENV=production
 export NODE_OPTIONS=--max-old-space-size=8192
+mkdir -p bin
+printf '#!/bin/sh\nexec node %s/package/bin/pnpm.mjs "$@"\n' "$PWD" > bin/pnpm
+chmod 755 bin/pnpm
+export PATH=$PWD/bin:$PATH
 pnpm install --offline --frozen-lockfile --ignore-scripts --store-dir "$PWD/pnpm-store" --filter="ledger-live-desktop..." --filter="@ledgerhq/ledger-live"
 pnpm run nx:write-cache-config
 pnpm exec nx run @ledgerhq/icons-ui:build
@@ -51,7 +60,8 @@ cd apps/ledger-live-desktop
 install -d %{buildroot}%{appdir}/node_modules/@ledgerhq/zcash-utils
 cp -r .webpack package.json %{buildroot}%{appdir}/
 find %{buildroot}%{appdir}/.webpack -name '*.map' -delete
-cp -L node_modules/@ledgerhq/zcash-utils/{package.json,index.js,index.linux-arm64-gnu.node} %{buildroot}%{appdir}/node_modules/@ledgerhq/zcash-utils/
+zcash=$(readlink -f node_modules/@ledgerhq/zcash-utils)
+cp $zcash/{package.json,index.js} $zcash/../zcash-utils-linux-arm64-gnu/index.linux-arm64-gnu.node %{buildroot}%{appdir}/node_modules/@ledgerhq/zcash-utils/
 
 install -d %{buildroot}%{_bindir}
 cat > %{buildroot}%{_bindir}/%{name} <<'SH'
@@ -64,7 +74,7 @@ SH
 chmod 755 %{buildroot}%{_bindir}/%{name}
 
 for i in 128 256 512 1024; do
-  install -Dm644 build/icons/icon@${i}x${i}.png %{buildroot}%{_datadir}/icons/hicolor/${i}x${i}/apps/%{name}.png
+  install -Dm644 build/icons/${i}x${i}.png %{buildroot}%{_datadir}/icons/hicolor/${i}x${i}/apps/%{name}.png
 done
 
 install -d %{buildroot}%{_datadir}/applications
@@ -96,6 +106,10 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_udevrulesdir}/20-hw1.rules
 
 %changelog
+* Fri Nov 20 2026 lacamar <lchlnm@pm.me> - 4.10.1-3
+- Bundle pnpm 11.23.0
+- Follow 4.29 icon names, zcash-utils layout
+
 * Fri Nov 20 2026 lacamar <lchlnm@pm.me> - 4.10.1-2
 - Fix tarballer args (spec, source dir)
 
