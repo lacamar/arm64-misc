@@ -4,7 +4,7 @@
 
 Name:           foot
 Version:        1.28.0
-Release:        39%{?dist}
+Release:        40%{?dist}
 Summary:        Fast, lightweight and minimalistic Wayland terminal emulator
 
 # Main package license: MIT
@@ -28,6 +28,7 @@ Patch6:         foot-tab-tooltips.patch
 Patch7:         foot-sidebar-clip.patch
 Patch8:         foot-close-window.patch
 Patch9:         foot-no-done-notify.patch
+Patch10:        foot-sidebar-auto-reveal.patch
 
 BuildRequires:  gcc
 BuildRequires:  gpgverify
@@ -163,6 +164,9 @@ desktop-file-validate \
 
 
 %changelog
+* Fri Nov 20 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-40
+- Reveal sidebar when second tab opens
+
 * Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 1.28.0-39
 - Drop command-finished notifications
 

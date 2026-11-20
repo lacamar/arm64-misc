@@ -1,0 +1,48 @@
+diff --git a/tabs.c b/tabs.c
+index a179c50..0c5b961 100644
+--- a/tabs.c
++++ b/tabs.c
+@@ -587,10 +587,25 @@ tabs_activate(struct wl_window *win, struct terminal *new)
+     window_chrome(win);
+ }
+ 
++static void anim_start(struct wl_window *win);
++
++static void
++reveal_on_second_tab(struct wl_window *win, int rows_before)
++{
++    if (rows_before != 1 || !win->sidebar_hidden || tabs_row_count(win) != 2)
++        return;
++    win->sidebar_hidden = false;
++    if (win->term->conf->tabs.animations) {
++        win->anim.slide = true;
++        anim_start(win);
++    }
++}
++
+ void
+ tabs_attach(struct wl_window *win, struct terminal *term,
+             struct terminal *after, bool split)
+ {
++    const int rows = tabs_row_count(win);
+     if (term->tab_created == 0)
+         term->tab_created = term->tab_last_active = tabs_now_ms();
+     struct terminal **arr;
+@@ -617,6 +632,7 @@ tabs_attach(struct wl_window *win, struct terminal *term,
+     arr[pos] = term;
+     from_arr(win, arr, n + 1);
+     pin_order(win);
++    reveal_on_second_tab(win, rows);
+     render_refresh_sidebar(win);
+ }
+ 
+@@ -1386,7 +1402,9 @@ tabs_transfer(struct terminal *t, struct wl_window *dst, bool keep_focus)
+     }
+ 
+     drop_buffers(t);
++    const int rows = tabs_row_count(dst);
+     tll_push_back(dst->tabs, t);
++    reveal_on_second_tab(dst, rows);
+     session_tab_moved(t->wl->session, t, dst);
+ }
+ 
