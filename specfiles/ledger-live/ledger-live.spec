@@ -4,8 +4,8 @@
 %global pnpm_version 11.23.0
 
 Name:           ledger-live
-Version:        4.10.1
-Release:        3%{?dist}
+Version:        4.29.0
+Release:        1%{?dist}
 Summary:        Ledger Wallet desktop app
 
 License:        MIT
@@ -106,6 +106,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_udevrulesdir}/20-hw1.rules
 
 %changelog
+* Fri Nov 20 2026 Lachlan Marie <lchlnm@pm.me> - 4.29.0-1
+- Update to 4.29.0
+
 * Fri Nov 20 2026 lacamar <lchlnm@pm.me> - 4.10.1-3
 - Bundle pnpm 11.23.0
 - Follow 4.29 icon names, zcash-utils layout
