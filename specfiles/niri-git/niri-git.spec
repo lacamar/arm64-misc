@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        44%{?dist}
+Release:        45%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -187,6 +187,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Fri Nov 20 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^21.git.f73c1456-45
+- Rebase move-column-by-id onto upstream focus flag
+
 * Thu Nov 19 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^21.git.f73c1456-44
 - Update to commit f73c14563ba3bb29e9d6dd407116ac3df0245577
 
