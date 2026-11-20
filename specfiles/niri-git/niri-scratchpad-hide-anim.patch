@@ -1,5 +1,5 @@
-]2;footdiff --git a/src/input/mod.rs b/src/input/mod.rs
-index c22247d..cb5330a 100644
+diff --git a/src/input/mod.rs b/src/input/mod.rs
+index c7d1346..23434b2 100644
 --- a/src/input/mod.rs
 +++ b/src/input/mod.rs
 @@ -2546,7 +2546,7 @@ impl State {
@@ -47,11 +47,165 @@ index c22247d..cb5330a 100644
                      self.niri.suppressed_buttons.insert(button_code);
                      self.niri.queue_redraw_all();
                      return;
+diff --git a/src/layout/floating.rs b/src/layout/floating.rs
+index 848a663..9c44655 100644
+--- a/src/layout/floating.rs
++++ b/src/layout/floating.rs
+@@ -76,6 +76,7 @@ pub struct FloatingSpace<W: LayoutElement> {
+ 
+     scratchpad_dim: SolidColorBuffer,
+     scratchpad_blur: BackgroundEffect,
++    scratchpad_backdrop_anim: Option<Animation>,
+ }
+ 
+ niri_render_elements! {
+@@ -231,6 +232,7 @@ impl<W: LayoutElement> FloatingSpace<W> {
+             options,
+             scratchpad_dim: SolidColorBuffer::new((0., 0.), [0., 0., 0., 0.]),
+             scratchpad_blur: BackgroundEffect::new(),
++            scratchpad_backdrop_anim: None,
+         }
+     }
+ 
+@@ -268,10 +270,39 @@ impl<W: LayoutElement> FloatingSpace<W> {
+             closing.advance_animations();
+             closing.are_animations_ongoing()
+         });
++
++        if self
++            .scratchpad_backdrop_anim
++            .as_ref()
++            .is_some_and(Animation::is_done)
++        {
++            self.scratchpad_backdrop_anim = None;
++        }
+     }
+ 
+     pub fn are_animations_ongoing(&self) -> bool {
+-        self.tiles.iter().any(Tile::are_animations_ongoing) || !self.closing_windows.is_empty()
++        self.tiles.iter().any(Tile::are_animations_ongoing)
++            || !self.closing_windows.is_empty()
++            || self.scratchpad_backdrop_anim.is_some()
++    }
++
++    fn scratchpad_backdrop_alpha(&self) -> f64 {
++        self.scratchpad_backdrop_anim
++            .as_ref()
++            .map_or(1., |anim| anim.clamped_value().clamp(0., 1.))
++    }
++
++    fn start_scratchpad_backdrop_anim(&mut self, to: f64, config: niri_config::Animation) {
++        let from = self
++            .scratchpad_backdrop_anim
++            .as_ref()
++            .map_or(1. - to, |_| self.scratchpad_backdrop_alpha());
++        self.scratchpad_backdrop_anim =
++            Some(Animation::new(self.clock.clone(), from, to, 0., config));
++    }
++
++    pub fn fade_out_scratchpad_backdrop(&mut self) {
++        self.start_scratchpad_backdrop_anim(0., self.options.animations.window_close.anim);
+     }
+ 
+     pub fn are_transitions_ongoing(&self) -> bool {
+@@ -608,8 +639,12 @@ impl<W: LayoutElement> FloatingSpace<W> {
+         };
+ 
+         let tile_size = tile.tile_size();
++        let is_scratchpad = tile.is_scratchpad;
+ 
+         self.start_close_animation_for_tile(renderer, snapshot, tile_size, tile_pos, blocker);
++        if is_scratchpad {
++            self.fade_out_scratchpad_backdrop();
++        }
+     }
+ 
+     pub fn activate_window_without_raising(&mut self, id: &W::Id) -> bool {
+@@ -736,6 +771,9 @@ impl<W: LayoutElement> FloatingSpace<W> {
+         };
+ 
+         self.tiles[idx].start_open_animation();
++        if self.tiles[idx].is_scratchpad {
++            self.start_scratchpad_backdrop_anim(1., self.options.animations.window_open.anim);
++        }
+         true
+     }
+ 
+@@ -1126,6 +1164,14 @@ impl<W: LayoutElement> FloatingSpace<W> {
+                     push(elem.into());
+                 }
+             }
++
++            let fading_out = self
++                .scratchpad_backdrop_anim
++                .as_ref()
++                .is_some_and(|anim| anim.to() == 0.);
++            if fading_out && !self.tiles.iter().any(|tile| tile.is_scratchpad) {
++                self.render_scratchpad_backdrop(ctx.as_gles(), xray_pos, view_rect, push);
++            }
+         }
+ 
+         let active = self.active_window_id.clone();
+@@ -1144,28 +1190,36 @@ impl<W: LayoutElement> FloatingSpace<W> {
+             });
+ 
+             if tile.is_scratchpad && layer.is_normal() {
+-                let elem = SolidColorRenderElement::from_buffer(
+-                    &self.scratchpad_dim,
+-                    view_rect.loc,
+-                    1.,
+-                    Kind::Unspecified,
+-                );
+-                push(elem.into());
+-
+-                let params = RenderParams {
+-                    geometry: view_rect,
+-                    subregion: None,
+-                    clip: None,
+-                    scale: self.scale,
+-                };
+-                self.scratchpad_blur
+-                    .render(ctx.as_gles(), None, params, xray_pos, &mut |elem| {
+-                        push(elem.into())
+-                    });
++                self.render_scratchpad_backdrop(ctx.as_gles(), xray_pos, view_rect, push);
+             }
+         }
+     }
+ 
++    fn render_scratchpad_backdrop<R: NiriRenderer>(
++        &self,
++        ctx: RenderCtx<BaseRenderer>,
++        xray_pos: XrayPos,
++        view_rect: Rectangle<f64, Logical>,
++        push: &mut dyn FnMut(FloatingSpaceRenderElement<R>),
++    ) {
++        let elem = SolidColorRenderElement::from_buffer(
++            &self.scratchpad_dim,
++            view_rect.loc,
++            self.scratchpad_backdrop_alpha() as f32,
++            Kind::Unspecified,
++        );
++        push(elem.into());
++
++        let params = RenderParams {
++            geometry: view_rect,
++            subregion: None,
++            clip: None,
++            scale: self.scale,
++        };
++        self.scratchpad_blur
++            .render(ctx, None, params, xray_pos, &mut |elem| push(elem.into()));
++    }
++
+     pub fn interactive_resize_begin(&mut self, window: W::Id, edges: ResizeEdge) -> bool {
+         if self.interactive_resize.is_some() {
+             return false;
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index 8d755d0..faa8fdd 100644
+index 2ef735d..6ae08b5 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
-@@ -3545,6 +3545,50 @@ impl<W: LayoutElement> Layout<W> {
+@@ -3545,6 +3545,51 @@ impl<W: LayoutElement> Layout<W> {
          Some(sp.id().clone())
      }
  
@@ -96,12 +250,28 @@ index 8d755d0..faa8fdd 100644
 +                tile_pos,
 +                TransactionBlocker::completed(),
 +            );
++            ws.fade_out_scratchpad_backdrop();
 +        }
 +    }
 +
      pub fn toggle_scratchpad(&mut self, window: Option<&W::Id>) {
          let Some(active_ws) = self.active_workspace() else {
              return;
+diff --git a/src/layout/workspace.rs b/src/layout/workspace.rs
+index 7f6d5aa..b9aa5ac 100644
+--- a/src/layout/workspace.rs
++++ b/src/layout/workspace.rs
+@@ -1801,6 +1801,10 @@ impl<W: LayoutElement> Workspace<W> {
+             .start_close_animation_for_tile(renderer, snapshot, tile_size, tile_pos, blocker);
+     }
+ 
++    pub fn fade_out_scratchpad_backdrop(&mut self) {
++        self.floating.fade_out_scratchpad_backdrop();
++    }
++
+     pub fn start_open_animation(&mut self, id: &W::Id) -> bool {
+         self.scrolling.start_open_animation(id) || self.floating.start_open_animation(id)
+     }
 diff --git a/src/niri.rs b/src/niri.rs
 index 7d9ab77..14db8d6 100644
 --- a/src/niri.rs
@@ -131,3 +301,4 @@ index 7d9ab77..14db8d6 100644
 +
      #[cfg(not(feature = "xdp-gnome-screencast"))]
      pub fn set_dynamic_cast_target(&mut self, _target: CastTarget) {}
+ 
