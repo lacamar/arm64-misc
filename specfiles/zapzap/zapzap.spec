@@ -1,0 +1,1 @@
+../../../zapzap/packaging/zapzap.spec
