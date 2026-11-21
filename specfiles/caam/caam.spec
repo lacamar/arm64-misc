@@ -2,8 +2,8 @@
 %global goipath github.com/Dicklesworthstone/coding_agent_account_manager
 
 Name:           caam
-Version:        0.1.25
-Release:        2%{?dist}
+Version:        0.1.26
+Release:        1%{?dist}
 Summary:        Instant auth switching for AI coding CLIs
 
 License:        MIT
@@ -42,6 +42,9 @@ install -Dpm0755 %{name} %{buildroot}%{_bindir}/%{name}
 %{fish_completions_dir}/caam.fish
 
 %changelog
+* Sun Nov 22 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.26-1
+- Update to 0.1.26
+
 * Thu Nov 05 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.25-2
 - Update to 0.1.25
 
