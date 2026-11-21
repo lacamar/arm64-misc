@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        47%{?dist}
+Release:        48%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -187,6 +187,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Sat Nov 21 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^23.git.ef54ab54-48
+- Fade scratchpad backdrop blur on show and hide
+
 * Sat Nov 21 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^23.git.ef54ab54-47
 - Fix session-management for open-on-output list
 

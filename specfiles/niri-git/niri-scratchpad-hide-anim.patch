@@ -48,7 +48,7 @@ index c7d1346..23434b2 100644
                      self.niri.queue_redraw_all();
                      return;
 diff --git a/src/layout/floating.rs b/src/layout/floating.rs
-index 848a663..9c44655 100644
+index 848a663..59f987d 100644
 --- a/src/layout/floating.rs
 +++ b/src/layout/floating.rs
 @@ -76,6 +76,7 @@ pub struct FloatingSpace<W: LayoutElement> {
@@ -146,7 +146,7 @@ index 848a663..9c44655 100644
          }
  
          let active = self.active_window_id.clone();
-@@ -1144,28 +1190,36 @@ impl<W: LayoutElement> FloatingSpace<W> {
+@@ -1144,28 +1190,39 @@ impl<W: LayoutElement> FloatingSpace<W> {
              });
  
              if tile.is_scratchpad && layer.is_normal() {
@@ -180,10 +180,11 @@ index 848a663..9c44655 100644
 +        view_rect: Rectangle<f64, Logical>,
 +        push: &mut dyn FnMut(FloatingSpaceRenderElement<R>),
 +    ) {
++        let alpha = self.scratchpad_backdrop_alpha() as f32;
 +        let elem = SolidColorRenderElement::from_buffer(
 +            &self.scratchpad_dim,
 +            view_rect.loc,
-+            self.scratchpad_backdrop_alpha() as f32,
++            alpha,
 +            Kind::Unspecified,
 +        );
 +        push(elem.into());
@@ -195,7 +196,9 @@ index 848a663..9c44655 100644
 +            scale: self.scale,
 +        };
 +        self.scratchpad_blur
-+            .render(ctx, None, params, xray_pos, &mut |elem| push(elem.into()));
++            .render(ctx, None, params, xray_pos, &mut |elem| {
++                push(elem.with_alpha(alpha).into())
++            });
 +    }
 +
      pub fn interactive_resize_begin(&mut self, window: W::Id, edges: ResizeEdge) -> bool {
@@ -258,10 +261,10 @@ index 2ef735d..6ae08b5 100644
          let Some(active_ws) = self.active_workspace() else {
              return;
 diff --git a/src/layout/workspace.rs b/src/layout/workspace.rs
-index 7f6d5aa..b9aa5ac 100644
+index ec42ae7..9cc7808 100644
 --- a/src/layout/workspace.rs
 +++ b/src/layout/workspace.rs
-@@ -1801,6 +1801,10 @@ impl<W: LayoutElement> Workspace<W> {
+@@ -1811,6 +1811,10 @@ impl<W: LayoutElement> Workspace<W> {
              .start_close_animation_for_tile(renderer, snapshot, tile_size, tile_pos, blocker);
      }
  
@@ -302,3 +305,134 @@ index 7d9ab77..14db8d6 100644
      #[cfg(not(feature = "xdp-gnome-screencast"))]
      pub fn set_dynamic_cast_target(&mut self, _target: CastTarget) {}
  
+diff --git a/src/render_helpers/background_effect.rs b/src/render_helpers/background_effect.rs
+index d01f6d1..de4f5df 100644
+--- a/src/render_helpers/background_effect.rs
++++ b/src/render_helpers/background_effect.rs
+@@ -81,6 +81,16 @@ niri_render_elements! {
+     }
+ }
+ 
++impl BackgroundEffectElement {
++    pub fn with_alpha(self, alpha: f32) -> Self {
++        match self {
++            Self::FramebufferEffect(elem) => Self::FramebufferEffect(elem.with_alpha(alpha)),
++            Self::Xray(elem) => Self::Xray(elem.with_alpha(alpha)),
++            elem => elem,
++        }
++    }
++}
++
+ impl BackgroundEffect {
+     pub fn new() -> Self {
+         Self {
+diff --git a/src/render_helpers/framebuffer_effect.rs b/src/render_helpers/framebuffer_effect.rs
+index aa83250..45f333b 100644
+--- a/src/render_helpers/framebuffer_effect.rs
++++ b/src/render_helpers/framebuffer_effect.rs
+@@ -40,6 +40,7 @@ pub struct FramebufferEffectElement {
+     blur_options: Option<BlurOptions>,
+     noise: f32,
+     saturation: f32,
++    alpha: f32,
+ }
+ 
+ #[derive(Debug)]
+@@ -91,11 +92,17 @@ impl FramebufferEffect {
+             blur_options,
+             noise,
+             saturation,
++            alpha: 1.,
+         }
+     }
+ }
+ 
+ impl FramebufferEffectElement {
++    pub fn with_alpha(mut self, alpha: f32) -> Self {
++        self.alpha = alpha;
++        self
++    }
++
+     fn compute_uniforms(
+         &self,
+         crop: Rectangle<f64, Logical>,
+@@ -135,6 +142,10 @@ impl Element for FramebufferEffectElement {
+         &self.id
+     }
+ 
++    fn alpha(&self) -> f32 {
++        self.alpha
++    }
++
+     fn current_commit(&self) -> CommitCounter {
+         self.commit
+     }
+@@ -370,7 +381,7 @@ impl RenderElement<BaseRenderer> for FramebufferEffectElement {
+             &[],
+             // The intermediate texture has the same transform as the frame.
+             frame.transformation().invert(),
+-            1.,
++            self.alpha,
+             program.as_ref(),
+             uniforms,
+         )
+diff --git a/src/render_helpers/xray.rs b/src/render_helpers/xray.rs
+index c1249f3..16442ac 100644
+--- a/src/render_helpers/xray.rs
++++ b/src/render_helpers/xray.rs
+@@ -81,6 +81,7 @@ pub struct XrayElement {
+     saturation: f32,
+     bg_color: Color32F,
+     program: Option<BaseTexProgram>,
++    alpha: f32,
+ }
+ 
+ impl Xray {
+@@ -202,6 +203,7 @@ impl Xray {
+                     saturation,
+                     bg_color: *bg_color,
+                     program: program.clone(),
++                    alpha: 1.,
+                 };
+                 push(elem);
+             }
+@@ -252,6 +254,7 @@ impl Xray {
+                 saturation,
+                 bg_color: self.backdrop_color,
+                 program: program.clone(),
++                alpha: 1.,
+             };
+             push(elem);
+         }
+@@ -272,11 +275,22 @@ impl XrayElement {
+     }
+ }
+ 
++impl XrayElement {
++    pub fn with_alpha(mut self, alpha: f32) -> Self {
++        self.alpha = alpha;
++        self
++    }
++}
++
+ impl Element for XrayElement {
+     fn id(&self) -> &Id {
+         &self.id
+     }
+ 
++    fn alpha(&self) -> f32 {
++        self.alpha
++    }
++
+     fn current_commit(&self) -> CommitCounter {
+         self.buffer.borrow().commit()
+     }
+@@ -350,7 +364,7 @@ impl RenderElement<BaseRenderer> for XrayElement {
+             // FIXME: opaque regions need to be filtered like damage.
+             &[],
+             Transform::Normal,
+-            1.,
++            self.alpha,
+             self.program.as_ref(),
+             uniforms,
+         )
