@@ -993,8 +993,8 @@ index 00000000..22ee957d
 +
 +impl ToplevelState {
 +    pub fn apply(&self, rules: &mut ResolvedWindowRules) {
-+        if self.output.is_some() {
-+            rules.open_on_output = self.output.clone();
++        if let Some(output) = &self.output {
++            rules.open_on_output = vec![output.clone()];
 +        }
 +        rules.open_on_workspace = self.workspace_name.clone();
 +        if let Some((w, h)) = self.size {
@@ -1596,7 +1596,7 @@ index 00000000..22ee957d
 +
 +        let mut rules = ResolvedWindowRules::default();
 +        saved.apply(&mut rules);
-+        assert_eq!(rules.open_on_output.as_deref(), Some("DP-1"));
++        assert_eq!(rules.open_on_output, ["DP-1"]);
 +        assert_eq!(rules.default_width, Some(Some(PresetSize::Fixed(800))));
 +        assert_eq!(rules.open_floating, Some(true));
 +        assert_eq!(rules.default_floating_position.unwrap().y, FloatOrInt(20.));
