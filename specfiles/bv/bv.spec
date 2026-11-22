@@ -3,7 +3,7 @@
 
 Name:           bv
 Version:        0.27.0
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Terminal UI and graph analytics for Beads issue trackers
 
 License:        MIT
@@ -19,6 +19,8 @@ graph analysis and a robot mode for AI coding agents.
 
 %prep
 %autosetup -p1 -n beads_viewer-%{version}
+# upstream pins a go patch release; Fedora may lag, vendored deps need only 1.26
+sed -i 's/^go 1\.26\.[0-9]*$/go 1.26/' go.mod
 
 %build
 export GOTOOLCHAIN=local
@@ -37,6 +39,9 @@ install -Dpm0755 %{name} %{buildroot}%{_bindir}/%{name}
 %{_bindir}/%{name}
 
 %changelog
+* Sun Nov 22 2026 Lachlan Marie <lchlnm@pm.me> - 0.27.0-2
+- Relax go.mod patch-level go requirement
+
 * Sun Nov 22 2026 Lachlan Marie <lchlnm@pm.me> - 0.27.0-1
 - Update to 0.27.0
 
