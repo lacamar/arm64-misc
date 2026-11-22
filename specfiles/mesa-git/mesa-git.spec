@@ -92,9 +92,9 @@
 
 Name:           mesa
 Summary:        Mesa graphics libraries
-%global commit ef594386e28b9a01ab00d2190d5960d3eee8fe04
+%global commit bb986060e01093a611b962b32fcc90b8d961b706
 %global shortcommit %{sub %{commit} 1 8}
-%global bumpver 10
+%global bumpver 11
 %global ver 27.0.0
 Version:        %{ver}~%{bumpver}.git.%{shortcommit}
 Release:        5%{?dist}
@@ -784,6 +784,9 @@ ln -s libGLX_mesa.so.0 %{buildroot}%{_libdir}/libGLX_system.so.0
 %endif
 
 %changelog
+* Mon Nov 23 2026 Lachlan Marie <lchlnm@pm.me> - 27.0.0~11.git.bb986060-5
+- Update to commit bb986060e01093a611b962b32fcc90b8d961b706
+
 * Sun Nov 22 2026 Lachlan Marie <lchlnm@pm.me> - 27.0.0~10.git.ef594386-5
 - Update to commit ef594386e28b9a01ab00d2190d5960d3eee8fe04
 
