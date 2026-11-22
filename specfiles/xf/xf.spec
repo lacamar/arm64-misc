@@ -4,7 +4,7 @@
 %global rustflags_codegen_units 16
 
 Name:           xf
-Version:        0.4.3
+Version:        0.5.0
 Release:        1%{?dist}
 Summary:        Search and query X (Twitter) data archives
 
@@ -48,6 +48,9 @@ target/rpm/%{name} completions fish | install -Dm0644 /dev/stdin %{buildroot}%{f
 %{fish_completions_dir}/%{name}.fish
 
 %changelog
+* Sun Nov 22 2026 Lachlan Marie <lchlnm@pm.me> - 0.5.0-1
+- Update to 0.5.0
+
 * Fri Oct 16 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.3-1
  - Update to 0.4.3
 
