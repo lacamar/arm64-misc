@@ -1,5 +1,5 @@
 Name:           giil
-Version:        3.2.1
+Version:        3.3.0
 Release:        1%{?dist}
 Summary:        Download full-resolution images from cloud photo share links
 
@@ -32,5 +32,8 @@ install -Dpm0755 giil %{buildroot}%{_bindir}/%{name}
 %{_bindir}/%{name}
 
 %changelog
+* Mon Nov 23 2026 Lachlan Marie <lchlnm@pm.me> - 3.3.0-1
+- Update to 3.3.0
+
 * Mon Sep 28 2026 Lachlan Marie <lchlnm@pm.me> - 3.2.1-1
 - Initial package
