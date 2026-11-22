@@ -1,8 +1,8 @@
 %global _name swayimg
 %global tag 5.7
-%global bumpver 0
+%global bumpver 1
 
-%global commit 543209aa76112cf18d764f81627d39251add1594
+%global commit 8ebd1a244c5175868561f0c7a887252b1da000d6
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 
 Name:           %{_name}-git
@@ -108,6 +108,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/swayimg.desktop
 
 
 %changelog
+* Mon Nov 23 2026 Lachlan Marie <lchlnm@pm.me> - 5.7^1.git.8ebd1a2-1
+- Update to commit 8ebd1a244c5175868561f0c7a887252b1da000d6
+
 * Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 5.7^0.git.543209a-1
 - Update to 5.7
 
