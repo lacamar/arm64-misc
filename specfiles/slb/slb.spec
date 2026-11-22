@@ -2,7 +2,7 @@
 %global goipath github.com/Dicklesworthstone/slb
 
 Name:           slb
-Version:        0.6.0
+Version:        0.6.1
 Release:        1%{?dist}
 Summary:        Two-person rule for dangerous commands run by AI coding agents
 
@@ -42,6 +42,9 @@ install -Dpm0755 %{name} %{buildroot}%{_bindir}/%{name}
 %{fish_completions_dir}/slb.fish
 
 %changelog
+* Sun Nov 22 2026 Lachlan Marie <lchlnm@pm.me> - 0.6.1-1
+- Update to 0.6.1
+
 * Thu Nov 05 2026 Lachlan Marie <lchlnm@pm.me> - 0.6.0-1
 - Update to 0.6.0
 
