@@ -1,8 +1,8 @@
-%global bumpver 10
+%global bumpver 11
 %global _name shadps4
 %global tag 0.21.0
 # Upstream shadps4-emu/shadPS4 commit the aarch64 patch series is based on
-%global commit 264d6b71d8671a429ad2c9d1a281e18558fb9693
+%global commit bbc020e5d0fcc959a4fe5bd9cdaa0205b0edf405
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 # Prebuilt FFmpeg release matching externals/ffmpeg-core
 %global ffmpeg_sha 94dde08
@@ -51,7 +51,7 @@ local externals = {
  { name="minimp3", ref="7b590fdcfa5a79c033e76eacc05d0c3e4c79f536", owner="lieff", path="minimp3" },
  { name="miniupnp", ref="bf4215a7574f88aa55859db9db00e3ae58cf42d6", owner="miniupnp", path="miniupnp" },
  { name="miniz", ref="174573d60290f447c13a2b1b3405de2b96e27d6c", owner="richgel999", path="miniz" },
- { name="openal-soft", ref="83ea7236c6f23fc98e2b62eb9c5b3abfd4b2be86", owner="shadexternals", path="openal-soft" },
+ { name="openal-soft", ref="b41444fa145e56b644961be7c386fa96c0d74e0f", owner="shadexternals", path="openal-soft" },
  { name="protobuf", ref="5917ee224a7e47383a78acc129628511fe210dff", owner="shadexternals", path="protobuf" },
  { name="pugixml", ref="caade5a28aad86b92a4b5337a9dc70c4ba73c5eb", owner="zeux", path="pugixml" },
  { name="robin-map", ref="4ec1bf19c6a96125ea22062f38c2cf5b958e448e", owner="Tessil", path="robin-map" },
@@ -169,6 +169,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/net.shadps4.shadPS4.d
 %{_datadir}/icons/hicolor/512x512/apps/net.shadps4.shadPS4.png
 
 %changelog
+* Mon Nov 23 2026 Lachlan Marie <lchlnm@pm.me> - 0.21.0^11.git.bbc020e-2
+- Update to commit bbc020e5d0fcc959a4fe5bd9cdaa0205b0edf405
+
 * Sat Nov 21 2026 Lachlan Marie <lchlnm@pm.me> - 0.21.0^10.git.264d6b7-2
 - Update to commit 264d6b71d8671a429ad2c9d1a281e18558fb9693
 
