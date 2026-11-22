@@ -1,9 +1,9 @@
 %undefine __brp_mangle_shebangs
 
-%global bumpver 11
+%global bumpver 12
 %global _name yazi
 %global tag 26.9.1
-%global commit d5e4beb6b5212c28d1026d8e7d4ae985dcf174cb
+%global commit af6850648e34bb9276d08965e1886fe8497c0734
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 
 Name: %{_name}-git
@@ -58,6 +58,9 @@ install -Dm644 assets/yazi.desktop \
 
 
 %changelog
+* Mon Nov 23 2026 Lachlan Marie <lchlnm@pm.me> - 26.9.1^12.git.af68506-3
+- Update to commit af6850648e34bb9276d08965e1886fe8497c0734
+
 * Mon Nov 16 2026 Lachlan Marie <lchlnm@pm.me> - 26.9.1^11.git.d5e4beb-3
 - Use thin LTO to fit COPR timeout
 
