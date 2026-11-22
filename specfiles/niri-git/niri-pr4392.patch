@@ -1,8 +1,8 @@
 diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
-index fad654b3..805457b0 100644
+index 767794d..6978385 100644
 --- a/niri-config/src/lib.rs
 +++ b/niri-config/src/lib.rs
-@@ -2405,6 +2405,7 @@ mod tests {
+@@ -2409,6 +2409,7 @@ mod tests {
                          ),
                      ),
                      tiled_state: None,
@@ -11,7 +11,7 @@ index fad654b3..805457b0 100644
                          xray: None,
                          blur: None,
 diff --git a/niri-config/src/window_rule.rs b/niri-config/src/window_rule.rs
-index b3543f92..4f79fc58 100644
+index 8fdc76a..d8b5578 100644
 --- a/niri-config/src/window_rule.rs
 +++ b/niri-config/src/window_rule.rs
 @@ -80,6 +80,8 @@ pub struct WindowRule {
@@ -24,10 +24,10 @@ index b3543f92..4f79fc58 100644
      pub background_effect: BackgroundEffectRule,
      #[knuffel(child, default)]
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index d9984448..e79a8ffc 100644
+index 9313456..5367d4f 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
-@@ -1462,6 +1462,84 @@ impl<W: LayoutElement> Layout<W> {
+@@ -1460,6 +1460,84 @@ impl<W: LayoutElement> Layout<W> {
          None
      }
  
@@ -113,10 +113,10 @@ index d9984448..e79a8ffc 100644
      ///
      /// We will try to fit popups inside this rect.
 diff --git a/src/niri.rs b/src/niri.rs
-index 8c05df9d..77657fdf 100644
+index 5a70ba2..e1883cc 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
-@@ -191,7 +191,7 @@ use crate::utils::vblank_throttle::VBlankThrottle;
+@@ -192,7 +192,7 @@ use crate::utils::vblank_throttle::VBlankThrottle;
  use crate::utils::watcher::Watcher;
  use crate::utils::xwayland::satellite::Satellite;
  use crate::utils::{
@@ -125,7 +125,7 @@ index 8c05df9d..77657fdf 100644
      make_screenshot_path, output_matches_name, output_size, panel_orientation,
      send_scale_transform, winit_scale, write_png_rgba8, xwayland,
  };
-@@ -640,6 +640,11 @@ struct SurfaceFrameThrottlingState {
+@@ -653,6 +653,11 @@ struct SurfaceFrameThrottlingState {
      last_sent_at: RefCell<Option<(Output, u32)>>,
  }
  
@@ -137,7 +137,7 @@ index 8c05df9d..77657fdf 100644
  pub enum CenterCoords {
      Separately,
      Both,
-@@ -731,6 +736,89 @@ impl Default for SurfaceFrameThrottlingState {
+@@ -744,6 +749,89 @@ impl Default for SurfaceFrameThrottlingState {
          }
      }
  }
@@ -227,16 +227,16 @@ index 8c05df9d..77657fdf 100644
  
  impl KeyboardFocus {
      pub fn surface(&self) -> Option<&WlSurface> {
-@@ -5511,6 +5599,7 @@ impl Niri {
+@@ -5605,6 +5693,7 @@ impl Niri {
          let frame_callback_time = get_monotonic_time();
  
          for mapped in self.layout.windows_for_output_mut(output) {
 +            setup_force_render(&mut self.event_loop, mapped);
-             mapped.send_frame(
-                 output,
-                 frame_callback_time,
+             if mapped.is_window_cast_target() {
+                 ignore_primary_output.set(true);
+             }
 diff --git a/src/utils/mod.rs b/src/utils/mod.rs
-index 6d513eb6..6f3684cd 100644
+index f9c3522..aca47c4 100644
 --- a/src/utils/mod.rs
 +++ b/src/utils/mod.rs
 @@ -165,6 +165,16 @@ pub fn get_monotonic_time() -> Duration {
@@ -257,7 +257,7 @@ index 6d513eb6..6f3684cd 100644
      rect.loc + rect.size.downscale(2).to_point()
  }
 diff --git a/src/window/mapped.rs b/src/window/mapped.rs
-index f61681d1..e1ed408f 100644
+index 8e75485..06f2238 100644
 --- a/src/window/mapped.rs
 +++ b/src/window/mapped.rs
 @@ -611,6 +611,16 @@ impl Mapped {
@@ -278,7 +278,7 @@ index f61681d1..e1ed408f 100644
  
  impl Drop for Mapped {
 diff --git a/src/window/mod.rs b/src/window/mod.rs
-index c6a24b1d..434e8069 100644
+index 07f355b..0d04d98 100644
 --- a/src/window/mod.rs
 +++ b/src/window/mod.rs
 @@ -126,6 +126,9 @@ pub struct ResolvedWindowRules {

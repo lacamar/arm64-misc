@@ -6,7 +6,7 @@ index 5a0e00c5..c625f59c 100644
  [[package]]
  name = "smithay"
  version = "0.7.0"
--source = "git+https://github.com/Smithay/smithay.git?rev=65aa86fa5236e41775c313408102a5d5c2d1e2ca#65aa86fa5236e41775c313408102a5d5c2d1e2ca"
+-source = "git+https://github.com/Smithay/smithay.git?rev=a38bb709a0400759b6a4fab6129e0f1dd72808c3#a38bb709a0400759b6a4fab6129e0f1dd72808c3"
  dependencies = [
   "aliasable",
   "appendlist",
@@ -14,7 +14,7 @@ index 5a0e00c5..c625f59c 100644
  [[package]]
  name = "smithay-drm-extras"
  version = "0.1.0"
--source = "git+https://github.com/Smithay/smithay.git?rev=65aa86fa5236e41775c313408102a5d5c2d1e2ca#65aa86fa5236e41775c313408102a5d5c2d1e2ca"
+-source = "git+https://github.com/Smithay/smithay.git?rev=a38bb709a0400759b6a4fab6129e0f1dd72808c3#a38bb709a0400759b6a4fab6129e0f1dd72808c3"
  dependencies = [
   "drm",
   "libdisplay-info",
@@ -64,15 +64,3 @@ index f4d24a2c..eb1bb406 100644
          } else {
              self.maybe_warp_cursor_to_focus();
          }
-diff --git a/src/handlers/xdg_shell.rs b/src/handlers/xdg_shell.rs
---- a/src/handlers/xdg_shell.rs
-+++ b/src/handlers/xdg_shell.rs
-@@ -983,6 +983,8 @@
- }
- 
- impl XdgDecorationHandler for State {
-+    fn decoration_destroyed(&mut self, _toplevel: ToplevelSurface) {}
-+
-     fn new_decoration(&mut self, toplevel: ToplevelSurface) {
-         // If we want CSD, we hide this global altogether.
-         toplevel.with_pending_state(|state| {

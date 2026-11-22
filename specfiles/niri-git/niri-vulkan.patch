@@ -48,10 +48,10 @@ index c625f59..e3b5266 100644
   "smallvec",
   "tempfile",
 diff --git a/Cargo.toml b/Cargo.toml
-index ba39650..26daa8f 100644
+index 6e7d6a1..79f7768 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
-@@ -110,6 +110,7 @@ features = [
+@@ -119,6 +119,7 @@ features = [
      "desktop",
      "renderer_gl",
      "renderer_pixman",
@@ -100,10 +100,10 @@ index d63e5cc..81806b0 100644
 +    Vulkan,
 +}
 diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
-index 8d78aab..09d4036 100644
+index d269074..ac53bc7 100644
 --- a/niri-config/src/lib.rs
 +++ b/niri-config/src/lib.rs
-@@ -2916,6 +2916,7 @@ mod tests {
+@@ -2919,6 +2919,7 @@ mod tests {
                  render_drm_device: Some(
                      "/dev/dri/renderD129",
                  ),
@@ -112,7 +112,7 @@ index 8d78aab..09d4036 100644
                      "/dev/dri/renderD128",
                      "/dev/dri/renderD130",
 diff --git a/smithay/Cargo.toml b/smithay/Cargo.toml
-index 7a4dbfbe..c8d6eebb 100644
+index 9b317d0..705f307 100644
 --- a/smithay/Cargo.toml
 +++ b/smithay/Cargo.toml
 @@ -108,6 +108,7 @@ renderer_gl = ["gl_generator", "backend_egl"]
@@ -125,7 +125,7 @@ index 7a4dbfbe..c8d6eebb 100644
  use_system_lib = ["wayland_frontend", "wayland-backend/server_system", "wayland-sys", "gbm?/import-wayland"]
 diff --git a/smithay/src/backend/renderer/base.rs b/smithay/src/backend/renderer/base.rs
 new file mode 100644
-index 00000000..97860ab6
+index 0000000..97860ab
 --- /dev/null
 +++ b/smithay/src/backend/renderer/base.rs
 @@ -0,0 +1,606 @@
@@ -736,7 +736,7 @@ index 00000000..97860ab6
 +    }
 +}
 diff --git a/smithay/src/backend/renderer/gles/mod.rs b/smithay/src/backend/renderer/gles/mod.rs
-index 913239b6..3351428a 100644
+index 913239b..3351428 100644
 --- a/smithay/src/backend/renderer/gles/mod.rs
 +++ b/smithay/src/backend/renderer/gles/mod.rs
 @@ -3298,7 +3298,7 @@ impl Drop for GlesFrame<'_, '_> {
@@ -749,7 +749,7 @@ index 913239b6..3351428a 100644
      dest: Rectangle<i32, Physical>,
      texture: Size<i32, BufferCoord>,
 diff --git a/smithay/src/backend/renderer/mod.rs b/smithay/src/backend/renderer/mod.rs
-index 2efa08c3..66218b44 100644
+index 2efa08c..66218b4 100644
 --- a/smithay/src/backend/renderer/mod.rs
 +++ b/smithay/src/backend/renderer/mod.rs
 @@ -27,6 +27,12 @@ use wayland_server::protocol::{wl_buffer, wl_shm};
@@ -767,7 +767,7 @@ index 2efa08c3..66218b44 100644
  
 diff --git a/smithay/src/backend/renderer/multigpu/gbm_base.rs b/smithay/src/backend/renderer/multigpu/gbm_base.rs
 new file mode 100644
-index 00000000..766931ac
+index 0000000..766931a
 --- /dev/null
 +++ b/smithay/src/backend/renderer/multigpu/gbm_base.rs
 @@ -0,0 +1,258 @@
@@ -1030,7 +1030,7 @@ index 00000000..766931ac
 +        .ok()
 +}
 diff --git a/smithay/src/backend/renderer/multigpu/mod.rs b/smithay/src/backend/renderer/multigpu/mod.rs
-index 8395437e..1be47e19 100644
+index 8395437..1be47e1 100644
 --- a/smithay/src/backend/renderer/multigpu/mod.rs
 +++ b/smithay/src/backend/renderer/multigpu/mod.rs
 @@ -79,6 +79,8 @@ use wayland_server::protocol::{wl_buffer, wl_shm, wl_surface::WlSurface};
@@ -1044,7 +1044,7 @@ index 8395437e..1be47e19 100644
  #[derive(Debug)]
 diff --git a/smithay/src/backend/renderer/vulkan/frame.rs b/smithay/src/backend/renderer/vulkan/frame.rs
 new file mode 100644
-index 00000000..9de03f42
+index 0000000..9de03f4
 --- /dev/null
 +++ b/smithay/src/backend/renderer/vulkan/frame.rs
 @@ -0,0 +1,368 @@
@@ -1418,7 +1418,7 @@ index 00000000..9de03f42
 +}
 diff --git a/smithay/src/backend/renderer/vulkan/import.rs b/smithay/src/backend/renderer/vulkan/import.rs
 new file mode 100644
-index 00000000..c1244af0
+index 0000000..c1244af
 --- /dev/null
 +++ b/smithay/src/backend/renderer/vulkan/import.rs
 @@ -0,0 +1,512 @@
@@ -1936,7 +1936,7 @@ index 00000000..c1244af0
 +}
 diff --git a/smithay/src/backend/renderer/vulkan/mod.rs b/smithay/src/backend/renderer/vulkan/mod.rs
 new file mode 100644
-index 00000000..17c3dd60
+index 0000000..17c3dd6
 --- /dev/null
 +++ b/smithay/src/backend/renderer/vulkan/mod.rs
 @@ -0,0 +1,1693 @@
@@ -3635,7 +3635,7 @@ index 00000000..17c3dd60
 +}
 diff --git a/smithay/src/backend/renderer/vulkan/shaders.rs b/smithay/src/backend/renderer/vulkan/shaders.rs
 new file mode 100644
-index 00000000..cc4de0e2
+index 0000000..cc4de0e
 --- /dev/null
 +++ b/smithay/src/backend/renderer/vulkan/shaders.rs
 @@ -0,0 +1,283 @@
@@ -3924,7 +3924,7 @@ index 00000000..cc4de0e2
 +}
 diff --git a/smithay/src/backend/renderer/vulkan/sync.rs b/smithay/src/backend/renderer/vulkan/sync.rs
 new file mode 100644
-index 00000000..3ffb2225
+index 0000000..3ffb222
 --- /dev/null
 +++ b/smithay/src/backend/renderer/vulkan/sync.rs
 @@ -0,0 +1,73 @@
@@ -4063,7 +4063,7 @@ index 815aad6..23dbb68 100644
          match self {
              Backend::Tty(tty) => tty.with_primary_renderer(f),
 diff --git a/src/backend/tty.rs b/src/backend/tty.rs
-index 85051da..b85cbee 100644
+index 6aa3b5b..8f6fe0f 100644
 --- a/src/backend/tty.rs
 +++ b/src/backend/tty.rs
 @@ -35,8 +35,8 @@ use smithay::backend::egl::{EGLDevice, EGLDisplay};
@@ -4138,7 +4138,7 @@ index 85051da..b85cbee 100644
              resources::init(gles_renderer);
              shaders::init(gles_renderer);
  
-@@ -1452,8 +1455,7 @@ impl Tty {
+@@ -1460,8 +1463,7 @@ impl Tty {
  
          let render_node = device.render_node.unwrap_or(self.primary_render_node);
          let renderer = self.gpu_manager.single_renderer(&render_node)?;
@@ -4148,7 +4148,7 @@ index 85051da..b85cbee 100644
  
          // Filter out the CCS modifiers as they have increased bandwidth, causing some monitor
          // configurations to stop working.
-@@ -1931,13 +1933,13 @@ impl Tty {
+@@ -1944,13 +1946,13 @@ impl Tty {
  
      pub fn with_primary_renderer<T>(
          &mut self,
@@ -4635,7 +4635,7 @@ index dbc3722..1baa972 100644
          tile_size: Size<f64, Logical>,
          tile_pos: Point<f64, Logical>,
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index 286eba6..da52dce 100644
+index 86e60dd..d9be189 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
 @@ -45,7 +45,7 @@ use niri_config::{
@@ -4656,8 +4656,8 @@ index 286eba6..da52dce 100644
  
  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
  pub enum SizingMode {
-@@ -202,7 +202,7 @@ pub trait LayoutElement {
-     #[allow(clippy::too_many_arguments)]
+@@ -201,7 +201,7 @@ pub trait LayoutElement {
+     /// Renders the background effect behind the main surface of the element.
      fn render_background_effect(
          &self,
 -        _ctx: RenderCtx<GlesRenderer>,
@@ -4665,7 +4665,7 @@ index 286eba6..da52dce 100644
          _geometry: Rectangle<f64, Logical>,
          _scale: f64,
          _clip_to_geometry: bool,
-@@ -5021,7 +5021,7 @@ impl<W: LayoutElement> Layout<W> {
+@@ -5019,7 +5019,7 @@ impl<W: LayoutElement> Layout<W> {
  
      pub fn store_unmap_snapshot(
          &mut self,
@@ -4674,7 +4674,7 @@ index 286eba6..da52dce 100644
          xray: Option<&mut Xray>,
          xray_has_blocked_out_layers: bool,
          window: &W::Id,
-@@ -5116,7 +5116,7 @@ impl<W: LayoutElement> Layout<W> {
+@@ -5114,7 +5114,7 @@ impl<W: LayoutElement> Layout<W> {
  
      pub fn start_close_animation_for_window(
          &mut self,
@@ -4709,7 +4709,7 @@ index 5ba97a3..4f50a51 100644
          location: Point<f64, Logical>,
          scale: Scale<f64>,
 diff --git a/src/layout/scrolling.rs b/src/layout/scrolling.rs
-index 3963c8f..c03396f 100644
+index 2e17842..47154c4 100644
 --- a/src/layout/scrolling.rs
 +++ b/src/layout/scrolling.rs
 @@ -7,7 +7,7 @@ use niri_config::utils::MergeWith as _;
@@ -4740,7 +4740,7 @@ index 3963c8f..c03396f 100644
          tile_size: Size<f64, Logical>,
          tile_pos: Point<f64, Logical>,
 diff --git a/src/layout/tile.rs b/src/layout/tile.rs
-index a078d52..2ece6cc 100644
+index 959a1a6..91fd359 100644
 --- a/src/layout/tile.rs
 +++ b/src/layout/tile.rs
 @@ -5,7 +5,7 @@ use niri_config::utils::MergeWith as _;
@@ -4761,7 +4761,7 @@ index a078d52..2ece6cc 100644
  
  #[derive(Debug)]
  struct ResizeAnimation {
-@@ -1447,7 +1447,7 @@ impl<W: LayoutElement> Tile<W> {
+@@ -1449,7 +1449,7 @@ impl<W: LayoutElement> Tile<W> {
  
      pub fn store_unmap_snapshot_if_empty(
          &mut self,
@@ -4770,7 +4770,7 @@ index a078d52..2ece6cc 100644
          xray: Option<&mut Xray>,
          xray_has_blocked_out_layers: bool,
          xray_pos: XrayPos,
-@@ -1462,7 +1462,7 @@ impl<W: LayoutElement> Tile<W> {
+@@ -1464,7 +1464,7 @@ impl<W: LayoutElement> Tile<W> {
  
      fn render_snapshot(
          &self,
@@ -4780,7 +4780,7 @@ index a078d52..2ece6cc 100644
          xray_has_blocked_out_layers: bool,
          xray_pos: XrayPos,
 diff --git a/src/layout/workspace.rs b/src/layout/workspace.rs
-index 37b1609..5f1d923 100644
+index dcd2fc9..fbfbe50 100644
 --- a/src/layout/workspace.rs
 +++ b/src/layout/workspace.rs
 @@ -8,7 +8,7 @@ use niri_config::{
@@ -4792,7 +4792,7 @@ index 37b1609..5f1d923 100644
  use smithay::desktop::{layer_map_for_output, Window};
  use smithay::output::Output;
  use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
-@@ -1737,7 +1737,7 @@ impl<W: LayoutElement> Workspace<W> {
+@@ -1746,7 +1746,7 @@ impl<W: LayoutElement> Workspace<W> {
  
      pub fn store_unmap_snapshot_if_empty(
          &mut self,
@@ -4801,7 +4801,7 @@ index 37b1609..5f1d923 100644
          xray: Option<&mut Xray>,
          xray_has_blocked_out_layers: bool,
          xray_pos: XrayPos,
-@@ -1772,7 +1772,7 @@ impl<W: LayoutElement> Workspace<W> {
+@@ -1781,7 +1781,7 @@ impl<W: LayoutElement> Workspace<W> {
  
      pub fn start_close_animation_for_window(
          &mut self,
@@ -4810,7 +4810,7 @@ index 37b1609..5f1d923 100644
          window: &W::Id,
          blocker: TransactionBlocker,
      ) {
-@@ -1787,7 +1787,7 @@ impl<W: LayoutElement> Workspace<W> {
+@@ -1796,7 +1796,7 @@ impl<W: LayoutElement> Workspace<W> {
  
      pub fn start_close_animation_for_tile(
          &mut self,
@@ -4820,7 +4820,7 @@ index 37b1609..5f1d923 100644
          tile_size: Size<f64, Logical>,
          tile_pos: Point<f64, Logical>,
 diff --git a/src/niri.rs b/src/niri.rs
-index 04d347e..a7e125b 100644
+index 32ffd95..0fc9f31 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -35,7 +35,7 @@ use smithay::backend::renderer::element::{
@@ -4832,7 +4832,7 @@ index 04d347e..a7e125b 100644
  use smithay::backend::renderer::Color32F;
  use smithay::desktop::utils::{
      bbox_from_surface_tree, output_update, send_dmabuf_feedback_surface_tree,
-@@ -5070,7 +5070,7 @@ impl Niri {
+@@ -5095,7 +5095,7 @@ impl Niri {
          push(backdrop);
      }
  
@@ -4841,7 +4841,7 @@ index 04d347e..a7e125b 100644
          let _span = tracy_client::span!("Niri::fill_xray_elements");
  
          // Make sure the xrayed elements themselves cannot use xray by mistake.
-@@ -6051,7 +6051,7 @@ impl Niri {
+@@ -6099,7 +6099,7 @@ impl Niri {
  
      pub fn render_for_screencopy_with_damage(
          &mut self,
@@ -4850,7 +4850,7 @@ index 04d347e..a7e125b 100644
          output: &Output,
      ) {
          let _span = tracy_client::span!("Niri::render_for_screencopy_with_damage");
-@@ -6123,7 +6123,7 @@ impl Niri {
+@@ -6171,7 +6171,7 @@ impl Niri {
  
      pub fn render_for_screencopy_without_damage(
          &mut self,
@@ -4859,8 +4859,8 @@ index 04d347e..a7e125b 100644
          manager: &ZwlrScreencopyManagerV1,
          screencopy: Screencopy,
      ) -> anyhow::Result<()> {
-@@ -6175,12 +6175,12 @@ impl Niri {
-     #[allow(clippy::too_many_arguments)]
+@@ -6222,12 +6222,12 @@ impl Niri {
+     /// Returns `true` if it succeeded and `false` otherwise.
      fn capture_image_copy_frame(
          &self,
 -        renderer: &mut GlesRenderer,
@@ -4874,7 +4874,7 @@ index 04d347e..a7e125b 100644
          states: RenderElementStates,
          target_presentation_time: Duration,
      ) -> bool {
-@@ -6215,7 +6215,7 @@ impl Niri {
+@@ -6262,7 +6262,7 @@ impl Niri {
  
      pub fn render_for_image_copy_capture(
          &mut self,
@@ -4883,7 +4883,7 @@ index 04d347e..a7e125b 100644
          output: &Output,
          target_presentation_time: Duration,
      ) {
-@@ -6307,7 +6307,7 @@ impl Niri {
+@@ -6354,7 +6354,7 @@ impl Niri {
  
      pub fn render_windows_for_image_copy_capture(
          &mut self,
@@ -4892,7 +4892,7 @@ index 04d347e..a7e125b 100644
          output: &Output,
          target_presentation_time: Duration,
      ) {
-@@ -6406,7 +6406,7 @@ impl Niri {
+@@ -6453,7 +6453,7 @@ impl Niri {
  
      pub fn render_for_image_copy_cursor_capture(
          &mut self,
@@ -4901,7 +4901,7 @@ index 04d347e..a7e125b 100644
          output: &Output,
          target_presentation_time: Duration,
      ) {
-@@ -6507,10 +6507,10 @@ impl Niri {
+@@ -6554,10 +6554,10 @@ impl Niri {
  
      pub fn render_cursor_for_capture(
          &self,
@@ -4914,7 +4914,7 @@ index 04d347e..a7e125b 100644
          CursorCaptureGeometry,
      ) {
          let output_scale = output.current_scale();
-@@ -6716,7 +6716,7 @@ impl Niri {
+@@ -6763,7 +6763,7 @@ impl Niri {
  
      pub fn capture_screenshots<'a>(
          &'a self,
@@ -4923,7 +4923,7 @@ index 04d347e..a7e125b 100644
      ) -> impl Iterator<Item = (Output, [OutputScreenshot; 3])> + 'a {
          self.global_space.outputs().cloned().filter_map(|output| {
              let size = output.current_mode().unwrap().size;
-@@ -6797,7 +6797,7 @@ impl Niri {
+@@ -6844,7 +6844,7 @@ impl Niri {
  
      pub fn screenshot(
          &mut self,
@@ -4932,7 +4932,7 @@ index 04d347e..a7e125b 100644
          output: &Output,
          write_to_disk: bool,
          include_pointer: bool,
-@@ -6834,7 +6834,7 @@ impl Niri {
+@@ -6881,7 +6881,7 @@ impl Niri {
  
      pub fn screenshot_window(
          &self,
@@ -4941,7 +4941,7 @@ index 04d347e..a7e125b 100644
          output: &Output,
          mapped: &Mapped,
          write_to_disk: bool,
-@@ -6857,7 +6857,7 @@ impl Niri {
+@@ -6904,7 +6904,7 @@ impl Niri {
                  mapped.rules().opacity.unwrap_or(1.).clamp(0., 1.)
              };
  
@@ -4950,7 +4950,7 @@ index 04d347e..a7e125b 100644
  
          // Add pointer if requested and it's over this window.
          if show_pointer {
-@@ -7016,7 +7016,7 @@ impl Niri {
+@@ -7063,7 +7063,7 @@ impl Niri {
      #[cfg(feature = "dbus")]
      pub fn screenshot_all_outputs(
          &mut self,
@@ -4959,7 +4959,7 @@ index 04d347e..a7e125b 100644
          include_pointer: bool,
          on_done: impl FnOnce(PathBuf) + Send + 'static,
      ) -> anyhow::Result<()> {
-@@ -7576,7 +7576,7 @@ impl Niri {
+@@ -7627,7 +7627,7 @@ impl Niri {
          }
      }
  
@@ -4969,7 +4969,7 @@ index 04d347e..a7e125b 100644
  
          self.update_render_elements(None);
 diff --git a/src/render_helpers/background_effect.rs b/src/render_helpers/background_effect.rs
-index d148b6c..d01f6d1 100644
+index e916821..57af143 100644
 --- a/src/render_helpers/background_effect.rs
 +++ b/src/render_helpers/background_effect.rs
 @@ -1,7 +1,7 @@
@@ -4990,9 +4990,9 @@ index d148b6c..d01f6d1 100644
          ns: Option<usize>,
          mut params: RenderParams,
          xray_pos: XrayPos,
-@@ -282,7 +282,7 @@ pub fn damage_surface(states: &SurfaceData) {
- // A Smithay user is talking
- #[allow(clippy::too_many_arguments)]
+@@ -279,7 +279,7 @@ pub fn damage_surface(states: &SurfaceData) {
+ }
+ 
  pub fn render_for_tile(
 -    ctx: RenderCtx<GlesRenderer>,
 +    ctx: RenderCtx<BaseRenderer>,
@@ -5224,7 +5224,7 @@ index 9a92b77..6f64b2d 100644
                  let dst_size = dst.size();
                  let w = dst_size.w;
 diff --git a/src/render_helpers/border.rs b/src/render_helpers/border.rs
-index 923066e..9746716 100644
+index 428806f..8fa2409 100644
 --- a/src/render_helpers/border.rs
 +++ b/src/render_helpers/border.rs
 @@ -6,7 +6,8 @@ use niri_config::{
@@ -5246,7 +5246,7 @@ index 923066e..9746716 100644
  
  /// Renders a wide variety of borders and border parts.
  ///
-@@ -278,19 +279,19 @@ impl Element for BorderRenderElement {
+@@ -276,19 +277,19 @@ impl Element for BorderRenderElement {
      }
  }
  
@@ -5270,7 +5270,7 @@ index 923066e..9746716 100644
                  &self.inner,
                  frame,
                  src,
-@@ -302,7 +303,7 @@ impl RenderElement<GlesRenderer> for BorderRenderElement {
+@@ -300,7 +301,7 @@ impl RenderElement<GlesRenderer> for BorderRenderElement {
          })
      }
  
@@ -5279,7 +5279,7 @@ index 923066e..9746716 100644
          self.inner.underlying_storage(renderer)
      }
  }
-@@ -317,8 +318,8 @@ impl<'render> RenderElement<TtyRenderer<'render>> for BorderRenderElement {
+@@ -315,8 +316,8 @@ impl<'render> RenderElement<TtyRenderer<'render>> for BorderRenderElement {
          opaque_regions: &[Rectangle<i32, Physical>],
          cache: Option<&UserDataMap>,
      ) -> Result<(), TtyRendererError<'render>> {
@@ -6514,7 +6514,7 @@ index 9c42ea3..c269e89 100644
      }
  }
 diff --git a/src/render_helpers/resize.rs b/src/render_helpers/resize.rs
-index 79b26db..3b6ccb1 100644
+index 491b199..5cf3127 100644
 --- a/src/render_helpers/resize.rs
 +++ b/src/render_helpers/resize.rs
 @@ -4,14 +4,15 @@ use std::rc::Rc;
@@ -6535,7 +6535,7 @@ index 79b26db..3b6ccb1 100644
  use super::shader_element::ShaderRenderElement;
  use super::shaders::{mat3_uniform, ProgramType, Shaders};
  use crate::backend::tty::{TtyFrame, TtyRenderer, TtyRendererError};
-@@ -24,9 +25,9 @@ impl ResizeRenderElement {
+@@ -23,9 +24,9 @@ impl ResizeRenderElement {
      pub fn new(
          area: Rectangle<f64, Logical>,
          scale: Scale<f64>,
@@ -6547,7 +6547,7 @@ index 79b26db..3b6ccb1 100644
          size_next: Size<f64, Logical>,
          progress: f32,
          clamped_progress: f32,
-@@ -164,19 +165,19 @@ impl Element for ResizeRenderElement {
+@@ -163,19 +164,19 @@ impl Element for ResizeRenderElement {
      }
  }
  
@@ -6571,7 +6571,7 @@ index 79b26db..3b6ccb1 100644
                  &self.0,
                  frame,
                  src,
-@@ -188,7 +189,7 @@ impl RenderElement<GlesRenderer> for ResizeRenderElement {
+@@ -187,7 +188,7 @@ impl RenderElement<GlesRenderer> for ResizeRenderElement {
          })
      }
  
@@ -6580,7 +6580,7 @@ index 79b26db..3b6ccb1 100644
          self.0.underlying_storage(renderer)
      }
  }
-@@ -203,8 +204,8 @@ impl<'render> RenderElement<TtyRenderer<'render>> for ResizeRenderElement {
+@@ -202,8 +203,8 @@ impl<'render> RenderElement<TtyRenderer<'render>> for ResizeRenderElement {
          opaque_regions: &[Rectangle<i32, Physical>],
          cache: Option<&UserDataMap>,
      ) -> Result<(), TtyRendererError<'render>> {
@@ -6624,7 +6624,7 @@ index 0aa1fed..72e8878 100644
          Ok(resources) => {
              let data = renderer.egl_context().user_data();
 diff --git a/src/render_helpers/shader_element.rs b/src/render_helpers/shader_element.rs
-index f1bf978..3430f33 100644
+index 07f760d..da7af5a 100644
 --- a/src/render_helpers/shader_element.rs
 +++ b/src/render_helpers/shader_element.rs
 @@ -4,16 +4,17 @@ use std::rc::Rc;
@@ -6745,7 +6745,7 @@ index f1bf978..3430f33 100644
      }
  }
  
-@@ -187,7 +194,7 @@ impl ShaderRenderElement {
+@@ -186,7 +193,7 @@ impl ShaderRenderElement {
          scale: f32,
          alpha: f32,
          additional_uniforms: Rc<[Uniform<'static>]>,
@@ -6754,7 +6754,7 @@ index f1bf978..3430f33 100644
          kind: Kind,
      ) -> Self {
          Self {
-@@ -230,7 +237,7 @@ impl ShaderRenderElement {
+@@ -229,7 +236,7 @@ impl ShaderRenderElement {
          scale: f32,
          alpha: f32,
          uniforms: Rc<[Uniform<'static>]>,
@@ -6763,7 +6763,7 @@ index f1bf978..3430f33 100644
      ) {
          self.area.size = size;
          self.opaque_regions = opaque_regions.unwrap_or_default();
-@@ -286,24 +293,85 @@ impl Element for ShaderRenderElement {
+@@ -285,24 +292,85 @@ impl Element for ShaderRenderElement {
      }
  }
  
@@ -6853,7 +6853,7 @@ index f1bf978..3430f33 100644
          let Some(resources) = Resources::get(frame) else {
              return Ok(());
          };
-@@ -378,17 +446,17 @@ impl RenderElement<GlesRenderer> for ShaderRenderElement {
+@@ -377,17 +445,17 @@ impl RenderElement<GlesRenderer> for ShaderRenderElement {
  
          // render
          let span_loc = smithay::gpu_span_location!("draw shader");
@@ -6875,7 +6875,7 @@ index f1bf978..3430f33 100644
                      gl.TexParameteri(ffi::TEXTURE_2D, ffi::TEXTURE_MIN_FILTER, ffi::LINEAR as i32);
                      gl.TexParameteri(ffi::TEXTURE_2D, ffi::TEXTURE_MAG_FILTER, ffi::LINEAR as i32);
                      gl.TexParameteri(
-@@ -427,7 +495,7 @@ impl RenderElement<GlesRenderer> for ShaderRenderElement {
+@@ -426,7 +494,7 @@ impl RenderElement<GlesRenderer> for ShaderRenderElement {
  
                  let tint = if has_tint { 1.0f32 } else { 0.0f32 };
                  if has_debug {
@@ -6884,7 +6884,7 @@ index f1bf978..3430f33 100644
                  }
  
                  for uniform in &*self.additional_uniforms {
-@@ -513,12 +581,6 @@ impl RenderElement<GlesRenderer> for ShaderRenderElement {
+@@ -512,12 +580,6 @@ impl RenderElement<GlesRenderer> for ShaderRenderElement {
  
          Ok(())
      }
@@ -6897,7 +6897,7 @@ index f1bf978..3430f33 100644
  }
  
  impl<'render> RenderElement<TtyRenderer<'render>> for ShaderRenderElement {
-@@ -531,9 +593,9 @@ impl<'render> RenderElement<TtyRenderer<'render>> for ShaderRenderElement {
+@@ -530,9 +592,9 @@ impl<'render> RenderElement<TtyRenderer<'render>> for ShaderRenderElement {
          opaque_regions: &[Rectangle<i32, Physical>],
          cache: Option<&UserDataMap>,
      ) -> Result<(), TtyRendererError<'render>> {
@@ -7055,7 +7055,7 @@ index ed5e06d..1e3561c 100644
          match compile_open_program(renderer, src) {
              Ok(program) => Some(program),
 diff --git a/src/render_helpers/shadow.rs b/src/render_helpers/shadow.rs
-index 0d26201..5413b77 100644
+index d8d0eaa..e28b355 100644
 --- a/src/render_helpers/shadow.rs
 +++ b/src/render_helpers/shadow.rs
 @@ -4,7 +4,8 @@ use std::rc::Rc;
@@ -7077,7 +7077,7 @@ index 0d26201..5413b77 100644
  
  /// Renders a rounded rectangle shadow.
  #[derive(Debug, Clone)]
-@@ -239,19 +240,19 @@ impl Element for ShadowRenderElement {
+@@ -237,19 +238,19 @@ impl Element for ShadowRenderElement {
      }
  }
  
@@ -7101,7 +7101,7 @@ index 0d26201..5413b77 100644
                  &self.inner,
                  frame,
                  src,
-@@ -263,7 +264,7 @@ impl RenderElement<GlesRenderer> for ShadowRenderElement {
+@@ -261,7 +262,7 @@ impl RenderElement<GlesRenderer> for ShadowRenderElement {
          })
      }
  
@@ -7110,7 +7110,7 @@ index 0d26201..5413b77 100644
          self.inner.underlying_storage(renderer)
      }
  }
-@@ -278,8 +279,8 @@ impl<'render> RenderElement<TtyRenderer<'render>> for ShadowRenderElement {
+@@ -276,8 +277,8 @@ impl<'render> RenderElement<TtyRenderer<'render>> for ShadowRenderElement {
          opaque_regions: &[Rectangle<i32, Physical>],
          cache: Option<&UserDataMap>,
      ) -> Result<(), TtyRendererError<'render>> {
@@ -7269,7 +7269,7 @@ index 946ee3a..9e156bd 100644
      let _span = tracy_client::span!("render_snapshot_from_surface_tree");
  
 diff --git a/src/render_helpers/texture.rs b/src/render_helpers/texture.rs
-index 5e52950..4a6a5c6 100644
+index ccf8aad..426efcf 100644
 --- a/src/render_helpers/texture.rs
 +++ b/src/render_helpers/texture.rs
 @@ -1,6 +1,6 @@
@@ -7280,7 +7280,7 @@ index 5e52950..4a6a5c6 100644
  use smithay::backend::renderer::utils::{CommitCounter, OpaqueRegions};
  use smithay::backend::renderer::{ContextId, Frame as _, ImportMem, Renderer, Texture};
  use smithay::utils::user_data::UserDataMap;
-@@ -117,7 +117,7 @@ impl<T: Texture> TextureBuffer<T> {
+@@ -116,7 +116,7 @@ impl<T: Texture> TextureBuffer<T> {
      }
  }
  
@@ -7290,7 +7290,7 @@ index 5e52950..4a6a5c6 100644
          self.texture.is_unique_reference()
      }
 diff --git a/src/render_helpers/xray.rs b/src/render_helpers/xray.rs
-index f4b4f86..c1249f3 100644
+index 517b995..f4f24bf 100644
 --- a/src/render_helpers/xray.rs
 +++ b/src/render_helpers/xray.rs
 @@ -5,9 +5,9 @@ use std::rc::Rc;
@@ -7324,8 +7324,8 @@ index f4b4f86..c1249f3 100644
  }
  
  impl Xray {
-@@ -96,7 +96,7 @@ impl Xray {
-     #[allow(clippy::too_many_arguments)]
+@@ -95,7 +95,7 @@ impl Xray {
+ 
      pub fn render(
          &self,
 -        ctx: RenderCtx<GlesRenderer>,
@@ -7333,7 +7333,7 @@ index f4b4f86..c1249f3 100644
          params: RenderParams,
          xray_pos: XrayPos,
          blur: bool,
-@@ -296,16 +296,16 @@ impl Element for XrayElement {
+@@ -295,16 +295,16 @@ impl Element for XrayElement {
      }
  }
  
@@ -7353,7 +7353,7 @@ index f4b4f86..c1249f3 100644
          let mut buffer = self.buffer.borrow_mut();
          let texture = match buffer.render(frame, self.blur) {
              Ok(x) => x,
-@@ -367,8 +367,8 @@ impl<'render> RenderElement<TtyRenderer<'render>> for XrayElement {
+@@ -366,8 +366,8 @@ impl<'render> RenderElement<TtyRenderer<'render>> for XrayElement {
          opaque_regions: &[Rectangle<i32, Physical>],
          cache: Option<&UserDataMap>,
      ) -> Result<(), TtyRendererError<'render>> {
@@ -7405,7 +7405,7 @@ index 3224d8c..b8aa0d7 100644
          target_presentation_time: Duration,
      ) {
 diff --git a/src/screencasting/pw_utils.rs b/src/screencasting/pw_utils.rs
-index a4d2aa9..77603e8 100644
+index f580bd4..8de7006 100644
 --- a/src/screencasting/pw_utils.rs
 +++ b/src/screencasting/pw_utils.rs
 @@ -39,7 +39,7 @@ use smithay::backend::allocator::Fourcc;
@@ -7417,8 +7417,8 @@ index a4d2aa9..77603e8 100644
  use smithay::backend::renderer::sync::SyncPoint;
  use smithay::backend::renderer::ExportMem;
  use smithay::output::{Output, OutputModeSource};
-@@ -1210,9 +1210,9 @@ impl Cast {
-     #[allow(clippy::too_many_arguments)]
+@@ -1245,9 +1245,9 @@ impl Cast {
+ 
      pub fn dequeue_buffer_and_render(
          &mut self,
 -        renderer: &mut GlesRenderer,
@@ -7430,7 +7430,7 @@ index a4d2aa9..77603e8 100644
          size: Size<i32, Physical>,
          scale: Scale<f64>,
      ) -> bool {
-@@ -1348,7 +1348,7 @@ impl Cast {
+@@ -1383,7 +1383,7 @@ impl Cast {
          }
      }
  
@@ -7439,7 +7439,7 @@ index a4d2aa9..77603e8 100644
          let mut inner = self.inner.borrow_mut();
  
          // Clear out the damage tracker if we're in Ready state.
-@@ -1811,9 +1811,9 @@ unsafe fn add_invisible_cursor(spa_buffer: *mut spa_buffer) {
+@@ -1846,9 +1846,9 @@ unsafe fn add_invisible_cursor(spa_buffer: *mut spa_buffer) {
  }
  
  unsafe fn add_cursor_metadata(
@@ -7451,7 +7451,7 @@ index a4d2aa9..77603e8 100644
      redraw: bool,
  ) {
      unsafe {
-@@ -1907,11 +1907,11 @@ unsafe fn add_cursor_metadata(
+@@ -1942,11 +1942,11 @@ unsafe fn add_cursor_metadata(
  }
  
  fn render_to_shmbuf(
@@ -7523,7 +7523,7 @@ index 221ae05..4d81a43 100644
              return;
          };
 diff --git a/src/ui/hotkey_overlay.rs b/src/ui/hotkey_overlay.rs
-index 0b92e47..17808a8 100644
+index 03a0d4a..5664ea2 100644
 --- a/src/ui/hotkey_overlay.rs
 +++ b/src/ui/hotkey_overlay.rs
 @@ -9,7 +9,7 @@ use niri_config::{Action, Bind, Config, Key, ModKey, Modifiers, Trigger};
@@ -7553,7 +7553,7 @@ index 0b92e47..17808a8 100644
              render(renderer, &self.config.borrow(), self.mod_key, scale)
                  .unwrap_or_else(|_| RenderedOverlay { buffer: None })
          });
-@@ -332,7 +332,7 @@ fn collect_actions(config: &Config) -> Vec<&Action> {
+@@ -344,7 +344,7 @@ fn collect_actions(config: &Config) -> Vec<&Action> {
  }
  
  fn render(
@@ -7563,7 +7563,7 @@ index 0b92e47..17808a8 100644
      mod_key: ModKey,
      scale: f64,
 diff --git a/src/ui/mru.rs b/src/ui/mru.rs
-index 3f97696..7b5fc30 100644
+index 6650388..58d806d 100644
 --- a/src/ui/mru.rs
 +++ b/src/ui/mru.rs
 @@ -17,7 +17,7 @@ use smithay::backend::renderer::element::utils::{
@@ -7593,7 +7593,7 @@ index 3f97696..7b5fc30 100644
          mapped: &Mapped,
          scale: f64,
      ) -> Option<MruTexture> {
-@@ -1635,7 +1635,7 @@ impl Inner {
+@@ -1634,7 +1634,7 @@ impl Inner {
  }
  
  impl TitleTexture {
@@ -7602,7 +7602,7 @@ index 3f97696..7b5fc30 100644
          if self.title != title || self.scale != scale {
              self.texture = None;
              self.title = title.to_owned();
-@@ -1657,7 +1657,7 @@ impl TitleTexture {
+@@ -1656,7 +1656,7 @@ impl TitleTexture {
  }
  
  fn generate_title_texture(
@@ -7611,7 +7611,7 @@ index 3f97696..7b5fc30 100644
      title: &str,
      scale: f64,
  ) -> anyhow::Result<MruTexture> {
-@@ -1707,7 +1707,7 @@ fn generate_title_texture(
+@@ -1706,7 +1706,7 @@ fn generate_title_texture(
  impl ScopePanel {
      fn get(
          &mut self,
@@ -7620,7 +7620,7 @@ index 3f97696..7b5fc30 100644
          scale: f64,
          scope: MruScope,
      ) -> Option<MruTexture> {
-@@ -1724,7 +1724,7 @@ impl ScopePanel {
+@@ -1723,7 +1723,7 @@ impl ScopePanel {
  }
  
  fn generate_scope_panels(
@@ -7629,7 +7629,7 @@ index 3f97696..7b5fc30 100644
      scale: f64,
  ) -> anyhow::Result<[MruTexture; 3]> {
      fn make_panel_text(idx: usize) -> String {
-@@ -1764,7 +1764,7 @@ fn generate_scope_panels(
+@@ -1763,7 +1763,7 @@ fn generate_scope_panels(
      ])
  }
  

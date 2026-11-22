@@ -1,5 +1,5 @@
 diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
-index 9fa3c05f..5dc6781d 100644
+index eb39cc4..54ceb24 100644
 --- a/niri-config/src/lib.rs
 +++ b/niri-config/src/lib.rs
 @@ -58,7 +58,7 @@ pub use crate::output::{Output, OutputName, Outputs, Position, Vrr};
@@ -40,7 +40,7 @@ index 9fa3c05f..5dc6781d 100644
              clipboard {
                  disable-primary
              }
-@@ -2017,6 +2025,7 @@ mod tests {
+@@ -2021,6 +2029,7 @@ mod tests {
                      "~/Screenshots/screenshot.png",
                  ),
              ),
@@ -49,10 +49,10 @@ index 9fa3c05f..5dc6781d 100644
                  disable_primary: true,
              },
 diff --git a/src/niri.rs b/src/niri.rs
-index caae82fa..1ca1ec48 100644
+index dfbffaf..8663bd7 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
-@@ -562,6 +562,7 @@ pub struct OutputState {
+@@ -575,6 +575,7 @@ pub struct OutputState {
      ///    would occur, based on the last presentation time and output refresh interval. Sequence
      ///    is incremented in that timer, before attempting a redraw or sending frame callbacks.
      pub frame_callback_sequence: u32,
@@ -60,7 +60,7 @@ index caae82fa..1ca1ec48 100644
      /// Solid color buffer for the backdrop that we use instead of clearing to avoid damage
      /// tracking issues and make screenshots easier.
      pub backdrop_buffer: SolidColorBuffer,
-@@ -3409,6 +3410,7 @@ impl Niri {
+@@ -3434,6 +3435,7 @@ impl Niri {
              last_drm_sequence: None,
              vblank_throttle: VBlankThrottle::new(self.event_loop.clone(), name.connector.clone()),
              frame_callback_sequence: 0,
@@ -68,7 +68,7 @@ index caae82fa..1ca1ec48 100644
              backdrop_buffer: SolidColorBuffer::new(size, backdrop_color),
              xray: Xray::new(),
              lock_render_state,
-@@ -5699,7 +5701,21 @@ impl Niri {
+@@ -5793,7 +5795,21 @@ impl Niri {
  
          let frame_callback_time = get_monotonic_time();
  
@@ -88,9 +88,9 @@ index caae82fa..1ca1ec48 100644
 +            }
 +
              setup_force_render(&mut self.event_loop, mapped);
-             mapped.send_frame(
-                 output,
-@@ -5747,6 +5763,23 @@ impl Niri {
+             if mapped.is_window_cast_target() {
+                 ignore_primary_output.set(true);
+@@ -5847,6 +5863,23 @@ impl Niri {
                  should_send,
              );
          }
@@ -115,7 +115,7 @@ index caae82fa..1ca1ec48 100644
  
      pub fn send_frame_callbacks_on_fallback_timer(&mut self) {
 diff --git a/src/window/mapped.rs b/src/window/mapped.rs
-index e1ed408f..73ba25bc 100644
+index 06f2238..c0ffdb9 100644
 --- a/src/window/mapped.rs
 +++ b/src/window/mapped.rs
 @@ -80,6 +80,8 @@ pub struct Mapped {

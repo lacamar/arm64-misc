@@ -16,10 +16,10 @@ index 943a98e..eed97cc 100644
  
  #[derive(knuffel::Decode, Debug, Clone, Copy, PartialEq)]
 diff --git a/niri-config/src/lib.rs b/niri-config/src/lib.rs
-index 09d4036..e5247c9 100644
+index ac53bc7..19a2ec6 100644
 --- a/niri-config/src/lib.rs
 +++ b/niri-config/src/lib.rs
-@@ -2016,6 +2016,11 @@ mod tests {
+@@ -2019,6 +2019,11 @@ mod tests {
                      width: None,
                      height: None,
                      hide_on_workspace_switch: false,
@@ -32,10 +32,10 @@ index 09d4036..e5247c9 100644
              },
              prefer_no_csd: true,
 diff --git a/src/input/mod.rs b/src/input/mod.rs
-index db1d9e4..c22247d 100644
+index 5599045..76c92e5 100644
 --- a/src/input/mod.rs
 +++ b/src/input/mod.rs
-@@ -3290,6 +3290,21 @@ impl State {
+@@ -3303,6 +3303,21 @@ impl State {
  
              let is_overview_open = self.niri.layout.is_overview_open();
  
@@ -166,10 +166,10 @@ index 1baa972..848a663 100644
      }
  
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index 5430773..8d755d0 100644
+index a9582b6..3818bc1 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
-@@ -3522,6 +3522,29 @@ impl<W: LayoutElement> Layout<W> {
+@@ -3520,6 +3520,29 @@ impl<W: LayoutElement> Layout<W> {
              .collect()
      }
  
@@ -200,10 +200,10 @@ index 5430773..8d755d0 100644
          let Some(active_ws) = self.active_workspace() else {
              return;
 diff --git a/src/layout/tests.rs b/src/layout/tests.rs
-index b13c879..92a6b5b 100644
+index db2d5d2..31dfcbb 100644
 --- a/src/layout/tests.rs
 +++ b/src/layout/tests.rs
-@@ -3331,6 +3331,33 @@ fn scratchpad_shows_one_at_a_time() {
+@@ -3389,6 +3389,33 @@ fn scratchpad_shows_one_at_a_time() {
      layout.verify_invariants();
  }
  
@@ -238,10 +238,10 @@ index b13c879..92a6b5b 100644
  fn scratchpad_hide_on_workspace_switch() {
      let ops = [
 diff --git a/src/niri.rs b/src/niri.rs
-index fabcc1f..7d9ab77 100644
+index 628ea5a..4ec090f 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
-@@ -7561,6 +7561,11 @@ impl Niri {
+@@ -7612,6 +7612,11 @@ impl Niri {
              return;
          }
  
@@ -251,5 +251,5 @@ index fabcc1f..7d9ab77 100644
 +        }
 +
          // Recompute the current pointer focus because we don't update it during animations.
-         let current_focus = self.contents_under(pointer.current_location());
+         let current_focus = self.contents_under(prev_location);
  

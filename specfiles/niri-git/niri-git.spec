@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        48%{?dist}
+Release:        49%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -187,6 +187,10 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Sun Nov 22 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^23.git.ef54ab54-49
+- Rebase pr4392, wp-protocols, frame-callback-rate, vulkan, scratchpad-backdrop patches on b888f40f
+- Drop local decoration_destroyed stub (upstream)
+
 * Sat Nov 21 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^23.git.ef54ab54-48
 - Fade scratchpad backdrop blur on show and hide
 
