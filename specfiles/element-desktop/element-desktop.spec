@@ -3,11 +3,11 @@
 %global __provides_exclude_from ^%{_libexecdir}/%{name}/.*$
 %global appdir %{_libexecdir}/%{name}
 %global pnpm_version 11.23.0
-%global ec_commit b2f7fccc6ef3faf8ef53874aa92dd5e6e0e54fde
+%global ec_commit b480f7ebb4e91f52394a551681f0f0612efd7729
 
 Name:           element-desktop
 Version:        1.12.35
-Release:        7%{?dist}
+Release:        8%{?dist}
 Summary:        Matrix collaboration client
 
 License:        AGPL-3.0-only OR GPL-3.0-only
@@ -127,6 +127,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/512x512/apps/%{name}.png
 
 %changelog
+* Mon Nov 23 2026 Lachlan Marie <lchlnm@pm.me> - 1.12.35-8
+- Update ec to b480f7ebb4e91f52394a551681f0f0612efd7729
+
 * Sun Nov 22 2026 Lachlan Marie <lchlnm@pm.me> - 1.12.35-7
 - Update ec to b2f7fccc6ef3faf8ef53874aa92dd5e6e0e54fde
 
