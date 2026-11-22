@@ -2,7 +2,7 @@
 %global __strip /bin/true
 
 Name:           s2p
-Version:        0.3.4
+Version:        0.3.5
 Release:        1%{?dist}
 Summary:        TUI for combining source files into LLM-ready prompts
 
@@ -36,5 +36,8 @@ install -Dpm0755 %{name} %{buildroot}%{_bindir}/%{name}
 %{_bindir}/%{name}
 
 %changelog
+* Sun Nov 22 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.5-1
+- Update to 0.3.5
+
 * Mon Sep 28 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.4-1
 - Initial package
