@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        49%{?dist}
+Release:        50%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -187,6 +187,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Mon Nov 23 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^24.git.b888f40f-50
+- Rebase gestures, move-column-by-id patches
+
 * Sun Nov 22 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^24.git.b888f40f-49
 - Update to commit b888f40f8219ff2464bbb3e1514024b6955e34e2
 

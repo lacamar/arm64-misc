@@ -1,8 +1,8 @@
 diff --git a/niri-config/src/binds.rs b/niri-config/src/binds.rs
-index e7a04c3..bd5b024 100644
+index f8b27a5..e0284b3 100644
 --- a/niri-config/src/binds.rs
 +++ b/niri-config/src/binds.rs
-@@ -350,6 +350,8 @@ pub enum Action {
+@@ -355,6 +355,8 @@ pub enum Action {
          #[knuffel(argument)] usize,
          #[knuffel(property(name = "focus"), default = true)] bool,
      ),
@@ -11,7 +11,7 @@ index e7a04c3..bd5b024 100644
      MoveWindowDown(#[knuffel(property(name = "focus"), default = true)] bool),
      MoveWindowUp(#[knuffel(property(name = "focus"), default = true)] bool),
      MoveWindowDownOrToWorkspaceDown,
-@@ -670,9 +672,16 @@ impl From<niri_ipc::Action> for Action {
+@@ -701,9 +703,16 @@ impl From<niri_ipc::Action> for Action {
              niri_ipc::Action::MoveColumnRight { focus } => Self::MoveColumnRight(focus),
              niri_ipc::Action::MoveColumnToFirst { focus } => Self::MoveColumnToFirst(focus),
              niri_ipc::Action::MoveColumnToLast { focus } => Self::MoveColumnToLast(focus),
@@ -32,7 +32,7 @@ index e7a04c3..bd5b024 100644
                  Self::MoveColumnLeftOrToMonitorLeft
              }
 diff --git a/niri-ipc/src/lib.rs b/niri-ipc/src/lib.rs
-index 2cb60b1..87d2bd3 100644
+index 253d725..b7188da 100644
 --- a/niri-ipc/src/lib.rs
 +++ b/niri-ipc/src/lib.rs
 @@ -87,6 +87,8 @@ pub enum Request {
@@ -44,7 +44,7 @@ index 2cb60b1..87d2bd3 100644
      /// Change output configuration temporarily.
      ///
      /// The configuration is changed temporarily and not saved into the config file. If the output
-@@ -512,7 +514,7 @@ pub enum Action {
+@@ -521,7 +523,7 @@ pub enum Action {
      MoveColumnLeftOrToMonitorLeft {},
      /// Move the focused column to the right or to the monitor to the right.
      MoveColumnRightOrToMonitorRight {},
@@ -53,7 +53,7 @@ index 2cb60b1..87d2bd3 100644
      MoveColumnToIndex {
          /// New index for the column.
          ///
-@@ -526,6 +528,14 @@ pub enum Action {
+@@ -535,6 +537,14 @@ pub enum Action {
          #[serde(default = "default_true")]
          #[cfg_attr(feature = "clap", arg(long, action = clap::ArgAction::Set, default_value_t = true))]
          focus: bool,
@@ -84,10 +84,10 @@ index df69aa1..a98b918 100644
          action: Action,
      },
 diff --git a/src/input/mod.rs b/src/input/mod.rs
-index e305e47..96e0162 100644
+index a950c5b..5cd4865 100644
 --- a/src/input/mod.rs
 +++ b/src/input/mod.rs
-@@ -917,6 +917,14 @@ impl State {
+@@ -918,6 +918,14 @@ impl State {
          }
      }
  
@@ -102,8 +102,8 @@ index e305e47..96e0162 100644
      pub fn do_action(&mut self, action: Action, allow_when_locked: bool, time: InputTime) {
          if self.niri.is_locked() && !(allow_when_locked || allowed_when_locked(&action)) {
              return;
-@@ -1792,11 +1800,20 @@ impl State {
-                 }
+@@ -1816,11 +1824,20 @@ impl State {
+                 self.niri.queue_redraw_all();
              }
              Action::MoveColumnToIndex(idx, focus) => {
 -                self.niri.layout.move_column_to_index(idx, focus);
@@ -187,10 +187,10 @@ index 630089e..583b372 100644
              });
  
 diff --git a/src/layout/mod.rs b/src/layout/mod.rs
-index c06f71a..9bef051 100644
+index 7837dda..e116373 100644
 --- a/src/layout/mod.rs
 +++ b/src/layout/mod.rs
-@@ -2044,11 +2044,16 @@ impl<W: LayoutElement> Layout<W> {
+@@ -2042,11 +2042,16 @@ impl<W: LayoutElement> Layout<W> {
          true
      }
  
@@ -211,7 +211,7 @@ index c06f71a..9bef051 100644
  
      pub fn move_down(&mut self, focus: bool) {
 diff --git a/src/layout/scrolling.rs b/src/layout/scrolling.rs
-index 73c69e1..9f30fcf 100644
+index 47154c4..7718d5e 100644
 --- a/src/layout/scrolling.rs
 +++ b/src/layout/scrolling.rs
 @@ -1699,31 +1699,51 @@ impl<W: LayoutElement> ScrollingSpace<W> {
@@ -315,7 +315,7 @@ index 73c69e1..9f30fcf 100644
          } else {
              // Make sure the newly active window stays in view.
 diff --git a/src/layout/tests.rs b/src/layout/tests.rs
-index 5457044..12a44f9 100644
+index 9b04bf5..5e1eeee 100644
 --- a/src/layout/tests.rs
 +++ b/src/layout/tests.rs
 @@ -510,6 +510,8 @@ enum Op {
@@ -327,7 +327,7 @@ index 5457044..12a44f9 100644
          #[proptest(strategy = "1..=5usize")]
          index: usize,
          focus: bool,
-@@ -1231,7 +1233,10 @@ impl Op {
+@@ -1247,7 +1249,10 @@ impl Op {
  
                  layout.move_column_right_or_to_output(&output);
              }
@@ -339,7 +339,7 @@ index 5457044..12a44f9 100644
              Op::MoveWindowDown(focus) => layout.move_down(focus),
              Op::MoveWindowUp(focus) => layout.move_up(focus),
              Op::MoveWindowDownOrToWorkspaceDown => layout.move_down_or_to_workspace_down(),
-@@ -1739,6 +1744,52 @@ fn workspace_output_name(layout: &Layout<TestWindow>, ws_name: usize) -> &str {
+@@ -1796,6 +1801,52 @@ fn workspace_output_name(layout: &Layout<TestWindow>, ws_name: usize) -> &str {
          .output_name()
  }
  
@@ -393,10 +393,10 @@ index 5457044..12a44f9 100644
  fn workspace_output_fallback_promotes_preferred_in_reverse_connection_order() {
      // output3 is not a candidate, so it stays the primary monitor throughout; every assertion
 diff --git a/src/layout/workspace.rs b/src/layout/workspace.rs
-index 5aaa83f..7f6d5aa 100644
+index fbfbe50..5a27e58 100644
 --- a/src/layout/workspace.rs
 +++ b/src/layout/workspace.rs
-@@ -1101,11 +1101,15 @@ impl<W: LayoutElement> Workspace<W> {
+@@ -1110,11 +1110,15 @@ impl<W: LayoutElement> Workspace<W> {
          self.scrolling.move_column_to_last(focus);
      }
  
