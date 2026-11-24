@@ -9,7 +9,7 @@
 
 Name:           zen-control
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        22%{?dist}
+Release:        23%{?dist}
 Summary:        MCP bridge and WebExtension to drive the Zen browser from Claude Code
 
 License:        LicenseRef-Not-specified
@@ -33,6 +33,7 @@ Patch12:        0013-screenshot-path-wait-gone.patch
 Patch13:        0014-network-bodies.patch
 Patch14:        0015-background-tabs-stay-visible.patch
 Patch15:        0016-daemon-bridge.patch
+Patch16:        0017-origin-check.patch
 
 BuildArch:      noarch
 
@@ -109,6 +110,9 @@ install -Dpm0644 %{SOURCE1} %{buildroot}%{_userunitdir}/%{name}.service
 %config(noreplace) %{_sysconfdir}/zen/policies/policies.json
 
 %changelog
+* Tue Nov 24 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-23
+- Reject WebSocket clients with a web Origin
+
 * Tue Nov 17 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-22
 - Run bridge as a systemd --user daemon; MCP sessions only proxy
 - Fix re-election deadlock when a wedged owner keeps the port

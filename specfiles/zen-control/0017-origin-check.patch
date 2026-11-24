@@ -1,0 +1,11 @@
+--- a/server/index.js
++++ b/server/index.js
+@@ -70,7 +70,7 @@
+ }
+ 
+ function startOwner() {
+-  const wss = new WebSocketServer({ host: HOST, port: PORT });
++  const wss = new WebSocketServer({ host: HOST, port: PORT, verifyClient: ({ origin }) => !origin || origin.startsWith("moz-extension://") });
+   wss.on("listening", () => { mode = "owner"; log(`listening on ws://${HOST}:${PORT}`); });
+   wss.on("error", (e) => {
+     if (e.code !== "EADDRINUSE") return log("ws server error", e);
