@@ -1,7 +1,7 @@
-%global bumpver 0
+%global bumpver 1
 %global _name shadps4-qtlauncher
 %global tag 2026.11.19
-%global commit 1c35b9b147a8e67474fba6500bdfc309bef6f8e1
+%global commit 1f9030088d4e69f9c47cea22e0c1433368d238ac
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 
 %global _lto_cflags %{nil}
@@ -20,7 +20,7 @@ Patch0:         0001-seed-system-emulator-version.patch
 local externals = {
  { name="ext-fmt", ref="64db979", owner="shadps4-emu", path="fmt", version="12.0.0", license="MIT" },
  { name="json", ref="54be9b0", owner="nlohmann", path="json", version="3.12", license="MIT" },
- { name="openal-soft", ref="f120be6", owner="shadexternals", path="openal-soft", version="1.24.3", license="LGPL-2.0-or-later" },
+ { name="openal-soft", ref="b41444f", owner="shadexternals", path="openal-soft", version="1.24.3", license="LGPL-2.0-or-later" },
  { name="sdl3", ref="d5af35e3fbb5bb6555ed00e69740d52af2a4e877", owner="shadexternals", path="sdl3", version="3.4", license="Zlib" },
  { name="spdlog", ref="b8944a4", owner="gabime", path="spdlog", version="1.15", license="MIT" },
  { name="toml11", ref="a01fe3b", owner="ToruNiina", path="toml11", version="4.4", license="MIT" },
@@ -116,6 +116,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/net.shadps4.shadps4-q
 %{_datadir}/icons/hicolor/scalable/apps/net.shadps4.shadPS4.svg
 
 %changelog
+* Tue Nov 24 2026 Lachlan Marie <lchlnm@pm.me> - 2026.11.19^1.git.1f90300-1
+- Update to commit 1f9030088d4e69f9c47cea22e0c1433368d238ac
+
 * Fri Nov 20 2026 Lachlan Marie <lchlnm@pm.me> - 2026.11.19^0.git.1c35b9b-1
 - Update to 2026.11.19
 
