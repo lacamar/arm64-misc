@@ -9,7 +9,7 @@
 
 Name:           zen-control
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        23%{?dist}
+Release:        24%{?dist}
 Summary:        MCP bridge and WebExtension to drive the Zen browser from Claude Code
 
 License:        LicenseRef-Not-specified
@@ -110,7 +110,7 @@ install -Dpm0644 %{SOURCE1} %{buildroot}%{_userunitdir}/%{name}.service
 %config(noreplace) %{_sysconfdir}/zen/policies/policies.json
 
 %changelog
-* Tue Nov 24 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-23
+* Tue Nov 24 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-24
 - Reject WebSocket clients with a web Origin
 
 * Tue Nov 17 2026 Lachlan Marie <lchlnm@pm.me> - 0.1.2^0.git.4de1d80-22
