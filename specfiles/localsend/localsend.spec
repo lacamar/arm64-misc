@@ -5,8 +5,8 @@
 %global flutter_version 3.41.9
 
 Name:       localsend
-Version:    1.18.2
-Release:    1%{?dist}
+Version:        1.19.0
+Release:        1%{?dist}
 Summary:    An open source cross-platform alternative to AirDrop
 
 License:    Apache-2.0
@@ -117,6 +117,9 @@ install -Dpm0644 app/assets/img/logo-512.png \
 %{_datadir}/icons/hicolor/512x512/apps/localsend.png
 
 %changelog
+* Wed Nov 25 2026 Lachlan Marie <lchlnm@pm.me> - 1.19.0-1
+- Update to 1.19.0
+
 * Sat Oct 17 2026 Lachlan Marie <lchlnm@pm.me> - 1.18.2-1
 - Update to 1.18.2
 - Drop exact rust version pin
