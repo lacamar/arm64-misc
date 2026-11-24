@@ -5,8 +5,8 @@
 %global appdir %{_libexecdir}/%{name}
 
 Name:           rocketchat-desktop
-Version:        4.19.3
-Release:        3%{?dist}
+Version:        4.19.4
+Release:        1%{?dist}
 Summary:        Desktop client for Rocket.Chat
 
 License:        MIT
@@ -102,6 +102,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/*/apps/%{name}.png
 
 %changelog
+* Tue Nov 24 2026 Lachlan Marie <lchlnm@pm.me> - 4.19.4-1
+- Update to 4.19.4
+
 * Sat Nov 14 2026 Lachlan Marie <lchlnm@pm.me> - 4.19.3-3
 - Update to 4.19.3
 
