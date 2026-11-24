@@ -4,7 +4,7 @@
 %global rustflags_codegen_units 16
 
 Name:           ms
-Version:        0.4.0
+Version:        0.4.1
 Release:        1%{?dist}
 Summary:        Mine coding agent sessions into Claude Code skills
 
@@ -42,6 +42,9 @@ install -Dpsm0755 target/rpm/%{name} %{buildroot}%{_bindir}/%{name}
 %{_bindir}/%{name}
 
 %changelog
+* Tue Nov 24 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.1-1
+- Update to 0.4.1
+
 * Sun Nov 22 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0-1
 - Update to 0.4.0
 
