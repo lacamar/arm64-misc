@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        51%{?dist}
+Release:        52%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -132,6 +132,7 @@ Opening a new window never causes existing windows to resize.
 %prep
 %setup -q -n niri-%{commit} -a1
 mv smithay-%{smithay_commit} smithay
+sed -i "/^source = \"git+https:\/\/github.com\/Smithay\/smithay.git/d" Cargo.lock
 %autopatch -p1
 
 %cargo_prep -N
@@ -187,7 +188,8 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
-* Wed Nov 25 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^27.git.886f4294-51
+* Wed Nov 25 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^27.git.886f4294-52
+- Drop smithay source lines from Cargo.lock in %%prep
 - Rebase niri-wp-protocols.patch
 
 * Tue Nov 24 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^27.git.886f4294-50

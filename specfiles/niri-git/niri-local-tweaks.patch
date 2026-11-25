@@ -1,23 +1,3 @@
-diff --git a/Cargo.lock b/Cargo.lock
-index 5a0e00c5..c625f59c 100644
---- a/Cargo.lock
-+++ b/Cargo.lock
-@@ -3258,7 +3258,6 @@ checksum = "e8e2fb0f499abb4d162f2bedad68f5ef91a1682b5a03596ddb67efd37768d100"
- [[package]]
- name = "smithay"
- version = "0.7.0"
--source = "git+https://github.com/Smithay/smithay.git?rev=a38bb709a0400759b6a4fab6129e0f1dd72808c3#a38bb709a0400759b6a4fab6129e0f1dd72808c3"
- dependencies = [
-  "aliasable",
-  "appendlist",
-@@ -3335,7 +3334,6 @@ dependencies = [
- [[package]]
- name = "smithay-drm-extras"
- version = "0.1.0"
--source = "git+https://github.com/Smithay/smithay.git?rev=a38bb709a0400759b6a4fab6129e0f1dd72808c3#a38bb709a0400759b6a4fab6129e0f1dd72808c3"
- dependencies = [
-  "drm",
-  "libdisplay-info",
 diff --git a/Cargo.toml b/Cargo.toml
 index 3146c659..ba39650e 100644
 --- a/Cargo.toml
