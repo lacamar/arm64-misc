@@ -2,10 +2,11 @@
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 %global tag 0.5.14
 %global bumpver 1
+%global debug_package %{nil}
 
 Name:           omarchy-ane
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Apple Neural Engine userspace: libane, runner, smoke test, firmware fetch
 License:        MIT
 URL:            https://github.com/joshuaswarren/omarchy-ane
@@ -64,5 +65,8 @@ tools/ane-selfcheck fixtures/h14-anec
 %{_includedir}/libane/
 
 %changelog
+* Wed Nov 25 2026 Lachlan Marie <lchlnm@pm.me> - 0.5.14^1.git.b351ae2-2
+- No debuginfo package
+
 * Tue Nov 24 2026 Lachlan Marie <lchlnm@pm.me> - 0.5.14^1.git.b351ae2-1
 - Initial package
