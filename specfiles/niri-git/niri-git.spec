@@ -24,11 +24,11 @@
 # Convince rust-srpm-macros to use Cargo.lock with the Smithay commit.
 %global __cargo_common_opts %{?_smp_mflags} -Z avoid-dev-deps --locked
 
-%global bumpver 27
+%global bumpver 28
 %global tag 26.04
-%global commit 886f4294f9ab461099c4d85c8127203621a71a72
+%global commit 6072f67d9fe0f1c1182f72cc5d4f2ca5f047bf9e
 %global shortcommit %{sub %{commit} 1 8}
-%global smithay_commit a38bb709a0400759b6a4fab6129e0f1dd72808c3
+%global smithay_commit 54cf9c10fe214066f2e69f43784aafde0d921682
 
 Name:           niri
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
@@ -188,6 +188,10 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Wed Nov 25 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^28.git.6072f67d-52
+- Update to commit 6072f67d9fe0f1c1182f72cc5d4f2ca5f047bf9e
+- Update smithay to 54cf9c10fe214066f2e69f43784aafde0d921682
+
 * Wed Nov 25 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^27.git.886f4294-52
 - Drop smithay source lines from Cargo.lock in %%prep
 - Rebase niri-wp-protocols.patch
