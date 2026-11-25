@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        50%{?dist}
+Release:        51%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -187,6 +187,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Wed Nov 25 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^27.git.886f4294-51
+- Rebase niri-wp-protocols.patch
+
 * Tue Nov 24 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^27.git.886f4294-50
 - Update to commit 886f4294f9ab461099c4d85c8127203621a71a72
 

@@ -23,7 +23,7 @@ index 88158cd..cc2ace6 100644
  
      fn commit(&mut self, surface: &WlSurface) {
 diff --git a/src/niri.rs b/src/niri.rs
-index f6a9e1e..9a1e9d5 100644
+index c8eb422..b656d50 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -62,6 +62,7 @@ use smithay::reexports::calloop::{
@@ -107,7 +107,7 @@ index f6a9e1e..9a1e9d5 100644
              pointer_inactivity_timer_got_reset: false,
              notified_activity_this_iteration: false,
              pointer_inside_hot_corner: false,
-@@ -5349,15 +5366,29 @@ impl Niri {
+@@ -5489,15 +5506,29 @@ impl Niri {
  
          let current = current
              || self.layout.windows_for_output(output).any(|mapped| {
@@ -144,7 +144,7 @@ index f6a9e1e..9a1e9d5 100644
                          {
                              visible = true;
                          }
-@@ -5697,6 +5728,7 @@ impl Niri {
+@@ -5873,6 +5904,7 @@ impl Niri {
  
          let state = self.output_state.get(output).unwrap();
          let sequence = state.frame_callback_sequence;
@@ -152,7 +152,7 @@ index f6a9e1e..9a1e9d5 100644
  
          // HACK: we set this to true for mapped windows that are screencast targets to keep them
          // redrawing even when they are invisible.
-@@ -5744,6 +5776,7 @@ impl Niri {
+@@ -5920,6 +5952,7 @@ impl Niri {
  
              if send {
                  *last_sent_at = Some((output.clone(), sequence));
@@ -160,7 +160,7 @@ index f6a9e1e..9a1e9d5 100644
                  Some(output.clone())
              } else {
                  None
-@@ -5829,24 +5862,19 @@ impl Niri {
+@@ -6018,24 +6051,19 @@ impl Niri {
          let output = &output;
  
          let frame_callback_time = get_monotonic_time();
@@ -192,16 +192,25 @@ index f6a9e1e..9a1e9d5 100644
              }
  
              if let Some(surface) = &state.lock_surface {
-@@ -5855,7 +5883,7 @@ impl Niri {
+@@ -6046,7 +6074,7 @@ impl Niri {
                      output,
                      frame_callback_time,
                      FRAME_CALLBACK_THROTTLE,
 -                    |_, _| None,
 +                    fifo,
                  );
+ 
+                 for (popup, _) in PopupManager::popups_for_surface(surface) {
+@@ -6056,7 +6084,7 @@ impl Niri {
+                         output,
+                         frame_callback_time,
+                         FRAME_CALLBACK_THROTTLE,
+-                        |_, _| None,
++                        fifo,
+                     );
+                 }
              }
-         }
-@@ -5866,7 +5894,7 @@ impl Niri {
+@@ -6068,7 +6096,7 @@ impl Niri {
                  output,
                  frame_callback_time,
                  FRAME_CALLBACK_THROTTLE,
@@ -210,7 +219,7 @@ index f6a9e1e..9a1e9d5 100644
              );
          }
  
-@@ -5876,11 +5904,59 @@ impl Niri {
+@@ -6078,11 +6106,59 @@ impl Niri {
                  output,
                  frame_callback_time,
                  FRAME_CALLBACK_THROTTLE,
@@ -271,7 +280,7 @@ index f6a9e1e..9a1e9d5 100644
      pub fn take_presentation_feedbacks(
          &mut self,
          output: &Output,
-@@ -7798,3 +7874,18 @@ niri_render_elements! {
+@@ -8019,3 +8095,18 @@ niri_render_elements! {
          RelocatedMemoryBuffer = RelocateRenderElement<MemoryRenderBufferRenderElement<R>>,
      }
  }
