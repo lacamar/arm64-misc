@@ -4,8 +4,8 @@
 %global pnpm_version 11.23.0
 
 Name:           ledger-live
-Version:        4.29.0
-Release:        2%{?dist}
+Version:        4.30.0
+Release:        1%{?dist}
 Summary:        Ledger Wallet desktop app
 
 License:        MIT
@@ -107,6 +107,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_udevrulesdir}/20-hw1.rules
 
 %changelog
+* Fri Nov 27 2026 Lachlan Marie <lchlnm@pm.me> - 4.30.0-1
+- Update to 4.30.0
+
 * Fri Nov 27 2026 Lachlan Marie <lchlnm@pm.me> - 4.29.0-2
 - Fix stale axios catalog pin in lockfile
 
