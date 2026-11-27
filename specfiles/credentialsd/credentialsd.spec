@@ -4,7 +4,7 @@
 
 Name:           credentialsd
 Version:        0.4.0
-Release:        6%{?dist}
+Release:        7%{?dist}
 Summary:        xdg-desktop-portal backend for WebAuthn credentials
 
 License:        LGPL-3.0-only
@@ -13,6 +13,7 @@ Source0:        %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
 Source1:        https://github.com/linux-credentials/libwebauthn/archive/%{lwa_commit}/libwebauthn-%{lwa_commit}.tar.gz
 Source2:        credentialsd.portal
 Source3:        portals.conf
+Source4:        bind-portal.conf
 Patch0:         credentialsd-supersede-stale-request.patch
 Patch1:         libwebauthn-hybrid-maxmsgsize.patch
 Patch2:         credentialsd-webext-all-frames.patch
@@ -79,6 +80,9 @@ EOF
 %find_lang %{name}-ui
 install -Dpm0644 %{SOURCE2} %{buildroot}%{_datadir}/xdg-desktop-portal/portals/credentialsd.portal
 install -Dpm0644 %{SOURCE3} %{buildroot}%{portalconfdir}/portals.conf
+for u in Credentials UiControl; do
+  install -Dpm0644 %{SOURCE4} %{buildroot}%{_userunitdir}/xyz.iinuwa.credentialsd.$u.service.d/bind-portal.conf
+done
 
 %post
 %systemd_user_post xyz.iinuwa.credentialsd.Credentials.service
@@ -108,6 +112,7 @@ install -Dpm0644 %{SOURCE3} %{buildroot}%{portalconfdir}/portals.conf
 %dir %{portalconfdir}
 %config(noreplace) %{portalconfdir}/portals.conf
 %{_userunitdir}/xyz.iinuwa.credentialsd.Credentials.service
+%{_userunitdir}/xyz.iinuwa.credentialsd.Credentials.service.d/
 
 %files ui -f %{name}-ui.lang
 %license LICENSE.md
@@ -119,6 +124,7 @@ install -Dpm0644 %{SOURCE3} %{buildroot}%{portalconfdir}/portals.conf
 %{_datadir}/icons/hicolor/symbolic/apps/xyz.iinuwa.credentialsd.CredentialsUi-symbolic.svg
 %{_datadir}/dbus-1/services/xyz.iinuwa.credentialsd.UiControl.service
 %{_userunitdir}/xyz.iinuwa.credentialsd.UiControl.service
+%{_userunitdir}/xyz.iinuwa.credentialsd.UiControl.service.d/
 
 %files webextension
 %{_bindir}/credentialsd-firefox-helper
@@ -128,6 +134,9 @@ install -Dpm0644 %{SOURCE3} %{buildroot}%{portalconfdir}/portals.conf
 %{_datadir}/credentialsd/
 
 %changelog
+* Fri Nov 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0-7
+- Restart with xdg-desktop-portal
+
 * Tue Nov 17 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0-6
 - Update lwa to 9d7d92f7263fe9c3fbbe7c751c83a03538297130
 
