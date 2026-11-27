@@ -8,7 +8,7 @@
 
 Name:           mil-hwx-compiler
 Version:        0.3.4
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Core ML MIL to Apple Neural Engine program compiler
 License:        MIT AND LGPL-2.1-or-later
 URL:            https://github.com/joshuaswarren/mil-hwx-compiler
@@ -75,9 +75,12 @@ make build/mil-hwxc CXX=clang++ GNUSTEP_PREFIX=$gs GNUSTEP_CONFIG=$gs/bin/gnuste
 %install
 install -Dm755 build/mil-hwxc %{buildroot}%{_bindir}/mil-hwxc
 install -d %{buildroot}%{privlib}
-cp -P gs/lib/libobjc.so.* gs/lib/libgnustep-base.so.* %{buildroot}%{privlib}/
-for f in %{buildroot}%{privlib}/*.so.*; do
-    [ -L "$f" ] || patchelf --set-rpath %{privlib} "$f"
+cp -P gs/lib/libobjc.so* gs/lib/libgnustep-base.so* %{buildroot}%{privlib}/
+for f in %{buildroot}%{privlib}/*.so*; do
+    [ -L "$f" ] && continue
+    patchelf --set-rpath %{privlib} "$f"
+    s=$(patchelf --print-soname "$f")
+    [ -e %{buildroot}%{privlib}/$s ] || ln -s "$(basename "$f")" %{buildroot}%{privlib}/$s
 done
 patchelf --set-rpath %{privlib} %{buildroot}%{_bindir}/mil-hwxc
 
@@ -93,6 +96,9 @@ python3 tests/test_h14_fixture_programs.py build/mil-hwxc
 %{privlib}/
 
 %changelog
+* Fri Nov 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.4-3
+- Install unversioned libobjc with soname link
+
 * Fri Nov 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.4-2
 - Backport gnustep-base 4a61eee44f (clang 23 __block ivar)
 
