@@ -8,7 +8,7 @@
 
 Name:           mil-hwx-compiler
 Version:        0.3.4
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Core ML MIL to Apple Neural Engine program compiler
 License:        MIT AND LGPL-2.1-or-later
 URL:            https://github.com/joshuaswarren/mil-hwx-compiler
@@ -43,6 +43,7 @@ and H14 (M2) Neural Engine, runnable with omarchy-ane-run.
 tar xf %{SOURCE1}
 tar xf %{SOURCE2}
 tar xf %{SOURCE3}
+sed -i 's/BLOCK_SCOPE GSScheduledBlock _block;/GSScheduledBlock _block;/' libs-base-%{base_commit}/Headers/Foundation/NSBackgroundActivityScheduler.h
 
 %build
 gs=$PWD/gs
@@ -92,5 +93,8 @@ python3 tests/test_h14_fixture_programs.py build/mil-hwxc
 %{privlib}/
 
 %changelog
+* Fri Nov 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.4-2
+- Backport gnustep-base 4a61eee44f (clang 23 __block ivar)
+
 * Fri Nov 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.4-1
 - Initial package
