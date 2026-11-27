@@ -1,8 +1,8 @@
 # copr-exclude-chroots: fedora-43-aarch64
-%global commit 37e3e0df6ae7ed6a9425d819984b10c554e7a214
+%global commit af3f63d119334d9178daf19542a11de2caa26f9f
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 %global tag 0
-%global bumpver 1
+%global bumpver 2
 %global owntone_version 29.3
 %global engine %{_libexecdir}/pw-airplay
 
@@ -111,6 +111,9 @@ sed -e 's|/usr/local/sbin/airptpd|%{engine}/sbin/airptpd|' -e '/^After=/a Confli
 %config(noreplace) %{_sysconfdir}/pipewire/pipewire.conf.d/50-pw-airplay-no-raop.conf
 
 %changelog
+* Fri Nov 27 2026 Lachlan Marie <lchlnm@pm.me> - 0^2.git.af3f63d-1
+- Update to commit af3f63d119334d9178daf19542a11de2caa26f9f
+
 * Sun Nov 15 2026 Lachlan Marie <lchlnm@pm.me> - 0^1.git.37e3e0d-1
 - Normalize spec for mx-rpm -U
 
