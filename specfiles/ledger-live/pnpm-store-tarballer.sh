@@ -12,6 +12,7 @@ node -e 'const p=require("./package.json");if(!p.pnpm?.supportedArchitectures)pr
 sed -i "s/\"packageManager\": \"pnpm@[^\"]*\"/\"packageManager\": \"pnpm@$pnpm_version\"/" package.json
 sed -i "/^minimumReleaseAge:/d" pnpm-workspace.yaml
 printf "minimumReleaseAge: 0\nfetchTimeout: 600000\nfetchRetries: 5\n" >> pnpm-workspace.yaml
+sed -i "s/^        version: 1.20.0(debug@4.4.3)$/        version: 1.21.1(debug@4.4.3)/" pnpm-lock.yaml
 export npm_config_manage_package_manager_versions=false
 node "$work/package/bin/pnpm.mjs" install --filter="ledger-live-desktop..." --filter="@ledgerhq/ledger-live" --frozen-lockfile --ignore-scripts --store-dir "$work/pnpm-store"
 tar -C "$work" -cf - pnpm-store | zstd -T0 -10 -f -o "$src/ledger-live-$version-pnpm-store.tar.zst"

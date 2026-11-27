@@ -5,7 +5,7 @@
 
 Name:           ledger-live
 Version:        4.29.0
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Ledger Wallet desktop app
 
 License:        MIT
@@ -34,6 +34,7 @@ node -e 'const p=require("./package.json");if(!p.pnpm?.supportedArchitectures)pr
 sed -i 's/"packageManager": "pnpm@[^"]*"/"packageManager": "pnpm@%{pnpm_version}"/' package.json
 sed -i '/^minimumReleaseAge:/d' pnpm-workspace.yaml
 echo "minimumReleaseAge: 0" >> pnpm-workspace.yaml
+sed -i "s/^        version: 1.20.0(debug@4.4.3)$/        version: 1.21.1(debug@4.4.3)/" pnpm-lock.yaml
 tar xzf %{SOURCE4}
 echo '[]' > apps/ledger-live-desktop/release-notes.json
 
@@ -106,6 +107,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_udevrulesdir}/20-hw1.rules
 
 %changelog
+* Fri Nov 27 2026 Lachlan Marie <lchlnm@pm.me> - 4.29.0-2
+- Fix stale axios catalog pin in lockfile
+
 * Fri Nov 20 2026 Lachlan Marie <lchlnm@pm.me> - 4.29.0-1
 - Update to 4.29.0
 
