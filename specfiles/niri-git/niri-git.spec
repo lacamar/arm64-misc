@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        52%{?dist}
+Release:        53%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -55,8 +55,6 @@ Patch:          niri-pr4295.patch
 Patch:          niri-pr4574.patch
 # https://github.com/niri-wm/niri/pull/4330
 Patch:          niri-pr4330.patch
-# https://github.com/niri-wm/niri/pull/4392
-Patch:          niri-pr4392.patch
 Patch:          niri-scratchpad.patch
 Patch:          niri-session-management.patch
 # https://github.com/niri-wm/niri/pull/3956
@@ -188,6 +186,10 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^29.git.6072f67d-53
+- Drop niri-pr4392.patch, superseded by upstream offscreen-fps
+- Move find_window_and_output_by into niri-scratchpad.patch
+
 * Fri Nov 27 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^29.git.6072f67d-52
 - Update smithay to 46643d204d61eef18bfb17faa814559af70504ed
 

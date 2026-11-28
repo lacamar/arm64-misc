@@ -335,35 +335,59 @@ index e79a8ffc..328d3ad4 100644
          match &mut self.monitor_set {
              MonitorSet::Normal { monitors, .. } => {
                  for mon in monitors {
-@@ -1474,6 +1508,12 @@ impl<W: LayoutElement> Layout<W> {
-             }
-         }
+@@ -1460,6 +1494,51 @@ impl<W: LayoutElement> Layout<W> {
+         None
+     }
  
++    pub fn find_window_and_output_by(
++        &self,
++        mut f: impl FnMut(&W, Option<&Output>) -> bool,
++    ) -> Option<(&W, Option<&Output>)> {
++        if let Some(InteractiveMoveState::Moving(move_)) = &self.interactive_move {
++            let win = move_.tile.window();
++            let out = Some(&move_.output);
++            if f(win, out) {
++                return Some((win, out));
++            }
++        }
++
 +        for removed in &self.scratchpad {
 +            if f(removed.tile.window(), None) {
 +                return Some((removed.tile.window(), None));
 +            }
 +        }
 +
-         match &self.monitor_set {
-             MonitorSet::Normal { monitors, .. } => {
-                 for mon in monitors {
-@@ -1513,6 +1553,14 @@ impl<W: LayoutElement> Layout<W> {
-             }
-         }
- 
-+        if let Some(removed) = self
-+            .scratchpad
-+            .iter_mut()
-+            .find(|r| f(r.tile.window(), None))
-+        {
-+            return Some((removed.tile.window_mut(), None));
++        match &self.monitor_set {
++            MonitorSet::Normal { monitors, .. } => {
++                for mon in monitors {
++                    let out = Some(&mon.output);
++                    for ws in &mon.workspaces {
++                        for win in ws.windows() {
++                            if f(win, out) {
++                                return Some((win, out));
++                            }
++                        }
++                    }
++                }
++            }
++            MonitorSet::NoOutputs { workspaces } => {
++                for ws in workspaces {
++                    for win in ws.windows() {
++                        if f(win, None) {
++                            return Some((win, None));
++                        }
++                    }
++                }
++            }
 +        }
 +
-         match &mut self.monitor_set {
-             MonitorSet::Normal { monitors, .. } => {
-                 for mon in monitors {
-@@ -1650,6 +1698,11 @@ impl<W: LayoutElement> Layout<W> {
++        None
++    }
++
+     /// Computes the window-geometry-relative target rect for popup unconstraining.
+     ///
+     /// We will try to fit popups inside this rect.
+@@ -1572,6 +1651,11 @@ impl<W: LayoutElement> Layout<W> {
              }
          }
  
@@ -375,7 +399,7 @@ index e79a8ffc..328d3ad4 100644
          let MonitorSet::Normal {
              monitors,
              active_monitor_idx,
-@@ -1807,6 +1860,15 @@ impl<W: LayoutElement> Layout<W> {
+@@ -1729,6 +1813,15 @@ impl<W: LayoutElement> Layout<W> {
              f(move_.tile.window(), Some(&move_.output), None, layout);
          }
  
@@ -391,7 +415,7 @@ index e79a8ffc..328d3ad4 100644
          match &self.monitor_set {
              MonitorSet::Normal { monitors, .. } => {
                  for mon in monitors {
-@@ -1832,6 +1894,10 @@ impl<W: LayoutElement> Layout<W> {
+@@ -1754,6 +1847,10 @@ impl<W: LayoutElement> Layout<W> {
              f(move_.tile.window_mut(), Some(&move_.output));
          }
  
@@ -402,7 +426,7 @@ index e79a8ffc..328d3ad4 100644
          match &mut self.monitor_set {
              MonitorSet::Normal { monitors, .. } => {
                  for mon in monitors {
-@@ -2517,6 +2583,10 @@ impl<W: LayoutElement> Layout<W> {
+@@ -2439,6 +2536,10 @@ impl<W: LayoutElement> Layout<W> {
  
          let zoom = self.overview_zoom();
  
@@ -413,7 +437,7 @@ index e79a8ffc..328d3ad4 100644
          let mut move_win_id = None;
          if let Some(state) = &self.interactive_move {
              match state {
-@@ -3388,6 +3458,148 @@ impl<W: LayoutElement> Layout<W> {
+@@ -3310,6 +3411,148 @@ impl<W: LayoutElement> Layout<W> {
          workspace.move_floating_window(id, x, y, animate);
      }
  
@@ -562,7 +586,7 @@ index e79a8ffc..328d3ad4 100644
      pub fn focus_output(&mut self, output: &Output) {
          if let MonitorSet::Normal {
              monitors,
-@@ -4990,6 +5202,40 @@ impl<W: LayoutElement> Layout<W> {
+@@ -4912,6 +5155,40 @@ impl<W: LayoutElement> Layout<W> {
  
          self.is_active = is_active;
  
