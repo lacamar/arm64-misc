@@ -24,9 +24,9 @@
 # Convince rust-srpm-macros to use Cargo.lock with the Smithay commit.
 %global __cargo_common_opts %{?_smp_mflags} -Z avoid-dev-deps --locked
 
-%global bumpver 29
+%global bumpver 30
 %global tag 26.04
-%global commit 6072f67d9fe0f1c1182f72cc5d4f2ca5f047bf9e
+%global commit 59a6615cca01a19e462964593c94b2e099484aab
 %global shortcommit %{sub %{commit} 1 8}
 %global smithay_commit 46643d204d61eef18bfb17faa814559af70504ed
 
@@ -186,6 +186,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^30.git.59a6615c-54
+- Update to commit 59a6615cca01a19e462964593c94b2e099484aab
+
 * Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^29.git.6072f67d-54
 - Rebase wp-protocols, frame-callback-rate, vulkan patches on offscreen-fps
 
