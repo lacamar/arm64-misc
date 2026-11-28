@@ -7,7 +7,7 @@
 
 Name:           element-desktop
 Version:        1.12.36
-Release:        5%{?dist}
+Release:        6%{?dist}
 Summary:        Matrix collaboration client
 
 License:        AGPL-3.0-only OR GPL-3.0-only
@@ -64,6 +64,7 @@ pnpm exec nx run-many -p element-desktop -t build:ts build:res
 node %{SOURCE5} "$PWD/apps/desktop" pkcs11js graphene-pk11 > prod-entries
 
 %install
+export PATH=$PWD/bin:$PATH
 install -d %{buildroot}%{appdir}/build %{buildroot}%{appdir}/node_modules/.pnpm
 cp -a apps/desktop/lib %{buildroot}%{appdir}/
 while read -r e; do cp -a node_modules/.pnpm/$e %{buildroot}%{appdir}/node_modules/.pnpm/; done < prod-entries
@@ -128,6 +129,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/512x512/apps/%{name}.png
 
 %changelog
+* Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 1.12.36-6
+- Use node-24 in install on f43
+
 * Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 1.12.36-5
 - Key pnpm store tarball by ec commit
 - Use node-24 binary on f43
