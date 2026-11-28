@@ -97,7 +97,7 @@ Summary:        Mesa graphics libraries
 %global bumpver 17
 %global ver 27.0.0
 Version:        %{ver}~%{bumpver}.git.%{shortcommit}
-Release:        5%{?dist}
+Release:        6%{?dist}
 License:        MIT AND BSD-3-Clause AND SGI-B-2.0
 URL:            https://mesa3d.org
 
@@ -691,6 +691,7 @@ ln -s libGLX_mesa.so.0 %{buildroot}%{_libdir}/libGLX_system.so.0
 %{_libdir}/dri/sti_dri.so
 %{_libdir}/dri/sun4i-drm_dri.so
 %{_libdir}/dri/udl_dri.so
+%{_libdir}/dri/verisilicon_dri.so
 %{_libdir}/dri/vkms_dri.so
 %{_libdir}/dri/zynqmp-dpsub_dri.so
 %endif
@@ -784,6 +785,9 @@ ln -s libGLX_mesa.so.0 %{buildroot}%{_libdir}/libGLX_system.so.0
 %endif
 
 %changelog
+* Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 27.0.0~17.git.651a12d3-6
+- Package verisilicon kmsro DRI driver
+
 * Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 27.0.0~17.git.651a12d3-5
 - Update to commit 651a12d357cefc7ee30f53f6bed0422d51202040
 
