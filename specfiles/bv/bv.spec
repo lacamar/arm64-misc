@@ -2,7 +2,7 @@
 %global goipath github.com/Dicklesworthstone/beads_viewer
 
 Name:           bv
-Version:        0.29.0
+Version:        0.29.1
 Release:        1%{?dist}
 Summary:        Terminal UI and graph analytics for Beads issue trackers
 
@@ -39,6 +39,9 @@ install -Dpm0755 %{name} %{buildroot}%{_bindir}/%{name}
 %{_bindir}/%{name}
 
 %changelog
+* Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 0.29.1-1
+- Update to 0.29.1
+
 * Fri Nov 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.29.0-1
 - Update to 0.29.0
 
