@@ -5,7 +5,7 @@
 
 Name:           ledger-live
 Version:        4.30.0
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Ledger Wallet desktop app
 
 License:        MIT
@@ -54,7 +54,6 @@ export PATH=$PWD/bin:$PATH
 pnpm install --offline --frozen-lockfile --ignore-scripts --store-dir "$PWD/pnpm-store" --filter="ledger-live-desktop..." --filter="@ledgerhq/ledger-live"
 pnpm run nx:write-cache-config
 pnpm exec nx run @ledgerhq/icons-ui:build
-cp -a libs/ui/packages/icons/{react,native,reactLegacy,nativeLegacy} "$(readlink -f libs/ui/packages/react/node_modules/@ledgerhq/icons-ui)/"
 pnpm exec nx run ledger-live-desktop:build-lib-deps
 pnpm desktop build:js
 
@@ -109,6 +108,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_udevrulesdir}/20-hw1.rules
 
 %changelog
+* Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 4.30.0-3
+- Drop obsolete icons-ui copy
+
 * Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 4.30.0-2
 - Build with full ICU data (Intl.Segmenter segfault)
 - Use node-24 binary on f43
