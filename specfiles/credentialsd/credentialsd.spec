@@ -4,7 +4,7 @@
 
 Name:           credentialsd
 Version:        0.4.0
-Release:        7%{?dist}
+Release:        8%{?dist}
 Summary:        xdg-desktop-portal backend for WebAuthn credentials
 
 License:        LGPL-3.0-only
@@ -18,6 +18,7 @@ Patch0:         credentialsd-supersede-stale-request.patch
 Patch1:         libwebauthn-hybrid-maxmsgsize.patch
 Patch2:         credentialsd-webext-all-frames.patch
 Patch3:         credentialsd-cancel-on-ui-close.patch
+Patch4:         credentialsd-portal-cancel.patch
 
 BuildRequires:  blueprint-compiler >= 0.20.4
 BuildRequires:  cargo
@@ -134,6 +135,11 @@ done
 %{_datadir}/credentialsd/
 
 %changelog
+* Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0-8
+- Cancel on page abort or portal Request.Close
+- Close UI on cancel
+- Fix UI deadlock on Session.Close
+
 * Fri Nov 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0-7
 - Restart with xdg-desktop-portal
 
