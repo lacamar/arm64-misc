@@ -7,13 +7,13 @@
 
 Name:           element-desktop
 Version:        1.12.36
-Release:        4%{?dist}
+Release:        5%{?dist}
 Summary:        Matrix collaboration client
 
 License:        AGPL-3.0-only OR GPL-3.0-only
 URL:            https://github.com/element-hq/element-web
 Source0:        https://github.com/element-hq/element-web/archive/refs/tags/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
-Source1:        %{name}-%{version}-pnpm-store.tar.zst
+Source1:        %{name}-%{version}-ec%{sub %{ec_commit} 1 8}-pnpm-store.tar.zst
 Source2:        https://registry.npmjs.org/pnpm/-/pnpm-%{pnpm_version}.tgz
 Source3:        https://codeload.github.com/element-hq/element-call/tar.gz/%{ec_commit}#/element-call-%{ec_commit}.tar.gz
 Source4:        pnpm-store-tarballer.sh
@@ -44,6 +44,7 @@ export NX_DAEMON=false
 export NX_NO_CLOUD=true
 export NODE_OPTIONS=--max-old-space-size=8192
 mkdir -p bin
+ln -sf %{_bindir}/node-24 bin/node
 printf '#!/bin/sh\nexec node %s/package/bin/pnpm.mjs "$@"\n' "$PWD" > bin/pnpm
 chmod 755 bin/pnpm
 export PATH=$PWD/bin:$PATH
@@ -127,6 +128,10 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/512x512/apps/%{name}.png
 
 %changelog
+* Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 1.12.36-5
+- Key pnpm store tarball by ec commit
+- Use node-24 binary on f43
+
 * Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 1.12.36-4
 - Update ec to 6dad3a43e5a56225c64c945f1d3bdf6229f82e25
 

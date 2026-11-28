@@ -16,4 +16,4 @@ for d in "element-web-$version" "element-call-$ec_commit"; do printf "minimumRel
 pnpm=(node "$work/package/bin/pnpm.mjs")
 (cd "element-web-$version" && "${pnpm[@]}" install --frozen-lockfile --ignore-scripts --store-dir "$work/pnpm-store")
 (cd "element-call-$ec_commit" && "${pnpm[@]}" install --frozen-lockfile --ignore-scripts --store-dir "$work/pnpm-store")
-tar -C "$work" -cf - pnpm-store | zstd -T0 -10 -o "$src/element-desktop-$version-pnpm-store.tar.zst" -f
+tar -C "$work" -cf - pnpm-store | zstd -T0 -10 -o "$src/element-desktop-$version-ec${ec_commit:0:8}-pnpm-store.tar.zst" -f
