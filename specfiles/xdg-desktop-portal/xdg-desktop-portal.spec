@@ -1,13 +1,17 @@
 # copr-exclude-chroots: fedora-43-aarch64
 Name:           xdg-desktop-portal
 Version:        1.22.1
-Release:        21%{?dist}
+Release:        22%{?dist}
 Summary:        Portal frontend service for Flatpak
 
 License:        LGPL-2.1-or-later
 URL:            https://github.com/flatpak/xdg-desktop-portal
 Source0:        %{url}/releases/download/%{version}/%{name}-%{version}.tar.xz
 Source1:        10-credentialsd.conf
+Source2:        portal-watchdog.sh
+Source3:        portal-watchdog.service
+Source4:        portal-watchdog.timer
+Source5:        portal-watchdog-test.sh
 Patch0:         pr-1938.patch
 Patch1:         pr-2036.patch
 Patch2:         pr-1889.patch
@@ -39,6 +43,15 @@ Requires:       %{_bindir}/fusermount3
 D-Bus portal frontend for Flatpak and other sandboxes, with the experimental
 WebAuthn credential portal.
 
+%package watchdog
+Summary:        Restart %{name} when it stops answering
+BuildArch:      noarch
+Requires:       %{name} = %{version}-%{release}
+
+%description watchdog
+User timer that restarts %{name} when it hangs or leaks threads,
+except during a memory stall.
+
 %package devel
 Summary:        Development files for %{name}
 Requires:       %{name} = %{version}-%{release}
@@ -64,13 +77,26 @@ Enables org.freedesktop.portal.experimental.Credential.
 %meson_install
 install -d %{buildroot}%{_datadir}/%{name}/portals
 install -Dm644 %{SOURCE1} %{buildroot}%{_userunitdir}/%{name}.service.d/10-credentialsd.conf
+install -Dm755 %{SOURCE2} %{buildroot}%{_libexecdir}/%{name}-watchdog
+install -Dm644 -t %{buildroot}%{_userunitdir} %{SOURCE3} %{SOURCE4}
+install -d %{buildroot}%{_userpresetdir}
+echo 'enable portal-watchdog.timer' > %{buildroot}%{_userpresetdir}/90-portal-watchdog.preset
 %find_lang %{name}
+
+%check
+bash %{SOURCE5} %{SOURCE2}
 
 %post
 %systemd_user_post %{name}.service xdg-document-portal.service xdg-permission-store.service
 
 %preun
 %systemd_user_preun %{name}.service xdg-document-portal.service xdg-permission-store.service
+
+%post watchdog
+%systemd_user_post portal-watchdog.timer
+
+%preun watchdog
+%systemd_user_preun portal-watchdog.timer
 
 %files -f %{name}.lang
 %license COPYING
@@ -96,10 +122,20 @@ install -Dm644 %{SOURCE1} %{buildroot}%{_userunitdir}/%{name}.service.d/10-crede
 %dir %{_userunitdir}/%{name}.service.d
 %{_userunitdir}/%{name}.service.d/10-credentialsd.conf
 
+%files watchdog
+%{_libexecdir}/%{name}-watchdog
+%{_userunitdir}/portal-watchdog.service
+%{_userunitdir}/portal-watchdog.timer
+%{_userpresetdir}/90-portal-watchdog.preset
+
 %files devel
 %{_datadir}/pkgconfig/%{name}.pc
 
 %changelog
+* Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 1.22.1-22
+- Add watchdog subpackage
+- Skip watchdog restart during memory stall
+
 * Fri Nov 20 2026 Lachlan Marie <lchlnm@pm.me> - 1.22.1-21
 - Reject app info promise on failed Register (stuck authorize threads)
 

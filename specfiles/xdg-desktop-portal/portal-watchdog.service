@@ -1,0 +1,6 @@
+[Unit]
+Description=Restart xdg-desktop-portal if it stops answering
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/xdg-desktop-portal-watchdog
