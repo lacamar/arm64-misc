@@ -92,9 +92,9 @@
 
 Name:           mesa
 Summary:        Mesa graphics libraries
-%global commit 651a12d357cefc7ee30f53f6bed0422d51202040
+%global commit fe8e268fa378c2fde8f1109e710fccda15566139
 %global shortcommit %{sub %{commit} 1 8}
-%global bumpver 17
+%global bumpver 18
 %global ver 27.0.0
 Version:        %{ver}~%{bumpver}.git.%{shortcommit}
 Release:        6%{?dist}
@@ -785,6 +785,9 @@ ln -s libGLX_mesa.so.0 %{buildroot}%{_libdir}/libGLX_system.so.0
 %endif
 
 %changelog
+* Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 27.0.0~18.git.fe8e268f-6
+- Update to commit fe8e268fa378c2fde8f1109e710fccda15566139
+
 * Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 27.0.0~17.git.651a12d3-6
 - Package verisilicon kmsro DRI driver
 
