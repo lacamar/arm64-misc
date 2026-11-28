@@ -5,7 +5,7 @@
 
 Name:           ledger-live
 Version:        4.30.0
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Ledger Wallet desktop app
 
 License:        MIT
@@ -19,6 +19,7 @@ Source4:        https://registry.npmjs.org/pnpm/-/pnpm-%{pnpm_version}.tgz
 ExclusiveArch:  aarch64
 
 BuildRequires:  nodejs24
+BuildRequires:  nodejs24-full-i18n
 BuildRequires:  zstd
 BuildRequires:  desktop-file-utils
 BuildRequires:  systemd-rpm-macros
@@ -30,7 +31,7 @@ Desktop companion app for Ledger hardware wallets.
 
 %prep
 %autosetup -n %{srcdir} -N -a 1
-node -e 'const p=require("./package.json");if(!p.pnpm?.supportedArchitectures)process.exit();delete p.pnpm.supportedArchitectures;require("fs").writeFileSync("package.json",JSON.stringify(p,null,2)+"\n")'
+node-24 -e 'const p=require("./package.json");if(!p.pnpm?.supportedArchitectures)process.exit();delete p.pnpm.supportedArchitectures;require("fs").writeFileSync("package.json",JSON.stringify(p,null,2)+"\n")'
 sed -i 's/"packageManager": "pnpm@[^"]*"/"packageManager": "pnpm@%{pnpm_version}"/' package.json
 sed -i '/^minimumReleaseAge:/d' pnpm-workspace.yaml
 echo "minimumReleaseAge: 0" >> pnpm-workspace.yaml
@@ -46,6 +47,7 @@ export NX_NO_CLOUD=true
 export NODE_ENV=production
 export NODE_OPTIONS=--max-old-space-size=8192
 mkdir -p bin
+ln -sf %{_bindir}/node-24 bin/node
 printf '#!/bin/sh\nexec node %s/package/bin/pnpm.mjs "$@"\n' "$PWD" > bin/pnpm
 chmod 755 bin/pnpm
 export PATH=$PWD/bin:$PATH
@@ -107,6 +109,10 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_udevrulesdir}/20-hw1.rules
 
 %changelog
+* Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 4.30.0-2
+- Build with full ICU data (Intl.Segmenter segfault)
+- Use node-24 binary on f43
+
 * Fri Nov 27 2026 Lachlan Marie <lchlnm@pm.me> - 4.30.0-1
 - Update to 4.30.0
 
