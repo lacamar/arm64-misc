@@ -4,7 +4,7 @@
 
 Name:           credentialsd
 Version:        0.4.0
-Release:        8%{?dist}
+Release:        9%{?dist}
 Summary:        xdg-desktop-portal backend for WebAuthn credentials
 
 License:        LGPL-3.0-only
@@ -135,6 +135,9 @@ done
 %{_datadir}/credentialsd/
 
 %changelog
+* Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0-9
+- Fix helper ignoring request timeout
+
 * Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 0.4.0-8
 - Cancel on page abort or portal Request.Close
 - Close UI on cancel
