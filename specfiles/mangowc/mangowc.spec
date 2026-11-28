@@ -1,6 +1,6 @@
 # copr-exclude-chroots: fedora-43-aarch64
 Name:           mangowc
-Version:        0.19.3
+Version:        0.19.4
 Release:        1%{?dist}
 Summary:        Lightweight Wayland compositor without compromises
 License:        GPL-3.0
@@ -54,6 +54,9 @@ MangoWC is a lightweight, high-performance Wayland compositor built on dwl, desi
 %{_mandir}/man1/mangonag.1.gz
 
 %changelog
+* Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 0.19.4-1
+- Update to 0.19.4
+
 * Fri Nov 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.19.3-1
 - Update to 0.19.3
 
