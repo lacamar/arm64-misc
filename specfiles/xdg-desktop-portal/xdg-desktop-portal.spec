@@ -1,7 +1,7 @@
 # copr-exclude-chroots: fedora-43-aarch64
 Name:           xdg-desktop-portal
 Version:        1.22.1
-Release:        22%{?dist}
+Release:        23%{?dist}
 Summary:        Portal frontend service for Flatpak
 
 License:        LGPL-2.1-or-later
@@ -17,6 +17,7 @@ Patch1:         pr-2036.patch
 Patch2:         pr-1889.patch
 Patch3:         xdp-app-info-registry-race.patch
 Patch4:         xdp-registry-reject-promise.patch
+Patch5:         credential-request-handle.patch
 
 BuildRequires:  gcc
 BuildRequires:  meson >= 0.58
@@ -132,6 +133,9 @@ bash %{SOURCE5} %{SOURCE2}
 %{_datadir}/pkgconfig/%{name}.pc
 
 %changelog
+* Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 1.22.1-23
+- Pass request handle to credential handler
+
 * Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 1.22.1-22
 - Add watchdog subpackage
 - Skip watchdog restart during memory stall
