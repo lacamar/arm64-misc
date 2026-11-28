@@ -32,7 +32,7 @@
 
 Name:           niri
 Version:        %{tag}^%{bumpver}.git.%{shortcommit}
-Release:        53%{?dist}
+Release:        54%{?dist}
 Summary:        Scrollable-tiling Wayland compositor
 
 SourceLicense:  GPL-3.0-or-later
@@ -186,6 +186,9 @@ install -Dm644 -t %{buildroot}%{zsh_completions_dir} ./_niri
 %{zsh_completions_dir}/_niri
 
 %changelog
+* Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^29.git.6072f67d-54
+- Rebase wp-protocols, frame-callback-rate, vulkan patches on offscreen-fps
+
 * Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 26.04^29.git.6072f67d-53
 - Drop niri-pr4392.patch, superseded by upstream offscreen-fps
 - Move find_window_and_output_by into niri-scratchpad.patch

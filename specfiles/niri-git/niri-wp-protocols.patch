@@ -1,5 +1,5 @@
 diff --git a/src/handlers/compositor.rs b/src/handlers/compositor.rs
-index 88158cd..cc2ace6 100644
+index 88158cdc..cc2ace65 100644
 --- a/src/handlers/compositor.rs
 +++ b/src/handlers/compositor.rs
 @@ -7,6 +7,7 @@ use smithay::reexports::wayland_server::protocol::wl_buffer;
@@ -23,7 +23,7 @@ index 88158cd..cc2ace6 100644
  
      fn commit(&mut self, surface: &WlSurface) {
 diff --git a/src/niri.rs b/src/niri.rs
-index c8eb422..b656d50 100644
+index 48c93d1e..ddcd6178 100644
 --- a/src/niri.rs
 +++ b/src/niri.rs
 @@ -62,6 +62,7 @@ use smithay::reexports::calloop::{
@@ -68,7 +68,7 @@ index c8eb422..b656d50 100644
  use crate::render_helpers::blur::BlurOptions;
  use crate::render_helpers::debug::push_opaque_regions;
  use crate::render_helpers::primary_gpu_texture::PrimaryGpuTextureRenderElement;
-@@ -434,6 +440,8 @@ pub struct Niri {
+@@ -429,6 +435,8 @@ pub struct Niri {
      pub pointer_contents: PointContents,
      pub pointer_visibility: PointerVisibility,
      pub pointer_inactivity_timer: Option<RegistrationToken>,
@@ -77,7 +77,7 @@ index c8eb422..b656d50 100644
      /// Whether the pointer inactivity timer got reset this event loop iteration.
      ///
      /// Used for limiting the reset to once per iteration, so that it's not spammed with high
-@@ -972,6 +980,8 @@ impl State {
+@@ -879,6 +887,8 @@ impl State {
      fn refresh(&mut self) {
          let _span = tracy_client::span!("State::refresh");
  
@@ -86,7 +86,7 @@ index c8eb422..b656d50 100644
          // Handle commits for surfaces whose blockers cleared this cycle. This should happen before
          // layout.refresh() since this is where these surfaces handle commits.
          self.notify_blocker_cleared();
-@@ -2856,6 +2866,11 @@ impl Niri {
+@@ -2763,6 +2773,11 @@ impl Niri {
              )
              .unwrap();
  
@@ -98,7 +98,7 @@ index c8eb422..b656d50 100644
          let mutter_x11_interop_state =
              MutterX11InteropManagerState::new::<State, _>(&display_handle, move |_| true);
  
-@@ -3103,6 +3118,8 @@ impl Niri {
+@@ -3028,6 +3043,8 @@ impl Niri {
              pointer_contents: PointContents::default(),
              pointer_visibility: PointerVisibility::Visible,
              pointer_inactivity_timer: None,
@@ -107,7 +107,7 @@ index c8eb422..b656d50 100644
              pointer_inactivity_timer_got_reset: false,
              notified_activity_this_iteration: false,
              pointer_inside_hot_corner: false,
-@@ -5489,15 +5506,29 @@ impl Niri {
+@@ -5513,15 +5530,29 @@ impl Niri {
  
          let current = current
              || self.layout.windows_for_output(output).any(|mapped| {
@@ -144,7 +144,7 @@ index c8eb422..b656d50 100644
                          {
                              visible = true;
                          }
-@@ -5873,6 +5904,7 @@ impl Niri {
+@@ -5893,6 +5924,7 @@ impl Niri {
  
          let state = self.output_state.get(output).unwrap();
          let sequence = state.frame_callback_sequence;
@@ -152,7 +152,7 @@ index c8eb422..b656d50 100644
  
          // HACK: we set this to true for mapped windows that are screencast targets to keep them
          // redrawing even when they are invisible.
-@@ -5920,6 +5952,7 @@ impl Niri {
+@@ -5940,6 +5972,7 @@ impl Niri {
  
              if send {
                  *last_sent_at = Some((output.clone(), sequence));
@@ -160,8 +160,29 @@ index c8eb422..b656d50 100644
                  Some(output.clone())
              } else {
                  None
-@@ -6018,24 +6051,19 @@ impl Niri {
-         let output = &output;
+@@ -6008,6 +6041,11 @@ impl Niri {
+         });
+ 
+         let frame_callback_time = get_monotonic_time();
++        let tx = &self.blocker_cleared_tx;
++        let fifo = |surface: &WlSurface, states: &SurfaceData| {
++            signal_fifo_barrier(surface, states, tx);
++            None
++        };
+ 
+         // Find the highest throttle FPS requested by any throttled window.
+         //
+@@ -6030,7 +6068,7 @@ impl Niri {
+                     &output,
+                     frame_callback_time,
+                     Some(Duration::from_secs_f64(secs)),
+-                    |_, _| None,
++                    fifo,
+                 );
+             }
+         });
+@@ -6054,17 +6092,70 @@ impl Niri {
+         );
  
          let frame_callback_time = get_monotonic_time();
 +        let tx = &self.blocker_cleared_tx;
@@ -171,62 +192,14 @@ index c8eb422..b656d50 100644
 +        };
  
          self.layout.with_windows_mut(|mapped, _| {
--            mapped.send_frame(
--                output,
--                frame_callback_time,
--                FRAME_CALLBACK_THROTTLE,
+             mapped.send_frame(
+                 &output,
+                 frame_callback_time,
+                 Some(Duration::ZERO),
 -                |_, _| None,
--            );
-+            mapped.send_frame(output, frame_callback_time, FRAME_CALLBACK_THROTTLE, fifo);
++                fifo,
+             );
          });
- 
-         for (output, state) in self.output_state.iter() {
-             for surface in layer_map_for_output(output).layers() {
--                surface.send_frame(
--                    output,
--                    frame_callback_time,
--                    FRAME_CALLBACK_THROTTLE,
--                    |_, _| None,
--                );
-+                surface.send_frame(output, frame_callback_time, FRAME_CALLBACK_THROTTLE, fifo);
-             }
- 
-             if let Some(surface) = &state.lock_surface {
-@@ -6046,7 +6074,7 @@ impl Niri {
-                     output,
-                     frame_callback_time,
-                     FRAME_CALLBACK_THROTTLE,
--                    |_, _| None,
-+                    fifo,
-                 );
- 
-                 for (popup, _) in PopupManager::popups_for_surface(surface) {
-@@ -6056,7 +6084,7 @@ impl Niri {
-                         output,
-                         frame_callback_time,
-                         FRAME_CALLBACK_THROTTLE,
--                        |_, _| None,
-+                        fifo,
-                     );
-                 }
-             }
-@@ -6068,7 +6096,7 @@ impl Niri {
-                 output,
-                 frame_callback_time,
-                 FRAME_CALLBACK_THROTTLE,
--                |_, _| None,
-+                fifo,
-             );
-         }
- 
-@@ -6078,11 +6106,59 @@ impl Niri {
-                 output,
-                 frame_callback_time,
-                 FRAME_CALLBACK_THROTTLE,
--                |_, _| None,
-+                fifo,
-             );
-         }
      }
  
 +    fn signal_commit_timers(&mut self) {
@@ -280,7 +253,7 @@ index c8eb422..b656d50 100644
      pub fn take_presentation_feedbacks(
          &mut self,
          output: &Output,
-@@ -8019,3 +8095,18 @@ niri_render_elements! {
+@@ -8015,3 +8106,18 @@ niri_render_elements! {
          RelocatedMemoryBuffer = RelocateRenderElement<MemoryRenderBufferRenderElement<R>>,
      }
  }
