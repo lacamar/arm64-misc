@@ -1,4 +1,4 @@
-%global objc_commit a1faad66cee79f29c4ca268b004111edc33a2ae2
+%global objc_commit 762f9d7ed2a518cbd8ab13c3ace3176de2db08f0
 %global make_commit d0349cc83a23367acdc53df364f73504c281b26c
 %global base_commit 3d7013e144b153abcd6c088dc8d6c64ebd43bc4b
 %global toolchain clang
@@ -8,7 +8,7 @@
 
 Name:           mil-hwx-compiler
 Version:        0.3.4
-Release:        3%{?dist}
+Release:        4%{?dist}
 Summary:        Core ML MIL to Apple Neural Engine program compiler
 License:        MIT AND LGPL-2.1-or-later
 URL:            https://github.com/joshuaswarren/mil-hwx-compiler
@@ -96,6 +96,9 @@ python3 tests/test_h14_fixture_programs.py build/mil-hwxc
 %{privlib}/
 
 %changelog
+* Sat Nov 28 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.4-4
+- Update objc to 762f9d7ed2a518cbd8ab13c3ace3176de2db08f0
+
 * Fri Nov 27 2026 Lachlan Marie <lchlnm@pm.me> - 0.3.4-3
 - Install unversioned libobjc with soname link
 
